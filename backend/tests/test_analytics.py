@@ -84,3 +84,12 @@ def test_stage_fills_speeds_and_summary() -> None:
     out = analytics_run(record, StageContext(video_path=None, out_dir=None))
     assert any(f.shuttle_speed_kmh for f in out.frames)
     assert out.summary.total_hits == 3 and out.rallies[0].stroke_count == 3
+
+
+def test_glitch_frame_does_not_leak_into_neighbours() -> None:
+    # 1 m per frame at 30 fps = 108 km/h, with one 10 m jump (1080 km/h) in the middle.
+    xy = np.array([[i, 0.0] for i in range(10)])
+    xy[5:] += [10.0, 0.0]
+    kmh = speeds_kmh(xy, fps=30, smooth=3)
+    assert np.isnan(kmh[5])
+    assert np.nanmax(kmh) == pytest.approx(108.0)

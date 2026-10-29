@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -178,7 +178,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         target_height=cfg.get("target_height", 720),
         max_fps=cfg.get("max_fps", 30),
     )
-    check_duration(reader.source, cfg.get("max_duration_s", 300))
+    # source_frames is counted by decoding when the container reports no frame count.
+    counted = replace(reader.source, num_frames=reader.source_frames)
+    check_duration(counted, cfg.get("max_duration_s", 300))
     ctx.reader = reader
     record.fps = reader.fps
     record.width = reader.width

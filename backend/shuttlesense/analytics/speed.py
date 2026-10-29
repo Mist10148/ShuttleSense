@@ -16,8 +16,9 @@ def speeds_kmh(court_xy_m: np.ndarray, fps: float, smooth: int = 3, max_gap: int
 
     A frame's speed uses the previous valid position if it is at most `max_gap` frames
     back; otherwise (start of the track or after a longer gap) it is NaN. The first valid
-    frame of a run takes the next frame's speed. `smooth` is a NaN-aware moving average.
-    Values above MAX_PLAUSIBLE_KMH become NaN.
+    frame of a run takes the next frame's speed. Values above MAX_PLAUSIBLE_KMH become NaN
+    before `smooth` (a NaN-aware moving average), so one glitch frame does not raise the
+    speed of its neighbours.
     """
     xy = np.asarray(court_xy_m, dtype=float)
     n = len(xy)
@@ -35,6 +36,7 @@ def speeds_kmh(court_xy_m: np.ndarray, fps: float, smooth: int = 3, max_gap: int
         if valid[i] and np.isnan(raw[i]) and not np.isnan(raw[i + 1]):
             raw[i] = raw[i + 1]
     kmh = raw * 3.6
+    kmh[kmh > MAX_PLAUSIBLE_KMH] = np.nan
     if smooth > 1:
         half = smooth // 2
         smoothed = np.full(n, np.nan)
@@ -42,7 +44,6 @@ def speeds_kmh(court_xy_m: np.ndarray, fps: float, smooth: int = 3, max_gap: int
             window = kmh[max(0, i - half) : i + half + 1]
             smoothed[i] = np.nanmean(window)
         kmh = smoothed
-    kmh[kmh > MAX_PLAUSIBLE_KMH] = np.nan
     return kmh
 
 

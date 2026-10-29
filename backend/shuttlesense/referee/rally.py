@@ -152,8 +152,11 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     rallies = []
     for index, seg in enumerate(segments):
         landing = None
+        point = None
         if seg.closed and seg.landing_frame is not None and record.court is not None:
             point = image_to_court(np.asarray(record.court.homography), xy[[seg.landing_frame]])[0]
+        # A point near the homography's horizon maps to inf/NaN, which JSON cannot hold.
+        if point is not None and np.isfinite(point).all():
             inside, conf = landing_call(point, size, cfg.get("in_out_margin_m", 0.05))
             landing = Landing(x_m=round(float(point[0]), 3), y_m=round(float(point[1]), 3),
                               in_court=inside, confidence=conf)  # fmt: skip
