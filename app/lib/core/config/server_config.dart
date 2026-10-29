@@ -28,11 +28,31 @@ class ServerConfig {
     }
     return url;
   }
+
+  /// Error message for an unusable address, or null if it looks valid.
+  static String? validateUrl(String input) {
+    final url = normalizeUrl(input);
+    if (url.isEmpty) return 'Enter the server address';
+    final uri = Uri.tryParse(url);
+    final badHost = uri == null || uri.host.isEmpty || uri.host == 'http' || uri.host == 'https';
+    if (badHost || url.contains(RegExp(r'\s'))) {
+      return 'That does not look like an address, e.g. http://192.168.1.20:8000';
+    }
+    if (uri.hasPort && (uri.port <= 0 || uri.port > 65535)) return 'The port must be 1 to 65535';
+    return null;
+  }
+
+  /// A page served over https cannot call an http server (mixed content), so a web build
+  /// on https needs the https tunnel URL.
+  static bool isMixedContent(String pageScheme, String serverUrl) =>
+      pageScheme == 'https' && serverUrl.startsWith('http://');
 }
 
 class ServerConfigNotifier extends Notifier<ServerConfig?> {
   static const _urlKey = 'server.baseUrl';
   static const _tokenKey = 'server.token';
+  static const _recentKey = 'server.recent';
+  static const maxRecent = 3;
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -43,8 +63,15 @@ class ServerConfigNotifier extends Notifier<ServerConfig?> {
     return ServerConfig(baseUrl: url, token: _prefs.getString(_tokenKey));
   }
 
+  /// Last [maxRecent] server addresses, newest first (tokens are not remembered here).
+  List<String> get recent => _prefs.getStringList(_recentKey) ?? const [];
+
   Future<void> save(ServerConfig config) async {
     await _prefs.setString(_urlKey, config.baseUrl);
+    await _prefs.setStringList(
+      _recentKey,
+      [config.baseUrl, ...recent.where((u) => u != config.baseUrl)].take(maxRecent).toList(),
+    );
     final token = config.token;
     if (token == null || token.isEmpty) {
       await _prefs.remove(_tokenKey);

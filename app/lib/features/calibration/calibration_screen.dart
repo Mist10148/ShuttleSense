@@ -6,6 +6,7 @@ import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/video_info.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../upload/upload_controller.dart';
 import '../../shared/widgets/message_view.dart';
 
 typedef Corner = ({double x, double y});

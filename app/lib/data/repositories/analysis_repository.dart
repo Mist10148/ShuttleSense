@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/server_config.dart';
 import '../api_client.dart';
 import '../models/clip_record.dart';
+import '../models/health.dart';
 import '../models/job.dart';
 import '../models/video_info.dart';
 
@@ -61,7 +62,7 @@ final recordProvider = FutureProvider.autoDispose.family<ClipRecord, String>(
   (ref, jobId) => ref.watch(apiClientProvider).getRecord(jobId),
 );
 
-/// Options picked on the upload screen, read by the calibration screen.
-final pendingJobOptionsProvider = StateProvider<JobOptions>(
-  (ref) => JobOptions(overlays: kOverlays.keys.toSet()),
+/// GET /health of the saved server: version, schema and installed stages.
+final healthProvider = FutureProvider.autoDispose<Health>(
+  (ref) => ref.watch(apiClientProvider).health(),
 );

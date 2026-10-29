@@ -5,14 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
-import '../../data/models/health.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/section_card.dart';
-
-final _healthProvider = FutureProvider.autoDispose<Health>(
-  (ref) => ref.watch(apiClientProvider).health(),
-);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -20,7 +15,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(serverConfigProvider);
-    final health = ref.watch(_healthProvider);
+    final health = ref.watch(healthProvider);
     return PageScaffold(
       title: 'Settings',
       children: [
@@ -28,7 +23,7 @@ class SettingsScreen extends ConsumerWidget {
           title: 'Server',
           trailing: IconButton(
             tooltip: 'Check again',
-            onPressed: () => ref.invalidate(_healthProvider),
+            onPressed: () => ref.invalidate(healthProvider),
             icon: const Icon(Icons.refresh),
           ),
           child: Column(
