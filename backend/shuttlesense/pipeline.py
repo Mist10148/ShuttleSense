@@ -128,6 +128,7 @@ def run_pipeline(
     for spec, enabled in plan:
         on_event(spec.name, "pending" if enabled else "skipped", 0.0)
 
+    reader = None
     for spec, enabled in plan:
         if not enabled:
             continue
@@ -138,10 +139,12 @@ def run_pipeline(
             device=device,
             overlays=tuple(overlays),
             progress=lambda p, name=spec.name: on_event(name, "running", p),
+            reader=reader,
         )
         on_event(spec.name, "running", 0.0)
         try:
             record = spec.fn(record, ctx)
+            reader = ctx.reader
         except StageSkipped:
             on_event(spec.name, "skipped", 0.0)
             continue

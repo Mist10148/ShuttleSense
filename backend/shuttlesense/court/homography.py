@@ -56,6 +56,11 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     corners = ctx.config.get("court_corners_px")
     if not corners:
         raise StageSkipped("no court corners provided")
+    # The app taps corners on the source frame; the record uses normalized pixels.
+    if ctx.reader is not None and ctx.reader.resized:
+        sx = ctx.reader.width / ctx.reader.source.width
+        sy = ctx.reader.height / ctx.reader.source.height
+        corners = [[x * sx, y * sy] for x, y in corners]
     h = compute_homography(corners)
     record.court = Court(corners_px=tuple(tuple(c) for c in corners), homography=h.tolist())
     ctx.progress(1.0)

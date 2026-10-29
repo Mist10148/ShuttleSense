@@ -23,7 +23,7 @@ from shuttlesense.api.models import (
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import validate_corners
-from shuttlesense.io import SUPPORTED_SUFFIXES, probe, read_frame
+from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, Score, ScoreCorrection
 
@@ -85,6 +85,7 @@ def _video_or_404(storage: Storage, video_id: str) -> VideoInfoOut:
 
 @router.post("/videos", response_model=VideoInfoOut, status_code=201)
 def upload_video(
+    request: Request,
     file: Annotated[UploadFile, File()],
     storage: StorageDep,
     settings: Annotated[Settings, Depends(get_settings)],
@@ -107,6 +108,12 @@ def upload_video(
     except ValueError as exc:
         storage.delete_video(video_id)
         raise HTTPException(status_code=415, detail=str(exc)) from exc
+    try:
+        io_cfg = request.app.state.jobs.config.get("stages", {}).get("io", {})
+        check_duration(meta, io_cfg.get("max_duration_s", 300))
+    except ValueError as exc:
+        storage.delete_video(video_id)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     info = VideoInfoOut(
         id=video_id,
         filename=file.filename or target.name,

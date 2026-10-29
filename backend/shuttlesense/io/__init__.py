@@ -1,5 +1,21 @@
 """Video loading and frame indexing (F1)."""
 
-from shuttlesense.io.video import SUPPORTED_SUFFIXES, VideoInfo, probe, read_frame, run
+from shuttlesense.io.video import (
+    SUPPORTED_SUFFIXES,
+    FrameReader,
+    VideoInfo,
+    check_duration,
+    probe,
+    read_frame,
+    run,
+)
 
-__all__ = ["SUPPORTED_SUFFIXES", "VideoInfo", "probe", "read_frame", "run"]
+__all__ = [
+    "SUPPORTED_SUFFIXES",
+    "FrameReader",
+    "VideoInfo",
+    "check_duration",
+    "probe",
+    "read_frame",
+    "run",
+]

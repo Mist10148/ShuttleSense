@@ -162,3 +162,11 @@ def test_fake_cli(tmp_path: Path, tiny_video: Path) -> None:
 
     main(["--video", str(tiny_video), "--out", str(tmp_path / "out"), "--fake"])
     assert (tmp_path / "out" / "hits.csv").read_text().count("\n") == 4
+
+
+def test_upload_over_duration_limit_is_400(tmp_path: Path, tiny_video: Path) -> None:
+    config = tmp_path / "pipeline.yaml"
+    config.write_text("stages:\n  io:\n    max_duration_s: 0.1\n")
+    with make_client(tmp_path, config=config) as client:
+        res = upload(client, tiny_video)
+        assert res.status_code == 400 and "longer than" in res.json()["detail"]
