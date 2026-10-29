@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
@@ -90,6 +93,15 @@ void main() {
       expect(record.hitAt(100)!.id, 1);
       expect(record.hits.first.position, const Duration(milliseconds: 1400));
     });
+  });
+
+  test('parses golden record', () {
+    final json = jsonDecode(File('test/fixtures/golden_record.json').readAsStringSync());
+    final golden = ClipRecord.fromJson(json as Map<String, dynamic>);
+    expect(golden.frames, hasLength(60));
+    expect(golden.hits.map((h) => h.stroke), ['serve', 'clear', 'smash']);
+    expect(golden.courtCorners, hasLength(4));
+    expect(golden.summary!.totalHits, 3);
   });
 
   test('Job parses status, stages and outputs', () {

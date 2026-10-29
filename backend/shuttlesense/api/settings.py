@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     max_upload_mb: int = 1024
     config: Path = DEFAULT_CONFIG
+    fake_pipeline: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

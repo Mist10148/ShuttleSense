@@ -91,6 +91,7 @@ ruff check . && ruff format --check . && pytest
 | `SHUTTLESENSE_CORS_ORIGINS` | `*` | Comma-separated origins for the web build |
 | `SHUTTLESENSE_MAX_UPLOAD_MB` | `1024` | Upload size limit |
 | `SHUTTLESENSE_CONFIG` | `configs/pipeline.yaml` | Pipeline config file |
+| `SHUTTLESENSE_FAKE_PIPELINE` | `0` | `1` returns the golden record (`backend/tests/fixtures/golden_record.json`) scaled to each upload instead of running models, so the app shows full results without a GPU. CLI equivalent: `python -m shuttlesense.run --fake ...` |
 
 ## 4. Backend on Google Colab (fallback)
 

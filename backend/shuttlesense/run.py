@@ -35,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-referee", action="store_true", help="skip the P3 referee layer")
     p.add_argument("--config", type=Path, default=None, help="pipeline YAML")
     p.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    p.add_argument(
+        "--fake", action="store_true", help="return the golden record instead of running models"
+    )
     return p
 
 
@@ -49,7 +52,12 @@ def main(argv: list[str] | None = None) -> None:
             return
         print(f"[{name:<9}] {status}")
 
-    record = run_pipeline(
+    pipeline = run_pipeline
+    if args.fake:
+        from shuttlesense.fake import fake_pipeline
+
+        pipeline = fake_pipeline
+    record = pipeline(
         args.video,
         args.out,
         clip_id=args.video.stem,

@@ -88,3 +88,15 @@ def test_stroke_classes_are_the_six_documented() -> None:
 def test_json_schema_snapshot() -> None:
     fixture = Path(__file__).parent / "fixtures" / "clip_record.schema.json"
     assert_matches_snapshot(ClipRecord.model_json_schema(), fixture)
+
+
+def test_golden_record_valid() -> None:
+    from shuttlesense.fake import load_golden
+
+    record = load_golden()
+    assert record.num_frames == len(record.frames) == 60
+    assert [h.stroke for h in record.hits] == ["serve", "clear", "smash"]
+    assert all(
+        len(p.keypoints) == 17 for f in record.frames for p in (f.players.near, f.players.far)
+    )
+    assert record.court is not None and record.summary.total_hits == 3

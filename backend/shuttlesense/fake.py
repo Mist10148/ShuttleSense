@@ -1,0 +1,117 @@
+"""Fake pipeline: the golden record scaled to the uploaded clip (task T1.10).
+
+Lets the app and demos show non-empty results without a GPU or weights. Enabled with
+`python -m shuttlesense.run --fake` or `SHUTTLESENSE_FAKE_PIPELINE=1` for the API.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from shuttlesense.analytics import write_exports
+from shuttlesense.io import probe
+from shuttlesense.pipeline import STAGE_NAMES, StageEvent
+from shuttlesense.schema import ClipRecord, Court
+
+GOLDEN_RECORD = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "golden_record.json"
+
+
+def load_golden() -> ClipRecord:
+    return ClipRecord.model_validate(json.loads(GOLDEN_RECORD.read_text(encoding="utf-8")))
+
+
+def _scale_xy(x: float | None, y: float | None, sx: float, sy: float):
+    return (None if x is None else round(x * sx, 1)), (None if y is None else round(y * sy, 1))
+
+
+def scale_record(
+    golden: ClipRecord, *, fps: float, width: int, height: int, num_frames: int
+) -> ClipRecord:
+    """Stretch the golden record over `num_frames` frames and a `width` x `height` image."""
+    sx, sy = width / golden.width, height / golden.height
+    n_src = len(golden.frames)
+    num_frames = max(num_frames, 1)
+
+    def src_index(i: int) -> int:
+        return round(i * (n_src - 1) / max(num_frames - 1, 1))
+
+    def dst_index(i: int) -> int:
+        return round(i * (num_frames - 1) / max(n_src - 1, 1))
+
+    frames = []
+    for i in range(num_frames):
+        f = golden.frames[src_index(i)].model_copy(deep=True)
+        f.frame = i
+        if f.shuttle and f.shuttle.visible:
+            f.shuttle.x, f.shuttle.y = _scale_xy(f.shuttle.x, f.shuttle.y, sx, sy)
+        for p in (f.players.near, f.players.far):
+            if p is None:
+                continue
+            bx, by, bw, bh = p.bbox
+            p.bbox = (bx * sx, by * sy, bw * sx, bh * sy)
+            p.keypoints = [(x * sx, y * sy, s) for x, y, s in p.keypoints]
+        frames.append(f)
+
+    record = golden.model_copy(deep=True)
+    record.fps, record.width, record.height = fps, width, height
+    record.num_frames = num_frames
+    record.frames = frames
+    for hit in record.hits:
+        hit.frame = dst_index(hit.frame)
+        hit.time_s = round(hit.frame / fps, 3) if fps else 0.0
+    for rally in record.rallies:
+        rally.start_frame = dst_index(rally.start_frame)
+        rally.end_frame = dst_index(rally.end_frame)
+    return record
+
+
+def fake_pipeline(
+    video_path: Path,
+    out_dir: Path,
+    *,
+    clip_id: str,
+    config: dict[str, Any] | None = None,
+    court_corners_px: Sequence[Sequence[float]] | None = None,
+    overlays: Sequence[str] = (),
+    referee_enabled: bool = False,
+    device: str = "cpu",
+    on_event: StageEvent = lambda _name, _status, _progress: None,
+) -> ClipRecord:
+    """Drop-in replacement for run_pipeline that never touches a model."""
+    info = probe(video_path)
+    record = scale_record(
+        load_golden(),
+        fps=info.fps,
+        width=info.width,
+        height=info.height,
+        num_frames=info.num_frames,
+    )
+    record.clip_id = clip_id
+    record.source_name = video_path.name
+    if court_corners_px:
+        from shuttlesense.court import compute_homography
+
+        corners = tuple(tuple(float(v) for v in c) for c in court_corners_px)
+        record.court = Court(corners_px=corners, homography=compute_homography(corners).tolist())
+    else:
+        record.court = None
+    if not referee_enabled:
+        record.rallies, record.score = [], None
+        for f in record.frames:
+            f.rally_state = None
+        for h in record.hits:
+            h.rally_index = None
+
+    for name in STAGE_NAMES:
+        on_event(name, "running", 0.0)
+        if name == "render" and video_path.suffix.lower() == ".mp4":
+            # Until the overlay renderer lands (T2.6), serve the source clip as the result.
+            out_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(video_path, out_dir / "annotated.mp4")
+        on_event(name, "done", 1.0)
+    write_exports(record, out_dir)
+    return record

@@ -142,3 +142,23 @@ def test_token_required_when_configured(tmp_path: Path, tiny_video: Path) -> Non
         assert c.get("/jobs", headers={"Authorization": "Bearer s3cret"}).status_code == 200
         assert c.get("/jobs?token=s3cret").status_code == 200
         assert upload(c, tiny_video, headers={"Authorization": "Bearer s3cret"}).status_code == 201
+
+
+def test_fake_pipeline_returns_hits(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        assert client.get("/health").json()["stages"] == list(STAGE_NAMES)
+        video = upload(client, tiny_video).json()
+        job = client.post("/jobs", json={"video_id": video["id"], "referee": True}).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        assert record["num_frames"] == 10 and len(record["frames"]) == 10
+        assert [h["stroke"] for h in record["hits"]] == ["serve", "clear", "smash"]
+        assert all(0 <= h["frame"] < 10 for h in record["hits"])
+        assert record["court"] is None and record["score"]["near"] == 1
+
+
+def test_fake_cli(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.run import main
+
+    main(["--video", str(tiny_video), "--out", str(tmp_path / "out"), "--fake"])
+    assert (tmp_path / "out" / "hits.csv").read_text().count("\n") == 4
