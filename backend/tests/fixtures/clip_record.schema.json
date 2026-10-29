@@ -1,0 +1,883 @@
+{
+  "$defs": {
+    "Court": {
+      "properties": {
+        "corners_px": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "title": "Corners Px",
+          "type": "array"
+        },
+        "court_size_m": {
+          "default": [
+            5.18,
+            13.4
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Court Size M",
+          "type": "array"
+        },
+        "homography": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "title": "Homography",
+          "type": "array"
+        }
+      },
+      "required": [
+        "corners_px",
+        "homography"
+      ],
+      "title": "Court",
+      "type": "object"
+    },
+    "CourtPositions": {
+      "properties": {
+        "far": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Far"
+        },
+        "near": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Near"
+        },
+        "shuttle": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shuttle"
+        }
+      },
+      "title": "CourtPositions",
+      "type": "object"
+    },
+    "FeedbackItem": {
+      "properties": {
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "tip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tip"
+        }
+      },
+      "required": [
+        "rule",
+        "passed"
+      ],
+      "title": "FeedbackItem",
+      "type": "object"
+    },
+    "Frame": {
+      "properties": {
+        "court_positions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CourtPositions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frame": {
+          "title": "Frame",
+          "type": "integer"
+        },
+        "players": {
+          "$ref": "#/$defs/Players"
+        },
+        "rally_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "in_play",
+                "between_rallies"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rally State"
+        },
+        "shuttle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Shuttle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "shuttle_speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shuttle Speed Kmh"
+        }
+      },
+      "required": [
+        "frame"
+      ],
+      "title": "Frame",
+      "type": "object"
+    },
+    "Hit": {
+      "properties": {
+        "class_probs": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "propertyNames": {
+                "enum": [
+                  "smash",
+                  "clear",
+                  "drop",
+                  "net_shot",
+                  "lift",
+                  "serve"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Class Probs"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "feedback": {
+          "items": {
+            "$ref": "#/$defs/FeedbackItem"
+          },
+          "title": "Feedback",
+          "type": "array"
+        },
+        "frame": {
+          "title": "Frame",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "player": {
+          "enum": [
+            "near",
+            "far"
+          ],
+          "title": "Player",
+          "type": "string"
+        },
+        "rally_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rally Index"
+        },
+        "speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speed Kmh"
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "enum": [
+                "smash",
+                "clear",
+                "drop",
+                "net_shot",
+                "lift",
+                "serve"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke"
+        },
+        "time_s": {
+          "title": "Time S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "frame",
+        "time_s",
+        "player"
+      ],
+      "title": "Hit",
+      "type": "object"
+    },
+    "Landing": {
+      "properties": {
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "in_court": {
+          "title": "In Court",
+          "type": "boolean"
+        },
+        "x_m": {
+          "title": "X M",
+          "type": "number"
+        },
+        "y_m": {
+          "title": "Y M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_m",
+        "y_m",
+        "in_court",
+        "confidence"
+      ],
+      "title": "Landing",
+      "type": "object"
+    },
+    "Player": {
+      "properties": {
+        "bbox": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Bbox",
+          "type": "array"
+        },
+        "keypoints": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Keypoints",
+          "type": "array"
+        },
+        "score": {
+          "default": 0.0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox"
+      ],
+      "title": "Player",
+      "type": "object"
+    },
+    "PlayerSummary": {
+      "properties": {
+        "hits": {
+          "default": 0,
+          "title": "Hits",
+          "type": "integer"
+        },
+        "peak_speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Speed Kmh"
+        },
+        "stroke_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "smash",
+              "clear",
+              "drop",
+              "net_shot",
+              "lift",
+              "serve"
+            ]
+          },
+          "title": "Stroke Counts",
+          "type": "object"
+        }
+      },
+      "title": "PlayerSummary",
+      "type": "object"
+    },
+    "Players": {
+      "properties": {
+        "far": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Player"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "near": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Player"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Players",
+      "type": "object"
+    },
+    "Rally": {
+      "properties": {
+        "end_frame": {
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "landing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Landing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "score_after": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorePair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "start_frame": {
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "stroke_count": {
+          "default": 0,
+          "title": "Stroke Count",
+          "type": "integer"
+        },
+        "winner": {
+          "anyOf": [
+            {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Winner"
+        }
+      },
+      "required": [
+        "index",
+        "start_frame",
+        "end_frame"
+      ],
+      "title": "Rally",
+      "type": "object"
+    },
+    "Score": {
+      "properties": {
+        "corrections": {
+          "items": {
+            "$ref": "#/$defs/ScoreCorrection"
+          },
+          "title": "Corrections",
+          "type": "array"
+        },
+        "far": {
+          "default": 0,
+          "title": "Far",
+          "type": "integer"
+        },
+        "near": {
+          "default": 0,
+          "title": "Near",
+          "type": "integer"
+        }
+      },
+      "title": "Score",
+      "type": "object"
+    },
+    "ScoreCorrection": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "rally_index": {
+          "title": "Rally Index",
+          "type": "integer"
+        },
+        "winner_after": {
+          "enum": [
+            "near",
+            "far"
+          ],
+          "title": "Winner After",
+          "type": "string"
+        },
+        "winner_before": {
+          "anyOf": [
+            {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Winner Before"
+        }
+      },
+      "required": [
+        "rally_index",
+        "winner_before",
+        "winner_after",
+        "at"
+      ],
+      "title": "ScoreCorrection",
+      "type": "object"
+    },
+    "ScorePair": {
+      "properties": {
+        "far": {
+          "default": 0,
+          "title": "Far",
+          "type": "integer"
+        },
+        "near": {
+          "default": 0,
+          "title": "Near",
+          "type": "integer"
+        }
+      },
+      "title": "ScorePair",
+      "type": "object"
+    },
+    "Shuttle": {
+      "properties": {
+        "visible": {
+          "default": 0,
+          "enum": [
+            0,
+            1
+          ],
+          "title": "Visible",
+          "type": "integer"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "title": "Shuttle",
+      "type": "object"
+    },
+    "Summary": {
+      "properties": {
+        "peak_speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Speed Kmh"
+        },
+        "per_player": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlayerSummary"
+          },
+          "propertyNames": {
+            "enum": [
+              "near",
+              "far"
+            ]
+          },
+          "title": "Per Player",
+          "type": "object"
+        },
+        "stroke_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "smash",
+              "clear",
+              "drop",
+              "net_shot",
+              "lift",
+              "serve"
+            ]
+          },
+          "title": "Stroke Counts",
+          "type": "object"
+        },
+        "total_hits": {
+          "default": 0,
+          "title": "Total Hits",
+          "type": "integer"
+        }
+      },
+      "title": "Summary",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "clip_id": {
+      "title": "Clip Id",
+      "type": "string"
+    },
+    "court": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Court"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "fps": {
+      "title": "Fps",
+      "type": "number"
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/Frame"
+      },
+      "title": "Frames",
+      "type": "array"
+    },
+    "height": {
+      "title": "Height",
+      "type": "integer"
+    },
+    "hits": {
+      "items": {
+        "$ref": "#/$defs/Hit"
+      },
+      "title": "Hits",
+      "type": "array"
+    },
+    "num_frames": {
+      "title": "Num Frames",
+      "type": "integer"
+    },
+    "rallies": {
+      "items": {
+        "$ref": "#/$defs/Rally"
+      },
+      "title": "Rallies",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Score"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "source_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Name"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Summary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "width": {
+      "title": "Width",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "clip_id",
+    "fps",
+    "width",
+    "height",
+    "num_frames"
+  ],
+  "title": "ClipRecord",
+  "type": "object"
+}

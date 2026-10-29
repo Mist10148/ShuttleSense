@@ -10,10 +10,10 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | --- | --- |
 | Pixel coordinates | Origin top-left of the **normalized** video frame (after io resizing), x right, y down, floats |
 | Court coordinates | Meters on the court plane. Origin at the near-left corner of the singles court, x across the court (0 to 5.18), y toward the far baseline (0 to 13.40) |
-| Frame index | 0-based index into the normalized video; time in seconds is `frame / fps` |
+| Frame index | 0-based index into the normalized video; time in seconds is `frame / fps`. `frames[]` holds **every** normalized frame (after fps downsampling), in order |
 | Players | Always `"near"` (closer to the camera, bottom of the image) or `"far"` |
 | Missing values | `null`, never `-1` or `0`, except `shuttle.visible` which is `0` or `1` as in TrackNetV3 |
-| Confidences | Floats in [0, 1] |
+| Confidences | Floats in [0, 1]. A keypoint with `score < 0.3` counts as missing: stages that read joints (hits, feedback, positions) ignore it |
 | Speeds | km/h, always estimates |
 
 ### Court corners order

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from snapshots import assert_matches_snapshot
+
 from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord
 
 EXAMPLE = {
@@ -79,3 +83,8 @@ def test_minimal_record_defaults() -> None:
 
 def test_stroke_classes_are_the_six_documented() -> None:
     assert STROKE_CLASSES == ("smash", "clear", "drop", "net_shot", "lift", "serve")
+
+
+def test_json_schema_snapshot() -> None:
+    fixture = Path(__file__).parent / "fixtures" / "clip_record.schema.json"
+    assert_matches_snapshot(ClipRecord.model_json_schema(), fixture)
