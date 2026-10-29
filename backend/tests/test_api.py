@@ -171,3 +171,28 @@ def test_upload_over_duration_limit_is_400(tmp_path: Path, tiny_video: Path) -> 
     with make_client(tmp_path, config=config) as client:
         res = upload(client, tiny_video)
         assert res.status_code == 400 and "longer than" in res.json()["detail"]
+
+
+def test_progress_is_monotonic(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.pipeline import run_pipeline
+
+    def slow_pipeline(*args, on_event, **kwargs):
+        def report(name, status, progress):
+            time.sleep(0.01)
+            on_event(name, status, progress)
+
+        return run_pipeline(*args, on_event=report, **kwargs)
+
+    with TestClient(
+        create_app(Settings(storage_dir=tmp_path / "s", device="cpu"), pipeline=slow_pipeline)
+    ) as client:
+        video = upload(client, tiny_video).json()
+        job_id = client.post("/jobs", json={"video_id": video["id"]}).json()["id"]
+        seen = []
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            job = client.get(f"/jobs/{job_id}").json()
+            seen.append(job["progress"])
+            if job["status"] == "done":
+                break
+        assert seen == sorted(seen) and seen[-1] == 1.0

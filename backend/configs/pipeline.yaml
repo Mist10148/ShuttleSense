@@ -1,5 +1,7 @@
 # Pipeline settings. Thresholds live here, not in code (CONTRIBUTING.md).
 # Each stage reads its own block via StageContext.stage_config("<name>").
+# Any stage may set `weight:` (share of job progress; defaults tracking 4, pose 4,
+# render 2, others 0.2) and `enabled: false`.
 
 seed: 42
 

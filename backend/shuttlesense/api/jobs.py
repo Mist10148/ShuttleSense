@@ -16,6 +16,10 @@ from shuttlesense.pipeline import STAGE_NAMES, run_pipeline
 PipelineFn = Callable[..., Any]
 
 
+# Expected share of wall time per stage; overridable with stages.<name>.weight.
+DEFAULT_STAGE_WEIGHTS = {"tracking": 4.0, "pose": 4.0, "render": 2.0}
+
+
 class JobCancelled(Exception):
     pass
 
@@ -128,6 +132,11 @@ class JobManager:
                 setattr(job, key, value)
             self.storage.save_job(job)
 
+    def stage_weight(self, name: str) -> float:
+        """Relative cost of a stage for overall progress (stages.<name>.weight)."""
+        cfg = self.config.get("stages", {}).get(name, {})
+        return float(cfg.get("weight", DEFAULT_STAGE_WEIGHTS.get(name, 0.2)))
+
     def _on_event(self, job_id: str, name: str, status: str, progress: float) -> None:
         if job_id in self._cancelled:
             raise JobCancelled
@@ -142,10 +151,14 @@ class JobManager:
             if status == "running":
                 job.current_stage = name
             active = [s for s in job.stages if s.status != "skipped"]
-            if active:
-                job.progress = sum(1.0 if s.status == "done" else s.progress for s in active) / len(
-                    active
+            total = sum(self.stage_weight(s.name) for s in active)
+            if total:
+                done = sum(
+                    self.stage_weight(s.name) * (1.0 if s.status == "done" else s.progress)
+                    for s in active
                 )
+                # Never move backwards, even when a stage reports a lower value.
+                job.progress = max(job.progress, min(done / total, 1.0))
 
     def _run_one(self, job_id: str) -> None:
         job = self.get(job_id)

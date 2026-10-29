@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +12,7 @@ from typing import Any
 
 from shuttlesense import (
     analytics,
+    cache,
     court,
     feedback,
     hits,
@@ -113,7 +116,12 @@ def run_pipeline(
     device: str = "cpu",
     on_event: StageEvent = lambda _name, _status, _progress: None,
 ) -> ClipRecord:
-    """Run all enabled stages on one video and write record.json, summary.json, hits.csv."""
+    """Run all enabled stages on one video and write record.json, summary.json, hits.csv.
+
+    Stage results are cached in out_dir/cache (see cache.py), so running again in the same
+    out_dir with only overlays changed re-runs io and render only. Wall time per stage goes
+    to out_dir/timings.json.
+    """
     config = dict(config or {})
     if court_corners_px:
         config["court_corners_px"] = [list(c) for c in court_corners_px]
@@ -129,8 +137,17 @@ def run_pipeline(
         on_event(spec.name, "pending" if enabled else "skipped", 0.0)
 
     reader = None
+    key = cache.initial_key(video_path, config)
+    timings: dict[str, float] = {}
     for spec, enabled in plan:
+        key = cache.next_key(key, spec.name, enabled, config.get("stages", {}).get(spec.name, {}))
         if not enabled:
+            continue
+        cached = cache.load(out_dir, spec.name, key, record)
+        if cached is not None:
+            record = cached
+            on_event(spec.name, "done", 1.0)
+            timings[spec.name] = 0.0
             continue
         ctx = StageContext(
             video_path=video_path,
@@ -142,6 +159,7 @@ def run_pipeline(
             reader=reader,
         )
         on_event(spec.name, "running", 0.0)
+        started = time.perf_counter()
         try:
             record = spec.fn(record, ctx)
             reader = ctx.reader
@@ -151,7 +169,11 @@ def run_pipeline(
         except Exception:
             on_event(spec.name, "failed", 0.0)
             raise
+        finally:
+            timings[spec.name] = round(time.perf_counter() - started, 3)
+        cache.save(out_dir, spec.name, key, record)
         on_event(spec.name, "done", 1.0)
 
     write_exports(record, out_dir)
+    (out_dir / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")
     return record
