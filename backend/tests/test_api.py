@@ -299,3 +299,15 @@ def test_correction_409_without_referee(tmp_path: Path, tiny_video: Path) -> Non
         assert wait_for(client, job["id"])["status"] == "done"
         res = client.patch(f"/jobs/{job['id']}/score", json={"rally_index": 0, "winner": "far"})
         assert res.status_code == 409
+
+
+def test_calibrate_without_gui_explains(tiny_video: Path) -> None:
+    import cv2
+
+    from shuttlesense.run import click_corners
+
+    if "GUI:                           NONE" not in cv2.getBuildInformation():
+        pytest.skip("OpenCV has GUI support here; the window would wait for clicks")
+
+    with pytest.raises(SystemExit, match="GUI support"):
+        click_corners(tiny_video)

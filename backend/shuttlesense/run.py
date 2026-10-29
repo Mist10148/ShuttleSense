@@ -25,6 +25,63 @@ def parse_overlays(text: str) -> list[str]:
     return names
 
 
+CORNER_NAMES = ("near-left", "near-right", "far-right", "far-left")
+
+
+def click_corners(video: Path, frame_index: int = 0) -> list[list[float]]:
+    """Open a window on one frame and collect 4 corner clicks (Backspace undoes, Esc quits).
+
+    Needs an OpenCV build with GUI support (pip install opencv-python); the headless wheel
+    used by the server cannot open windows.
+    """
+    import cv2
+
+    from shuttlesense.court import validate_corners
+    from shuttlesense.io import read_frame
+
+    frame = read_frame(video, frame_index)
+    if frame is None:
+        raise SystemExit(f"cannot read frame {frame_index} of {video}")
+    points: list[list[float]] = []
+    title = "ShuttleSense calibration"
+
+    def on_mouse(event, x, y, _flags, _param) -> None:
+        if event == cv2.EVENT_LBUTTONDOWN and len(points) < 4:
+            points.append([float(x), float(y)])
+
+    try:
+        cv2.namedWindow(title, cv2.WINDOW_NORMAL)
+    except cv2.error as exc:
+        raise SystemExit(
+            "--calibrate needs OpenCV with GUI support: pip install opencv-python "
+            "(or pass --corners)"
+        ) from exc
+    cv2.setMouseCallback(title, on_mouse)
+    while True:
+        canvas = frame.copy()
+        for i, (x, y) in enumerate(points):
+            cv2.circle(canvas, (int(x), int(y)), 6, (0, 255, 255), -1)
+            cv2.putText(canvas, str(i + 1), (int(x) + 8, int(y) - 8), 0, 0.7, (0, 255, 255), 2)
+        hint = "Enter: done" if len(points) == 4 else f"Click {CORNER_NAMES[len(points)]}"
+        cv2.putText(canvas, hint, (12, 30), 0, 0.8, (255, 255, 255), 2)
+        cv2.imshow(title, canvas)
+        key = cv2.waitKey(30) & 0xFF
+        if key == 27:
+            cv2.destroyWindow(title)
+            raise SystemExit("calibration cancelled")
+        if key == 8 and points:
+            points.pop()
+        if key in (10, 13) and len(points) == 4:
+            try:
+                validate_corners(points)
+            except ValueError as exc:
+                print(f"{exc}; click them again")
+                points.clear()
+                continue
+            cv2.destroyWindow(title)
+            return points
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="shuttlesense", description="Analyze a badminton rally video.")
     p.add_argument("--video", type=Path, required=True, help="input video (MP4/MOV/AVI)")
@@ -47,8 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.calibrate:
-        # TODO(T5.1): OpenCV window on frame 0 to click corners for CLI users.
-        raise SystemExit("--calibrate is not implemented yet; pass --corners instead")
+        args.corners = click_corners(args.video)
+        print("corners: " + ",".join(f"{v:.0f}" for c in args.corners for v in c))
 
     def report(name: str, status: str, progress: float) -> None:
         if status in ("running", "pending") and progress not in (0.0, 1.0):
