@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,7 @@ from shuttlesense import (
     tracking,
 )
 from shuttlesense.analytics import write_exports
+from shuttlesense.config import BACKEND_DIR
 from shuttlesense.schema import ClipRecord
 from shuttlesense.stage import Stage, StageContext, StageSkipped
 
@@ -30,16 +32,19 @@ class StageSpec:
     fn: Stage
     needs_court: bool = False
     referee: bool = False
+    # Python packages the stage imports lazily, and config keys holding weight paths.
+    requires: tuple[str, ...] = ()
+    weights: tuple[str, ...] = ()
 
 
 # Execution order. Names match docs/ARCHITECTURE.md and GET /health "stages".
 STAGES: tuple[StageSpec, ...] = (
     StageSpec("io", io.run),
-    StageSpec("tracking", tracking.run),
-    StageSpec("pose", pose.run),
+    StageSpec("tracking", tracking.run, requires=("torch",), weights=("tracknet_weights",)),
+    StageSpec("pose", pose.run, requires=("rtmlib",)),
     StageSpec("court", court.run, needs_court=True),
     StageSpec("hits", hits.run),
-    StageSpec("strokes", strokes.run),
+    StageSpec("strokes", strokes.run, requires=("torch",), weights=("weights",)),
     StageSpec("feedback", feedback.run),
     StageSpec("analytics", analytics.run),
     StageSpec("referee", referee.run, needs_court=True, referee=True),
@@ -49,6 +54,33 @@ STAGE_NAMES: tuple[str, ...] = tuple(s.name for s in STAGES)
 
 # (stage name, status, progress 0..1); status is pending/running/done/skipped/failed.
 StageEvent = Callable[[str, str, float], None]
+
+
+def _installed(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def available_stages(config: dict[str, Any] | None = None) -> list[str]:
+    """Stages whose lazy imports and weight files are present (GET /health "stages").
+
+    A stage that is missing either still runs, but skips itself and leaves its fields empty.
+    """
+    stage_cfg = (config or {}).get("stages", {})
+    names = []
+    for spec in STAGES:
+        cfg = stage_cfg.get(spec.name, {})
+        if not cfg.get("enabled", True):
+            continue
+        if not all(_installed(m) for m in spec.requires):
+            continue
+        paths = [cfg.get(key) for key in spec.weights]
+        if not all(p and (BACKEND_DIR / p).exists() for p in paths):
+            continue
+        names.append(spec.name)
+    return names
 
 
 def plan_stages(

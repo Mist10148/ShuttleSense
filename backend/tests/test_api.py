@@ -8,9 +8,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from snapshots import assert_matches_snapshot
 
 from shuttlesense.api.main import create_app
 from shuttlesense.api.settings import Settings
+from shuttlesense.pipeline import STAGE_NAMES, available_stages
 
 CORNERS = [[20, 80], [140, 80], [120, 20], [40, 20]]
 
@@ -48,7 +50,21 @@ def test_health(client: TestClient) -> None:
     body = client.get("/health").json()
     assert body["status"] == "ok"
     assert body["auth_required"] is False
+    assert set(body["stages"]) <= set(STAGE_NAMES)
     assert body["stages"][0] == "io" and body["stages"][-1] == "render"
+
+
+def test_available_stages_skip_missing_weights() -> None:
+    config = {"stages": {"tracking": {"tracknet_weights": "weights/does-not-exist.pt"}}}
+    stages = available_stages(config)
+    assert "tracking" not in stages
+    assert {"io", "court", "hits", "analytics", "render"} <= set(stages)
+    assert "court" not in available_stages({"stages": {"court": {"enabled": False}}})
+
+
+def test_openapi_snapshot(client: TestClient) -> None:
+    docs = Path(__file__).resolve().parents[2] / "docs" / "openapi.json"
+    assert_matches_snapshot(client.app.openapi(), docs)
 
 
 def test_full_round_trip(client: TestClient, tiny_video: Path) -> None:

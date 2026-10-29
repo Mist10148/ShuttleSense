@@ -14,7 +14,7 @@ from shuttlesense.api.routes import public, router
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage
 from shuttlesense.config import detect_device, load_config
-from shuttlesense.pipeline import run_pipeline
+from shuttlesense.pipeline import available_stages, run_pipeline
 
 
 def create_app(settings: Settings | None = None, pipeline: PipelineFn = run_pipeline) -> FastAPI:
@@ -30,6 +30,7 @@ def create_app(settings: Settings | None = None, pipeline: PipelineFn = run_pipe
         app.state.storage = storage
         app.state.jobs = jobs
         app.state.device = device
+        app.state.available_stages = available_stages(jobs.config)
         jobs.start()
         yield
         jobs.stop()

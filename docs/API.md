@@ -78,7 +78,7 @@ Same body as the upload response.
 
 ### `GET /videos/{video_id}/frames/{n}`
 
-JPEG of frame `n` (0-based), used for court calibration. Optional query `max_width` (default 1280) to downscale for phones. Coordinates the app sends back are always in **normalized video pixels**; the response includes headers `X-Frame-Width` and `X-Frame-Height` so the app can scale taps.
+JPEG of frame `n` (0-based), used for court calibration. Optional query `max_width` (default 1280) to downscale for phones. Coordinates the app sends back are always in **source video pixels** (the `width` × `height` reported by `POST /videos`), whatever size the JPEG was scaled to; the response includes headers `X-Frame-Width` and `X-Frame-Height` (source size) so the app can scale taps.
 
 ### `DELETE /videos/{video_id}`
 
@@ -132,15 +132,20 @@ Job object, polled by the processing screen every 1 to 2 s.
   "created_at": "2026-11-05T09:13:01Z",
   "started_at": "2026-11-05T09:13:02Z",
   "finished_at": null,
-  "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false}
+  "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false},
+  "court_corners_px": [[212, 650], [1068, 650], [880, 210], [400, 210]],
+  "overlays": ["trail", "pose", "boxes", "hits", "strokes"],
+  "referee": false
 }
 ```
+
+`court_corners_px`, `overlays` and `referee` echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
 ### `GET /jobs/{job_id}/record`
 
-The full clip record ([DATA_FORMAT.md](DATA_FORMAT.md)). `404` until the job is `done`.
+The full clip record ([DATA_FORMAT.md](DATA_FORMAT.md)). `404` until the pipeline has written it (when the job is `done`).
 
 ### `GET /jobs/{job_id}/video`
 

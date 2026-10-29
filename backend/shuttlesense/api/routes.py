@@ -24,7 +24,6 @@ from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, probe, read_frame
-from shuttlesense.pipeline import STAGE_NAMES
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, Score, ScoreCorrection
 
@@ -70,8 +69,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         schema_version=SCHEMA_VERSION,
         device=request.app.state.device,
         auth_required=bool(settings.token),
-        # TODO(T1.6): report only stages whose dependencies and weights are installed.
-        stages=list(STAGE_NAMES),
+        stages=request.app.state.available_stages,
     )
 
 
