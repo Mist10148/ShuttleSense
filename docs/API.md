@@ -1,0 +1,175 @@
+# Backend API
+
+REST contract between the Flutter app and the FastAPI backend. The server implements it in [`backend/shuttlesense/api/routes.py`](../backend/shuttlesense/api/routes.py); the app's client is [`app/lib/data/api_client.dart`](../app/lib/data/api_client.dart). FastAPI also serves live interactive docs at `/docs` (Swagger UI) and the OpenAPI JSON at `/openapi.json` on any running server.
+
+Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [clip record](DATA_FORMAT.md): breaking changes need the lead's approval and must update server, app client and this page in one PR.
+
+## Basics
+
+| Item | Value |
+| --- | --- |
+| Base URL | `http://<laptop-LAN-IP>:8000` or `https://<name>.trycloudflare.com` |
+| Format | JSON (`application/json`), except uploads (`multipart/form-data`) and file downloads |
+| Auth | If the server has `SHUTTLESENSE_TOKEN` set, every request except `GET /health` needs `Authorization: Bearer <token>` |
+| CORS | Allowed origins from `SHUTTLESENSE_CORS_ORIGINS` (default `*`) so the web build works |
+| IDs | URL-safe random strings (`uuid4().hex[:12]`) |
+| Times | ISO 8601 UTC |
+
+### Errors
+
+All errors use FastAPI's shape with a stable `detail`:
+
+```json
+{"detail": "job not found"}
+```
+
+| Status | When |
+| --- | --- |
+| 400 | Invalid input (bad corners, unsupported overlay name) |
+| 401 | Missing or wrong bearer token |
+| 404 | Unknown video or job id, or a result file that is not produced yet |
+| 409 | Action not allowed in the current job state (e.g. score correction before referee ran) |
+| 413 | Upload larger than `SHUTTLESENSE_MAX_UPLOAD_MB` (default 1024) |
+| 415 | Unsupported video container (not MP4/MOV/AVI) |
+| 422 | Request body failed validation |
+
+## Endpoints
+
+### `GET /health`
+
+Liveness and capability check used by the connect screen.
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "device": "cuda",
+  "auth_required": true,
+  "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"]
+}
+```
+
+`stages` lists the stages whose dependencies and weights are installed on this host, so the app can grey out overlays that cannot be produced.
+
+### `POST /videos`
+
+Upload a video. `multipart/form-data` with field `file`.
+
+Response `201`:
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "filename": "rally12.mp4",
+  "size_bytes": 48211234,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080,
+  "num_frames": 1800,
+  "duration_s": 60.0,
+  "created_at": "2026-11-05T09:12:44Z"
+}
+```
+
+### `GET /videos/{video_id}`
+
+Same body as the upload response.
+
+### `GET /videos/{video_id}/frames/{n}`
+
+JPEG of frame `n` (0-based), used for court calibration. Optional query `max_width` (default 1280) to downscale for phones. Coordinates the app sends back are always in **normalized video pixels**; the response includes headers `X-Frame-Width` and `X-Frame-Height` so the app can scale taps.
+
+### `DELETE /videos/{video_id}`
+
+Deletes the upload and every job created from it. `204`.
+
+### `POST /jobs`
+
+Start processing.
+
+```json
+{
+  "video_id": "a1b2c3d4e5f6",
+  "court_corners_px": [[212, 650], [1068, 650], [880, 210], [400, 210]],
+  "overlays": ["trail", "pose", "boxes", "hits", "strokes", "court", "speed", "score"],
+  "referee": true
+}
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `video_id` | yes | From `POST /videos` |
+| `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features |
+| `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all available |
+| `referee` | no | Run the P3 referee layer; default `false` |
+
+Response `202`: a Job object (below).
+
+### `GET /jobs`
+
+List jobs, newest first. Query `limit` (default 50).
+
+### `GET /jobs/{job_id}`
+
+Job object, polled by the processing screen every 1 to 2 s.
+
+```json
+{
+  "id": "f00dbabe1234",
+  "video_id": "a1b2c3d4e5f6",
+  "status": "running",
+  "queue_position": 0,
+  "current_stage": "pose",
+  "progress": 0.42,
+  "stages": [
+    {"name": "io",       "status": "done",    "progress": 1.0},
+    {"name": "tracking", "status": "done",    "progress": 1.0},
+    {"name": "pose",     "status": "running", "progress": 0.35},
+    {"name": "hits",     "status": "pending", "progress": 0.0}
+  ],
+  "error": null,
+  "created_at": "2026-11-05T09:13:01Z",
+  "started_at": "2026-11-05T09:13:02Z",
+  "finished_at": null,
+  "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false}
+}
+```
+
+`status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
+
+### `GET /jobs/{job_id}/record`
+
+The full clip record ([DATA_FORMAT.md](DATA_FORMAT.md)). `404` until the job is `done`.
+
+### `GET /jobs/{job_id}/video`
+
+Annotated MP4 (`video/mp4`). Supports HTTP range requests so players can seek.
+
+### `GET /jobs/{job_id}/summary.json` · `GET /jobs/{job_id}/hits.csv`
+
+Export files (F13). Served with `Content-Disposition: attachment`.
+
+### `POST /jobs/{job_id}/render`
+
+Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns the Job object; the job goes back to `running` with only the `render` stage active.
+
+### `PATCH /jobs/{job_id}/score`
+
+Correct the winner of a rally (F16). Body:
+
+```json
+{"rally_index": 3, "winner": "far"}
+```
+
+Returns the updated `score` object; the correction is appended to `score.corrections` in the record and `summary.json` is regenerated. `409` if the referee stage did not run.
+
+### `DELETE /jobs/{job_id}`
+
+Cancels a queued/running job or deletes a finished job's outputs. `204`.
+
+## Polling and timeouts (client guidance)
+
+- Poll `GET /jobs/{id}` every 1 s while `running`, every 3 s while `queued`; stop on `done`, `failed` or `cancelled`.
+- Upload timeout: none (progress-driven); other requests: 15 s connect, 30 s receive.
+- On a network error during polling, retry with back-off up to 30 s, then show "Lost connection to server" with a retry button. The job keeps running on the server.
