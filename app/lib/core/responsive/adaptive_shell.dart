@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/widgets/offline_banner.dart';
 import 'breakpoints.dart';
 
 class ShellDestination {
@@ -31,7 +32,7 @@ class AdaptiveShell extends StatelessWidget {
     final windowClass = Breakpoints.of(context);
     if (windowClass.isCompact) {
       return Scaffold(
-        body: navigationShell,
+        body: OfflineBanner(child: navigationShell),
         bottomNavigationBar: NavigationBar(
           selectedIndex: navigationShell.currentIndex,
           onDestinationSelected: _select,
@@ -74,7 +75,7 @@ class AdaptiveShell extends StatelessWidget {
             ),
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: navigationShell),
+          Expanded(child: OfflineBanner(child: navigationShell)),
         ],
       ),
     );

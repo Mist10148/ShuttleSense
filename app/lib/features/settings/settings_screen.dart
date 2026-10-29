@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
+import '../../core/theme/theme_mode.dart';
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
@@ -50,6 +51,31 @@ class SettingsScreen extends ConsumerWidget {
                 label: const Text('Change server'),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Appearance',
+          child: SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.system,
+                label: Text('System'),
+                icon: Icon(Icons.brightness_auto),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                label: Text('Light'),
+                icon: Icon(Icons.light_mode),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                label: Text('Dark'),
+                icon: Icon(Icons.dark_mode),
+              ),
+            ],
+            selected: {ref.watch(themeModeProvider)},
+            onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
           ),
         ),
         const SizedBox(height: 16),
