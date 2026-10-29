@@ -209,9 +209,11 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 | --- | --- |
 | `--video` | Path to the input video |
 | `--corners` | Court corners as `x1,y1,x2,y2,x3,y3,x4,y4` (enables P2 and P3 features) |
-| `--calibrate` | Opens a window to click the 4 court corners instead of `--corners` |
+| `--calibrate` | Opens a window to click the 4 court corners instead of `--corners` (needs `pip install opencv-python`) |
 | `--overlays` | Comma-separated: `trail,pose,boxes,hits,strokes,court,minimap,speed,score` (default: all) |
 | `--no-referee` | Skip the P3 referee layer |
+| `--tracking-csv` | Use a TrackNetV3 `predict.py` CSV instead of running the tracker |
+| `--fake` | Return the golden record scaled to the video (no models; for app and demo testing) |
 | `--out` | Output folder for the annotated video and JSON/CSV files |
 
 ### Train the stroke classifier
@@ -324,6 +326,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 | [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 96 tasks (steps, tests, acceptance criteria) |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |
+| [docs/RELEASE.md](docs/RELEASE.md) | Release checklist: version bump, builds, signing, smoke tests, tagging |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, PRs, code style, definition of done |
 
 ---

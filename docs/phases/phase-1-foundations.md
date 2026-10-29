@@ -24,8 +24,8 @@
 | [T1.7](#t17) | Colab backend reachable through a tunnel | M1 | 3 h | T0.3, T1.6 | ⬜ | [#19](https://github.com/Mist10148/ShuttleSense/issues/19) |
 | [T1.8](#t18) | App connects on Android, tablet, Windows, Chrome | M6 | 4 h | T0.4 | ⬜ | [#20](https://github.com/Mist10148/ShuttleSense/issues/20) |
 | [T1.9](#t19) | Download ShuttleSet annotations and match list | M3 | 5 h | — | ⬜ | [#21](https://github.com/Mist10148/ShuttleSense/issues/21) |
-| [T1.10](#t110) | Test fixture clip and golden record | M1 | 3 h | T1.1 | ⬜ | [#22](https://github.com/Mist10148/ShuttleSense/issues/22) |
-| [T1.11](#t111) | Decision log | M1 | 1 h | — | ⬜ | [#23](https://github.com/Mist10148/ShuttleSense/issues/23) |
+| [T1.10](#t110) | Test fixture clip and golden record | M1 | 3 h | T1.1 | ✅ | [#22](https://github.com/Mist10148/ShuttleSense/issues/22) |
+| [T1.11](#t111) | Decision log | M1 | 1 h | — | ✅ | [#23](https://github.com/Mist10148/ShuttleSense/issues/23) |
 
 ---
 

@@ -30,7 +30,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 | [T7.11](#t711) | Demo rehearsal with fallback | All | 2 h | T7.10 | ⬜ | [#93](https://github.com/Mist10148/ShuttleSense/issues/93) |
 | [T7.12](#t712) | Update docs to what actually shipped | M1 | 2 h | freeze | ⬜ | [#94](https://github.com/Mist10148/ShuttleSense/issues/94) |
 | [T7.13](#t713) | License and privacy audit | M1 | 2 h | freeze | ⬜ | [#95](https://github.com/Mist10148/ShuttleSense/issues/95) |
-| [T7.14](#t714) | Release checklist | M1 | 1 h | — | ⬜ | [#96](https://github.com/Mist10148/ShuttleSense/issues/96) |
+| [T7.14](#t714) | Release checklist | M1 | 1 h | — | ✅ | [#96](https://github.com/Mist10148/ShuttleSense/issues/96) |
 
 ---
 

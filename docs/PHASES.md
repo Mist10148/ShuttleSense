@@ -149,6 +149,20 @@ If the schedule slips, cut in this order (first = first to go) and record it in 
 - **Phase gates:** each phase file ends with a gate checklist. Run it as a short live demo before the phase is marked done.
 - **Pull requests:** follow [CONTRIBUTING.md](../CONTRIBUTING.md). Reference the task (`Refs T2.2`), flip the status here, close the issue.
 
+## Implementation snapshot (Oct 30)
+
+The parts of each task that need no data, GPU, devices or team decisions are already on `main`, with tests. Only the steps marked below remain. A task flips to ✅ only once its acceptance criteria are met; most still need a real clip, trained weights or a device check.
+
+| Area | In code now | Still needed to close the task |
+| --- | --- | --- |
+| Tooling (T0.11, T1.1, T1.2, T1.4, T1.10, T1.11) | `scripts/check_env.py`, schema and OpenAPI snapshots, `/health` lists installed stages, checksum verification, golden record + fake pipeline, decision log | Review meeting and tags `schema-v1.0` / `api-v1.0`; real SHA-256 values once weights are on HF |
+| Perception (T2.1–T2.8) | `FrameReader` (720p, ≤ 30 fps, 5-min limit), heatmap→point, outlier filter + gap filling, tracking CSV import, player filter + stable IDs + keypoint smoothing, overlay layers, H.264 writer, stage cache + weighted progress | TrackNetV3 inference in `tracking/tracknet.py::predict` (submodule, T1.3); pose backend choice (T1.5); visual checks on team clips |
+| Hits and strokes (T3.1–T3.11) | Rule-based hit detector, feature windows, clip extraction, class-stratified splits, dataset + augmentation, configurable CNN, training script, inference stage, hit/stroke overlays, metric functions | ShuttleSet download and label check (T1.9, T3.3), extraction and training runs, tuning on val matches |
+| Analysis (T5.1–T5.14) | Calibration UI (drag, loupe, convexity check, frame scrubber) and CLI `--calibrate`, homography checks, court lines/outline, court positions, NaN-aware speed, stroke counter, 9 form rules (docs/FEEDBACK_RULES.md), exports with BOM + `rallies.csv`, re-render, minimap layer | Accuracy checks on team clips (T5.13); device checks |
+| Referee (T6.1–T6.6) | Rally segmentation, landing in/out with confidence, BWF scoring with start score, correction API re-scoring later rallies, app scoreboard with corrections, score/landing overlays | Rally labels and evaluation on team footage (T6.7) |
+| App (T4.1–T4.12) | Connect validation + recent servers, persisted stage-aware options, upload warnings, processing back-off/ETA/retry, results layout (landscape, side panel), playback speed/frame step/shortcuts, timeline filters + tips sheet, history filenames + delete video, theme mode, offline banner, platform config, fake API + widget and accessibility tests | Runs on Android, tablet, Windows and Chrome (T1.8, T4.x acceptance); icon artwork (T4.13) |
+| Release (T7.13, T7.14) | `docs/RELEASE.md` | Everything after the feature freeze |
+
 ## All tasks
 
 | Phase | Tasks |

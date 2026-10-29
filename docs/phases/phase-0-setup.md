@@ -25,7 +25,7 @@
 | [T0.8](#t08) | Every member sets up backend + app locally | All | 3 h each | T0.3, T0.4 | ⬜ | [#8](https://github.com/Mist10148/ShuttleSense/issues/8) |
 | [T0.9](#t09) | Hugging Face weights repo and Google Drive data folder | M1 | 1 h | — | ⬜ | [#9](https://github.com/Mist10148/ShuttleSense/issues/9) |
 | [T0.10](#t010) | Record 2 consented test rallies | M4 | 2 h | — | ⬜ | [#10](https://github.com/Mist10148/ShuttleSense/issues/10) |
-| [T0.11](#t011) | Environment check script | M1 | 2 h | T0.3 | ⬜ | [#11](https://github.com/Mist10148/ShuttleSense/issues/11) |
+| [T0.11](#t011) | Environment check script | M1 | 2 h | T0.3 | ✅ | [#11](https://github.com/Mist10148/ShuttleSense/issues/11) |
 | [T0.12](#t012) | Team working agreements | M1 | 1 h | — | ⬜ | [#12](https://github.com/Mist10148/ShuttleSense/issues/12) |
 
 ---

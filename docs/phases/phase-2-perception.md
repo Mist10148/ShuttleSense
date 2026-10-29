@@ -22,7 +22,7 @@
 | [T2.5](#t25) | Keypoints per player with smoothing | M5 | 5 h | T2.4 | ⬜ | [#28](https://github.com/Mist10148/ShuttleSense/issues/28) |
 | [T2.6](#t26) | Overlay renderer: trail, boxes, skeletons | M2 | 8 h | T2.2, T2.5 | ⬜ | [#29](https://github.com/Mist10148/ShuttleSense/issues/29) |
 | [T2.7](#t27) | H.264 export via ffmpeg | M1 | 4 h | T2.6 | ⬜ | [#30](https://github.com/Mist10148/ShuttleSense/issues/30) |
-| [T2.8](#t28) | Real pipeline wiring: progress and stage cache | M1 | 6 h | T2.1 | ⬜ | [#31](https://github.com/Mist10148/ShuttleSense/issues/31) |
+| [T2.8](#t28) | Real pipeline wiring: progress and stage cache | M1 | 6 h | T2.1 | ✅ | [#31](https://github.com/Mist10148/ShuttleSense/issues/31) |
 | [T2.9](#t29) | Processing-time benchmark | M1 | 3 h | T2.8 | ⬜ | [#32](https://github.com/Mist10148/ShuttleSense/issues/32) |
 | [T2.10](#t210) | Shuttle tracking accuracy evaluation | M2 | 5 h | T2.3 | ⬜ | [#33](https://github.com/Mist10148/ShuttleSense/issues/33) |
 | [T2.11](#t211) | Player ID and pose quality check on team clips | M3 | 3 h | T2.5 | ⬜ | [#34](https://github.com/Mist10148/ShuttleSense/issues/34) |

@@ -88,7 +88,10 @@ backend/
 ├── shuttlesense/
 │   ├── schema.py               # ClipRecord and friends (pydantic) — source of truth
 │   ├── config.py               # YAML loading
-│   ├── pipeline.py             # stage registry, ordering, progress, caching
+│   ├── pipeline.py             # stage registry, ordering, progress, available_stages()
+│   ├── cache.py                # per-stage cache in out_dir/cache (chained config hash)
+│   ├── fake.py                 # golden record scaled to a clip (SHUTTLESENSE_FAKE_PIPELINE)
+│   ├── evaluation.py           # hit / tracking / rally metrics for the eval scripts
 │   ├── run.py                  # CLI: python -m shuttlesense.run
 │   ├── io/ tracking/ pose/ court/ hits/ strokes/ feedback/ analytics/ referee/ render/
 │   └── api/

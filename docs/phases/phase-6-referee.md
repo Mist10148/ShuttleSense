@@ -18,7 +18,7 @@
 | [T6.1](#t61) | Rally state detection | M3 | 6 h | T3.6 | ⬜ | [#76](https://github.com/Mist10148/ShuttleSense/issues/76) |
 | [T6.2](#t62) | Landing point and in/out with confidence | M3 | 6 h | T6.1, T5.2 | ⬜ | [#77](https://github.com/Mist10148/ShuttleSense/issues/77) |
 | [T6.3](#t63) | BWF scoring and rally winner | M3 | 4 h | T6.2 | ⬜ | [#78](https://github.com/Mist10148/ShuttleSense/issues/78) |
-| [T6.4](#t64) | Score correction API | M1 | 3 h | T6.3 | ⬜ | [#79](https://github.com/Mist10148/ShuttleSense/issues/79) |
+| [T6.4](#t64) | Score correction API | M1 | 3 h | T6.3 | ✅ | [#79](https://github.com/Mist10148/ShuttleSense/issues/79) |
 | [T6.5](#t65) | App scoreboard with corrections and rally state | M6 | 4 h | T6.4, T4.5 | ⬜ | [#80](https://github.com/Mist10148/ShuttleSense/issues/80) |
 | [T6.6](#t66) | Scoreboard and rally-state overlays | M2 | 3 h | T6.3 | ⬜ | [#81](https://github.com/Mist10148/ShuttleSense/issues/81) |
 | [T6.7](#t67) | Rally boundary labels and evaluation | M3 | 3 h | T7.1 | ⬜ | [#82](https://github.com/Mist10148/ShuttleSense/issues/82) |
