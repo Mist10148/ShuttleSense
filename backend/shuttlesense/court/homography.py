@@ -44,11 +44,36 @@ def compute_homography(
     return cv2.getPerspectiveTransform(src, court_corners_m(size))
 
 
+def _apply(h: np.ndarray, points: np.ndarray) -> np.ndarray:
+    points = np.asarray(points, dtype=float).reshape(-1, 2)
+    pts = np.hstack([points, np.ones((len(points), 1))])
+    mapped = pts @ np.asarray(h, dtype=float).T
+    return mapped[:, :2] / mapped[:, 2:3]
+
+
 def image_to_court(h: np.ndarray, points_px: np.ndarray) -> np.ndarray:
     """Project (N, 2) pixel points onto the court plane."""
-    pts = np.hstack([points_px, np.ones((len(points_px), 1))])
-    mapped = pts @ h.T
-    return mapped[:, :2] / mapped[:, 2:3]
+    return _apply(h, points_px)
+
+
+def court_to_image(h: np.ndarray, points_m: np.ndarray) -> np.ndarray:
+    """Project (N, 2) court points (meters) back to image pixels (for drawing)."""
+    return _apply(np.linalg.inv(np.asarray(h, dtype=float)), points_m)
+
+
+def check_court_area(
+    corners_px: Sequence[Sequence[float]],
+    frame_size: tuple[int, int],
+    min_frac: float = 0.10,
+    max_frac: float = 0.95,
+) -> None:
+    """Raise ValueError("corners look wrong") unless the court covers 10-95% of the frame."""
+    pts = np.asarray(corners_px, dtype=float)
+    x, y = pts[:, 0], pts[:, 1]
+    area = 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+    frac = area / max(frame_size[0] * frame_size[1], 1)
+    if not min_frac <= frac <= max_frac:
+        raise ValueError(f"corners look wrong: the court covers {frac:.0%} of the frame")
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
@@ -61,7 +86,10 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         sx = ctx.reader.width / ctx.reader.source.width
         sy = ctx.reader.height / ctx.reader.source.height
         corners = [[x * sx, y * sy] for x, y in corners]
-    h = compute_homography(corners)
-    record.court = Court(corners_px=tuple(tuple(c) for c in corners), homography=h.tolist())
+    size = tuple(ctx.stage_config("court").get("court_size_m", COURT_SIZE_M))
+    h = compute_homography(corners, size)
+    record.court = Court(
+        corners_px=tuple(tuple(c) for c in corners), homography=h.tolist(), court_size_m=size
+    )
     ctx.progress(1.0)
     return record

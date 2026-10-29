@@ -178,7 +178,38 @@ def draw_strokes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
     _label(img, text, _pt(x, y - 24 * state.scale), style.PLAYER_COLORS[hit.player], state.scale)
 
 
+def court_segments_px(record: ClipRecord, state: RenderState) -> list[tuple]:
+    """All court line segments in image pixels (computed once per video)."""
+    if "court_px" not in state.cache:
+        from shuttlesense.court import court_lines, court_to_image
+
+        segments = []
+        if record.court is not None:
+            h = np.asarray(record.court.homography)
+            for group in court_lines(record.court.court_size_m).values():
+                for a, b in group:
+                    pa, pb = court_to_image(h, np.array([a, b]))
+                    segments.append((_pt(*pa), _pt(*pb)))
+        state.cache["court_px"] = segments
+    return state.cache["court_px"]
+
+
+def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Semi-transparent singles court lines projected from court meters."""
+    import cv2
+
+    segments = court_segments_px(record, state)
+    if not segments:
+        return
+    overlay = img.copy()
+    thick = max(1, int(round(3 * state.scale)))
+    for a, b in segments:
+        cv2.line(overlay, a, b, style.COURT, thick, cv2.LINE_AA)
+    cv2.addWeighted(overlay, 0.6, img, 0.4, 0, dst=img)
+
+
 LAYERS: dict[str, Layer] = {
+    "court": draw_court,
     "trail": draw_trail,
     "pose": draw_pose,
     "boxes": draw_boxes,

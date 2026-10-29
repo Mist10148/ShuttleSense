@@ -100,7 +100,7 @@ Start processing.
 | Field | Required | Notes |
 | --- | --- | --- |
 | `video_id` | yes | From `POST /videos` |
-| `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features |
+| `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features. `400` if they are not a convex quadrilateral in that order, or if the court they outline covers less than 10% or more than 95% of the frame ("corners look wrong") |
 | `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all available |
 | `referee` | no | Run the P3 referee layer; default `false` |
 

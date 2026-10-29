@@ -22,7 +22,7 @@ from shuttlesense.api.models import (
 )
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
-from shuttlesense.court import validate_corners
+from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, Score, ScoreCorrection
@@ -189,10 +189,11 @@ def _check_overlays(names: list[str] | None) -> list[str]:
 
 @router.post("/jobs", response_model=Job, status_code=202)
 def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
-    _video_or_404(storage, body.video_id)
+    video = _video_or_404(storage, body.video_id)
     if body.court_corners_px is not None:
         try:
             validate_corners(body.court_corners_px)
+            check_court_area(body.court_corners_px, (video.width, video.height))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     job = Job(

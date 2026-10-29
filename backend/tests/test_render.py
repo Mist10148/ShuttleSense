@@ -109,3 +109,16 @@ def test_hit_marker_visible_only_within_duration() -> None:
     img = blank.copy()
     draw_strokes(img, record, 9, state)  # label stays until the next hit
     assert img.any()
+
+
+def test_court_lines_hit_corners() -> None:
+    from shuttlesense.court import compute_homography
+    from shuttlesense.render.overlays import RenderState, court_segments_px
+    from shuttlesense.schema import ClipRecord, Court
+
+    corners = [[20.0, 80.0], [140.0, 80.0], [120.0, 20.0], [40.0, 20.0]]
+    h = compute_homography(corners)
+    record = ClipRecord(clip_id="c", fps=25, width=160, height=90, num_frames=1,
+                        court=Court(corners_px=corners, homography=h.tolist()))  # fmt: skip
+    outline = court_segments_px(record, RenderState())[:4]
+    assert [list(a) for a, _b in outline] == corners

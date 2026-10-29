@@ -32,3 +32,20 @@ def test_image_center_line_maps_to_court_center_line() -> None:
 def test_invalid_corners_rejected(corners: list[list[float]]) -> None:
     with pytest.raises(ValueError):
         validate_corners(corners)
+
+
+def test_court_to_image_inverts_image_to_court() -> None:
+    from shuttlesense.court import court_to_image
+
+    h = compute_homography(CORNERS)
+    pts = np.array([[300.0, 600.0], [640.0, 400.0], [900.0, 250.0]])
+    back = court_to_image(h, image_to_court(h, pts))
+    assert np.abs(back - pts).max() < 0.5
+
+
+def test_tiny_court_rejected() -> None:
+    from shuttlesense.court import check_court_area
+
+    check_court_area(CORNERS, (1280, 720))
+    with pytest.raises(ValueError, match="corners look wrong"):
+        check_court_area([[600, 360], [620, 360], [615, 350], [605, 350]], (1280, 720))
