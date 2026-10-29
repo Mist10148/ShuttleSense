@@ -249,12 +249,19 @@ def get_hits_csv(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileRespons
     return FileResponse(path, media_type="text/csv", filename=f"{job_id}_hits.csv")
 
 
-@router.post("/jobs/{job_id}/render", response_model=Job)
+@router.get("/jobs/{job_id}/rallies.csv")
+def get_rallies_csv(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
+    path = _output_or_404(storage, jobs, job_id, "rallies_csv")
+    return FileResponse(path, media_type="text/csv", filename=f"{job_id}_rallies.csv")
+
+
+@router.post("/jobs/{job_id}/render", response_model=Job, status_code=202)
 def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
-    _job_or_404(jobs, job_id)
-    _check_overlays(body.overlays)
-    # TODO(T5.12): re-run only the render stage from cached stage outputs.
-    raise HTTPException(status_code=501, detail="re-render is not implemented yet")
+    job = _job_or_404(jobs, job_id)
+    overlays = _check_overlays(body.overlays)
+    if job.status != "done":
+        raise HTTPException(status_code=409, detail="only finished jobs can be re-rendered")
+    return jobs.rerender(job_id, overlays)
 
 
 @router.patch("/jobs/{job_id}/score", response_model=Score)

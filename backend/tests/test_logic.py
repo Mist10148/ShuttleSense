@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import csv
 
 import numpy as np
@@ -89,6 +90,28 @@ def test_summary_and_exports(tmp_path) -> None:
     assert record.summary.per_player["near"].peak_speed_kmh == 150.0
 
     write_exports(record, tmp_path)
-    rows = list(csv.DictReader((tmp_path / "hits.csv").open(encoding="utf-8")))
+    rows = list(csv.DictReader((tmp_path / "hits.csv").open(encoding="utf-8-sig")))
     assert [r["stroke"] for r in rows] == ["smash", "lift", "smash"]
     assert (tmp_path / "record.json").exists() and (tmp_path / "summary.json").exists()
+
+
+def test_csv_opens_with_bom(tmp_path) -> None:
+    write_exports(ClipRecord(clip_id="c", fps=30, width=10, height=10, num_frames=0), tmp_path)
+    for name in ("hits.csv", "rallies.csv"):
+        assert (tmp_path / name).read_bytes().startswith(codecs.BOM_UTF8)
+
+
+def test_summary_matches_record(tmp_path) -> None:
+    import json
+
+    from shuttlesense.fake import load_golden
+
+    record = load_golden()
+    write_exports(record, tmp_path)
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    assert summary["summary"]["total_hits"] == len(record.hits)
+    stats = summary["rally_stats"][0]
+    assert stats["stroke_count"] == 3 and stats["peak_speed_kmh"] == 241.0
+    assert stats["duration_s"] == round(55 / 30, 3)
+    rows = list(csv.DictReader((tmp_path / "rallies.csv").open(encoding="utf-8-sig")))
+    assert rows[0]["winner"] == "near" and rows[0]["score_near"] == "1"

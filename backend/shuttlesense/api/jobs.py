@@ -77,6 +77,22 @@ class JobManager:
         self._queue.put(job.id)
         return self.get(job.id)
 
+    def rerender(self, job_id: str, overlays: list[str]) -> Job:
+        """Queue a finished job again with new overlays. The pipeline reuses its stage cache
+        in the job folder, so only io and render actually run."""
+        with self._lock:
+            job = self._jobs[job_id]
+            job.overlays = list(overlays)
+            job.status = "queued"
+            job.progress = 0.0
+            job.error = None
+            job.current_stage = None
+            job.finished_at = None
+            job.stages = [StageState(name=n) for n in STAGE_NAMES]
+            self.storage.save_job(job)
+        self._queue.put(job_id)
+        return self.get(job_id)
+
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)

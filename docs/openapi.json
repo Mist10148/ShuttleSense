@@ -278,6 +278,11 @@
             "title": "Hits Csv",
             "type": "boolean"
           },
+          "rallies_csv": {
+            "default": false,
+            "title": "Rallies Csv",
+            "type": "boolean"
+          },
           "record": {
             "default": false,
             "title": "Record",
@@ -831,6 +836,61 @@
         "summary": "Get Hits Csv"
       }
     },
+    "/jobs/{job_id}/rallies.csv": {
+      "get": {
+        "operationId": "get_rallies_csv_jobs__job_id__rallies_csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Rallies Csv"
+      }
+    },
     "/jobs/{job_id}/record": {
       "get": {
         "operationId": "get_record_jobs__job_id__record_get",
@@ -929,7 +989,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {

@@ -153,8 +153,9 @@ Draft mapping from ShuttleSet's 18 annotated types (finalized by Member 4 in tas
 | File | Content | Producer |
 | --- | --- | --- |
 | `record.json` | The full clip record above | pipeline |
-| `summary.json` | `{clip_id, fps, summary, score, rallies}` subset | analytics (F13) |
-| `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index` | analytics (F13) |
+| `summary.json` | `{clip_id, fps, summary, score, rallies, rally_stats}` subset | analytics (F13) |
+| `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index` (UTF-8 with BOM) | analytics (F13) |
+| `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (UTF-8 with BOM) | analytics (F13) |
 | `annotated.mp4` | H.264, yuv420p, same fps and size as the normalized clip | render (F7) |
 | `tracking.csv` | `frame,visible,x,y` (TrackNetV3 format) for debugging and evaluation | tracking (F2) |
 

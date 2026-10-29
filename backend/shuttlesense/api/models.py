@@ -67,6 +67,7 @@ class JobOutputs(BaseModel):
     video: bool = False
     summary: bool = False
     hits_csv: bool = False
+    rallies_csv: bool = False
 
 
 class Job(BaseModel):

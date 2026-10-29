@@ -1,7 +1,7 @@
 """On-disk layout for uploads and job outputs (docs/ARCHITECTURE.md §3).
 
 storage/videos/<video_id>/source.<ext> + meta.json
-storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.csv
+storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.csv, rallies.csv
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ OUTPUT_FILES = {
     "video": "annotated.mp4",
     "summary": "summary.json",
     "hits_csv": "hits.csv",
+    "rallies_csv": "rallies.csv",
 }
 
 

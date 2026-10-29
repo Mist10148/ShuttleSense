@@ -132,7 +132,7 @@ Job object, polled by the processing screen every 1 to 2 s.
   "created_at": "2026-11-05T09:13:01Z",
   "started_at": "2026-11-05T09:13:02Z",
   "finished_at": null,
-  "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false},
+  "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false, "rallies_csv": false},
   "court_corners_px": [[212, 650], [1068, 650], [880, 210], [400, 210]],
   "overlays": ["trail", "pose", "boxes", "hits", "strokes"],
   "referee": false
@@ -151,13 +151,13 @@ The full clip record ([DATA_FORMAT.md](DATA_FORMAT.md)). `404` until the pipelin
 
 Annotated MP4 (`video/mp4`). Supports HTTP range requests so players can seek.
 
-### `GET /jobs/{job_id}/summary.json` · `GET /jobs/{job_id}/hits.csv`
+### `GET /jobs/{job_id}/summary.json` · `GET /jobs/{job_id}/hits.csv` · `GET /jobs/{job_id}/rallies.csv`
 
-Export files (F13). Served with `Content-Disposition: attachment`.
+Export files (F13). Served with `Content-Disposition: attachment`. CSV files are UTF-8 with a byte-order mark so Excel opens them correctly. `summary.json` adds `rally_stats` (per rally: `stroke_count`, `start_s`, `end_s`, `duration_s`, `peak_speed_kmh`). `rallies.csv` has one row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (empty when the referee stage did not run).
 
 ### `POST /jobs/{job_id}/render`
 
-Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns the Job object; the job goes back to `running` with only the `render` stage active.
+Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns `202` and the Job object with the new `overlays`; the job goes back to `queued`/`running`, the cached stages report `done` immediately and only `io` and `render` actually run. `409` unless the job is `done`; `400` for unknown overlays.
 
 ### `PATCH /jobs/{job_id}/score`
 

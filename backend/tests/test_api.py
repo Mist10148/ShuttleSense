@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -92,7 +93,8 @@ def test_full_round_trip(client: TestClient, tiny_video: Path) -> None:
     assert len(record["frames"]) == 10
     assert record["court"]["corners_px"][0] == [20.0, 80.0]
 
-    assert client.get(f"/jobs/{job['id']}/hits.csv").text.startswith("id,frame")
+    hits_csv = client.get(f"/jobs/{job['id']}/hits.csv").content
+    assert hits_csv.startswith(codecs.BOM_UTF8 + b"id,frame")
     video_res = client.get(f"/jobs/{job['id']}/video")
     assert video_res.status_code == 200 and video_res.headers["content-type"] == "video/mp4"
     assert [j["id"] for j in client.get("/jobs").json()] == [job["id"]]
@@ -196,3 +198,51 @@ def test_progress_is_monotonic(tmp_path: Path, tiny_video: Path) -> None:
             if job["status"] == "done":
                 break
         assert seen == sorted(seen) and seen[-1] == 1.0
+
+
+def test_rerender_only_runs_render_stage(
+    tmp_path: Path, tiny_video: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense import pipeline
+    from shuttlesense.pipeline import StageSpec
+
+    calls = {"tracking": 0, "render": 0}
+    real_render = {s.name: s.fn for s in pipeline.STAGES}["render"]
+
+    def tracking(record, ctx):
+        calls["tracking"] += 1
+        return record
+
+    def render(record, ctx):
+        calls["render"] += 1
+        assert ctx.overlays == (("boxes",) if calls["render"] == 2 else ("trail",))
+        return real_render(record, ctx)
+
+    stages = []
+    for s in pipeline.STAGES:
+        fn = {"tracking": tracking, "render": render}.get(s.name, s.fn)
+        stages.append(StageSpec(s.name, fn, s.needs_court, s.referee))
+    monkeypatch.setattr(pipeline, "STAGES", tuple(stages))
+
+    with make_client(tmp_path) as client:
+        video = upload(client, tiny_video).json()
+        job = client.post("/jobs", json={"video_id": video["id"], "overlays": ["trail"]}).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        res = client.post(f"/jobs/{job['id']}/render", json={"overlays": ["boxes"]})
+        assert res.status_code == 202 and res.json()["overlays"] == ["boxes"]
+        done = wait_for(client, job["id"])
+        assert done["status"] == "done" and done["outputs"]["video"]
+        assert calls == {"tracking": 1, "render": 2}
+        bad = client.post(f"/jobs/{job['id']}/render", json={"overlays": ["nope"]})
+        assert bad.status_code == 400
+
+
+def test_rallies_csv_endpoint(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        video = upload(client, tiny_video).json()
+        job = client.post("/jobs", json={"video_id": video["id"], "referee": True}).json()
+        assert wait_for(client, job["id"])["outputs"]["rallies_csv"]
+        res = client.get(f"/jobs/{job['id']}/rallies.csv")
+        assert res.status_code == 200
+        assert res.content.startswith(codecs.BOM_UTF8 + b"index,start_frame")
+        assert len(res.content.decode("utf-8-sig").strip().splitlines()) == 2
