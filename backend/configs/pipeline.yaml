@@ -50,7 +50,13 @@ stages:
     use_trajectory: true        # false = pose-only ablation
 
   feedback:
-    enabled: true
+    enabled: true               # rules: docs/FEEDBACK_RULES.md
+    min_keypoint_score: 0.3
+    window_frames: 2            # contact rules use the hit frame +- this
+    elbow_extension_deg: 150
+    lunge_knee_deg: 140
+    drop_follow_through: 0.6    # wrist travel after contact, in box heights
+    serve_feet_motion: 0.1      # ankle travel before the serve, in box heights
 
   analytics:
     enabled: true
