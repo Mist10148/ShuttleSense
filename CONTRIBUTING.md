@@ -16,7 +16,7 @@ Team workflow for the 3-week build. Setup is in [docs/SETUP.md](docs/SETUP.md); 
 
 Examples: `feat/T2.2-tracknet-wrapper`, `fix/T4.5-timeline-overflow`, `docs/T7.4-results-tables`.
 
-`main` is protected: no direct pushes after Phase 0, at least one approving review, CI must pass.
+`main` is protected: no direct pushes after Phase 0, at least one approving review, CI must pass. If GitHub branch protection is unavailable on the repo's plan, this is a team rule instead (see [Team rhythm](#team-rhythm)).
 
 ## Commits
 
@@ -68,6 +68,15 @@ Keep commits small and focused; reference the task in the body (`Refs T2.2`).
 - No network calls from widgets; go through repositories/providers.
 - Use `Breakpoints` from `core/responsive/` instead of hard-coded widths.
 - Colors from the theme (`Theme.of(context).colorScheme`, `PlayerColors`), never inline hex.
+
+## Team rhythm
+
+- **Daily stand-up (async, 10 minutes):** post in the team chat before noon: *yesterday / today / blocked*, with task IDs.
+- **Sync (30 minutes) on Mon, Wed and Fri:** walk the board, then the critical path in [PHASES.md](docs/PHASES.md#critical-path).
+- **Phase gates:** at the end of each phase, run the gate checklist at the bottom of its phase file as a short live demo before marking the phase done.
+- **Reviews:** every PR gets a review within 24 h. The lead reviews anything touching `backend/shuttlesense/schema.py`, `backend/shuttlesense/api/` or `app/lib/data/`.
+- **No direct pushes to `main`** after Phase 0, even where GitHub cannot enforce it: branch, open a PR, wait for green CI and one approval.
+- **Decisions** that change a design choice go into [docs/DECISIONS.md](docs/DECISIONS.md) in the same PR.
 
 ## Large files and data
 

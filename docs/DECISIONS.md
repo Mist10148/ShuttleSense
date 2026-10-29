@@ -1,0 +1,15 @@
+# Decision log
+
+Design choices that shaped ShuttleSense, newest last. Add a row in the PR that makes the decision; if a later decision replaces an earlier one, add a new row and mark the old one *superseded*.
+
+| # | Date | Decision | Alternatives considered | Reason | Owner |
+| --- | --- | --- | --- | --- | --- |
+| D1 | 2026-10-29 | One Flutter client (Android, iOS, Web, Windows) talking REST to a Python FastAPI backend | Streamlit/Gradio web UI; native Android app; on-device inference | One codebase for every screen size; the CV stack is Python-only and needs a GPU, so it stays on a laptop or Colab | M1 |
+| D2 | 2026-10-29 | Pose via RTMDet + RTMPose through rtmlib (Apache-2.0) | Ultralytics YOLO-pose (AGPL-3.0); MMPose directly; torchvision Keypoint R-CNN | AGPL would force the whole project's license; rtmlib runs on onnxruntime without the MMCV install pain. Keypoint R-CNN is the fallback (see D6) | M5 |
+| D3 | 2026-10-29 | The app polls `GET /jobs/{id}` (1 s while running, 3 s while queued, back-off on errors) | WebSockets; Server-Sent Events | Jobs take minutes, so 1 s latency is fine; polling survives Colab tunnels and flaky phone Wi-Fi with no reconnect logic | M1 |
+| D4 | 2026-10-29 | Weights on the Hugging Face Hub, datasets and clips on a shared Google Drive folder; nothing large in git | Git LFS; GitHub Releases | Free, works from Colab with one call, and keeps the repo small; `scripts/download_weights.py` verifies SHA-256 checksums | M1 |
+| D5 | 2026-11-02 | Clip record v1.0 frozen (`schema.py` is the source of truth; snapshot in `backend/tests/fixtures/clip_record.schema.json`) | Keep the format open until Phase 3 | Six people build against it in parallel; any change after the freeze needs the lead's approval and a version bump | M1 + all |
+| D6 | *pending T1.5* | Pose backend: rtmlib `balanced` vs Keypoint R-CNN | — | Filled in after the pose spike on the two test rallies (speed, missed players, keypoint jitter) | M5 |
+| D7 | 2026-10-30 | Per-stage cache keyed by a SHA-1 of the stage config, video size and schema version | Re-run every stage on every request | Lets re-render (T5.12) and score corrections reuse perception results instead of re-running TrackNetV3 and pose | M1 |
+| D8 | 2026-10-30 | Fake pipeline (`SHUTTLESENSE_FAKE_PIPELINE=1`, `run --fake`) returns the golden record scaled to the video | Mocking in the app only | The app team can develop and demo every screen before the models work | M1 |
+| D9 | 2026-10-30 | Player assignment uses a greedy nearest-box match instead of SciPy's Hungarian solver | `scipy.optimize.linear_sum_assignment` | With at most a handful of people per frame greedy is exact enough, and it keeps SciPy out of the base install | M5 |
