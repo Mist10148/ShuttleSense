@@ -7,6 +7,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from shuttlesense.atomic import atomic_open, atomic_write_text
 from shuttlesense.schema import ClipRecord, PlayerSummary, Summary
 
 HITS_CSV_COLUMNS = (
@@ -86,7 +87,7 @@ def _fmt(value: float | None, digits: int) -> str:
 def write_exports(record: ClipRecord, out_dir: Path) -> None:
     """Write record.json, summary.json, hits.csv and rallies.csv to out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "record.json").write_text(record.model_dump_json(), encoding="utf-8")
+    atomic_write_text(out_dir / "record.json", record.model_dump_json())
 
     stats = rally_stats(record)
     summary = {
@@ -97,9 +98,9 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
         "rallies": [r.model_dump() for r in record.rallies],
         "rally_stats": stats,
     }
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    atomic_write_text(out_dir / "summary.json", json.dumps(summary, indent=2))
 
-    with (out_dir / "rallies.csv").open("w", newline="", encoding=CSV_ENCODING) as f:
+    with atomic_open(out_dir / "rallies.csv", newline="", encoding=CSV_ENCODING) as f:
         writer = csv.writer(f)
         writer.writerow(RALLIES_CSV_COLUMNS)
         for r, s in zip(record.rallies, stats, strict=True):
@@ -120,7 +121,7 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
                 ]
             )
 
-    with (out_dir / "hits.csv").open("w", newline="", encoding=CSV_ENCODING) as f:
+    with atomic_open(out_dir / "hits.csv", newline="", encoding=CSV_ENCODING) as f:
         writer = csv.writer(f)
         writer.writerow(HITS_CSV_COLUMNS)
         for h in record.hits:

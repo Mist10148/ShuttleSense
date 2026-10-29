@@ -14,6 +14,8 @@ from types import TracebackType
 
 import numpy as np
 
+from shuttlesense.atomic import partial_path, replace
+
 log = logging.getLogger(__name__)
 
 
@@ -31,6 +33,9 @@ def ffmpeg_command(
 
 class VideoWriter:
     """Context manager: write(frame_bgr) for each frame; the file is complete on exit.
+
+    Frames go to a temp file that replaces `path` only on success, so a player streaming the
+    previous render never sees a half-written video.
 
     `backend` is "ffmpeg" or "opencv" (when ffmpeg is missing or use_ffmpeg is False).
     """
@@ -55,12 +60,13 @@ class VideoWriter:
         self.frames = 0
         self._proc: subprocess.Popen | None = None
         self._cv = None
+        self._tmp = partial_path(self.path)
 
     def __enter__(self) -> VideoWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.exe:
             cmd = ffmpeg_command(
-                self.path, fps=self.fps, size=self.size, crf=self.crf, codec=self.codec,
+                self._tmp, fps=self.fps, size=self.size, crf=self.crf, codec=self.codec,
                 exe=self.exe,
             )  # fmt: skip
             self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -69,7 +75,9 @@ class VideoWriter:
 
             log.warning("ffmpeg not found: writing mp4v, which browsers may not play")
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            self._cv = cv2.VideoWriter(str(self.path), fourcc, self.fps, self.size)
+            self._cv = cv2.VideoWriter(str(self._tmp), fourcc, self.fps, self.size)
+            if not self._cv.isOpened():
+                raise RuntimeError(f"OpenCV could not open {self._tmp} for writing")
         return self
 
     def write(self, frame: np.ndarray) -> None:
@@ -90,12 +98,17 @@ class VideoWriter:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        if self._proc is not None:
-            assert self._proc.stdin is not None
-            self._proc.stdin.close()
-            stderr = self._proc.stderr.read().decode(errors="replace") if self._proc.stderr else ""
-            code = self._proc.wait()
-            if code != 0 and exc_type is None:
-                raise RuntimeError(f"ffmpeg failed ({code}): {stderr.strip()[-500:]}")
-        if self._cv is not None:
-            self._cv.release()
+        try:
+            if self._proc is not None:
+                assert self._proc.stdin is not None
+                self._proc.stdin.close()
+                err = self._proc.stderr.read().decode(errors="replace") if self._proc.stderr else ""
+                code = self._proc.wait()
+                if code != 0 and exc_type is None:
+                    raise RuntimeError(f"ffmpeg failed ({code}): {err.strip()[-500:]}")
+            if self._cv is not None:
+                self._cv.release()
+            if exc_type is None:
+                replace(self._tmp, self.path)
+        finally:
+            self._tmp.unlink(missing_ok=True)

@@ -303,6 +303,8 @@ def correct_score(
     job_id: str, body: ScoreCorrectionIn, storage: StorageDep, jobs: JobsDep
 ) -> ScoreUpdate:
     job = _job_or_404(jobs, job_id)
+    if job.status != "done":  # a re-render is about to rewrite record.json
+        raise HTTPException(status_code=409, detail="wait until the job has finished")
     path = _output_or_404(storage, jobs, job_id, "record")
     with jobs.job_lock(job_id):  # read-modify-write of record.json
         record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))

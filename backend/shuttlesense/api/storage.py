@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 from shuttlesense.api.models import Job, VideoInfoOut
+from shuttlesense.atomic import atomic_write_text
 
 OUTPUT_FILES = {
     "record": "record.json",
@@ -56,7 +57,7 @@ class Storage:
         return matches[0] if matches else None
 
     def save_video_meta(self, info: VideoInfoOut) -> None:
-        (self.video_dir(info.id) / "meta.json").write_text(info.model_dump_json(), encoding="utf-8")
+        atomic_write_text(self.video_dir(info.id) / "meta.json", info.model_dump_json())
 
     def load_video_meta(self, video_id: str) -> VideoInfoOut | None:
         if not is_id(video_id):
@@ -84,7 +85,7 @@ class Storage:
     def save_job(self, job: Job) -> None:
         d = self.job_dir(job.id)
         d.mkdir(parents=True, exist_ok=True)
-        (d / "job.json").write_text(job.model_dump_json(), encoding="utf-8")
+        atomic_write_text(d / "job.json", job.model_dump_json())
 
     def load_jobs(self) -> list[Job]:
         jobs = []
