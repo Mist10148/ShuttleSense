@@ -121,7 +121,7 @@ class _ResultsBodyState extends State<_ResultsBody> {
           timeline: StrokeTimeline(
             hits: record.hits,
             currentHitId: currentHit?.id,
-            onSeek: (hit) => _player.seek(hit.position),
+            onSeek: _player.seek,
           ),
           minimap: CourtMinimap(frame: frame, calibrated: record.courtCorners != null),
           scoreboard: Scoreboard(score: record.score, summary: record.summary),
