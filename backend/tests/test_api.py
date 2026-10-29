@@ -311,3 +311,45 @@ def test_calibrate_without_gui_explains(tiny_video: Path) -> None:
 
     with pytest.raises(SystemExit, match="GUI support"):
         click_corners(tiny_video)
+
+
+def test_worker_survives_storage_errors(tmp_path: Path, tiny_video: Path) -> None:
+    def empty_error(*_args, **_kwargs):
+        raise AssertionError
+
+    app = create_app(Settings(storage_dir=tmp_path / "s", device="cpu"), pipeline=empty_error)
+    with TestClient(app) as c:
+        jobs = c.app.state.jobs
+        real_save = jobs.storage.save_job
+        calls = {"n": 0}
+
+        def flaky_save(job):
+            calls["n"] += 1
+            if job.status == "running" and calls["n"] < 4:
+                raise OSError("disk full")
+            real_save(job)
+
+        jobs.storage.save_job = flaky_save
+        video = upload(c, tiny_video).json()
+        first = wait_for(c, c.post("/jobs", json={"video_id": video["id"]}).json()["id"])
+        assert first["status"] == "failed"
+        jobs.storage.save_job = real_save
+        # The worker is still alive, and an exception without a message reports its type.
+        second = wait_for(c, c.post("/jobs", json={"video_id": video["id"]}).json()["id"])
+        assert second["status"] == "failed" and second["error"] == "AssertionError"
+
+
+def test_queue_position_follows_enqueue_order(tmp_path: Path) -> None:
+    from shuttlesense.api.jobs import JobManager
+    from shuttlesense.api.models import Job
+    from shuttlesense.api.storage import Storage
+
+    manager = JobManager(Storage(tmp_path / "s"), config={}, device="cpu")
+    older = manager.submit(Job(id="a" * 12, video_id="v" * 12, overlays=[]))
+    newer = manager.submit(Job(id="b" * 12, video_id="v" * 12, overlays=[]))
+    assert (older.queue_position, manager.get(newer.id).queue_position) == (0, 1)
+    with manager._lock:
+        manager._jobs[older.id].status = "done"
+    manager.rerender(older.id, [])  # back of the queue, although it was created first
+    assert manager.get(newer.id).queue_position == 0
+    assert manager.get(older.id).queue_position == 1

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+import logging
 import queue
 import threading
 from collections.abc import Callable
@@ -15,6 +17,8 @@ from shuttlesense.pipeline import STAGE_NAMES, run_pipeline
 # Signature of run_pipeline, injectable for tests.
 PipelineFn = Callable[..., Any]
 
+log = logging.getLogger(__name__)
+
 
 # Expected share of wall time per stage; overridable with stages.<name>.weight.
 DEFAULT_STAGE_WEIGHTS = {"tracking": 4.0, "pose": 4.0, "render": 2.0}
@@ -22,6 +26,10 @@ DEFAULT_STAGE_WEIGHTS = {"tracking": 4.0, "pose": 4.0, "render": 2.0}
 
 class JobCancelled(Exception):
     pass
+
+
+class JobBusy(Exception):
+    """The job is queued or running, so it cannot be changed yet."""
 
 
 class JobManager:
@@ -45,6 +53,9 @@ class JobManager:
         self._lock = threading.Lock()
         self._job_locks: dict[str, threading.Lock] = {}
         self._worker: threading.Thread | None = None
+        # FIFO order of the queue, for queue_position (created_at is wrong after a re-render).
+        self._enqueued: dict[str, int] = {}
+        self._ticket = itertools.count()
 
         # Jobs interrupted by a server restart cannot resume.
         for job in self._jobs.values():
@@ -75,14 +86,21 @@ class JobManager:
         with self._lock:
             self._jobs[job.id] = job
             self.storage.save_job(job)
+            self._enqueued[job.id] = next(self._ticket)
         self._queue.put(job.id)
         return self.get(job.id)
 
-    def rerender(self, job_id: str, overlays: list[str]) -> Job:
+    def rerender(self, job_id: str, overlays: list[str]) -> Job | None:
         """Queue a finished job again with new overlays. The pipeline reuses its stage cache
-        in the job folder, so only io and render actually run."""
+        in the job folder, so only io and render actually run.
+
+        Returns None if the job is gone. Raises JobBusy if it is queued or running."""
         with self._lock:
-            job = self._jobs[job_id]
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.status in ("queued", "running"):
+                raise JobBusy(job_id)
             job.overlays = list(overlays)
             job.status = "queued"
             job.progress = 0.0
@@ -91,6 +109,7 @@ class JobManager:
             job.finished_at = None
             job.stages = [StageState(name=n) for n in STAGE_NAMES]
             self.storage.save_job(job)
+            self._enqueued[job_id] = next(self._ticket)
         self._queue.put(job_id)
         return self.get(job_id)
 
@@ -101,7 +120,7 @@ class JobManager:
                 return None
             if job.status == "queued":
                 waiting = [j for j in self._jobs.values() if j.status == "queued"]
-                waiting.sort(key=lambda j: j.created_at)
+                waiting.sort(key=lambda j: self._enqueued.get(j.id, -1))
                 job.queue_position = waiting.index(job)
             else:
                 job.queue_position = None
@@ -122,6 +141,7 @@ class JobManager:
                 job.status = "cancelled"
                 job.finished_at = utcnow()
             del self._jobs[job_id]
+            self._enqueued.pop(job_id, None)
         self.storage.delete_job(job_id)
         return True
 
@@ -138,7 +158,17 @@ class JobManager:
             job_id = self._queue.get()
             if job_id is None:
                 return
-            self._run_one(job_id)
+            try:
+                self._run_one(job_id)
+            except Exception:  # keep the worker alive (e.g. disk full while saving job.json)
+                log.exception("job %s could not be run", job_id)
+                try:
+                    self._update(job_id, status="failed", error="internal server error")
+                except Exception:
+                    log.exception("job %s could not be marked failed", job_id)
+            finally:
+                with self._lock:
+                    self._cancelled.discard(job_id)
 
     def _update(self, job_id: str, **changes: Any) -> None:
         with self._lock:
@@ -191,6 +221,8 @@ class JobManager:
 
     def _run_one(self, job_id: str) -> None:
         job = self.get(job_id)
+        with self._lock:
+            self._enqueued.pop(job_id, None)
         if job is None or job.status != "queued":
             return
         source: Path | None = self.storage.video_source(job.video_id)
@@ -215,7 +247,9 @@ class JobManager:
             self.storage.delete_job(job_id)
             return
         except Exception as exc:  # report any stage failure to the client
-            self._update(job_id, status="failed", error=str(exc), finished_at=utcnow())
+            log.exception("job %s failed", job_id)
+            error = str(exc) or type(exc).__name__
+            self._update(job_id, status="failed", error=error, finished_at=utcnow())
             return
         if self.get(job_id) is None:  # deleted while the last stage was finishing
             self.storage.delete_job(job_id)

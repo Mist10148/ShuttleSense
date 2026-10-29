@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from shuttlesense import __version__
 from shuttlesense.analytics import build_summary, write_exports
-from shuttlesense.api.jobs import JobManager
+from shuttlesense.api.jobs import JobBusy, JobManager
 from shuttlesense.api.models import (
     Health,
     Job,
@@ -265,7 +265,13 @@ def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
     overlays = _check_overlays(body.overlays)
     if job.status != "done":
         raise HTTPException(status_code=409, detail="only finished jobs can be re-rendered")
-    return jobs.rerender(job_id, overlays)
+    try:
+        updated = jobs.rerender(job_id, overlays)
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail="job is already queued or running") from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return updated
 
 
 @router.patch("/jobs/{job_id}/score", response_model=ScoreUpdate)
