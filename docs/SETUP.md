@@ -48,6 +48,12 @@ pip install -r requirements/base.txt -r requirements/dev.txt
 pip install -e .
 ```
 
+Check what is installed and what is missing (✓ / ✗ per item; exit code 0 when the base stack is OK):
+
+```bash
+python scripts/check_env.py
+```
+
 That is enough to run the API with the stub pipeline, the tests and the lint. For the real models also install the ML stack. Install the CUDA build of PyTorch first, using the exact command from the selector at <https://pytorch.org/get-started/locally/> (Stable, your OS, Pip, Python, latest CUDA), with the version from `requirements/ml.txt`:
 
 ```bash
