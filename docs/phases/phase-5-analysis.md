@@ -13,22 +13,22 @@
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T5.1](#t51) | App calibration screen polish | M1 | 5 h | T4.3 | ⬜ |
-| [T5.2](#t52) | Court homography stage and validation | M2 | 3 h | T1.1 | ⬜ |
-| [T5.3](#t53) | Court outline overlay | M2 | 3 h | T5.2, T2.6 | ⬜ |
-| [T5.4](#t54) | Court-plane positions for players and shuttle | M2 | 6 h | T5.2, T2.5 | ⬜ |
-| [T5.5](#t55) | App minimap synced to playback | M6 | 4 h | T5.4, T4.6 | ⬜ |
-| [T5.6](#t56) | Estimated shuttle speed | M2 | 5 h | T5.4, T3.10 | ⬜ |
-| [T5.7](#t57) | Stroke counter and status bar | M2 + M6 | 4 h | T3.6 | ⬜ |
-| [T5.8](#t58) | Form feedback rules | M3 | 8 h | T2.5, T3.10 | ⬜ |
-| [T5.9](#t59) | Form tips in the app | M6 | 2 h | T5.8, T4.7 | ⬜ |
-| [T5.10](#t510) | Summary, JSON and CSV exports | M2 | 3 h | T5.6 | ⬜ |
-| [T5.11](#t511) | App downloads and sharing, summary chart | M4 | 5 h | T5.10 | ⬜ |
-| [T5.12](#t512) | Re-render with different overlays | M1 + M6 | 5 h | T2.8 | ⬜ |
-| [T5.13](#t513) | Speed sanity evaluation | M2 | 3 h | T5.6 | ⬜ |
-| [T5.14](#t514) | Minimap overlay in the rendered video | M2 | 3 h | T5.4, T2.6 | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T5.1](#t51) | App calibration screen polish | M1 | 5 h | T4.3 | ⬜ | [#62](https://github.com/Mist10148/ShuttleSense/issues/62) |
+| [T5.2](#t52) | Court homography stage and validation | M2 | 3 h | T1.1 | ⬜ | [#63](https://github.com/Mist10148/ShuttleSense/issues/63) |
+| [T5.3](#t53) | Court outline overlay | M2 | 3 h | T5.2, T2.6 | ⬜ | [#64](https://github.com/Mist10148/ShuttleSense/issues/64) |
+| [T5.4](#t54) | Court-plane positions for players and shuttle | M2 | 6 h | T5.2, T2.5 | ⬜ | [#65](https://github.com/Mist10148/ShuttleSense/issues/65) |
+| [T5.5](#t55) | App minimap synced to playback | M6 | 4 h | T5.4, T4.6 | ⬜ | [#66](https://github.com/Mist10148/ShuttleSense/issues/66) |
+| [T5.6](#t56) | Estimated shuttle speed | M2 | 5 h | T5.4, T3.10 | ⬜ | [#67](https://github.com/Mist10148/ShuttleSense/issues/67) |
+| [T5.7](#t57) | Stroke counter and status bar | M2 + M6 | 4 h | T3.6 | ⬜ | [#68](https://github.com/Mist10148/ShuttleSense/issues/68) |
+| [T5.8](#t58) | Form feedback rules | M3 | 8 h | T2.5, T3.10 | ⬜ | [#69](https://github.com/Mist10148/ShuttleSense/issues/69) |
+| [T5.9](#t59) | Form tips in the app | M6 | 2 h | T5.8, T4.7 | ⬜ | [#70](https://github.com/Mist10148/ShuttleSense/issues/70) |
+| [T5.10](#t510) | Summary, JSON and CSV exports | M2 | 3 h | T5.6 | ⬜ | [#71](https://github.com/Mist10148/ShuttleSense/issues/71) |
+| [T5.11](#t511) | App downloads and sharing, summary chart | M4 | 5 h | T5.10 | ⬜ | [#72](https://github.com/Mist10148/ShuttleSense/issues/72) |
+| [T5.12](#t512) | Re-render with different overlays | M1 + M6 | 5 h | T2.8 | ⬜ | [#73](https://github.com/Mist10148/ShuttleSense/issues/73) |
+| [T5.13](#t513) | Speed sanity evaluation | M2 | 3 h | T5.6 | ⬜ | [#74](https://github.com/Mist10148/ShuttleSense/issues/74) |
+| [T5.14](#t514) | Minimap overlay in the rendered video | M2 | 3 h | T5.4, T2.6 | ⬜ | [#75](https://github.com/Mist10148/ShuttleSense/issues/75) |
 
 ---
 

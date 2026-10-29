@@ -15,21 +15,21 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T4.1](#t41) | Connect screen polish and validation | M6 | 4 h | T1.2 | ⬜ |
-| [T4.2](#t42) | Upload: pick, inspect, upload with progress and cancel | M6 | 6 h | T4.1 | ⬜ |
-| [T4.3](#t43) | Overlay options and job start | M6 | 3 h | T4.2 | ⬜ |
-| [T4.4](#t44) | Processing screen: stages, queue, errors, cancel | M6 | 4 h | T4.3 | ⬜ |
-| [T4.5](#t45) | Results layout for compact / medium / expanded | M6 | 6 h | T4.4 | ⬜ |
-| [T4.6](#t46) | Video player with auth, controls, fullscreen | M6 | 6 h | T4.5, T2.7 | ⬜ |
-| [T4.7](#t47) | Stroke timeline synced with playback | M6 | 5 h | T4.6, T3.10 | ⬜ |
-| [T4.8](#t48) | History screen with delete | M6 | 3 h | T4.4 | ⬜ |
-| [T4.9](#t49) | Error, empty, loading and offline states; theming | M6 | 4 h | T4.1–T4.8 | ⬜ |
-| [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ⬜ |
-| [T4.11](#t411) | Accessibility pass | M4 | 3 h | T4.9 | ⬜ |
-| [T4.12](#t412) | Widget tests with a fake API | M4 | 6 h | T4.4 | ⬜ |
-| [T4.13](#t413) | App icon and splash screen | M4 | 2 h | — | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T4.1](#t41) | Connect screen polish and validation | M6 | 4 h | T1.2 | ⬜ | [#49](https://github.com/Mist10148/ShuttleSense/issues/49) |
+| [T4.2](#t42) | Upload: pick, inspect, upload with progress and cancel | M6 | 6 h | T4.1 | ⬜ | [#50](https://github.com/Mist10148/ShuttleSense/issues/50) |
+| [T4.3](#t43) | Overlay options and job start | M6 | 3 h | T4.2 | ⬜ | [#51](https://github.com/Mist10148/ShuttleSense/issues/51) |
+| [T4.4](#t44) | Processing screen: stages, queue, errors, cancel | M6 | 4 h | T4.3 | ⬜ | [#52](https://github.com/Mist10148/ShuttleSense/issues/52) |
+| [T4.5](#t45) | Results layout for compact / medium / expanded | M6 | 6 h | T4.4 | ⬜ | [#53](https://github.com/Mist10148/ShuttleSense/issues/53) |
+| [T4.6](#t46) | Video player with auth, controls, fullscreen | M6 | 6 h | T4.5, T2.7 | ⬜ | [#54](https://github.com/Mist10148/ShuttleSense/issues/54) |
+| [T4.7](#t47) | Stroke timeline synced with playback | M6 | 5 h | T4.6, T3.10 | ⬜ | [#55](https://github.com/Mist10148/ShuttleSense/issues/55) |
+| [T4.8](#t48) | History screen with delete | M6 | 3 h | T4.4 | ⬜ | [#56](https://github.com/Mist10148/ShuttleSense/issues/56) |
+| [T4.9](#t49) | Error, empty, loading and offline states; theming | M6 | 4 h | T4.1–T4.8 | ⬜ | [#57](https://github.com/Mist10148/ShuttleSense/issues/57) |
+| [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ⬜ | [#58](https://github.com/Mist10148/ShuttleSense/issues/58) |
+| [T4.11](#t411) | Accessibility pass | M4 | 3 h | T4.9 | ⬜ | [#59](https://github.com/Mist10148/ShuttleSense/issues/59) |
+| [T4.12](#t412) | Widget tests with a fake API | M4 | 6 h | T4.4 | ⬜ | [#60](https://github.com/Mist10148/ShuttleSense/issues/60) |
+| [T4.13](#t413) | App icon and splash screen | M4 | 2 h | — | ⬜ | [#61](https://github.com/Mist10148/ShuttleSense/issues/61) |
 
 ---
 

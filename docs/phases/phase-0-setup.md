@@ -13,20 +13,20 @@
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T0.1](#t01) | Repo structure and single root README | M1 | 3 h | — | ✅ |
-| [T0.2](#t02) | Refined PRD and design docs | M1 | 6 h | T0.1 | ✅ |
-| [T0.3](#t03) | Backend skeleton with stub stages, API and tests | M1 | 6 h | T0.1 | ✅ |
-| [T0.4](#t04) | Flutter skeleton with responsive shell and screens | M1 | 6 h | T0.1 | ✅ |
-| [T0.5](#t05) | CI workflows, issue and PR templates | M1 | 2 h | T0.3, T0.4 | ✅ |
-| [T0.6](#t06) | GitHub project board, labels, milestones, issues | M1 | 2 h | T0.5 | ⬜ |
-| [T0.7](#t07) | Protect `main` | M1 | 0.5 h | T0.5 | ⬜ |
-| [T0.8](#t08) | Every member sets up backend + app locally | All | 3 h each | T0.3, T0.4 | ⬜ |
-| [T0.9](#t09) | Hugging Face weights repo and Google Drive data folder | M1 | 1 h | — | ⬜ |
-| [T0.10](#t010) | Record 2 consented test rallies | M4 | 2 h | — | ⬜ |
-| [T0.11](#t011) | Environment check script | M1 | 2 h | T0.3 | ⬜ |
-| [T0.12](#t012) | Team working agreements | M1 | 1 h | — | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T0.1](#t01) | Repo structure and single root README | M1 | 3 h | — | ✅ | [#1](https://github.com/Mist10148/ShuttleSense/issues/1) |
+| [T0.2](#t02) | Refined PRD and design docs | M1 | 6 h | T0.1 | ✅ | [#2](https://github.com/Mist10148/ShuttleSense/issues/2) |
+| [T0.3](#t03) | Backend skeleton with stub stages, API and tests | M1 | 6 h | T0.1 | ✅ | [#3](https://github.com/Mist10148/ShuttleSense/issues/3) |
+| [T0.4](#t04) | Flutter skeleton with responsive shell and screens | M1 | 6 h | T0.1 | ✅ | [#4](https://github.com/Mist10148/ShuttleSense/issues/4) |
+| [T0.5](#t05) | CI workflows, issue and PR templates | M1 | 2 h | T0.3, T0.4 | ✅ | [#5](https://github.com/Mist10148/ShuttleSense/issues/5) |
+| [T0.6](#t06) | GitHub project board, labels, milestones, issues | M1 | 2 h | T0.5 | ⬜ | [#6](https://github.com/Mist10148/ShuttleSense/issues/6) |
+| [T0.7](#t07) | Protect `main` | M1 | 0.5 h | T0.5 | ⬜ | [#7](https://github.com/Mist10148/ShuttleSense/issues/7) |
+| [T0.8](#t08) | Every member sets up backend + app locally | All | 3 h each | T0.3, T0.4 | ⬜ | [#8](https://github.com/Mist10148/ShuttleSense/issues/8) |
+| [T0.9](#t09) | Hugging Face weights repo and Google Drive data folder | M1 | 1 h | — | ⬜ | [#9](https://github.com/Mist10148/ShuttleSense/issues/9) |
+| [T0.10](#t010) | Record 2 consented test rallies | M4 | 2 h | — | ⬜ | [#10](https://github.com/Mist10148/ShuttleSense/issues/10) |
+| [T0.11](#t011) | Environment check script | M1 | 2 h | T0.3 | ⬜ | [#11](https://github.com/Mist10148/ShuttleSense/issues/11) |
+| [T0.12](#t012) | Team working agreements | M1 | 1 h | — | ⬜ | [#12](https://github.com/Mist10148/ShuttleSense/issues/12) |
 
 ---
 

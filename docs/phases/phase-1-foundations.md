@@ -13,19 +13,19 @@
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T1.1](#t11) | Freeze clip record v1.0 | M1 + all | 4 h | T0.3 | ⬜ |
-| [T1.2](#t12) | Freeze API contract v1.0 | M1 + M6 | 3 h | T0.3, T0.4 | ⬜ |
-| [T1.3](#t13) | Add TrackNetV3 as a pinned git submodule | M2 | 2 h | — | ⬜ |
-| [T1.4](#t14) | Weights download with checksums | M2 | 3 h | T1.3, T0.9 | ⬜ |
-| [T1.5](#t15) | Pose model spike: rtmlib vs Keypoint R-CNN | M5 | 6 h | T0.10 | ⬜ |
-| [T1.6](#t16) | Install and pin the ML stack on laptop and Colab | M1 | 4 h | — | ⬜ |
-| [T1.7](#t17) | Colab backend reachable through a tunnel | M1 | 3 h | T0.3, T1.6 | ⬜ |
-| [T1.8](#t18) | App connects on Android, tablet, Windows, Chrome | M6 | 4 h | T0.4 | ⬜ |
-| [T1.9](#t19) | Download ShuttleSet annotations and match list | M3 | 5 h | — | ⬜ |
-| [T1.10](#t110) | Test fixture clip and golden record | M1 | 3 h | T1.1 | ⬜ |
-| [T1.11](#t111) | Decision log | M1 | 1 h | — | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T1.1](#t11) | Freeze clip record v1.0 | M1 + all | 4 h | T0.3 | ⬜ | [#13](https://github.com/Mist10148/ShuttleSense/issues/13) |
+| [T1.2](#t12) | Freeze API contract v1.0 | M1 + M6 | 3 h | T0.3, T0.4 | ⬜ | [#14](https://github.com/Mist10148/ShuttleSense/issues/14) |
+| [T1.3](#t13) | Add TrackNetV3 as a pinned git submodule | M2 | 2 h | — | ⬜ | [#15](https://github.com/Mist10148/ShuttleSense/issues/15) |
+| [T1.4](#t14) | Weights download with checksums | M2 | 3 h | T1.3, T0.9 | ⬜ | [#16](https://github.com/Mist10148/ShuttleSense/issues/16) |
+| [T1.5](#t15) | Pose model spike: rtmlib vs Keypoint R-CNN | M5 | 6 h | T0.10 | ⬜ | [#17](https://github.com/Mist10148/ShuttleSense/issues/17) |
+| [T1.6](#t16) | Install and pin the ML stack on laptop and Colab | M1 | 4 h | — | ⬜ | [#18](https://github.com/Mist10148/ShuttleSense/issues/18) |
+| [T1.7](#t17) | Colab backend reachable through a tunnel | M1 | 3 h | T0.3, T1.6 | ⬜ | [#19](https://github.com/Mist10148/ShuttleSense/issues/19) |
+| [T1.8](#t18) | App connects on Android, tablet, Windows, Chrome | M6 | 4 h | T0.4 | ⬜ | [#20](https://github.com/Mist10148/ShuttleSense/issues/20) |
+| [T1.9](#t19) | Download ShuttleSet annotations and match list | M3 | 5 h | — | ⬜ | [#21](https://github.com/Mist10148/ShuttleSense/issues/21) |
+| [T1.10](#t110) | Test fixture clip and golden record | M1 | 3 h | T1.1 | ⬜ | [#22](https://github.com/Mist10148/ShuttleSense/issues/22) |
+| [T1.11](#t111) | Decision log | M1 | 1 h | — | ⬜ | [#23](https://github.com/Mist10148/ShuttleSense/issues/23) |
 
 ---
 

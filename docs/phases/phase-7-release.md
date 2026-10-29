@@ -15,22 +15,22 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T7.1](#t71) | Record and label team phone footage | M4 | 8 h | T0.10 | ⬜ |
-| [T7.2](#t72) | Evaluate on phone footage | M4 + M5 | 5 h | T7.1 | ⬜ |
-| [T7.3](#t73) | Final ShuttleSet and system metrics | M5 | 4 h | T3.9, T3.7, T2.10, T2.9 | ⬜ |
-| [T7.4](#t74) | End-to-end test on every platform | M1 + M6 | 5 h | freeze | ⬜ |
-| [T7.5](#t75) | Bug-fix pass | All | 10 h | T7.4 | ⬜ |
-| [T7.6](#t76) | Release builds and GitHub Release | M1 | 4 h | T7.5, T4.10 | ⬜ |
-| [T7.7](#t77) | Freeze versions and tag `v1.0.0` | M1 | 1 h | T7.6 | ⬜ |
-| [T7.8](#t78) | README final: demo media, results, limitations | M6 | 4 h | T7.2, T7.3 | ⬜ |
-| [T7.9](#t79) | Slides and written evaluation | M6 + M3 | 8 h | T7.2, T7.3 | ⬜ |
-| [T7.10](#t710) | Backup demo video | M6 | 3 h | T7.5 | ⬜ |
-| [T7.11](#t711) | Demo rehearsal with fallback | All | 2 h | T7.10 | ⬜ |
-| [T7.12](#t712) | Update docs to what actually shipped | M1 | 2 h | freeze | ⬜ |
-| [T7.13](#t713) | License and privacy audit | M1 | 2 h | freeze | ⬜ |
-| [T7.14](#t714) | Release checklist | M1 | 1 h | — | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T7.1](#t71) | Record and label team phone footage | M4 | 8 h | T0.10 | ⬜ | [#83](https://github.com/Mist10148/ShuttleSense/issues/83) |
+| [T7.2](#t72) | Evaluate on phone footage | M4 + M5 | 5 h | T7.1 | ⬜ | [#84](https://github.com/Mist10148/ShuttleSense/issues/84) |
+| [T7.3](#t73) | Final ShuttleSet and system metrics | M5 | 4 h | T3.9, T3.7, T2.10, T2.9 | ⬜ | [#85](https://github.com/Mist10148/ShuttleSense/issues/85) |
+| [T7.4](#t74) | End-to-end test on every platform | M1 + M6 | 5 h | freeze | ⬜ | [#86](https://github.com/Mist10148/ShuttleSense/issues/86) |
+| [T7.5](#t75) | Bug-fix pass | All | 10 h | T7.4 | ⬜ | [#87](https://github.com/Mist10148/ShuttleSense/issues/87) |
+| [T7.6](#t76) | Release builds and GitHub Release | M1 | 4 h | T7.5, T4.10 | ⬜ | [#88](https://github.com/Mist10148/ShuttleSense/issues/88) |
+| [T7.7](#t77) | Freeze versions and tag `v1.0.0` | M1 | 1 h | T7.6 | ⬜ | [#89](https://github.com/Mist10148/ShuttleSense/issues/89) |
+| [T7.8](#t78) | README final: demo media, results, limitations | M6 | 4 h | T7.2, T7.3 | ⬜ | [#90](https://github.com/Mist10148/ShuttleSense/issues/90) |
+| [T7.9](#t79) | Slides and written evaluation | M6 + M3 | 8 h | T7.2, T7.3 | ⬜ | [#91](https://github.com/Mist10148/ShuttleSense/issues/91) |
+| [T7.10](#t710) | Backup demo video | M6 | 3 h | T7.5 | ⬜ | [#92](https://github.com/Mist10148/ShuttleSense/issues/92) |
+| [T7.11](#t711) | Demo rehearsal with fallback | All | 2 h | T7.10 | ⬜ | [#93](https://github.com/Mist10148/ShuttleSense/issues/93) |
+| [T7.12](#t712) | Update docs to what actually shipped | M1 | 2 h | freeze | ⬜ | [#94](https://github.com/Mist10148/ShuttleSense/issues/94) |
+| [T7.13](#t713) | License and privacy audit | M1 | 2 h | freeze | ⬜ | [#95](https://github.com/Mist10148/ShuttleSense/issues/95) |
+| [T7.14](#t714) | Release checklist | M1 | 1 h | — | ⬜ | [#96](https://github.com/Mist10148/ShuttleSense/issues/96) |
 
 ---
 

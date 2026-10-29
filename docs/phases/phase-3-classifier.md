@@ -15,22 +15,22 @@
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T3.1](#t31) | Clip extraction, matches 1–22 | M3 | 10 h | T1.9 | ⬜ |
-| [T3.2](#t32) | Clip extraction, matches 23–44 | M4 | 10 h | T1.9 | ⬜ |
-| [T3.3](#t33) | Final 18 → 6 label mapping | M4 | 3 h | T1.9 | ⬜ |
-| [T3.4](#t34) | Match-level train/val/test split | M4 | 2 h | T3.3 | ⬜ |
-| [T3.5](#t35) | Feature extraction to `.npz` windows | M5 | 10 h | T2.2, T2.5, T3.1, T3.2 | ⬜ |
-| [T3.6](#t36) | Rule-based hit detector stage | M5 | 8 h | T2.3, T2.5 | ⬜ |
-| [T3.7](#t37) | Hit detection evaluation and tuning | M3 | 5 h | T3.6, T3.4 | ⬜ |
-| [T3.8](#t38) | 1D CNN model, data loader, training script | M5 | 10 h | T3.5 | ⬜ |
-| [T3.9](#t39) | Full training + pose-only ablation | M5 | 8 h | T3.8 | ⬜ |
-| [T3.10](#t310) | Stroke inference stage | M5 | 5 h | T3.9, T2.8 | ⬜ |
-| [T3.11](#t311) | Hit marker and stroke label overlays | M2 | 4 h | T3.10, T2.6 | ⬜ |
-| [T3.12](#t312) | Confusion matrix and results figures | M4 | 4 h | T3.9 | ⬜ |
-| [T3.13](#t313) | Dataset statistics and class balance report | M4 | 3 h | T3.3, T3.4 | ⬜ |
-| [T3.14](#t314) | Classifier inference latency and fallback | M3 | 2 h | T3.10 | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T3.1](#t31) | Clip extraction, matches 1–22 | M3 | 10 h | T1.9 | ⬜ | [#35](https://github.com/Mist10148/ShuttleSense/issues/35) |
+| [T3.2](#t32) | Clip extraction, matches 23–44 | M4 | 10 h | T1.9 | ⬜ | [#36](https://github.com/Mist10148/ShuttleSense/issues/36) |
+| [T3.3](#t33) | Final 18 → 6 label mapping | M4 | 3 h | T1.9 | ⬜ | [#37](https://github.com/Mist10148/ShuttleSense/issues/37) |
+| [T3.4](#t34) | Match-level train/val/test split | M4 | 2 h | T3.3 | ⬜ | [#38](https://github.com/Mist10148/ShuttleSense/issues/38) |
+| [T3.5](#t35) | Feature extraction to `.npz` windows | M5 | 10 h | T2.2, T2.5, T3.1, T3.2 | ⬜ | [#39](https://github.com/Mist10148/ShuttleSense/issues/39) |
+| [T3.6](#t36) | Rule-based hit detector stage | M5 | 8 h | T2.3, T2.5 | ⬜ | [#40](https://github.com/Mist10148/ShuttleSense/issues/40) |
+| [T3.7](#t37) | Hit detection evaluation and tuning | M3 | 5 h | T3.6, T3.4 | ⬜ | [#41](https://github.com/Mist10148/ShuttleSense/issues/41) |
+| [T3.8](#t38) | 1D CNN model, data loader, training script | M5 | 10 h | T3.5 | ⬜ | [#42](https://github.com/Mist10148/ShuttleSense/issues/42) |
+| [T3.9](#t39) | Full training + pose-only ablation | M5 | 8 h | T3.8 | ⬜ | [#43](https://github.com/Mist10148/ShuttleSense/issues/43) |
+| [T3.10](#t310) | Stroke inference stage | M5 | 5 h | T3.9, T2.8 | ⬜ | [#44](https://github.com/Mist10148/ShuttleSense/issues/44) |
+| [T3.11](#t311) | Hit marker and stroke label overlays | M2 | 4 h | T3.10, T2.6 | ⬜ | [#45](https://github.com/Mist10148/ShuttleSense/issues/45) |
+| [T3.12](#t312) | Confusion matrix and results figures | M4 | 4 h | T3.9 | ⬜ | [#46](https://github.com/Mist10148/ShuttleSense/issues/46) |
+| [T3.13](#t313) | Dataset statistics and class balance report | M4 | 3 h | T3.3, T3.4 | ⬜ | [#47](https://github.com/Mist10148/ShuttleSense/issues/47) |
+| [T3.14](#t314) | Classifier inference latency and fallback | M3 | 2 h | T3.10 | ⬜ | [#48](https://github.com/Mist10148/ShuttleSense/issues/48) |
 
 ---
 

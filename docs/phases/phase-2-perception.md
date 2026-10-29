@@ -13,19 +13,19 @@
 
 ## Tasks
 
-| ID | Task | Owner | Est. | Depends | Status |
-| --- | --- | --- | --- | --- | --- |
-| [T2.1](#t21) | Video io: normalize, frame iterator, limits | M1 | 6 h | T1.1 | ⬜ |
-| [T2.2](#t22) | TrackNetV3 wrapper stage | M2 | 10 h | T1.3, T1.4, T2.1 | ⬜ |
-| [T2.3](#t23) | Trajectory rectification and gap filling | M2 | 5 h | T2.2 | ⬜ |
-| [T2.4](#t24) | Player detection and near/far IDs | M5 | 8 h | T1.5, T2.1 | ⬜ |
-| [T2.5](#t25) | Keypoints per player with smoothing | M5 | 5 h | T2.4 | ⬜ |
-| [T2.6](#t26) | Overlay renderer: trail, boxes, skeletons | M2 | 8 h | T2.2, T2.5 | ⬜ |
-| [T2.7](#t27) | H.264 export via ffmpeg | M1 | 4 h | T2.6 | ⬜ |
-| [T2.8](#t28) | Real pipeline wiring: progress and stage cache | M1 | 6 h | T2.1 | ⬜ |
-| [T2.9](#t29) | Processing-time benchmark | M1 | 3 h | T2.8 | ⬜ |
-| [T2.10](#t210) | Shuttle tracking accuracy evaluation | M2 | 5 h | T2.3 | ⬜ |
-| [T2.11](#t211) | Player ID and pose quality check on team clips | M3 | 3 h | T2.5 | ⬜ |
+| ID | Task | Owner | Est. | Depends | Status | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| [T2.1](#t21) | Video io: normalize, frame iterator, limits | M1 | 6 h | T1.1 | ⬜ | [#24](https://github.com/Mist10148/ShuttleSense/issues/24) |
+| [T2.2](#t22) | TrackNetV3 wrapper stage | M2 | 10 h | T1.3, T1.4, T2.1 | ⬜ | [#25](https://github.com/Mist10148/ShuttleSense/issues/25) |
+| [T2.3](#t23) | Trajectory rectification and gap filling | M2 | 5 h | T2.2 | ⬜ | [#26](https://github.com/Mist10148/ShuttleSense/issues/26) |
+| [T2.4](#t24) | Player detection and near/far IDs | M5 | 8 h | T1.5, T2.1 | ⬜ | [#27](https://github.com/Mist10148/ShuttleSense/issues/27) |
+| [T2.5](#t25) | Keypoints per player with smoothing | M5 | 5 h | T2.4 | ⬜ | [#28](https://github.com/Mist10148/ShuttleSense/issues/28) |
+| [T2.6](#t26) | Overlay renderer: trail, boxes, skeletons | M2 | 8 h | T2.2, T2.5 | ⬜ | [#29](https://github.com/Mist10148/ShuttleSense/issues/29) |
+| [T2.7](#t27) | H.264 export via ffmpeg | M1 | 4 h | T2.6 | ⬜ | [#30](https://github.com/Mist10148/ShuttleSense/issues/30) |
+| [T2.8](#t28) | Real pipeline wiring: progress and stage cache | M1 | 6 h | T2.1 | ⬜ | [#31](https://github.com/Mist10148/ShuttleSense/issues/31) |
+| [T2.9](#t29) | Processing-time benchmark | M1 | 3 h | T2.8 | ⬜ | [#32](https://github.com/Mist10148/ShuttleSense/issues/32) |
+| [T2.10](#t210) | Shuttle tracking accuracy evaluation | M2 | 5 h | T2.3 | ⬜ | [#33](https://github.com/Mist10148/ShuttleSense/issues/33) |
+| [T2.11](#t211) | Player ID and pose quality check on team clips | M3 | 3 h | T2.5 | ⬜ | [#34](https://github.com/Mist10148/ShuttleSense/issues/34) |
 
 ---
 
