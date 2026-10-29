@@ -59,6 +59,7 @@ class ResultsScreen extends ConsumerWidget {
           ),
         ),
         data: (record) => _ResultsBody(
+          jobId: jobId,
           record: record,
           videoUrl: api.videoUrl(jobId),
           headers: api.authHeaders,
@@ -69,26 +70,54 @@ class ResultsScreen extends ConsumerWidget {
   }
 }
 
-class _ResultsBody extends StatefulWidget {
+class _ResultsBody extends ConsumerStatefulWidget {
   const _ResultsBody({
+    required this.jobId,
     required this.record,
     required this.videoUrl,
     required this.headers,
     required this.videoAvailable,
   });
 
+  final String jobId;
   final ClipRecord record;
   final String videoUrl;
   final Map<String, String> headers;
   final bool videoAvailable;
 
   @override
-  State<_ResultsBody> createState() => _ResultsBodyState();
+  ConsumerState<_ResultsBody> createState() => _ResultsBodyState();
 }
 
-class _ResultsBodyState extends State<_ResultsBody> {
+class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   late final Player _player = openPlayer(widget.videoUrl, widget.headers);
   late final VideoController _controller = VideoController(_player);
+  late ClipRecord _record = widget.record;
+  bool _correcting = false;
+
+  @override
+  void didUpdateWidget(_ResultsBody old) {
+    super.didUpdateWidget(old);
+    if (old.record != widget.record) _record = widget.record;
+  }
+
+  /// F16: flip a rally's winner on the server and show the re-scored rallies.
+  Future<void> _correct(int rallyIndex, String winner) async {
+    setState(() => _correcting = true);
+    try {
+      final update = await ref
+          .read(apiClientProvider)
+          .correctScore(widget.jobId, rallyIndex: rallyIndex, winner: winner);
+      if (!mounted) return;
+      setState(() => _record = _record.copyWith(rallies: update.rallies, score: update.score));
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _correcting = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -98,7 +127,7 @@ class _ResultsBodyState extends State<_ResultsBody> {
 
   @override
   Widget build(BuildContext context) {
-    final record = widget.record;
+    final record = _record;
     return StreamBuilder<Duration>(
       stream: _player.stream.position,
       initialData: Duration.zero,
@@ -116,15 +145,20 @@ class _ResultsBodyState extends State<_ResultsBody> {
             rallyState: frame?.rallyState,
             speedKmh: frame?.shuttleSpeedKmh,
             peakSpeedKmh: record.summary?.peakSpeedKmh,
-            strokeCount: record.hits.where((h) => h.frame <= frameIndex).length,
+            strokeCount: record.strokesSoFar(frameIndex),
           ),
           timeline: StrokeTimeline(
             hits: record.hits,
             currentHitId: currentHit?.id,
             onSeek: _player.seek,
           ),
-          minimap: CourtMinimap(frame: frame, calibrated: record.courtCorners != null),
-          scoreboard: Scoreboard(score: record.score, summary: record.summary),
+          minimap: CourtMinimap(record: record, frameIndex: frameIndex),
+          scoreboard: Scoreboard(
+            record: record,
+            frameIndex: frameIndex,
+            busy: _correcting,
+            onCorrect: _correct,
+          ),
         );
       },
     );
