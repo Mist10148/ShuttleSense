@@ -109,7 +109,10 @@ Weights are not committed (`backend/weights/` is gitignored).
 cd backend
 python scripts/download_weights.py            # all weights
 python scripts/download_weights.py --only tracknet
+python scripts/download_weights.py --force    # re-download, e.g. after a checksum error
 ```
+
+Each file is checked against the SHA-256 in `CHECKSUMS` (in the script); a mismatching file is deleted and the script stops with an error.
 
 Expected layout after download:
 
