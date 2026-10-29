@@ -87,13 +87,13 @@
 
 **Owner:** M1 · **Estimate:** 3 h · **Priority:** P3 · **Area:** backend · **Refs:** F16 · **Depends on:** T6.3 · **Blocks:** T6.5
 
-**Inputs.** `PATCH /jobs/{id}/score` in `api/routes.py` (partially implemented: changes the winner and appends a correction).
+**Inputs.** `PATCH /jobs/{id}/score` in `api/routes.py` (implemented: changes the winner, appends a correction, re-scores later rallies and rewrites the exports; corrections are also kept in `corrections.json` so a re-render applies them again).
 
 **Steps**
-- [ ] Recompute `score_after` for all rallies after the corrected one using `apply_rallies`.
-- [ ] Regenerate `summary.json` and `hits.csv` (`write_exports`).
-- [ ] Concurrency: protect the read-modify-write with a per-job lock in `JobManager`.
-- [ ] Return the updated `score` and `rallies`.
+- [x] Recompute `score_after` for all rallies after the corrected one using `apply_rallies`.
+- [x] Regenerate `summary.json` and `hits.csv` (`write_exports`).
+- [x] Concurrency: protect the read-modify-write with a per-job lock in `JobManager`.
+- [x] Return the updated `score` and `rallies`.
 
 **Tests.** `test_api.py::test_score_correction_recomputes_following_rallies`, `::test_correction_409_without_referee`.
 

@@ -101,7 +101,7 @@ Start processing.
 | --- | --- | --- |
 | `video_id` | yes | From `POST /videos` |
 | `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features. `400` if they are not a convex quadrilateral in that order, or if the court they outline covers less than 10% or more than 95% of the frame ("corners look wrong") |
-| `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all available |
+| `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all nine (overlays whose stage did not run are simply not drawn) |
 | `referee` | no | Run the P3 referee layer; default `false` |
 | `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0 |
 
@@ -120,7 +120,7 @@ Job object, polled by the processing screen every 1 to 2 s.
   "id": "f00dbabe1234",
   "video_id": "a1b2c3d4e5f6",
   "status": "running",
-  "queue_position": 0,
+  "queue_position": null,
   "current_stage": "pose",
   "progress": 0.42,
   "stages": [
@@ -142,7 +142,7 @@ Job object, polled by the processing screen every 1 to 2 s.
 
 `court_corners_px`, `overlays` and `referee` echo the options the job was created with, so the app can retry or re-render with the same settings.
 
-`status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
+`status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
 ### `GET /jobs/{job_id}/record`
 

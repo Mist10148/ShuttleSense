@@ -128,14 +128,15 @@ RTMDet/RTMPose ONNX files are downloaded and cached by rtmlib on first use.
 
 ## 6. Datasets
 
-Datasets are not committed (`backend/data/` is gitignored) and match videos are never redistributed. Follow ShuttleSet's terms of use.
+Datasets are not committed (`backend/data/` is gitignored) and match videos are never redistributed. Follow ShuttleSet's terms of use. Put each match video in `backend/data/videos/` under the file name given in the `video` column of `data/shuttleset/match_list.csv`.
 
 ```bash
 cd backend
 python scripts/download_shuttleset.py                 # annotations + match list -> data/shuttleset/
 python scripts/extract_clips.py --matches 1-22        # Member 3
 python scripts/extract_clips.py --matches 23-44       # Member 4
-python scripts/extract_features.py                    # -> data/features/*.npz, data/splits.json
+python scripts/make_splits.py                         # -> data/splits.json, configs/splits.json
+python scripts/extract_features.py                    # -> data/features/*.npz
 python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
 ```
 

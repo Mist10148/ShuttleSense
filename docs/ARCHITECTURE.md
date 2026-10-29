@@ -95,11 +95,11 @@ backend/
 │   ├── run.py                  # CLI: python -m shuttlesense.run
 │   ├── io/ tracking/ pose/ court/ hits/ strokes/ feedback/ analytics/ referee/ render/
 │   └── api/
-│       ├── main.py             # FastAPI app factory, CORS, auth dependency
+│       ├── main.py             # FastAPI app factory, CORS, job manager startup
 │       ├── settings.py         # env-driven settings (SHUTTLESENSE_*)
 │       ├── storage.py          # per-video / per-job folders on disk
 │       ├── jobs.py             # in-memory job registry + single GPU worker thread
-│       └── routes.py           # endpoints from API.md
+│       └── routes.py           # endpoints from API.md, token check
 ├── scripts/                    # weights/data download, clip extraction, training, Colab serving
 ├── notebooks/                  # Colab notebook (runs the backend with a tunnel)
 ├── third_party/TrackNetV3/     # git submodule (added in Phase 1)

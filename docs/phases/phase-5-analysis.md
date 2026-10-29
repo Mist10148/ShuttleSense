@@ -118,7 +118,7 @@
 - [ ] Optional heatmap toggle (player positions over the whole clip).
 - [ ] Repaint efficiently: only when the frame index changes (`shouldRepaint` compares frame numbers).
 
-**Tests.** `test/minimap_test.dart`: painter `shouldRepaint` logic; widget renders with a golden record frame.
+**Tests.** In `test/scoreboard_test.dart`: painter `shouldRepaint` logic; widget renders with a golden record frame.
 
 **Acceptance criteria.** Dots move smoothly with the video on phone and laptop.
 
@@ -138,7 +138,7 @@
 - [ ] Clip implausible values (> 450 km/h) to null and log.
 - [ ] Every display (video, app, exports) labels speed as "estimated".
 
-**Tests.** Existing `test_speed_constant_motion`; add `test_speed_none_across_gaps`, `test_hit_speed_is_post_hit_peak`.
+**Tests.** Existing `test_speed_constant_motion`; add `test_speed_constant_motion_and_none_across_gaps`, `test_hit_speed_is_post_hit_peak`, `test_glitch_frame_does_not_leak_into_neighbours`.
 
 **Acceptance criteria.** On test clips, median smash speed > median drop speed; values in a plausible range (drops 30–90, smashes 100–300 km/h in 2D approximation).
 
@@ -243,7 +243,7 @@
 **Owner:** M1 + M6 · **Estimate:** 5 h · **Priority:** P2 · **Area:** backend · **Refs:** F7 · **Depends on:** T2.8 · **Blocks:** —
 
 **Steps**
-- [ ] Backend: implement `POST /jobs/{id}/render` (currently 501): set job `running`, run only the `render` stage using cached stage outputs (T2.8) and the new overlay list; update `job.overlays`.
+- [ ] Backend: implement `POST /jobs/{id}/render` (done): set job `running`, run only the `render` stage using cached stage outputs (T2.8) and the new overlay list; update `job.overlays`.
 - [ ] App: "Overlays" button on results opens the chip sheet; on apply, call render, show progress, reload the player.
 
 **Tests.** `test_api.py::test_rerender_only_runs_render_stage` (fake pipeline counting stage calls).

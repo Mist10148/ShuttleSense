@@ -78,7 +78,7 @@
 - [x] `api/` (`main.py`, `routes.py`, `jobs.py`, `storage.py`, `settings.py`, `models.py`).
 - [x] Tests: `tests/test_schema.py`, `test_api.py`, `test_court.py`, `test_logic.py`.
 
-**Acceptance criteria.** `ruff check . && ruff format --check . && pytest` pass (26 tests); `GET /health` responds.
+**Acceptance criteria.** `ruff check . && ruff format --check . && pytest` pass; `GET /health` responds.
 
 ---
 
@@ -94,7 +94,7 @@
 - [x] `lib/core/` (server config, router, theme, `Breakpoints`, `AdaptiveShell`), `lib/data/` (`ApiClient`, models, providers), `lib/features/*` screens.
 - [x] Tests: `test/models_test.dart`, `test/responsive_test.dart`.
 
-**Acceptance criteria.** `flutter analyze` clean, `flutter test` green (13 tests), `flutter build web` succeeds.
+**Acceptance criteria.** `flutter analyze` clean, `flutter test` green, `flutter build web` succeeds.
 
 ---
 
@@ -211,9 +211,9 @@
 **Goal.** One command that tells a member what is missing.
 
 **Steps**
-- [ ] Add `backend/scripts/check_env.py` that prints ✓/✗ for: Python ≥ 3.11; packages in `requirements/base.txt` importable at the pinned versions; optional ML packages (`torch`, `onnxruntime`, `rtmlib`) with CUDA availability; `ffmpeg -version`; weights files from `download_weights.FILES`; TrackNetV3 submodule present; free disk space ≥ 20 GB.
-- [ ] Exit code 0 when the base stack is OK even if optional ML pieces are missing.
-- [ ] Mention it in SETUP.md §3.
+- [x] Add `backend/scripts/check_env.py` that prints ✓/✗ for: Python ≥ 3.11; packages in `requirements/base.txt` importable at the pinned versions; optional ML packages (`torch`, `onnxruntime`, `rtmlib`) with CUDA availability; `ffmpeg -version`; weights files from `download_weights.FILES`; TrackNetV3 submodule present; free disk space ≥ 20 GB.
+- [x] Exit code 0 when the base stack is OK even if optional ML pieces are missing.
+- [x] Mention it in SETUP.md §3.
 
 **Tests.** `tests/test_check_env.py::test_runs_and_reports_python` (runs `main()` with a captured stdout and asserts the Python line).
 

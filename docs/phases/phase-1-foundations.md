@@ -217,10 +217,10 @@
 **Goal.** Stage owners and the app can test against a realistic record without a GPU.
 
 **Steps**
-- [ ] Add `backend/tests/fixtures/golden_record.json`: a hand-written 60-frame record with shuttle positions, two players with 17 keypoints, 3 hits with strokes, court corners, positions and speeds (values plausible, not real).
-- [ ] Add `tests/test_schema.py::test_golden_record_valid`.
-- [ ] Add a `--fake` flag to `shuttlesense.run` and an env var `SHUTTLESENSE_FAKE_PIPELINE=1` for the API that returns the golden record (scaled to the uploaded clip's frame count) so the app can show non-empty results.
-- [ ] Copy the same JSON to `app/test/fixtures/golden_record.json` and parse it in `models_test.dart`.
+- [x] Add `backend/tests/fixtures/golden_record.json`: a hand-written 60-frame record with shuttle positions, two players with 17 keypoints, 3 hits with strokes, court corners, positions and speeds (values plausible, not real).
+- [x] Add `tests/test_schema.py::test_golden_record_valid`.
+- [x] Add a `--fake` flag to `shuttlesense.run` and an env var `SHUTTLESENSE_FAKE_PIPELINE=1` for the API that returns the golden record (scaled to the uploaded clip's frame count) so the app can show non-empty results.
+- [x] Copy the same JSON to `app/test/fixtures/golden_record.json` and parse it in `models_test.dart`.
 
 **Tests.** `test_golden_record_valid`, `test_api.py::test_fake_pipeline_returns_hits`, `models_test.dart: parses golden record`.
 
@@ -234,9 +234,9 @@
 **Owner:** M1 · **Estimate:** 1 h · **Priority:** P2 · **Area:** docs · **Refs:** — · **Depends on:** — · **Blocks:** —
 
 **Steps**
-- [ ] Create `docs/DECISIONS.md` with a table: date, decision, alternatives, reason, owner.
-- [ ] Seed it with: Flutter client + FastAPI backend; rtmlib vs YOLO (license); polling vs WebSockets; HF Hub + Drive; schema v1.0 freeze; pose spike result (T1.5).
-- [ ] Link it from README "Documentation".
+- [x] Create `docs/DECISIONS.md` with a table: date, decision, alternatives, reason, owner.
+- [x] Seed it with: Flutter client + FastAPI backend; rtmlib vs YOLO (license); polling vs WebSockets; HF Hub + Drive; schema v1.0 freeze; pose spike result (T1.5).
+- [x] Link it from README "Documentation".
 
 **Acceptance criteria.** File merged with ≥ 6 entries.
 

@@ -69,7 +69,7 @@ Platform notes:
 | Person + pose | rtmlib (RTMDet + RTMPose) | 0.0.16 | Apache-2.0 | Multi-person, fast on ONNX Runtime, no mmcv install; COCO-17 keypoints |
 | Inference runtime | onnxruntime-gpu | 1.31.1 | MIT | Runs RTMDet/RTMPose on CUDA; CPU fallback with `onnxruntime` |
 | Fallback pose | torchvision Keypoint R-CNN | with torch | BSD-3 | Used only if rtmlib fails the Phase 1 spike |
-| Numerics | SciPy | 1.18.1 | BSD-3 | Smoothing (Savitzky–Golay), interpolation of trajectory gaps |
+| Numerics | SciPy | 1.18.1 | BSD-3 | Pulled in by the ML stack (`requirements/ml.txt`); ShuttleSense's own code does not import it (gap filling and smoothing are NumPy, see D9) |
 | Weights hosting | huggingface-hub | 2.3.0 | Apache-2.0 | `scripts/download_weights.py` pulls versioned weights |
 | Progress | tqdm | 4.70.1 | MIT/MPL-2.0 | Progress bars in scripts |
 

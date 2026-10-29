@@ -157,7 +157,7 @@ Draft mapping from ShuttleSet's 18 annotated types (finalized by Member 4 in tas
 | `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index` (UTF-8 with BOM) | analytics (F13) |
 | `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (UTF-8 with BOM) | analytics (F13) |
 | `annotated.mp4` | H.264, yuv420p, same fps and size as the normalized clip | render (F7) |
-| `tracking.csv` | `frame,visible,x,y` (TrackNetV3 format) for debugging and evaluation | tracking (F2) |
+| `tracking.csv` | `frame,visible,x,y,source` (TrackNetV3 format plus `source`: `net`, `interp` or empty) for debugging and evaluation | tracking (F2) |
 
 ## Training data layout (stroke classifier)
 
@@ -172,4 +172,4 @@ backend/data/
 └── splits.json                 # {"train": [match_ids], "val": [...], "test": [...]} — split by match
 ```
 
-Feature window per hit: `T = 32` frames centered on the hit frame (configurable in `configs/stroke_cnn.yaml`). Per frame `F` = hitter's 17 keypoints × (x, y) normalized to the player's bbox, plus shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features.
+Feature window per hit: `T = 32` frames centered on the hit frame (`extract_features.py --window`; the checkpoint stores `window_frames` and inference uses it). Per frame `F` = hitter's 17 keypoints × (x, y) normalized to the player's bbox, plus shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features.

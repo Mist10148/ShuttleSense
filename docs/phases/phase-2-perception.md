@@ -70,7 +70,7 @@
 **Inputs.** `ctx.reader`; `weights/tracknet/TrackNet_best.pt`; `configs/pipeline.yaml stages.tracking` (`batch_size`, weights paths).
 
 **Steps**
-- [ ] In `tracking/tracknet.py`, add `load_models(device) -> (tracknet, inpaintnet)` that adds the submodule to `sys.path` (lazy), builds the models as upstream `predict.py` does and loads checkpoints with `map_location=device`. Cache loaded models in a module-level dict keyed by device so the API worker loads them once.
+- [ ] In `tracking/tracknet.py`, implement `predict(ctx, weights)` (stub in place) with a cached model loader that adds the submodule to `sys.path` (lazy), builds the models as upstream `predict.py` does and loads checkpoints with `map_location=device`. Cache loaded models in a module-level dict keyed by device so the API worker loads them once.
 - [ ] Implement sliding-window inference: build input sequences of the length TrackNetV3 expects (see notes from T1.3) from `ctx.reader.batch(...)`, resized to the network input size; include the background/median frame if the upstream model needs it.
 - [ ] Convert heatmaps to coordinates (upstream threshold + largest connected component), scale back to normalized video pixels.
 - [ ] Call `ctx.progress(done / total)` at least every batch.
@@ -123,7 +123,7 @@
 - [ ] In `pose/estimator.py`, add `load_detector(backend, mode, device)` (lazy rtmlib/torchvision import, cached per device).
 - [ ] Per frame: detect people, drop boxes below `min_person_score`.
 - [ ] Filter to players: if `record.court` exists, keep people whose foot point (bottom-centre of bbox) projects inside the court expanded by 1.5 m (`court.image_to_court`); otherwise keep the two largest boxes whose feet are in the lower 90% of the frame (removes umpires/spectators in the stands).
-- [ ] Assign sides with the existing `assign_sides` on the first frame; afterwards track by nearest previous bbox centre (Hungarian on IoU/centre distance via `scipy.optimize.linear_sum_assignment`), so IDs stay stable through crossings at the net.
+- [ ] Assign sides with the existing `assign_sides` on the first frame; afterwards track by nearest previous bbox centre (greedy nearest-box match; see DECISIONS.md D9), so IDs stay stable through crossings at the net.
 - [ ] If only one player is detected, keep the previous box for up to `stages.pose.hold_frames` (add to config, default 5) and lower its score.
 - [ ] Write `frames[i].players.near/far = Player(bbox, score)`.
 
@@ -202,11 +202,11 @@
 **Owner:** M1 · **Estimate:** 6 h · **Priority:** P1 · **Area:** backend · **Refs:** NFR Modularity · **Depends on:** T2.1 · **Blocks:** T2.9, T5.12
 
 **Steps**
-- [ ] In `pipeline.run_pipeline`, after each stage write `out_dir/cache/<stage>.json` containing only the fields that stage owns (per the ownership table); on start, if a cache file exists and its `config_hash` matches, load it and skip the stage (status `done`, progress 1).
-- [ ] `config_hash` = SHA-1 of the stage's config block + video file size + schema version.
-- [ ] Weight overall job progress by expected stage cost (config `stages.<name>.weight`, defaults: tracking 4, pose 4, render 2, others 0.2) in `JobManager._on_event`.
-- [ ] Load models once per worker: keep the model caches from T2.2/T2.4 alive between jobs.
-- [ ] Log per-stage wall time to `out_dir/timings.json`.
+- [x] In `pipeline.run_pipeline`, after each stage write `out_dir/cache/<stage>.json` containing only the fields that stage owns (per the ownership table); on start, if a cache file exists and its `config_hash` matches, load it and skip the stage (status `done`, progress 1).
+- [x] `config_hash` = SHA-1 of the stage's config block + video file size + schema version.
+- [x] Weight overall job progress by expected stage cost (config `stages.<name>.weight`, defaults: tracking 4, pose 4, render 2, others 0.2) in `JobManager._on_event`.
+- [x] Load models once per worker: keep the model caches from T2.2/T2.4 alive between jobs.
+- [x] Log per-stage wall time to `out_dir/timings.json`.
 
 **Tests**
 - `test_pipeline.py::test_cached_stage_is_skipped` (fake stage counting calls)

@@ -234,7 +234,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 **Owner:** M1 · **Estimate:** 1 h · **Priority:** P2 · **Area:** docs · **Refs:** — · **Depends on:** — · **Blocks:** T7.6
 
 **Steps**
-- [ ] Add `docs/RELEASE.md`: version bump locations, build commands per platform, signing, smoke test per artifact, release notes template, tagging.
+- [x] Add `docs/RELEASE.md`: version bump locations, build commands per platform, signing, smoke test per artifact, release notes template, tagging.
 
 **Acceptance criteria.** T7.6 and T7.7 are executed by following `docs/RELEASE.md` step by step.
 

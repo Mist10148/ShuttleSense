@@ -47,7 +47,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 - [ ] Help link "How do I find my laptop's address?" opening a bottom sheet with the steps from SETUP.md §8.
 - [ ] Web build: if the page is `https://` and the URL is `http://`, show "Browsers block http servers from https pages; use the tunnel URL".
 
-**Tests.** `test/connect_test.dart`: invalid URL shows error; success navigates home (fake `ApiClient` via provider override, see T4.12); schema mismatch warning.
+**Tests.** `test/connect_upload_test.dart`: invalid URL shows error; success navigates home (fake `ApiClient` via provider override, see T4.12); schema mismatch warning.
 
 **Acceptance criteria.** Works on all four platforms; every failure case has a human-readable message.
 
@@ -67,7 +67,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 - [ ] On failure keep the picked file so the user can retry without re-picking.
 - [ ] Move upload state into `features/upload/upload_controller.dart` (Riverpod `Notifier`) so the widget only renders state.
 
-**Tests.** `test/upload_test.dart`: progress updates from a fake upload stream; cancel resets state; error message shown.
+**Tests.** `test/connect_upload_test.dart`: progress updates from a fake upload stream; cancel resets state; error message shown.
 
 **Acceptance criteria.** 1-minute 1080p clip uploads from Android phone, Windows and Chrome with live progress; cancel works.
 
@@ -84,7 +84,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 - [ ] Court-dependent overlays (`court`, `minimap`, `speed`, `score`) are greyed out when "Calibrate court" is off.
 - [ ] "Upload and analyze" calls `createJob` and navigates to `Routes.job(id)`.
 
-**Tests.** `test/upload_test.dart::court overlays disabled without calibration`.
+**Tests.** `test/connect_upload_test.dart` (court overlays disabled without calibration) and `test/calibration_test.dart` (skip sends no court overlays).
 
 **Acceptance criteria.** The job request contains exactly the chosen overlays (verify in backend log).
 
@@ -192,7 +192,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M6 · **Estimate:** 4 h · **Priority:** C · **Area:** app · **Refs:** NFR Usability · **Depends on:** T4.1–T4.8 · **Blocks:** T4.11
 
 **Steps**
-- [ ] Global offline banner when the last API call failed with a connection error (provider `connectivityStateProvider` updated by a dio interceptor in `ApiClient`).
+- [ ] Global offline banner when the last API call failed with a connection error (implemented as `OfflineBanner` in `shared/widgets/offline_banner.dart`, driven by `healthProvider`, which re-checks the server every 30 s, or every 10 s while unreachable).
 - [ ] Every screen has loading, empty and error states using `MessageView`.
 - [ ] Settings: theme mode (system/light/dark) persisted; wire into `MaterialApp.themeMode`.
 - [ ] Review every screen in light and dark mode on phone and laptop.

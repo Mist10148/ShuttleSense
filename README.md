@@ -214,6 +214,8 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 | `--no-referee` | Skip the P3 referee layer |
 | `--tracking-csv` | Use a TrackNetV3 `predict.py` CSV instead of running the tracker |
 | `--fake` | Return the golden record scaled to the video (no models; for app and demo testing) |
+| `--config` | Pipeline YAML to use instead of `configs/pipeline.yaml` |
+| `--device` | `cpu` or `cuda` (default: CUDA when available) |
 | `--out` | Output folder for the annotated video and JSON/CSV files |
 
 ### Train the stroke classifier
@@ -221,7 +223,8 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 ```bash
 cd backend
 python scripts/download_shuttleset.py      # annotations + match list
-python scripts/extract_clips.py            # cut per-stroke clips
+python scripts/extract_clips.py            # cut per-stroke clips (videos in data/videos/)
+python scripts/make_splits.py              # train/val/test split by match
 python scripts/extract_features.py         # pose + shuttle features per clip
 python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
 ```
