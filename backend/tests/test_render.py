@@ -148,3 +148,30 @@ def test_minimap_layer_draws_in_corner() -> None:
     outside = img.copy()
     outside[y : y + h, x : x + w] = 0
     assert not outside.any()
+
+
+def test_score_layer_updates_after_rally() -> None:
+    from shuttlesense.render.overlays import RenderState, draw_score, score_at
+    from shuttlesense.schema import ClipRecord, Frame, Rally, Score, ScorePair
+
+    record = ClipRecord(
+        clip_id="c", fps=10, width=160, height=90, num_frames=40,
+        frames=[Frame(frame=i) for i in range(40)],
+        rallies=[
+            Rally(index=0, start_frame=0, end_frame=10, winner="far",
+                  score_after=ScorePair(near=5, far=7)),
+            Rally(index=1, start_frame=20, end_frame=30, winner="near",
+                  score_after=ScorePair(near=6, far=7)),
+        ],
+        score=Score(near=6, far=7),
+    )  # fmt: skip
+    assert score_at(record, 5) == (5, 6)  # before the first rally ends: starting score
+    assert score_at(record, 15) == (5, 7)
+    assert score_at(record, 35) == (6, 7)
+    img = np.zeros((90, 160, 3), np.uint8)
+    draw_score(img, record, 15, RenderState())
+    assert img.any()
+    record.score = None
+    blank = np.zeros((90, 160, 3), np.uint8)
+    draw_score(blank, record, 15, RenderState())
+    assert not blank.any()

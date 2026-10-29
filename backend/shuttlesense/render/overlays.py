@@ -278,7 +278,51 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
             cv2.circle(img, to_px(p), r, color, -1, cv2.LINE_AA)
 
 
+def score_at(record: ClipRecord, i: int) -> tuple[int, int] | None:
+    """Score after the last rally that ended at or before frame i (None without a referee)."""
+    if record.score is None:
+        return None
+    near = far = 0
+    first = next((r.score_after for r in record.rallies if r.score_after is not None), None)
+    if first is not None and record.rallies:
+        # Back out the first rally to find the starting score.
+        r0 = record.rallies[0]
+        near = first.near - (1 if r0.winner == "near" else 0)
+        far = first.far - (1 if r0.winner == "far" else 0)
+    for r in record.rallies:
+        if r.end_frame <= i and r.score_after is not None:
+            near, far = r.score_after.near, r.score_after.far
+    return near, far
+
+
+def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Scoreboard (Near : Far) at the top left and a landing marker for 1 s after landing."""
+    import cv2
+
+    score = score_at(record, i)
+    if score is None:
+        return
+    s = state.scale
+    _label(img, f"Near {score[0]}", _pt(12 * s, 28 * s), style.NEAR, s)
+    _label(img, f"Far {score[1]}", _pt(12 * s, 58 * s), style.FAR, s)
+
+    fps = record.fps or 30.0
+    for r in record.rallies:
+        if r.landing is None or record.court is None or not 0 <= i - r.end_frame <= fps:
+            continue
+        from shuttlesense.court import court_to_image
+
+        h = np.asarray(record.court.homography)
+        p = court_to_image(h, np.array([[r.landing.x_m, r.landing.y_m]]))[0]
+        if r.landing.confidence < 0.5:
+            color = style.UNCERTAIN_CALL
+        else:
+            color = style.IN_COURT if r.landing.in_court else style.OUT_COURT
+        cv2.circle(img, _pt(*p), int(10 * s), color, max(2, int(3 * s)), cv2.LINE_AA)
+
+
 LAYERS: dict[str, Layer] = {
+    "score": draw_score,
     "minimap": draw_minimap,
     "speed": draw_speed,
     "court": draw_court,
