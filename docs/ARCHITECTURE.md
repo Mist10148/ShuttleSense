@@ -147,7 +147,8 @@ app/lib/
 │   ├── calibration/            # F9 tap 4 corners on first frame, zoom/pan
 │   ├── processing/             # C2 per-stage progress
 │   ├── results/                # C3 player, status bar, minimap, timeline, scoreboard
-│   └── history/                # list of jobs on the server, delete
+│   ├── history/                # list of jobs on the server, delete
+│   └── settings/               # server URL/token, theme, about
 └── shared/widgets/             # reusable widgets (section card, empty state, …)
 ```
 
