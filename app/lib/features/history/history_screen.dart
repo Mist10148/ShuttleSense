@@ -9,6 +9,10 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../results/results_screen.dart';
 
+/// Jobs deleted in this session. They are hidden at once, before the refreshed list
+/// arrives, so a swiped-away tile is never built again (Dismissible requires that).
+final _deletedJobsProvider = StateProvider.autoDispose<Set<String>>((ref) => {});
+
 /// Past jobs on the connected server; open or delete them (privacy).
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -16,6 +20,7 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final jobs = ref.watch(jobsListProvider);
+    final deleted = ref.watch(_deletedJobsProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('History'),
@@ -38,16 +43,24 @@ class HistoryScreen extends ConsumerWidget {
             child: const Text('Retry'),
           ),
         ),
-        data: (list) => list.isEmpty
-            ? const MessageView(icon: Icons.history, message: 'No analyses on this server yet')
-            : RefreshIndicator(
-                onRefresh: () => ref.refresh(jobsListProvider.future),
-                child: ListView.builder(
-                  itemCount: list.length,
-                  itemBuilder: (context, i) =>
-                      MaxWidth(maxWidth: 900, child: _JobTile(job: list[i])),
-                ),
-              ),
+        data: (all) => switch ([
+          for (final j in all)
+            if (!deleted.contains(j.id)) j,
+        ]) {
+          final list =>
+            list.isEmpty
+                ? const MessageView(icon: Icons.history, message: 'No analyses on this server yet')
+                : RefreshIndicator(
+                    onRefresh: () => ref.refresh(jobsListProvider.future),
+                    child: ListView.builder(
+                      itemCount: list.length,
+                      itemBuilder: (context, i) => MaxWidth(
+                        maxWidth: 900,
+                        child: _JobTile(job: list[i], all: all),
+                      ),
+                    ),
+                  ),
+        },
       ),
     );
   }
@@ -57,27 +70,43 @@ class HistoryScreen extends ConsumerWidget {
 enum _DeleteChoice { results, resultsAndVideo }
 
 class _JobTile extends ConsumerWidget {
-  const _JobTile({required this.job});
+  const _JobTile({required this.job, required this.all});
 
   final Job job;
+
+  /// Every listed job, to hide the ones a video delete takes with it.
+  final List<Job> all;
 
   Future<_DeleteChoice?> _confirm(BuildContext context) =>
       showDialog<_DeleteChoice>(context: context, builder: (context) => const _DeleteDialog());
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, _DeleteChoice choice) async {
+  /// True when the server deleted it. Everything from [ref] is read before the first await:
+  /// a swiped tile may be gone by the time the request returns.
+  Future<bool> _delete(BuildContext context, WidgetRef ref, _DeleteChoice choice) async {
     final api = ref.read(apiClientProvider);
+    final deleted = ref.read(_deletedJobsProvider.notifier);
+    final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       if (choice == _DeleteChoice.resultsAndVideo) {
         // Deleting the video also deletes every job made from it (docs/API.md).
         await api.deleteVideo(job.videoId);
+        deleted.state = {
+          ...deleted.state,
+          for (final j in all)
+            if (j.videoId == job.videoId) j.id,
+        };
       } else {
         await api.deleteJob(job.id);
+        deleted.state = {...deleted.state, job.id};
       }
+      return true;
     } on Exception catch (e) {
       messenger?.showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+      return false;
+    } finally {
+      container.invalidate(jobsListProvider);
     }
-    ref.invalidate(jobsListProvider);
   }
 
   @override
@@ -101,8 +130,7 @@ class _JobTile extends ConsumerWidget {
       confirmDismiss: (_) async {
         final choice = await _confirm(context);
         if (choice == null || !context.mounted) return false;
-        await _delete(context, ref, choice);
-        return true;
+        return _delete(context, ref, choice);
       },
       child: ListTile(
         leading: Icon(switch (job.status) {

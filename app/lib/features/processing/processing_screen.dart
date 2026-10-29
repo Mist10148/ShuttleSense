@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
+import '../../data/api_client.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
@@ -49,9 +50,15 @@ class ProcessingScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (ok != true) return;
-    await ref.read(apiClientProvider).deleteJob(jobId);
-    if (context.mounted) context.go(Routes.home);
+    if (ok != true || !context.mounted) return;
+    try {
+      await ref.read(apiClientProvider).deleteJob(jobId);
+      if (context.mounted) context.go(Routes.home);
+    } on Exception catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
+      }
+    }
   }
 
   Future<void> _retry(BuildContext context, WidgetRef ref, Job job) async {
@@ -81,15 +88,25 @@ class ProcessingScreen extends ConsumerWidget {
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(title: const Text('Processing')),
-        body: MessageView(
-          icon: Icons.wifi_off,
-          message: 'Lost connection to server',
-          detail: '$e\nThe job keeps running on the server.',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(jobProvider(jobId)),
-            child: const Text('Retry'),
-          ),
-        ),
+        body: e is ApiException && e.statusCode == 404
+            ? MessageView(
+                icon: Icons.search_off,
+                message: 'This job no longer exists',
+                detail: 'It was cancelled or deleted.',
+                action: FilledButton(
+                  onPressed: () => context.go(Routes.home),
+                  child: const Text('Back to upload'),
+                ),
+              )
+            : MessageView(
+                icon: Icons.wifi_off,
+                message: 'Lost connection to server',
+                detail: '$e\nThe job keeps running on the server.',
+                action: FilledButton(
+                  onPressed: () => ref.invalidate(jobProvider(jobId)),
+                  child: const Text('Retry'),
+                ),
+              ),
       ),
       data: (job) => PageScaffold(
         title: 'Processing',
@@ -101,6 +118,22 @@ class ProcessingScreen extends ConsumerWidget {
           _Header(job: job),
           const SizedBox(height: 16),
           for (final stage in job.stages) _StageRow(stage: stage),
+          if (job.status == JobStatus.done) ...[
+            // Reached with Back from the results screen.
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => context.go(Routes.results(jobId)),
+              icon: const Icon(Icons.insights),
+              label: const Text('View results'),
+            ),
+          ],
+          if (job.status == JobStatus.cancelled) ...[
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => context.go(Routes.home),
+              child: const Text('Back to upload'),
+            ),
+          ],
           if (job.status == JobStatus.failed) ...[
             const SizedBox(height: 16),
             Text(

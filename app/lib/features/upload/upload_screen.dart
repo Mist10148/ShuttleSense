@@ -41,6 +41,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     );
     if (files.isEmpty) return;
     final size = await files.first.length() ?? 0;
+    if (!mounted) return;
     setState(() {
       _file = files.first;
       _size = size;
