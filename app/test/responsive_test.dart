@@ -97,6 +97,7 @@ void main() {
 
     for (final (name, size, tabs) in [
       ('phone', phone, true),
+      ('phone landscape', const Size(780, 360), true),
       ('tablet', tablet, false),
       ('laptop', laptop, false),
       ('wide desktop', const Size(1920, 1080), false),
@@ -112,5 +113,11 @@ void main() {
         }
       });
     }
+
+    test('side panel stays between 300 and 400 dp', () {
+      expect(ResultsLayout.sidePanelWidth(800), 300);
+      expect(ResultsLayout.sidePanelWidth(1280), 384);
+      expect(ResultsLayout.sidePanelWidth(1920), 400);
+    });
   });
 }
