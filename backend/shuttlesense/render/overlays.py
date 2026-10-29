@@ -106,10 +106,84 @@ def draw_pose(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
                 cv2.circle(img, _pt(x, y), thick + 1, style.TEXT, -1, cv2.LINE_AA)
 
 
+def _last_hit_before(record: ClipRecord, i: int):
+    """The most recent hit at or before frame i (hits are in frame order)."""
+    last = None
+    for h in record.hits:
+        if h.frame > i:
+            break
+        last = h
+    return last
+
+
+def _hitter_anchor(record: ClipRecord, frame: int, side: str) -> tuple[float, float] | None:
+    """Hitter's best wrist at `frame`, else the top of their box."""
+    p = getattr(record.frames[frame].players, side) if frame < len(record.frames) else None
+    if p is None:
+        return None
+    wrists = [p.keypoints[k] for k in (9, 10) if len(p.keypoints) > k]
+    wrists = [w for w in wrists if w[2] >= style.MIN_KEYPOINT_SCORE]
+    if wrists:
+        best = max(wrists, key=lambda w: w[2])
+        return best[0], best[1]
+    x, y, w, _h = p.bbox
+    return x + w / 2, y
+
+
+def _label(img: np.ndarray, text: str, org: tuple[int, int], color, scale: float) -> None:
+    """Text on a filled background so it reads on any court colour."""
+    import cv2
+
+    font_scale = 0.6 * scale
+    thick = max(1, int(round(1.5 * scale)))
+    (tw, th), base = cv2.getTextSize(text, style.FONT, font_scale, thick)
+    x, y = max(0, org[0]), max(th + base, org[1])
+    pad = int(4 * scale)
+    cv2.rectangle(img, (x - pad, y - th - pad), (x + tw + pad, y + base), color, -1)
+    cv2.putText(img, text, (x, y), style.FONT, font_scale, style.TEXT, thick, cv2.LINE_AA)
+
+
+def draw_hits(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """ "HIT" badge and an expanding ring at the hitter's wrist for marker_duration_s."""
+    import cv2
+
+    hit = _last_hit_before(record, i)
+    duration = state.stage("hits").get("marker_duration_s", 0.5) * (record.fps or 30)
+    if hit is None or i - hit.frame > duration:
+        return
+    anchor = _hitter_anchor(record, hit.frame, hit.player)
+    if anchor is None:
+        return
+    t = (i - hit.frame) / max(duration, 1)
+    radius = int((12 + 30 * t) * state.scale)
+    color = style.PLAYER_COLORS[hit.player]
+    cv2.circle(img, _pt(*anchor), radius, style.HIT, max(1, int(3 * (1 - t) * state.scale) + 1),
+               cv2.LINE_AA)  # fmt: skip
+    _label(img, "HIT", _pt(anchor[0] + 14 * state.scale, anchor[1] - 14 * state.scale), color,
+           state.scale)  # fmt: skip
+
+
+def draw_strokes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Stroke and confidence ("Smash 81%") above the hitter's box until the next hit."""
+    hit = _last_hit_before(record, i)
+    if hit is None or hit.stroke is None:
+        return
+    p = getattr(record.frames[i].players, hit.player)
+    if p is None:
+        return
+    x, y, _w, _h = p.bbox
+    text = hit.stroke.replace("_", " ").capitalize()
+    if hit.confidence is not None:
+        text += f" {hit.confidence:.0%}"
+    _label(img, text, _pt(x, y - 24 * state.scale), style.PLAYER_COLORS[hit.player], state.scale)
+
+
 LAYERS: dict[str, Layer] = {
     "trail": draw_trail,
     "pose": draw_pose,
     "boxes": draw_boxes,
+    "hits": draw_hits,
+    "strokes": draw_strokes,
 }
 
 

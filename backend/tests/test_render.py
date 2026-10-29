@@ -88,3 +88,24 @@ def test_render_stage_writes_annotated_mp4(tiny_video: Path, tmp_path: Path) -> 
     record = fake_pipeline(tiny_video, tmp_path, clip_id="c", overlays=["trail", "pose", "boxes"])
     assert record.num_frames == 10
     assert _count(tmp_path / "annotated.mp4") == 10
+
+
+def test_hit_marker_visible_only_within_duration() -> None:
+    from shuttlesense.render.overlays import RenderState, draw_hits, draw_strokes
+    from shuttlesense.schema import Hit, Player
+
+    record = _record_with_track()
+    kps = [(0.0, 0.0, 0.0)] * 17
+    kps[9] = (80.0, 40.0, 0.9)
+    for f in record.frames:
+        f.players.near = Player(bbox=(60, 30, 40, 50), keypoints=kps, score=0.9)
+    record.hits = [Hit(id=0, frame=2, time_s=0.08, player="near", stroke="smash", confidence=0.81)]
+    state = RenderState(config={"stages": {"hits": {"marker_duration_s": 0.2}}})  # 5 frames
+    blank = np.zeros((90, 160, 3), np.uint8)
+    for frame, expected in ((1, False), (2, True), (7, True), (8, False)):
+        img = blank.copy()
+        draw_hits(img, record, frame, state)
+        assert img.any() == expected, frame
+    img = blank.copy()
+    draw_strokes(img, record, 9, state)  # label stays until the next hit
+    assert img.any()
