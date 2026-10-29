@@ -2,15 +2,68 @@
 
 from __future__ import annotations
 
-from shuttlesense.schema import ClipRecord
-from shuttlesense.stage import StageContext
+from typing import Any
+
+import numpy as np
+
+from shuttlesense.config import BACKEND_DIR
+from shuttlesense.schema import STROKE_CLASSES, ClipRecord
+from shuttlesense.stage import StageContext, StageSkipped
+from shuttlesense.strokes.features import build_window
+
+_MODELS: dict[tuple[str, str], Any] = {}
+
+
+def load_classifier(path: str, device: str):
+    """(model, checkpoint dict), cached per (path, device) so the API worker loads it once."""
+    key = (path, device)
+    if key in _MODELS:
+        return _MODELS[key]
+    weights = BACKEND_DIR / path
+    if not weights.exists():
+        raise StageSkipped("stroke model not installed")
+    try:
+        import torch
+    except ImportError as exc:
+        raise StageSkipped("torch is not installed") from exc
+    from shuttlesense.strokes.model import build_from_config
+
+    ckpt = torch.load(weights, map_location=device, weights_only=False)
+    classes = ckpt.get("classes", list(STROKE_CLASSES))
+    model_cfg = ckpt.get("config", {}).get("model", {})
+    model = build_from_config(ckpt["in_features"], model_cfg, len(classes))
+    model.load_state_dict(ckpt["state_dict"])
+    model.to(device).eval()
+    _MODELS[key] = (model, ckpt)
+    return _MODELS[key]
+
+
+def softmax(logits: np.ndarray) -> np.ndarray:
+    z = logits - logits.max(axis=1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=1, keepdims=True)
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
-    """Fill hits[].stroke, confidence and class_probs.
+    """Fill hits[].stroke (argmax), confidence and class_probs."""
+    if not record.hits:
+        raise StageSkipped("no hits to classify")
+    cfg = ctx.stage_config("strokes")
+    model, ckpt = load_classifier(cfg.get("weights", "weights/strokes/stroke_cnn.pt"), ctx.device)
+    window = cfg.get("window_frames", 32)
+    use_traj = ckpt.get("use_trajectory", cfg.get("use_trajectory", True))
+    classes = ckpt.get("classes", list(STROKE_CLASSES))
+    x = np.stack([build_window(record, h.frame, h.player, window, use_traj) for h in record.hits])
 
-    TODO(T3.10): build the same feature window as scripts/extract_features.py around each hit,
-    load weights/strokes/stroke_cnn.pt, softmax over STROKE_CLASSES.
-    """
+    import torch
+
+    with torch.inference_mode():
+        logits = model(torch.from_numpy(np.transpose(x, (0, 2, 1)).copy()).to(ctx.device))
+    probs = softmax(logits.float().cpu().numpy())
+    for hit, p in zip(record.hits, probs, strict=True):
+        best = int(p.argmax())
+        hit.stroke = classes[best]
+        hit.confidence = round(float(p[best]), 4)
+        hit.class_probs = {c: round(float(v), 4) for c, v in zip(classes, p, strict=True)}
     ctx.progress(1.0)
     return record
