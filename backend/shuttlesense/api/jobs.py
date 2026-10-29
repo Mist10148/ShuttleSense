@@ -43,6 +43,7 @@ class JobManager:
         self._cancelled: set[str] = set()
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
+        self._job_locks: dict[str, threading.Lock] = {}
         self._worker: threading.Thread | None = None
 
         # Jobs interrupted by a server restart cannot resume.
@@ -147,6 +148,11 @@ class JobManager:
             for key, value in changes.items():
                 setattr(job, key, value)
             self.storage.save_job(job)
+
+    def job_lock(self, job_id: str) -> threading.Lock:
+        """Lock for edits to one job's outputs (score corrections)."""
+        with self._lock:
+            return self._job_locks.setdefault(job_id, threading.Lock())
 
     def job_config(self, job: Job) -> dict[str, Any]:
         """Pipeline config plus this job's own inputs."""

@@ -168,7 +168,7 @@ Correct the winner of a rally (F16). Body:
 {"rally_index": 3, "winner": "far"}
 ```
 
-Returns the updated `score` object; the correction is appended to `score.corrections` in the record and `summary.json` is regenerated. `409` if the referee stage did not run.
+Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally, `409` if the referee stage did not run.
 
 ### `DELETE /jobs/{job_id}`
 

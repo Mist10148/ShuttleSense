@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shuttlesense.schema import PlayerSide, ScorePair
+from shuttlesense.schema import PlayerSide, Rally, Score, ScorePair
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
@@ -55,6 +55,13 @@ class RenderRequest(BaseModel):
 class ScoreCorrectionIn(BaseModel):
     rally_index: int
     winner: PlayerSide
+
+
+class ScoreUpdate(BaseModel):
+    """PATCH /jobs/{id}/score response: the new score and every rally's score_after."""
+
+    score: Score
+    rallies: list[Rally]
 
 
 class StageState(BaseModel):

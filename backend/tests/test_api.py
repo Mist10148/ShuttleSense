@@ -246,3 +246,56 @@ def test_rallies_csv_endpoint(tmp_path: Path, tiny_video: Path) -> None:
         assert res.status_code == 200
         assert res.content.startswith(codecs.BOM_UTF8 + b"index,start_frame")
         assert len(res.content.decode("utf-8-sig").strip().splitlines()) == 2
+
+
+def _referee_job(client: TestClient, video: Path, start_score: dict | None = None) -> str:
+    vid = upload(client, video).json()["id"]
+    body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS}
+    if start_score:
+        body["start_score"] = start_score
+    job = client.post("/jobs", json=body).json()
+    assert wait_for(client, job["id"])["status"] == "done"
+    return job["id"]
+
+
+def test_score_correction_recomputes_following_rallies(
+    tmp_path: Path, tiny_video: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense import fake
+    from shuttlesense.schema import Rally
+
+    real_scale = fake.scale_record
+
+    def three_rallies(*args, **kwargs):
+        record = real_scale(*args, **kwargs)
+        record.rallies = [
+            Rally(index=i, start_frame=3 * i, end_frame=3 * i + 2, winner=w)
+            for i, w in enumerate(["near", "near", "far"])
+        ]
+        return record
+
+    monkeypatch.setattr(fake, "scale_record", three_rallies)
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        res = client.patch(f"/jobs/{job_id}/score", json={"rally_index": 0, "winner": "far"})
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["score"]["near"] == 1 and body["score"]["far"] == 2
+        assert [(r["score_after"]["near"], r["score_after"]["far"]) for r in body["rallies"]] == [
+            (0, 1), (1, 1), (1, 2),
+        ]  # fmt: skip
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert record["score"]["corrections"][0]["winner_before"] == "near"
+        summary = client.get(f"/jobs/{job_id}/summary.json").json()
+        assert summary["score"]["far"] == 2
+        rallies_csv = client.get(f"/jobs/{job_id}/rallies.csv").content.decode("utf-8-sig")
+        assert rallies_csv.splitlines()[1].endswith(",0,1")
+
+
+def test_correction_409_without_referee(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        job = client.post("/jobs", json={"video_id": vid}).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        res = client.patch(f"/jobs/{job['id']}/score", json={"rally_index": 0, "winner": "far"})
+        assert res.status_code == 409

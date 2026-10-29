@@ -322,6 +322,97 @@
         "title": "JobOutputs",
         "type": "object"
       },
+      "Landing": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "in_court": {
+            "title": "In Court",
+            "type": "boolean"
+          },
+          "x_m": {
+            "title": "X M",
+            "type": "number"
+          },
+          "y_m": {
+            "title": "Y M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x_m",
+          "y_m",
+          "in_court",
+          "confidence"
+        ],
+        "title": "Landing",
+        "type": "object"
+      },
+      "Rally": {
+        "properties": {
+          "end_frame": {
+            "title": "End Frame",
+            "type": "integer"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "landing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Landing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_frame": {
+            "title": "Start Frame",
+            "type": "integer"
+          },
+          "stroke_count": {
+            "default": 0,
+            "title": "Stroke Count",
+            "type": "integer"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winner"
+          }
+        },
+        "required": [
+          "index",
+          "start_frame",
+          "end_frame"
+        ],
+        "title": "Rally",
+        "type": "object"
+      },
       "RenderRequest": {
         "properties": {
           "overlays": {
@@ -441,6 +532,27 @@
           }
         },
         "title": "ScorePair",
+        "type": "object"
+      },
+      "ScoreUpdate": {
+        "description": "PATCH /jobs/{id}/score response: the new score and every rally's score_after.",
+        "properties": {
+          "rallies": {
+            "items": {
+              "$ref": "#/components/schemas/Rally"
+            },
+            "title": "Rallies",
+            "type": "array"
+          },
+          "score": {
+            "$ref": "#/components/schemas/Score"
+          }
+        },
+        "required": [
+          "score",
+          "rallies"
+        ],
+        "title": "ScoreUpdate",
         "type": "object"
       },
       "StageState": {
@@ -1096,7 +1208,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Score"
+                  "$ref": "#/components/schemas/ScoreUpdate"
                 }
               }
             },

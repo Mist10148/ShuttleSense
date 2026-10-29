@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse
 
 from shuttlesense import __version__
+from shuttlesense.analytics import build_summary, write_exports
 from shuttlesense.api.jobs import JobManager
 from shuttlesense.api.models import (
     Health,
@@ -17,6 +18,7 @@ from shuttlesense.api.models import (
     JobCreate,
     RenderRequest,
     ScoreCorrectionIn,
+    ScoreUpdate,
     VideoInfoOut,
     utcnow,
 )
@@ -24,8 +26,9 @@ from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
+from shuttlesense.referee import apply_rallies
 from shuttlesense.render import OVERLAYS
-from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, Score, ScoreCorrection
+from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, ScoreCorrection
 
 
 def get_storage(request: Request) -> Storage:
@@ -265,31 +268,33 @@ def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
     return jobs.rerender(job_id, overlays)
 
 
-@router.patch("/jobs/{job_id}/score", response_model=Score)
+@router.patch("/jobs/{job_id}/score", response_model=ScoreUpdate)
 def correct_score(
     job_id: str, body: ScoreCorrectionIn, storage: StorageDep, jobs: JobsDep
-) -> Score:
+) -> ScoreUpdate:
+    job = _job_or_404(jobs, job_id)
     path = _output_or_404(storage, jobs, job_id, "record")
-    record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
-    if record.score is None or not record.rallies:
-        raise HTTPException(status_code=409, detail="referee stage did not run for this job")
-    rally = next((r for r in record.rallies if r.index == body.rally_index), None)
-    if rally is None:
-        raise HTTPException(status_code=404, detail="rally not found")
-    record.score.corrections.append(
-        ScoreCorrection(
-            rally_index=rally.index,
-            winner_before=rally.winner,
-            winner_after=body.winner,
-            at=utcnow(),
+    with jobs.job_lock(job_id):  # read-modify-write of record.json
+        record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        if record.score is None or not record.rallies:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        rally = next((r for r in record.rallies if r.index == body.rally_index), None)
+        if rally is None:
+            raise HTTPException(status_code=404, detail="rally not found")
+        record.score.corrections.append(
+            ScoreCorrection(
+                rally_index=rally.index,
+                winner_before=rally.winner,
+                winner_after=body.winner,
+                at=utcnow(),
+            )
         )
-    )
-    rally.winner = body.winner
-    # TODO(T6.4): recompute score_after for later rallies and regenerate summary.json.
-    record.score.near = sum(1 for r in record.rallies if r.winner == "near")
-    record.score.far = sum(1 for r in record.rallies if r.winner == "far")
-    path.write_text(record.model_dump_json(), encoding="utf-8")
-    return record.score
+        rally.winner = body.winner
+        final = apply_rallies(record.rallies, job.start_score)
+        record.score.near, record.score.far = final.near, final.far
+        record.summary = build_summary(record)
+        write_exports(record, storage.job_dir(job_id))
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
 
 
 @router.delete("/jobs/{job_id}", status_code=204)
