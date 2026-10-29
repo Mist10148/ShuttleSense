@@ -53,50 +53,116 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
+/// What the user chose in the delete dialog.
+enum _DeleteChoice { results, resultsAndVideo }
+
 class _JobTile extends ConsumerWidget {
   const _JobTile({required this.job});
 
   final Job job;
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete analysis?'),
-        content: const Text('The results are removed from the server.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref.read(apiClientProvider).deleteJob(job.id);
+  Future<_DeleteChoice?> _confirm(BuildContext context) =>
+      showDialog<_DeleteChoice>(context: context, builder: (context) => const _DeleteDialog());
+
+  Future<void> _delete(BuildContext context, WidgetRef ref, _DeleteChoice choice) async {
+    final api = ref.read(apiClientProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      if (choice == _DeleteChoice.resultsAndVideo) {
+        // Deleting the video also deletes every job made from it (docs/API.md).
+        await api.deleteVideo(job.videoId);
+      } else {
+        await api.deleteJob(job.id);
+      }
+    } on Exception catch (e) {
+      messenger?.showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+    }
     ref.invalidate(jobsListProvider);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final video = ref.watch(videoProvider(job.videoId)).valueOrNull;
     final created = job.createdAt.toLocal();
     final when =
         '${created.year}-${created.month.toString().padLeft(2, '0')}-'
         '${created.day.toString().padLeft(2, '0')} '
         '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
-    return ListTile(
-      leading: Icon(switch (job.status) {
-        JobStatus.done => Icons.check_circle_outline,
-        JobStatus.failed => Icons.error_outline,
-        JobStatus.cancelled => Icons.cancel_outlined,
-        _ => Icons.hourglass_top,
-      }),
-      title: Text('Analysis ${job.id}'),
-      subtitle: Text('$when · ${job.status.name}'),
-      onTap: () => context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
-      trailing: IconButton(
-        tooltip: 'Delete',
-        icon: const Icon(Icons.delete_outline),
-        onPressed: () => _delete(context, ref),
+    final title = video?.filename ?? 'Analysis ${job.id}';
+    return Dismissible(
+      key: ValueKey(job.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: Theme.of(context).colorScheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: const Icon(Icons.delete_outline),
+      ),
+      confirmDismiss: (_) async {
+        final choice = await _confirm(context);
+        if (choice == null || !context.mounted) return false;
+        await _delete(context, ref, choice);
+        return true;
+      },
+      child: ListTile(
+        leading: Icon(switch (job.status) {
+          JobStatus.done => Icons.check_circle_outline,
+          JobStatus.failed => Icons.error_outline,
+          JobStatus.cancelled => Icons.cancel_outlined,
+          _ => Icons.hourglass_top,
+        }, semanticLabel: job.status.name),
+        title: Text(title, overflow: TextOverflow.ellipsis),
+        subtitle: Text('$when · ${job.status.name} · ${job.id}'),
+        onTap: () => context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+        trailing: IconButton(
+          tooltip: 'Delete',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () async {
+            final choice = await _confirm(context);
+            if (choice != null && context.mounted) await _delete(context, ref, choice);
+          },
+        ),
       ),
     );
   }
+}
+
+class _DeleteDialog extends StatefulWidget {
+  const _DeleteDialog();
+
+  @override
+  State<_DeleteDialog> createState() => _DeleteDialogState();
+}
+
+class _DeleteDialogState extends State<_DeleteDialog> {
+  bool _withVideo = false;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Delete analysis?'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('The results are removed from the server.'),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _withVideo,
+          onChanged: (v) => setState(() => _withVideo = v ?? false),
+          title: const Text('Also delete the uploaded video'),
+          subtitle: const Text('and every analysis of it'),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(
+        onPressed: () => Navigator.pop(
+          context,
+          _withVideo ? _DeleteChoice.resultsAndVideo : _DeleteChoice.results,
+        ),
+        child: const Text('Delete'),
+      ),
+    ],
+  );
 }
