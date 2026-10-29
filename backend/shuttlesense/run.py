@@ -36,6 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", type=Path, default=None, help="pipeline YAML")
     p.add_argument("--device", choices=["cpu", "cuda"], default=None)
     p.add_argument(
+        "--tracking-csv", type=Path, help="use a TrackNetV3 predict.py CSV instead of the model"
+    )
+    p.add_argument(
         "--fake", action="store_true", help="return the golden record instead of running models"
     )
     return p
@@ -52,6 +55,10 @@ def main(argv: list[str] | None = None) -> None:
             return
         print(f"[{name:<9}] {status}")
 
+    config = load_config(args.config)
+    if args.tracking_csv:
+        stages = config.setdefault("stages", {})
+        stages.setdefault("tracking", {})["precomputed_csv"] = str(args.tracking_csv.resolve())
     pipeline = run_pipeline
     if args.fake:
         from shuttlesense.fake import fake_pipeline
@@ -61,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
         args.video,
         args.out,
         clip_id=args.video.stem,
-        config=load_config(args.config),
+        config=config,
         court_corners_px=args.corners,
         overlays=args.overlays,
         referee_enabled=not args.no_referee,

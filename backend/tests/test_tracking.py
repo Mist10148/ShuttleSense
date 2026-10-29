@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+from shuttlesense.schema import ClipRecord, Frame
+from shuttlesense.stage import StageContext
+from shuttlesense.tracking import heatmap_to_xy, rectify, remove_outliers, scale_to_video
+from shuttlesense.tracking import run as tracking_run
+from shuttlesense.tracking.postprocess import read_tracking_csv, write_tracking_csv
+
+
+def test_heatmap_to_xy_picks_peak() -> None:
+    heat = np.zeros((72, 128))
+    heat[10:13, 20:23] = 0.9  # small blob
+    heat[40:46, 60:66] = 0.8  # largest blob wins
+    x, y, vis = heatmap_to_xy(heat, threshold=0.5)
+    assert vis == 1 and (x, y) == (62.5, 42.5)
+    assert heatmap_to_xy(np.zeros((8, 8)))[2] == 0
+
+
+def test_scale_back_to_video_pixels() -> None:
+    out = scale_to_video(np.array([[256.0, 144.0]]), (512, 288), (1280, 720))
+    assert out.tolist() == [[640.0, 360.0]]
+
+
+def test_outlier_removed() -> None:
+    xy = np.array([[10, 10], [12, 11], [14, 12], [0, 0], [0, 0], [400, 300], [0, 0], [0, 0]], float)
+    visible = np.array([1, 1, 1, 0, 0, 1, 0, 0])
+    assert remove_outliers(xy, visible, outlier_px=80).tolist() == [1, 1, 1, 0, 0, 0, 0, 0]
+    near = xy.copy()
+    near[5] = [30, 20]
+    assert remove_outliers(near, visible, outlier_px=80)[5] == 1
+
+
+def test_long_gap_not_filled() -> None:
+    xy = np.array([[0, 0]] + [[0, 0]] * 5 + [[60, 0], [70, 0], [0, 0], [90, 0]], float)
+    visible = np.array([1, 0, 0, 0, 0, 0, 1, 1, 0, 1])
+    out_xy, out_vis, source = rectify(xy, visible, max_gap=2, outlier_px=1000)
+    assert out_vis.tolist() == [1, 0, 0, 0, 0, 0, 1, 1, 1, 1]
+    assert source[8] == "interp" and source[7] == "net" and source[2] == ""
+    assert out_xy[8].tolist() == [80.0, 0.0]
+
+
+def test_stage_reads_precomputed_csv(tmp_path: Path) -> None:
+    xy = np.array([[10.0, 20.0], [0, 0], [30.0, 40.0]])
+    write_tracking_csv(tmp_path / "in.csv", xy, np.array([1, 0, 1]))
+    assert read_tracking_csv(tmp_path / "in.csv", 3)[1].tolist() == [1, 0, 1]
+    record = ClipRecord(clip_id="c", fps=30, width=64, height=48, num_frames=3,
+                        frames=[Frame(frame=i) for i in range(3)])  # fmt: skip
+    ctx = StageContext(
+        video_path=tmp_path / "v.mp4",
+        out_dir=tmp_path / "out",
+        config={"stages": {"tracking": {"precomputed_csv": str(tmp_path / "in.csv")}}},
+    )
+    record = tracking_run(record, ctx)
+    assert record.frames[1].shuttle.visible == 1  # 1-frame gap interpolated
+    assert (record.frames[1].shuttle.x, record.frames[1].shuttle.y) == (20.0, 30.0)
+    assert (tmp_path / "out" / "tracking.csv").read_text().splitlines()[2].endswith("interp")
