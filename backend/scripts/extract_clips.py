@@ -98,7 +98,10 @@ def read_strokes(match_dir: Path) -> list[Stroke]:
 
 
 def cut_clips(video: Path, windows: list[Window], out_dir: Path, match_id: str) -> int:
-    """Write one 720p clip per window (existing clips are kept: resume support)."""
+    """Write one 720p clip per window (existing clips are kept: resume support).
+
+    VideoWriter only moves a clip into place once it is complete, so an interrupted run
+    leaves no partial clip to be kept on resume."""
     from shuttlesense.io import FrameReader
     from shuttlesense.render.writer import VideoWriter
 
@@ -138,7 +141,7 @@ def main() -> None:
     parser.add_argument("--pad-frames", type=int, default=16, help="frames kept around each hit")
     args = parser.parse_args()
 
-    from shuttlesense.io import probe
+    from shuttlesense.io import FrameReader
 
     match_list = DATA_DIR / "shuttleset" / "match_list.csv"
     if not match_list.exists():
@@ -155,7 +158,9 @@ def main() -> None:
             print(f"{match_id}: video missing, skipped")
             continue
         strokes = read_strokes(DATA_DIR / "shuttleset" / match_id)
-        windows, skipped = stroke_windows(strokes, args.pad_frames, probe(video).num_frames)
+        # source_frames is counted by decoding when the container reports no frame count.
+        num_frames = FrameReader(video, target_height=720, max_fps=0).source_frames
+        windows, skipped = stroke_windows(strokes, args.pad_frames, num_frames)
         n = cut_clips(video, windows, DATA_DIR / "clips" / match_id, match_id)
         print(f"{match_id}: {n} clips, {skipped} strokes skipped (window crosses a boundary)")
 

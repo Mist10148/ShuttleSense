@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -28,6 +29,11 @@ def ensure_cloudflared() -> Path:
         urllib.request.urlretrieve(CLOUDFLARED_URL, path)
         path.chmod(0o755)
     return path
+
+
+def _drain(stream) -> None:
+    for _line in stream:
+        pass
 
 
 def main() -> None:
@@ -53,6 +59,8 @@ def main() -> None:
             if match:
                 print(f"\nShuttleSense API: {match.group(0)}\nToken: {args.token}\n", flush=True)
                 break
+        # Keep reading cloudflared's log: a full, unread pipe would stall the tunnel.
+        threading.Thread(target=_drain, args=(tunnel.stderr,), daemon=True).start()
         while server.poll() is None and tunnel.poll() is None:
             time.sleep(5)
     finally:
