@@ -80,4 +80,4 @@ A task is done when:
 1. Its "done when" criterion in PHASES.md is met.
 2. Tests cover the logic that can be tested without a GPU.
 3. Docs are updated if behaviour, config, schema or API changed.
-4. It is merged to `main` with green CI, and the checkbox in PHASES.md is ticked in the same PR.
+4. It is merged to `main` with green CI, and its status in PHASES.md is flipped to ✅ in the same PR.
