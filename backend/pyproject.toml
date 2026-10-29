@@ -28,3 +28,4 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`:DeprecationWarning"]
