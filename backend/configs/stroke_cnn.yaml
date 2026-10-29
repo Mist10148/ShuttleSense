@@ -1,0 +1,25 @@
+# Stroke classifier training (T3.8, T3.9). Used by scripts/train_stroke_classifier.py.
+
+seed: 42
+
+data:
+  features_dir: data/features
+  splits: data/splits.json
+  window_frames: 32
+  use_trajectory: true          # false for the pose-only ablation
+  classes: [smash, clear, drop, net_shot, lift, serve]
+
+model:
+  dropout: 0.3
+
+train:
+  epochs: 40
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0001
+  class_weighting: inverse_frequency
+  early_stopping_patience: 8
+
+output:
+  checkpoint: weights/strokes/stroke_cnn.pt
+  metrics: outputs/stroke_cnn_metrics.json

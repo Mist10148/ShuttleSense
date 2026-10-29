@@ -282,3 +282,6 @@ app/coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tools downloaded by scripts (cloudflared)
+backend/.bin/

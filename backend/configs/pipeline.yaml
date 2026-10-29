@@ -1,0 +1,60 @@
+# Pipeline settings. Thresholds live here, not in code (CONTRIBUTING.md).
+# Each stage reads its own block via StageContext.stage_config("<name>").
+
+seed: 42
+
+stages:
+  io:
+    enabled: true
+    target_height: 720          # normalize resolution (T2.1)
+    max_fps: 30                 # downsample higher frame rates
+    max_duration_s: 300         # FR-1: up to 5 minutes
+
+  tracking:
+    enabled: true
+    tracknet_weights: weights/tracknet/TrackNet_best.pt
+    inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
+    batch_size: 16
+    max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
+    trail_length: 12            # FR-2: 8 to 15 positions
+
+  pose:
+    enabled: true
+    backend: rtmlib             # rtmlib | keypoint_rcnn (decided in T1.5)
+    mode: balanced              # rtmlib: lightweight | balanced | performance
+    min_person_score: 0.4
+    smoothing_window: 5
+
+  court:
+    enabled: true
+
+  hits:
+    enabled: true
+    min_angle_deg: 60           # direction change threshold
+    max_wrist_distance_px: 120  # at 720p
+    min_frames_between_hits: 8
+    marker_duration_s: 0.5
+
+  strokes:
+    enabled: true
+    weights: weights/strokes/stroke_cnn.pt
+    window_frames: 32
+    use_trajectory: true        # false = pose-only ablation
+
+  feedback:
+    enabled: true
+
+  analytics:
+    enabled: true
+    speed_smoothing: 3
+
+  referee:
+    enabled: true
+    stationary_frames_end: 20   # shuttle still on floor for N frames ends a rally
+    lost_frames_end: 30
+    in_out_margin_m: 0.05       # closer than this to a line = uncertain
+
+  render:
+    enabled: true
+    codec: libx264
+    crf: 23
