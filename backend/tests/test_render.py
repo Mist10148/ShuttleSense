@@ -45,3 +45,46 @@ def test_writer_opencv_fallback(tmp_path: Path) -> None:
         for img in _frames(8):
             writer.write(img)
     assert _count(out) == 8
+
+
+def _record_with_track():
+    from shuttlesense.schema import ClipRecord, Frame, Shuttle
+
+    frames = [Frame(frame=i, shuttle=Shuttle()) for i in range(10)]
+    frames[3].shuttle = Shuttle(x=20, y=20, visible=1)
+    frames[5].shuttle = Shuttle(x=100, y=60, visible=1)
+    return ClipRecord(clip_id="c", fps=25, width=160, height=90, num_frames=10, frames=frames)
+
+
+def test_trail_draws_only_visible_points() -> None:
+    from shuttlesense.render.overlays import RenderState, draw_trail
+
+    record = _record_with_track()
+    img = np.zeros((90, 160, 3), dtype=np.uint8)
+    draw_trail(img, record, 6, RenderState(scale=1.0))
+    assert img[20, 20].any() and img[60, 100].any()
+    assert img[45, 60].sum() == 0  # nothing between the points
+    assert img.any(axis=2).sum() < 400  # two small dots only
+
+
+def test_layers_respect_overlay_selection() -> None:
+    from shuttlesense.render.overlays import RenderState, draw_frame
+    from shuttlesense.schema import Player
+
+    record = _record_with_track()
+    record.frames[5].players.near = Player(bbox=(50, 10, 40, 70), score=0.9)
+    state = RenderState()
+    only_boxes = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["boxes"], state)
+    assert not only_boxes[60, 100].any() and only_boxes[40, 50].any()
+    only_trail = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["trail"], state)
+    assert only_trail[60, 100].any() and not only_trail[40, 50].any()
+    nothing = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["minimap?"], state)
+    assert not nothing.any()
+
+
+def test_render_stage_writes_annotated_mp4(tiny_video: Path, tmp_path: Path) -> None:
+    from shuttlesense.fake import fake_pipeline
+
+    record = fake_pipeline(tiny_video, tmp_path, clip_id="c", overlays=["trail", "pose", "boxes"])
+    assert record.num_frames == 10
+    assert _count(tmp_path / "annotated.mp4") == 10

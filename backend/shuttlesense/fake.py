@@ -7,7 +7,6 @@ Lets the app and demos show non-empty results without a GPU or weights. Enabled 
 from __future__ import annotations
 
 import json
-import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -108,10 +107,18 @@ def fake_pipeline(
 
     for name in STAGE_NAMES:
         on_event(name, "running", 0.0)
-        if name == "render" and video_path.suffix.lower() == ".mp4":
-            # Until the overlay renderer lands (T2.6), serve the source clip as the result.
-            out_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(video_path, out_dir / "annotated.mp4")
+        if name == "render":
+            from shuttlesense.io import FrameReader
+            from shuttlesense.render import render_video
+
+            render_video(
+                record,
+                FrameReader(video_path, target_height=info.height, max_fps=info.fps),
+                out_dir / "annotated.mp4",
+                overlays=overlays,
+                config=config,
+                progress=lambda p: on_event("render", "running", p),
+            )
         on_event(name, "done", 1.0)
     write_exports(record, out_dir)
     return record

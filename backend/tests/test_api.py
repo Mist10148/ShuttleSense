@@ -93,7 +93,8 @@ def test_full_round_trip(client: TestClient, tiny_video: Path) -> None:
     assert record["court"]["corners_px"][0] == [20.0, 80.0]
 
     assert client.get(f"/jobs/{job['id']}/hits.csv").text.startswith("id,frame")
-    assert client.get(f"/jobs/{job['id']}/video").status_code == 404  # render is a stub
+    video_res = client.get(f"/jobs/{job['id']}/video")
+    assert video_res.status_code == 200 and video_res.headers["content-type"] == "video/mp4"
     assert [j["id"] for j in client.get("/jobs").json()] == [job["id"]]
 
     assert client.delete(f"/jobs/{job['id']}").status_code == 204
