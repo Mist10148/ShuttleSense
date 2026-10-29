@@ -138,7 +138,10 @@ python scripts/extract_clips.py --matches 23-44       # Member 4
 python scripts/make_splits.py                         # -> data/splits.json, configs/splits.json
 python scripts/extract_features.py                    # -> data/features/*.npz
 python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
+python scripts/dataset_stats.py                       # -> docs/results/dataset.md
 ```
+
+Evaluation scripts (each writes a table to `docs/results/`; see each script's docstring for its label format): `benchmark.py` (T2.9), `eval_tracking.py` (T2.10), `eval_hits.py` (T3.7), `eval_rallies.py` (T6.7).
 
 Processed `clips/` and `features/` are shared through the team Google Drive folder so not everyone re-runs extraction. Layout is described in [DATA_FORMAT.md](DATA_FORMAT.md#training-data-layout-stroke-classifier).
 

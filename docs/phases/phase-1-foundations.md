@@ -196,9 +196,9 @@
 
 **Steps**
 - [ ] Locate the official ShuttleSet release (KDD 2023 paper, arXiv 2306.04948) and its repository; confirm the URL in `backend/scripts/download_shuttleset.py` (`SHUTTLESET_REPO`) and the license/terms.
-- [ ] Implement `download_shuttleset.py`: fetch only the ShuttleSet folder (sparse checkout or release archive) into `backend/data/shuttleset/`.
-- [ ] Write `data/shuttleset/match_list.csv`: `match_id, video_url, players, duration_s, num_rallies, num_strokes`.
-- [ ] Print the set of distinct stroke type names found in the annotations (input for T3.3) and the per-type counts.
+- [x] Implement `download_shuttleset.py`: fetch only the ShuttleSet folder (GitHub API + raw files; git cannot check the repo out on Windows) into `backend/data/shuttleset/`.
+- [x] Write `data/shuttleset/match_list.csv`: `match_id, video, video_url, players, duration_min, num_rallies, num_strokes` (`video` is the file name `extract_clips.py` looks for in `data/videos/`).
+- [x] Print the set of distinct stroke type names found in the annotations (input for T3.3) and the per-type counts (19 types, 36,484 strokes on 2026-10-30).
 - [ ] Upload the annotations folder to Drive `shuttleset/`.
 
 **Outputs.** Working script, `match_list.csv`, stroke-type count table posted on the issue.
