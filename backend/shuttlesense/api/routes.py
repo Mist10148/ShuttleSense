@@ -202,6 +202,7 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         court_corners_px=body.court_corners_px,
         overlays=_check_overlays(body.overlays),
         referee=body.referee,
+        start_score=body.start_score,
     )
     return jobs.submit(job)
 

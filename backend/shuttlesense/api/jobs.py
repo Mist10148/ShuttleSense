@@ -148,6 +148,13 @@ class JobManager:
                 setattr(job, key, value)
             self.storage.save_job(job)
 
+    def job_config(self, job: Job) -> dict[str, Any]:
+        """Pipeline config plus this job's own inputs."""
+        config = dict(self.config)
+        if job.start_score is not None:
+            config["start_score"] = job.start_score.model_dump()
+        return config
+
     def stage_weight(self, name: str) -> float:
         """Relative cost of a stage for overall progress (stages.<name>.weight)."""
         cfg = self.config.get("stages", {}).get(name, {})
@@ -191,7 +198,7 @@ class JobManager:
                 source,
                 out_dir,
                 clip_id=job_id,
-                config=self.config,
+                config=self.job_config(job),
                 court_corners_px=job.court_corners_px,
                 overlays=job.overlays,
                 referee_enabled=job.referee,

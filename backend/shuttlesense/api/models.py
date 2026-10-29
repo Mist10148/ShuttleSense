@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shuttlesense.schema import PlayerSide
+from shuttlesense.schema import PlayerSide, ScorePair
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
@@ -45,6 +45,7 @@ class JobCreate(BaseModel):
     )
     overlays: list[str] | None = None
     referee: bool = False
+    start_score: ScorePair | None = None  # for clips that start mid-game
 
 
 class RenderRequest(BaseModel):
@@ -87,3 +88,4 @@ class Job(BaseModel):
     court_corners_px: list[tuple[float, float]] | None = None
     overlays: list[str] = Field(default_factory=list)
     referee: bool = False
+    start_score: ScorePair | None = None

@@ -177,6 +177,16 @@
             "title": "Stages",
             "type": "array"
           },
+          "start_score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "started_at": {
             "anyOf": [
               {
@@ -259,6 +269,16 @@
             "default": false,
             "title": "Referee",
             "type": "boolean"
+          },
+          "start_score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "video_id": {
             "title": "Video Id",
@@ -405,6 +425,22 @@
           "winner"
         ],
         "title": "ScoreCorrectionIn",
+        "type": "object"
+      },
+      "ScorePair": {
+        "properties": {
+          "far": {
+            "default": 0,
+            "title": "Far",
+            "type": "integer"
+          },
+          "near": {
+            "default": 0,
+            "title": "Near",
+            "type": "integer"
+          }
+        },
+        "title": "ScorePair",
         "type": "object"
       },
       "StageState": {
