@@ -4,7 +4,8 @@ Usage: python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yam
                 [--pose-only] [--seed 42] [--epochs N] [--train m01,m02 --val m03]
 
 Reads data/features/<match_id>.npz and the match split (data.splits). Saves the best
-checkpoint on val macro-F1 as {state_dict, in_features, classes, config, use_trajectory}
+checkpoint on val macro-F1 as {state_dict, in_features, window_frames, classes, config,
+use_trajectory}
 and per-epoch + test metrics as JSON.
 """
 
@@ -123,6 +124,7 @@ def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: s
     result["checkpoint"] = {
         "state_dict": best_state,
         "in_features": train_ds.in_features,
+        "window_frames": int(train_ds.x.shape[1]),
         "classes": classes,
         "config": cfg,
         "use_trajectory": use_trajectory,

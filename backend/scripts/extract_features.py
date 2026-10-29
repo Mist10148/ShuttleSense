@@ -49,6 +49,7 @@ def perceive(clip: Path, device: str):
 
 
 def extract_match(match_dir: Path, window: int, device: str) -> int:
+    from shuttlesense.io import probe
     from shuttlesense.schema import STROKE_CLASSES
     from shuttlesense.strokes.features import build_window
     from shuttlesense.strokes.labels import map_label
@@ -60,8 +61,11 @@ def extract_match(match_dir: Path, window: int, device: str) -> int:
         label = map_label(row["shuttleset_type"])
         if label is None:
             continue
-        record = perceive(match_dir / row["clip"], device)
-        hit = int(row["hit_frame_in_clip"])
+        clip = match_dir / row["clip"]
+        record = perceive(clip, device)
+        # Clips are cut at source fps, but the pipeline keeps every step-th frame (<= 30 fps).
+        step = max(1, round(probe(clip).fps / record.fps)) if record.fps else 1
+        hit = min(int(row["hit_frame_in_clip"]) // step, max(len(record.frames) - 1, 0))
         X.append(build_window(record, hit, hitter_side(record, hit), window, use_trajectory=True))
         y.append(STROKE_CLASSES.index(label))
         meta.append(row["clip"])

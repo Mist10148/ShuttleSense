@@ -9,7 +9,7 @@ import numpy as np
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.schema import STROKE_CLASSES, ClipRecord
 from shuttlesense.stage import StageContext, StageSkipped
-from shuttlesense.strokes.features import build_window
+from shuttlesense.strokes.features import POSE_FEATURES, build_window
 
 _MODELS: dict[tuple[str, str], Any] = {}
 
@@ -28,7 +28,8 @@ def load_classifier(path: str, device: str):
         raise StageSkipped("torch is not installed") from exc
     from shuttlesense.strokes.model import build_from_config
 
-    ckpt = torch.load(weights, map_location=device, weights_only=False)
+    # The checkpoint holds only tensors and plain containers, so no pickled code may run.
+    ckpt = torch.load(weights, map_location=device, weights_only=True)
     classes = ckpt.get("classes", list(STROKE_CLASSES))
     model_cfg = ckpt.get("config", {}).get("model", {})
     model = build_from_config(ckpt["in_features"], model_cfg, len(classes))
@@ -50,8 +51,14 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         raise StageSkipped("no hits to classify")
     cfg = ctx.stage_config("strokes")
     model, ckpt = load_classifier(cfg.get("weights", "weights/strokes/stroke_cnn.pt"), ctx.device)
-    window = cfg.get("window_frames", 32)
-    use_traj = ckpt.get("use_trajectory", cfg.get("use_trajectory", True))
+    # The model was trained on a fixed window and feature layout: take both from the checkpoint.
+    window = int(ckpt.get("window_frames", cfg.get("window_frames", 32)))
+    if "use_trajectory" in ckpt:
+        use_traj = bool(ckpt["use_trajectory"])
+    elif "in_features" in ckpt:
+        use_traj = int(ckpt["in_features"]) > POSE_FEATURES
+    else:
+        use_traj = cfg.get("use_trajectory", True)
     classes = ckpt.get("classes", list(STROKE_CLASSES))
     x = np.stack([build_window(record, h.frame, h.player, window, use_traj) for h in record.hits])
 

@@ -94,3 +94,14 @@ def test_training_script_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
                           use_trajectory=True, seed=1, device="cpu")  # fmt: skip
     assert result["test"]["accuracy"] > 0.5
     assert result["checkpoint"]["in_features"] == 39
+    assert result["checkpoint"]["window_frames"] == 32
+
+    # The saved checkpoint loads without unpickling code, and inference uses its window.
+    import torch
+
+    from shuttlesense.strokes import classify
+
+    torch.save(result["checkpoint"], tmp_path / "stroke.pt")
+    monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
+    model, ckpt = classify.load_classifier("stroke.pt", "cpu")
+    assert ckpt["window_frames"] == 32 and not model.training
