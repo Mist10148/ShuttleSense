@@ -138,10 +138,16 @@ def run_pipeline(
 
     reader = None
     key = cache.initial_key(video_path, config)
+    installed = set(available_stages(config))
     timings: dict[str, float] = {}
     for spec, enabled in plan:
-        key = cache.next_key(key, spec.name, enabled, config.get("stages", {}).get(spec.name, {}))
+        stage_cfg = config.get("stages", {}).get(spec.name, {})
+        key = cache.next_key(key, spec.name, enabled, stage_cfg, spec.name in installed)
         if not enabled:
+            continue
+        if cache.is_skipped(out_dir, spec.name, key):
+            on_event(spec.name, "skipped", 0.0)
+            timings[spec.name] = 0.0
             continue
         cached = cache.load(out_dir, spec.name, key, record)
         if cached is not None:
@@ -164,6 +170,7 @@ def run_pipeline(
             record = spec.fn(record, ctx)
             reader = ctx.reader
         except StageSkipped:
+            cache.save_skipped(out_dir, spec.name, key)
             on_event(spec.name, "skipped", 0.0)
             continue
         except Exception:

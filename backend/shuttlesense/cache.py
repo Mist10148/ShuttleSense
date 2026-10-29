@@ -1,10 +1,12 @@
 """Per-stage cache: out_dir/cache/<stage>.json holds the fields a stage owns (T2.8).
 
 A stage is skipped when its cache file exists and its key matches. Keys are chained: each
-one hashes the stage's config block, the video size, the schema version, the job inputs
-(court corners) and the previous stage's key, so changing an upstream stage invalidates
-everything after it. io and render are never cached (io is cheap and provides the frame
-reader; render depends on the overlay choice).
+one hashes the stage's config block, whether its packages and weights are installed, the
+video file, the schema version, the job inputs (court corners) and the previous stage's key,
+so changing an upstream stage invalidates everything after it. A stage that skipped itself
+(StageSkipped) is cached as skipped, so installing its weights later makes it, and every
+stage after it, run again. io and render are never cached (io is cheap and provides the
+frame reader; render depends on the overlay choice).
 """
 
 from __future__ import annotations
@@ -30,13 +32,28 @@ OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
 
 
 def initial_key(video_path: Path, config: dict[str, Any]) -> str:
-    size = video_path.stat().st_size if video_path.exists() else 0
-    payload = {"size": size, "schema": SCHEMA_VERSION, "corners": config.get("court_corners_px")}
+    stat = video_path.stat() if video_path.exists() else None
+    payload = {
+        "name": video_path.name,
+        "size": stat.st_size if stat else 0,
+        "mtime": stat.st_mtime_ns if stat else 0,
+        "schema": SCHEMA_VERSION,
+        "corners": config.get("court_corners_px"),
+    }
     return _sha1(payload)
 
 
-def next_key(previous: str, stage: str, enabled: bool, stage_config: dict[str, Any]) -> str:
-    return _sha1({"prev": previous, "stage": stage, "on": enabled, "cfg": stage_config})
+def next_key(
+    previous: str,
+    stage: str,
+    enabled: bool,
+    stage_config: dict[str, Any],
+    available: bool = True,
+) -> str:
+    payload = {"prev": previous, "stage": stage, "on": enabled, "cfg": stage_config}
+    if not available:  # keeps keys of installed stages unchanged
+        payload["missing"] = True
+    return _sha1(payload)
 
 
 def _sha1(payload: Any) -> str:
@@ -46,6 +63,30 @@ def _sha1(payload: Any) -> str:
 
 def cache_path(out_dir: Path, stage: str) -> Path:
     return out_dir / "cache" / f"{stage}.json"
+
+
+def save_skipped(out_dir: Path, stage: str, key: str) -> None:
+    if stage not in OWNED:
+        return
+    path = cache_path(out_dir, stage)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"config_hash": key, "skipped": True}), encoding="utf-8")
+
+
+def is_skipped(out_dir: Path, stage: str, key: str) -> bool:
+    """True if this stage skipped itself last time with the same key."""
+    cached = _read(out_dir, stage)
+    return bool(cached and cached.get("config_hash") == key and cached.get("skipped"))
+
+
+def _read(out_dir: Path, stage: str) -> dict[str, Any] | None:
+    path = cache_path(out_dir, stage)
+    if stage not in OWNED or not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def save(out_dir: Path, stage: str, key: str, record: ClipRecord) -> None:
@@ -62,16 +103,8 @@ def save(out_dir: Path, stage: str, key: str, record: ClipRecord) -> None:
 
 def load(out_dir: Path, stage: str, key: str, record: ClipRecord) -> ClipRecord | None:
     """The record with the cached fields applied, or None on a miss."""
-    if stage not in OWNED:
-        return None
-    path = cache_path(out_dir, stage)
-    if not path.exists():
-        return None
-    try:
-        cached = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if cached.get("config_hash") != key:
+    cached = _read(out_dir, stage)
+    if cached is None or cached.get("config_hash") != key or "fields" not in cached:
         return None
     fields = cached["fields"]
     frames = fields.pop("frames", None)
