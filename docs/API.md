@@ -10,7 +10,7 @@ Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [cl
 | --- | --- |
 | Base URL | `http://<laptop-LAN-IP>:8000` or `https://<name>.trycloudflare.com` |
 | Format | JSON (`application/json`), except uploads (`multipart/form-data`) and file downloads |
-| Auth | If the server has `SHUTTLESENSE_TOKEN` set, every request except `GET /health` needs `Authorization: Bearer <token>` |
+| Auth | If the server has `SHUTTLESENSE_TOKEN` set, every request except `GET /health` needs `Authorization: Bearer <token>`. Where headers cannot be set (the web build's `<video>` element), `?token=<token>` is accepted instead |
 | CORS | Allowed origins from `SHUTTLESENSE_CORS_ORIGINS` (default `*`) so the web build works |
 | IDs | URL-safe random strings (`uuid4().hex[:12]`) |
 | Times | ISO 8601 UTC |

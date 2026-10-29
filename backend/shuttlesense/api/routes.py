@@ -1,0 +1,285 @@
+"""REST endpoints. Keep in sync with docs/API.md and app/lib/data/api_client.dart."""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse
+
+from shuttlesense import __version__
+from shuttlesense.api.jobs import JobManager
+from shuttlesense.api.models import (
+    Health,
+    Job,
+    JobCreate,
+    RenderRequest,
+    ScoreCorrectionIn,
+    VideoInfoOut,
+    utcnow,
+)
+from shuttlesense.api.settings import Settings, get_settings
+from shuttlesense.api.storage import Storage, new_id
+from shuttlesense.court import validate_corners
+from shuttlesense.io import SUPPORTED_SUFFIXES, probe, read_frame
+from shuttlesense.pipeline import STAGE_NAMES
+from shuttlesense.render import OVERLAYS
+from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, Score, ScoreCorrection
+
+
+def get_storage(request: Request) -> Storage:
+    return request.app.state.storage
+
+
+def get_jobs(request: Request) -> JobManager:
+    return request.app.state.jobs
+
+
+def require_token(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    token: Annotated[
+        str | None, Query(description="Alternative to the header for <video> tags")
+    ] = None,
+) -> None:
+    """Bearer token check when SHUTTLESENSE_TOKEN is set."""
+    if not settings.token:
+        return
+    header = request.headers.get("authorization", "")
+    supplied = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else token
+    if supplied != settings.token:
+        raise HTTPException(status_code=401, detail="missing or invalid token")
+
+
+StorageDep = Annotated[Storage, Depends(get_storage)]
+JobsDep = Annotated[JobManager, Depends(get_jobs)]
+
+public = APIRouter()
+router = APIRouter(dependencies=[Depends(require_token)])
+
+
+# Health -----------------------------------------------------------------------
+
+
+@public.get("/health", response_model=Health)
+def health(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> Health:
+    return Health(
+        version=__version__,
+        schema_version=SCHEMA_VERSION,
+        device=request.app.state.device,
+        auth_required=bool(settings.token),
+        # TODO(T1.6): report only stages whose dependencies and weights are installed.
+        stages=list(STAGE_NAMES),
+    )
+
+
+# Videos -----------------------------------------------------------------------
+
+
+def _video_or_404(storage: Storage, video_id: str) -> VideoInfoOut:
+    info = storage.load_video_meta(video_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="video not found")
+    return info
+
+
+@router.post("/videos", response_model=VideoInfoOut, status_code=201)
+def upload_video(
+    file: Annotated[UploadFile, File()],
+    storage: StorageDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> VideoInfoOut:
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise HTTPException(status_code=415, detail="unsupported video type; use MP4, MOV or AVI")
+    video_id = new_id()
+    target_dir = storage.video_dir(video_id)
+    target_dir.mkdir(parents=True)
+    target = target_dir / f"source{suffix}"
+    with target.open("wb") as out:
+        shutil.copyfileobj(file.file, out)
+    size = target.stat().st_size
+    if size > settings.max_upload_mb * 1024 * 1024:
+        storage.delete_video(video_id)
+        raise HTTPException(status_code=413, detail="upload too large")
+    try:
+        meta = probe(target)
+    except ValueError as exc:
+        storage.delete_video(video_id)
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    info = VideoInfoOut(
+        id=video_id,
+        filename=file.filename or target.name,
+        size_bytes=size,
+        fps=meta.fps,
+        width=meta.width,
+        height=meta.height,
+        num_frames=meta.num_frames,
+        duration_s=meta.duration_s,
+    )
+    storage.save_video_meta(info)
+    return info
+
+
+@router.get("/videos/{video_id}", response_model=VideoInfoOut)
+def get_video(video_id: str, storage: StorageDep) -> VideoInfoOut:
+    return _video_or_404(storage, video_id)
+
+
+@router.get("/videos/{video_id}/frames/{n}")
+def get_frame(
+    video_id: str,
+    n: int,
+    storage: StorageDep,
+    max_width: Annotated[int, Query(ge=64, le=3840)] = 1280,
+) -> Response:
+    import cv2
+
+    info = _video_or_404(storage, video_id)
+    source = storage.video_source(video_id)
+    frame = read_frame(source, n) if source else None
+    if frame is None:
+        raise HTTPException(status_code=404, detail="frame not found")
+    if frame.shape[1] > max_width:
+        scale = max_width / frame.shape[1]
+        frame = cv2.resize(frame, (max_width, round(frame.shape[0] * scale)))
+    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not ok:
+        raise HTTPException(status_code=500, detail="could not encode frame")
+    return Response(
+        content=jpeg.tobytes(),
+        media_type="image/jpeg",
+        headers={"X-Frame-Width": str(info.width), "X-Frame-Height": str(info.height)},
+    )
+
+
+@router.delete("/videos/{video_id}", status_code=204)
+def delete_video(video_id: str, storage: StorageDep, jobs: JobsDep) -> Response:
+    _video_or_404(storage, video_id)
+    jobs.delete_for_video(video_id)
+    storage.delete_video(video_id)
+    return Response(status_code=204)
+
+
+# Jobs -------------------------------------------------------------------------
+
+
+def _job_or_404(jobs: JobManager, job_id: str) -> Job:
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
+
+
+def _check_overlays(names: list[str] | None) -> list[str]:
+    if names is None:
+        return list(OVERLAYS)
+    unknown = sorted(set(names) - set(OVERLAYS))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown overlays: {', '.join(unknown)}")
+    return names
+
+
+@router.post("/jobs", response_model=Job, status_code=202)
+def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
+    _video_or_404(storage, body.video_id)
+    if body.court_corners_px is not None:
+        try:
+            validate_corners(body.court_corners_px)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    job = Job(
+        id=new_id(),
+        video_id=body.video_id,
+        court_corners_px=body.court_corners_px,
+        overlays=_check_overlays(body.overlays),
+        referee=body.referee,
+    )
+    return jobs.submit(job)
+
+
+@router.get("/jobs", response_model=list[Job])
+def list_jobs(jobs: JobsDep, limit: Annotated[int, Query(ge=1, le=500)] = 50) -> list[Job]:
+    return jobs.list(limit)
+
+
+@router.get("/jobs/{job_id}", response_model=Job)
+def get_job(job_id: str, jobs: JobsDep) -> Job:
+    return _job_or_404(jobs, job_id)
+
+
+def _output_or_404(storage: Storage, jobs: JobManager, job_id: str, key: str) -> Path:
+    _job_or_404(jobs, job_id)
+    path = storage.output_path(job_id, key)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{path.name} not available yet")
+    return path
+
+
+@router.get("/jobs/{job_id}/record")
+def get_record(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
+    return FileResponse(
+        _output_or_404(storage, jobs, job_id, "record"), media_type="application/json"
+    )
+
+
+@router.get("/jobs/{job_id}/video")
+def get_annotated_video(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
+    # FileResponse handles HTTP range requests, so players can seek.
+    return FileResponse(_output_or_404(storage, jobs, job_id, "video"), media_type="video/mp4")
+
+
+@router.get("/jobs/{job_id}/summary.json")
+def get_summary(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
+    path = _output_or_404(storage, jobs, job_id, "summary")
+    return FileResponse(path, media_type="application/json", filename=f"{job_id}_summary.json")
+
+
+@router.get("/jobs/{job_id}/hits.csv")
+def get_hits_csv(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
+    path = _output_or_404(storage, jobs, job_id, "hits_csv")
+    return FileResponse(path, media_type="text/csv", filename=f"{job_id}_hits.csv")
+
+
+@router.post("/jobs/{job_id}/render", response_model=Job)
+def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
+    _job_or_404(jobs, job_id)
+    _check_overlays(body.overlays)
+    # TODO(T5.12): re-run only the render stage from cached stage outputs.
+    raise HTTPException(status_code=501, detail="re-render is not implemented yet")
+
+
+@router.patch("/jobs/{job_id}/score", response_model=Score)
+def correct_score(
+    job_id: str, body: ScoreCorrectionIn, storage: StorageDep, jobs: JobsDep
+) -> Score:
+    path = _output_or_404(storage, jobs, job_id, "record")
+    record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
+    if record.score is None or not record.rallies:
+        raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+    rally = next((r for r in record.rallies if r.index == body.rally_index), None)
+    if rally is None:
+        raise HTTPException(status_code=404, detail="rally not found")
+    record.score.corrections.append(
+        ScoreCorrection(
+            rally_index=rally.index,
+            winner_before=rally.winner,
+            winner_after=body.winner,
+            at=utcnow(),
+        )
+    )
+    rally.winner = body.winner
+    # TODO(T6.4): recompute score_after for later rallies and regenerate summary.json.
+    record.score.near = sum(1 for r in record.rallies if r.winner == "near")
+    record.score.far = sum(1 for r in record.rallies if r.winner == "far")
+    path.write_text(record.model_dump_json(), encoding="utf-8")
+    return record.score
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+def delete_job(job_id: str, jobs: JobsDep) -> Response:
+    if not jobs.cancel_or_delete(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+    return Response(status_code=204)

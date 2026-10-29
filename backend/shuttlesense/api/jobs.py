@@ -1,0 +1,189 @@
+"""Job registry and a single GPU worker thread (docs/ARCHITECTURE.md, job lifecycle)."""
+
+from __future__ import annotations
+
+import queue
+import threading
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from shuttlesense.api.models import Job, JobOutputs, StageState, utcnow
+from shuttlesense.api.storage import OUTPUT_FILES, Storage
+from shuttlesense.pipeline import STAGE_NAMES, run_pipeline
+
+# Signature of run_pipeline, injectable for tests.
+PipelineFn = Callable[..., Any]
+
+
+class JobCancelled(Exception):
+    pass
+
+
+class JobManager:
+    """Keeps jobs in memory (mirrored to job.json) and runs them one at a time."""
+
+    def __init__(
+        self,
+        storage: Storage,
+        *,
+        config: dict[str, Any],
+        device: str,
+        pipeline: PipelineFn = run_pipeline,
+    ) -> None:
+        self.storage = storage
+        self.config = config
+        self.device = device
+        self.pipeline = pipeline
+        self._jobs: dict[str, Job] = {j.id: j for j in storage.load_jobs()}
+        self._cancelled: set[str] = set()
+        self._queue: queue.Queue[str | None] = queue.Queue()
+        self._lock = threading.Lock()
+        self._worker: threading.Thread | None = None
+
+        # Jobs interrupted by a server restart cannot resume.
+        for job in self._jobs.values():
+            if job.status in ("queued", "running"):
+                job.status = "failed"
+                job.error = "server restarted before the job finished"
+                storage.save_job(job)
+
+    # Lifecycle --------------------------------------------------------------
+
+    def start(self) -> None:
+        if self._worker is None:
+            self._worker = threading.Thread(
+                target=self._run_forever, daemon=True, name="job-worker"
+            )
+            self._worker.start()
+
+    def stop(self) -> None:
+        if self._worker is not None:
+            self._queue.put(None)
+            self._worker.join(timeout=5)
+            self._worker = None
+
+    # Public API -------------------------------------------------------------
+
+    def submit(self, job: Job) -> Job:
+        job.stages = [StageState(name=n) for n in STAGE_NAMES]
+        with self._lock:
+            self._jobs[job.id] = job
+            self.storage.save_job(job)
+        self._queue.put(job.id)
+        return self.get(job.id)
+
+    def get(self, job_id: str) -> Job | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.status == "queued":
+                waiting = [j for j in self._jobs.values() if j.status == "queued"]
+                waiting.sort(key=lambda j: j.created_at)
+                job.queue_position = waiting.index(job)
+            else:
+                job.queue_position = None
+            return job.model_copy(deep=True)
+
+    def list(self, limit: int = 50) -> list[Job]:
+        with self._lock:
+            ids = sorted(self._jobs, key=lambda i: self._jobs[i].created_at, reverse=True)
+        return [j for j in (self.get(i) for i in ids[:limit]) if j is not None]
+
+    def cancel_or_delete(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return False
+            if job.status in ("queued", "running"):
+                self._cancelled.add(job_id)
+                job.status = "cancelled"
+                job.finished_at = utcnow()
+            del self._jobs[job_id]
+        self.storage.delete_job(job_id)
+        return True
+
+    def delete_for_video(self, video_id: str) -> None:
+        with self._lock:
+            ids = [j.id for j in self._jobs.values() if j.video_id == video_id]
+        for job_id in ids:
+            self.cancel_or_delete(job_id)
+
+    # Worker -----------------------------------------------------------------
+
+    def _run_forever(self) -> None:
+        while True:
+            job_id = self._queue.get()
+            if job_id is None:
+                return
+            self._run_one(job_id)
+
+    def _update(self, job_id: str, **changes: Any) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return
+            for key, value in changes.items():
+                setattr(job, key, value)
+            self.storage.save_job(job)
+
+    def _on_event(self, job_id: str, name: str, status: str, progress: float) -> None:
+        if job_id in self._cancelled:
+            raise JobCancelled
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise JobCancelled
+            for stage in job.stages:
+                if stage.name == name:
+                    stage.status = status
+                    stage.progress = progress
+            if status == "running":
+                job.current_stage = name
+            active = [s for s in job.stages if s.status != "skipped"]
+            if active:
+                job.progress = sum(1.0 if s.status == "done" else s.progress for s in active) / len(
+                    active
+                )
+
+    def _run_one(self, job_id: str) -> None:
+        job = self.get(job_id)
+        if job is None or job.status != "queued":
+            return
+        source: Path | None = self.storage.video_source(job.video_id)
+        if source is None:
+            self._update(job_id, status="failed", error="video not found", finished_at=utcnow())
+            return
+        self._update(job_id, status="running", started_at=utcnow())
+        out_dir = self.storage.job_dir(job_id)
+        try:
+            self.pipeline(
+                source,
+                out_dir,
+                clip_id=job_id,
+                config=self.config,
+                court_corners_px=job.court_corners_px,
+                overlays=job.overlays,
+                referee_enabled=job.referee,
+                device=self.device,
+                on_event=lambda n, s, p: self._on_event(job_id, n, s, p),
+            )
+        except JobCancelled:
+            self.storage.delete_job(job_id)
+            return
+        except Exception as exc:  # report any stage failure to the client
+            self._update(job_id, status="failed", error=str(exc), finished_at=utcnow())
+            return
+        if self.get(job_id) is None:  # deleted while the last stage was finishing
+            self.storage.delete_job(job_id)
+            return
+        outputs = {key: (out_dir / name).exists() for key, name in OUTPUT_FILES.items()}
+        self._update(
+            job_id,
+            status="done",
+            progress=1.0,
+            current_stage=None,
+            finished_at=utcnow(),
+            outputs=JobOutputs(**outputs),
+        )
