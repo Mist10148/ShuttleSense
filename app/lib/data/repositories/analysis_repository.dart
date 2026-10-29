@@ -70,7 +70,23 @@ final recordProvider = FutureProvider.autoDispose.family<ClipRecord, String>(
   (ref, jobId) => ref.watch(apiClientProvider).getRecord(jobId),
 );
 
-/// GET /health of the saved server: version, schema and installed stages.
-final healthProvider = FutureProvider.autoDispose<Health>(
-  (ref) => ref.watch(apiClientProvider).health(),
-);
+/// How often the saved server is checked again while a screen shows it (offline banner).
+const kHealthRecheck = Duration(seconds: 30);
+const kOfflineRecheck = Duration(seconds: 10);
+
+/// GET /health of the saved server: version, schema and installed stages. Checked again
+/// every [kHealthRecheck] (sooner while unreachable), so the offline banner appears when the
+/// server drops and goes away when it is back.
+final healthProvider = FutureProvider.autoDispose<Health>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  Timer? recheck;
+  ref.onDispose(() => recheck?.cancel());
+  try {
+    final health = await api.health();
+    recheck = Timer(kHealthRecheck, ref.invalidateSelf);
+    return health;
+  } on ApiException {
+    recheck = Timer(kOfflineRecheck, ref.invalidateSelf);
+    rethrow;
+  }
+});

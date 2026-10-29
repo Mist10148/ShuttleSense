@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
+import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
 import 'package:shuttlesense_app/features/history/history_screen.dart';
 import 'package:shuttlesense_app/features/processing/processing_screen.dart';
 import 'package:shuttlesense_app/features/settings/settings_screen.dart';
@@ -60,6 +61,20 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Server unreachable'), findsNothing);
+  });
+
+  testWidgets('offline banner checks the server again by itself', (tester) async {
+    final api = FakeApiClient()..failWith = ApiException('Cannot reach server at http://fake');
+    await pumpScreen(tester, const OfflineBanner(child: Text('content')), api: api);
+    expect(find.textContaining('Server unreachable'), findsOneWidget);
+    api.failWith = null;
+    await tester.pump(kOfflineRecheck);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Server unreachable'), findsNothing);
+    api.failWith = ApiException('Cannot reach server at http://fake');
+    await tester.pump(kHealthRecheck);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Server unreachable'), findsOneWidget);
   });
 
   testWidgets('fake API errors show a retry message', (tester) async {

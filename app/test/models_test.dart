@@ -226,4 +226,18 @@ void main() {
     });
     expect(job.elapsed(DateTime.utc(2026, 11, 5, 9, 12)), Duration.zero);
   });
+
+  test('a retried job keeps its start score', () {
+    final job = Job.fromJson({
+      'id': 'j',
+      'video_id': 'v',
+      'status': 'failed',
+      'progress': 0.2,
+      'stages': <dynamic>[],
+      'created_at': '2026-11-05T09:13:01Z',
+      'referee': true,
+      'start_score': {'near': 11, 'far': 9},
+    });
+    expect(job.options.startScore, (near: 11, far: 9));
+  });
 }

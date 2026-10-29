@@ -74,6 +74,7 @@ class Job {
     this.overlays = const [],
     this.courtCorners,
     this.referee = false,
+    this.startScore,
   });
 
   final String id;
@@ -93,6 +94,7 @@ class Job {
   final List<String> overlays;
   final List<({double x, double y})>? courtCorners;
   final bool referee;
+  final ({int near, int far})? startScore;
 
   /// Time spent running so far (or in total once finished).
   Duration? elapsed([DateTime? now]) {
@@ -110,8 +112,12 @@ class Job {
     return spent * ((1 - progress) / progress);
   }
 
-  JobOptions get options =>
-      JobOptions(overlays: overlays.toSet(), referee: referee, calibrate: courtCorners != null);
+  JobOptions get options => JobOptions(
+    overlays: overlays.toSet(),
+    referee: referee,
+    calibrate: courtCorners != null,
+    startScore: startScore,
+  );
 
   factory Job.fromJson(Json j) => Job(
     id: j['id'] as String,
@@ -129,6 +135,10 @@ class Job {
     overlays: (j['overlays'] as List<dynamic>? ?? const []).cast<String>(),
     courtCorners: (j['court_corners_px'] as List<dynamic>?)?.map((p) => asPoint(p)!).toList(),
     referee: j['referee'] as bool? ?? false,
+    startScore: switch (j['start_score']) {
+      final Json s => (near: asInt(s['near']) ?? 0, far: asInt(s['far']) ?? 0),
+      _ => null,
+    },
   );
 }
 
