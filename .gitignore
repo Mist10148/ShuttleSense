@@ -285,3 +285,7 @@ Thumbs.db
 
 # Tools downloaded by scripts (cloudflared)
 backend/.bin/
+
+# Re-include Flutter paths caught by the Python rules above (lib/, *.manifest)
+!app/lib/
+!app/windows/runner/*.manifest
