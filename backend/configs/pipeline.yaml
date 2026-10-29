@@ -27,6 +27,8 @@ stages:
     mode: balanced              # rtmlib: lightweight | balanced | performance
     min_person_score: 0.4
     smoothing_window: 5
+    min_keypoint_score: 0.3     # joints below this count as missing
+    hold_frames: 5              # keep a lost player's last box this many frames
 
   court:
     enabled: true
