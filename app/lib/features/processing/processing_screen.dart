@@ -21,11 +21,51 @@ const kStageLabels = {
   'render': 'Render video',
 };
 
+/// "1 min 05 s", "42 s".
+String formatDuration(Duration d) {
+  final s = d.inSeconds;
+  if (s < 60) return '$s s';
+  return '${s ~/ 60} min ${(s % 60).toString().padLeft(2, '0')} s';
+}
+
 /// C2 / FR-C2: per-stage job progress, then on to results.
 class ProcessingScreen extends ConsumerWidget {
   const ProcessingScreen({super.key, required this.jobId});
 
   final String jobId;
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel processing?'),
+        content: const Text('The job stops and its partial results are deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel job'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(apiClientProvider).deleteJob(jobId);
+    if (context.mounted) context.go(Routes.home);
+  }
+
+  Future<void> _retry(BuildContext context, WidgetRef ref, Job job) async {
+    try {
+      final next = await ref
+          .read(apiClientProvider)
+          .createJob(videoId: job.videoId, options: job.options, corners: job.courtCorners);
+      if (context.mounted) context.go(Routes.job(next.id));
+    } on Exception catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,13 +95,7 @@ class ProcessingScreen extends ConsumerWidget {
         title: 'Processing',
         actions: [
           if (!job.status.isFinished)
-            TextButton(
-              onPressed: () async {
-                await ref.read(apiClientProvider).deleteJob(jobId);
-                if (context.mounted) context.go(Routes.home);
-              },
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => _cancel(context, ref), child: const Text('Cancel')),
         ],
         children: [
           _Header(job: job),
@@ -74,9 +108,20 @@ class ProcessingScreen extends ConsumerWidget {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
             const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => context.go(Routes.home),
-              child: const Text('Back to upload'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _retry(context, ref, job),
+                  icon: const Icon(Icons.replay),
+                  label: const Text('Try again'),
+                ),
+                OutlinedButton(
+                  onPressed: () => context.go(Routes.home),
+                  child: const Text('Back to upload'),
+                ),
+              ],
             ),
           ],
         ],
@@ -99,12 +144,29 @@ class _Header extends StatelessWidget {
       JobStatus.failed => 'Failed',
       JobStatus.cancelled => 'Cancelled',
     };
+    final elapsed = job.elapsed();
+    final eta = job.eta();
+    final timing = [
+      if (elapsed != null) 'Elapsed ${formatDuration(elapsed)}',
+      if (eta != null && job.status == JobStatus.running) 'about ${formatDuration(eta)} left',
+    ].join(' · ');
+    final percent = (job.progress * 100).round();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(text, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        LinearProgressIndicator(value: job.status == JobStatus.queued ? null : job.progress),
+        Semantics(
+          label: 'Overall progress',
+          value: '$percent%',
+          child: LinearProgressIndicator(
+            value: job.status == JobStatus.queued ? null : job.progress,
+          ),
+        ),
+        if (timing.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(timing, style: Theme.of(context).textTheme.bodySmall),
+        ],
       ],
     );
   }

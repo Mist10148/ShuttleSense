@@ -15,11 +15,32 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(config);
 });
 
-/// Polls GET /jobs/{id} until the job finishes (docs/API.md, polling guidance).
+/// Waits after failed polls: 2, 4, 8, 16, then 30 s; one more failure gives up.
+const kPollBackoff = [
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+  Duration(seconds: 16),
+  Duration(seconds: 30),
+];
+
+/// Polls GET /jobs/{id} until the job finishes (docs/API.md, polling guidance): every 1 s
+/// while running, 3 s while queued, backing off on network errors before reporting
+/// "Lost connection" (the job keeps running on the server).
 final jobProvider = StreamProvider.autoDispose.family<Job, String>((ref, jobId) async* {
   final api = ref.watch(apiClientProvider);
+  var failures = 0;
   while (true) {
-    final job = await api.getJob(jobId);
+    final Job job;
+    try {
+      job = await api.getJob(jobId);
+      failures = 0;
+    } on ApiException catch (e) {
+      // A missing job will not come back; anything else may be a network blip.
+      if (e.statusCode == 404 || failures >= kPollBackoff.length) rethrow;
+      await Future<void>.delayed(kPollBackoff[failures++]);
+      continue;
+    }
     yield job;
     if (job.status.isFinished) return;
     await Future<void>.delayed(
