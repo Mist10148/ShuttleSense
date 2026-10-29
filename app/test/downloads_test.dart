@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -35,8 +36,13 @@ class FakeTargets extends SaveTargets {
 class FakeTarget implements PlaybackTarget {
   @override
   Duration position = const Duration(seconds: 1);
+  final _changes = StreamController<bool>.broadcast();
+  bool _playing = true;
   @override
-  bool playing = true;
+  bool get playing => _playing;
+  set playing(bool value) => _changes.add(_playing = value);
+  @override
+  Stream<bool> get playingChanges => _changes.stream;
   final rates = <double>[];
 
   @override
@@ -143,5 +149,36 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     expect(target.playing, isFalse);
     expect(target.position, const Duration(milliseconds: 1040));
+  });
+
+  testWidgets('play button shows the state; Space on a focused button presses it', (tester) async {
+    final target = FakeTarget()..playing = false;
+    var pressed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlaybackShortcuts(
+            target: target,
+            fps: 25,
+            child: Column(
+              children: [
+                PlaybackControls(target: target, fps: 25),
+                TextButton(onPressed: () => pressed++, child: const Text('Other')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byTooltip('Play (Space)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Play (Space)'));
+    await tester.pump();
+    expect(find.byTooltip('Pause (Space)'), findsOneWidget);
+
+    Focus.of(tester.element(find.text('Other'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(pressed, 1);
+    expect(target.playing, isTrue); // the shortcut left Space to the button
   });
 }

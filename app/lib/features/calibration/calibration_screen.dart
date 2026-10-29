@@ -44,6 +44,10 @@ class CalibrationScreen extends ConsumerStatefulWidget {
 class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
   final List<Corner> _corners = [];
   int _frame = 0;
+
+  /// Slider position while dragging; the frame is only fetched once the drag ends, so the
+  /// server does not decode a frame for every tick.
+  double? _sliding;
   bool _submitting = false;
   String? _error;
 
@@ -142,12 +146,17 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                     const Text('Frame'),
                     Expanded(
                       child: Slider(
-                        value: _frame.toDouble(),
+                        value: _sliding ?? _frame.toDouble(),
                         max: (info.numFrames - 1).toDouble(),
                         divisions: (info.numFrames - 1).clamp(1, 100),
-                        label: '${(_frame / (info.fps == 0 ? 30 : info.fps)).toStringAsFixed(1)} s',
+                        label:
+                            '${((_sliding ?? _frame) / (info.fps == 0 ? 30 : info.fps)).toStringAsFixed(1)} s',
                         semanticFormatterCallback: (v) => 'Frame ${v.round()}',
-                        onChanged: (v) => setState(() => _frame = v.round()),
+                        onChanged: (v) => setState(() => _sliding = v),
+                        onChangeEnd: (v) => setState(() {
+                          _sliding = null;
+                          _frame = v.round();
+                        }),
                       ),
                     ),
                   ],

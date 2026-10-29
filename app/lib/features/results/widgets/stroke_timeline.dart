@@ -146,6 +146,9 @@ class _HitRow extends StatelessWidget {
       label: '$player player, $stroke at ${formatClock(hit.timeS)}',
       hint: 'Double tap to jump to this hit. Long press for details.',
       excludeSemantics: true,
+      // The tile's own actions are excluded with its semantics, so give them back here.
+      onTap: () => onSeek(target.isNegative ? Duration.zero : target),
+      onLongPress: () => showHitDetails(context, hit),
       child: ListTile(
         selected: selected,
         onTap: () => onSeek(target.isNegative ? Duration.zero : target),

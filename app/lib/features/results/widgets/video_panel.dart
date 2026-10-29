@@ -19,7 +19,9 @@ class VideoPanel extends StatelessWidget {
   });
 
   final VideoController controller;
-  final bool available;
+
+  /// Null while the job is still loading, so "not available" is not claimed too early.
+  final bool? available;
   final double? aspectRatio;
 
   @override
@@ -30,16 +32,18 @@ class VideoPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: ColoredBox(
           color: Colors.black,
-          child: available
-              ? Semantics(
-                  label: 'Annotated rally video',
-                  child: Video(controller: controller),
-                )
-              : const MessageView(
-                  icon: Icons.videocam_off_outlined,
-                  message: 'Annotated video not available',
-                  detail: 'The render stage did not produce a video for this job.',
-                ),
+          child: switch (available) {
+            true => Semantics(
+              label: 'Annotated rally video',
+              child: Video(controller: controller),
+            ),
+            false => const MessageView(
+              icon: Icons.videocam_off_outlined,
+              message: 'Annotated video not available',
+              detail: 'The render stage did not produce a video for this job.',
+            ),
+            null => const Center(child: CircularProgressIndicator()),
+          },
         ),
       ),
     );
@@ -50,6 +54,9 @@ class VideoPanel extends StatelessWidget {
 abstract interface class PlaybackTarget {
   Duration get position;
   bool get playing;
+
+  /// Emits whenever playback starts or stops.
+  Stream<bool> get playingChanges;
   Future<void> playOrPause();
   Future<void> seek(Duration position);
   Future<void> setRate(double rate);
@@ -64,6 +71,8 @@ class MediaKitTarget implements PlaybackTarget {
   Duration get position => player.state.position;
   @override
   bool get playing => player.state.playing;
+  @override
+  Stream<bool> get playingChanges => player.stream.playing;
   @override
   Future<void> playOrPause() => player.playOrPause();
   @override
@@ -110,10 +119,17 @@ class _PlaybackControlsState extends State<PlaybackControls> {
           icon: const Icon(Icons.skip_previous),
           onPressed: () => stepFrame(widget.target, widget.fps, -1),
         ),
-        IconButton(
-          tooltip: 'Play or pause (Space)',
-          icon: const Icon(Icons.play_arrow),
-          onPressed: widget.target.playOrPause,
+        StreamBuilder<bool>(
+          stream: widget.target.playingChanges,
+          initialData: widget.target.playing,
+          builder: (context, snapshot) {
+            final playing = snapshot.data ?? false;
+            return IconButton(
+              tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
+              icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+              onPressed: widget.target.playOrPause,
+            );
+          },
         ),
         IconButton(
           tooltip: 'Next frame (Right arrow)',
@@ -136,7 +152,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 }
 
 /// Keyboard control for the whole results screen (T4.11): Space plays or pauses, the left
-/// and right arrows step one frame.
+/// and right arrows step one frame. Only while no control inside has focus: a focused
+/// button, chip or list keeps Space and the arrows for itself.
 class PlaybackShortcuts extends StatelessWidget {
   const PlaybackShortcuts({
     super.key,
@@ -151,20 +168,25 @@ class PlaybackShortcuts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.space): target.playOrPause,
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => stepFrame(target, fps, -1),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () => stepFrame(target, fps, 1),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (!node.hasPrimaryFocus || event is KeyUpEvent) return KeyEventResult.ignored;
+        final action = switch (event.logicalKey) {
+          LogicalKeyboardKey.space when event is KeyDownEvent => target.playOrPause,
+          LogicalKeyboardKey.arrowLeft => () => stepFrame(target, fps, -1),
+          LogicalKeyboardKey.arrowRight => () => stepFrame(target, fps, 1),
+          _ => null,
+        };
+        if (action == null) return KeyEventResult.ignored;
+        action();
+        return KeyEventResult.handled;
       },
-      child: Focus(autofocus: true, child: child),
+      child: child,
     );
   }
 }
 
-/// Creates a player for [url] with optional auth headers.
-Player openPlayer(String url, Map<String, String> headers) {
-  final player = Player();
-  player.open(Media(url, httpHeaders: headers), play: false);
-  return player;
-}
+/// Loads [url] with optional auth headers into [player], paused.
+void openVideo(Player player, String url, Map<String, String> headers) =>
+    player.open(Media(url, httpHeaders: headers), play: false);

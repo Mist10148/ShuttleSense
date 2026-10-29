@@ -158,11 +158,14 @@ class CourtPainter extends CustomPainter {
     }
   }
 
-  /// Only repaint when playback moves to another frame or the theme changes.
+  /// Only repaint when playback moves to another frame, the record or the theme changes.
   @override
   bool shouldRepaint(CourtPainter old) =>
       old.frameIndex != frameIndex ||
+      old.frame != frame ||
       old.lines != lines ||
       old.surface != surface ||
-      old.trail.length != trail.length;
+      old.players != players ||
+      old.trail.length != trail.length ||
+      old.hitMarks.length != hitMarks.length;
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -90,7 +92,7 @@ class ResultsScreen extends ConsumerWidget {
           record: record,
           videoUrl: api.videoUrl(jobId),
           headers: api.authHeaders,
-          videoAvailable: outputs?.video ?? false,
+          videoAvailable: outputs?.video,
         ),
       ),
     );
@@ -189,23 +191,45 @@ class _ResultsBody extends ConsumerStatefulWidget {
   final ClipRecord record;
   final String videoUrl;
   final Map<String, String> headers;
-  final bool videoAvailable;
+
+  /// Null until the job has loaded.
+  final bool? videoAvailable;
 
   @override
   ConsumerState<_ResultsBody> createState() => _ResultsBodyState();
 }
 
 class _ResultsBodyState extends ConsumerState<_ResultsBody> {
-  late final Player _player = openPlayer(widget.videoUrl, widget.headers);
+  final Player _player = Player();
   late final VideoController _controller = VideoController(_player);
   late final PlaybackTarget _target = MediaKitTarget(_player);
   late ClipRecord _record = widget.record;
   bool _correcting = false;
+  bool _opened = false;
+
+  /// Current frame; the layout rebuilds when it changes, not on every position event.
+  final ValueNotifier<int> _frameIndex = ValueNotifier(0);
+  StreamSubscription<Duration>? _position;
+
+  @override
+  void initState() {
+    super.initState();
+    _openIfAvailable();
+    _position = _player.stream.position.listen((p) => _frameIndex.value = _record.frameAt(p));
+  }
+
+  /// Only ask for the video once the job says it exists (no request for a missing file).
+  void _openIfAvailable() {
+    if (_opened || widget.videoAvailable != true) return;
+    _opened = true;
+    openVideo(_player, widget.videoUrl, widget.headers);
+  }
 
   @override
   void didUpdateWidget(_ResultsBody old) {
     super.didUpdateWidget(old);
     if (old.record != widget.record) _record = widget.record;
+    _openIfAvailable();
   }
 
   /// F16: flip a rally's winner on the server and show the re-scored rallies.
@@ -217,6 +241,8 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
           .correctScore(widget.jobId, rallyIndex: rallyIndex, winner: winner);
       if (!mounted) return;
       setState(() => _record = _record.copyWith(rallies: update.rallies, score: update.score));
+      // The server also rebuilt summary.json; fetch the record again for the chart.
+      ref.invalidate(recordProvider(widget.jobId));
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -228,6 +254,8 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 
   @override
   void dispose() {
+    _position?.cancel();
+    _frameIndex.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -236,14 +264,13 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   Widget build(BuildContext context) {
     final record = _record;
     final fps = record.fps == 0 ? 30.0 : record.fps;
+    final chart = SummaryChart(summary: record.summary); // does not change with the frame
     return PlaybackShortcuts(
       target: _target,
       fps: fps,
-      child: StreamBuilder<Duration>(
-        stream: _player.stream.position,
-        initialData: Duration.zero,
-        builder: (context, snapshot) {
-          final frameIndex = record.frameAt(snapshot.data ?? Duration.zero);
+      child: ValueListenableBuilder<int>(
+        valueListenable: _frameIndex,
+        builder: (context, frameIndex, _) {
           final frame = record.frame(frameIndex);
           final currentHit = record.hitAt(frameIndex);
           return ResultsLayout(
@@ -255,7 +282,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
             status: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (widget.videoAvailable) PlaybackControls(target: _target, fps: fps),
+                if (widget.videoAvailable == true) PlaybackControls(target: _target, fps: fps),
                 StatusStrip(
                   rallyState: frame?.rallyState,
                   speedKmh: frame?.shuttleSpeedKmh,
@@ -279,7 +306,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onCorrect: _correct,
                 ),
                 const SizedBox(height: 16),
-                SummaryChart(summary: record.summary),
+                chart,
               ],
             ),
           );
