@@ -104,6 +104,9 @@ class FakeApiClient extends ApiClient {
   final Map<String, VideoInfo> videos;
   ClipRecord record;
 
+  /// Called with the options of every createJob, for checks on what would be sent.
+  void Function(JobOptions options)? onCreateJob;
+
   /// When set, every call throws this.
   ApiException? failWith;
   final List<String> calls = [];
@@ -142,6 +145,7 @@ class FakeApiClient extends ApiClient {
     required JobOptions options,
     List<({double x, double y})>? corners,
   }) => _answer('createJob $videoId ${options.overlays.join(',')}', () {
+    onCreateJob?.call(options);
     final job = Job.fromJson(
       jobJson(id: 'job${jobs.length + 1}', videoId: videoId, status: 'queued', progress: 0),
     );

@@ -6,6 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/router/app_router.dart';
 import '../../data/models/clip_record.dart';
+import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
@@ -102,7 +103,7 @@ Future<void> showRerenderSheet(BuildContext context, WidgetRef ref, Job job) asy
     context: context,
     showDragHandle: true,
     builder: (context) =>
-        _OverlaySheet(initial: job.overlays.toSet(), calibrated: job.courtCorners != null),
+        _OverlaySheet(options: job.options, health: ref.read(healthProvider).valueOrNull),
   );
   if (chosen == null || !context.mounted) return;
   try {
@@ -117,17 +118,18 @@ Future<void> showRerenderSheet(BuildContext context, WidgetRef ref, Job job) asy
 }
 
 class _OverlaySheet extends StatefulWidget {
-  const _OverlaySheet({required this.initial, required this.calibrated});
+  const _OverlaySheet({required this.options, required this.health});
 
-  final Set<String> initial;
-  final bool calibrated;
+  /// The job's own options: what it was calibrated for and whether the referee ran.
+  final JobOptions options;
+  final Health? health;
 
   @override
   State<_OverlaySheet> createState() => _OverlaySheetState();
 }
 
 class _OverlaySheetState extends State<_OverlaySheet> {
-  late final Set<String> _selected = {...widget.initial};
+  late final Set<String> _selected = {...widget.options.overlays};
 
   @override
   Widget build(BuildContext context) {
@@ -145,18 +147,26 @@ class _OverlaySheetState extends State<_OverlaySheet> {
               runSpacing: 8,
               children: [
                 for (final MapEntry(key: name, value: label) in kOverlays.entries)
-                  FilterChip(
-                    label: Text(label),
-                    selected: _selected.contains(name),
-                    onSelected: !widget.calibrated && kCourtOverlays.contains(name)
-                        ? null
-                        : (on) => setState(() => on ? _selected.add(name) : _selected.remove(name)),
-                  ),
+                  if (overlayDisabledReason(name, widget.options, widget.health) case final reason?)
+                    Tooltip(
+                      message: reason,
+                      child: FilterChip(label: Text(label), selected: false, onSelected: null),
+                    )
+                  else
+                    FilterChip(
+                      label: Text(label),
+                      selected: _selected.contains(name),
+                      onSelected: (on) =>
+                          setState(() => on ? _selected.add(name) : _selected.remove(name)),
+                    ),
               ],
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => Navigator.pop(context, _selected),
+              onPressed: () => Navigator.pop(
+                context,
+                widget.options.copyWith(overlays: _selected).submittable(widget.health).overlays,
+              ),
               child: const Text('Re-render video'),
             ),
           ],

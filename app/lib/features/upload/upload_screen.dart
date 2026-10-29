@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
-import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
@@ -54,7 +53,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     if (file == null) return;
     if (_size > kLargeUploadBytes && !await _confirmLarge()) return;
     final api = ref.read(apiClientProvider);
-    final options = ref.read(pendingJobOptionsProvider);
+    final options = ref
+        .read(pendingJobOptionsProvider)
+        .submittable(ref.read(healthProvider).valueOrNull);
     setState(() {
       _progress = 0;
       _sent = 0;
@@ -205,7 +206,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                       name: name,
                       label: label,
                       selected: options.overlays.contains(name),
-                      reason: _disabledReason(name, options, health),
+                      reason: overlayDisabledReason(name, options, health),
                       onSelected: (on) => notifier.toggleOverlay(name, on),
                     ),
                 ],
@@ -240,16 +241,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       ],
     );
   }
-}
-
-/// Why an overlay chip is greyed out, or null when it can be chosen (T4.3).
-String? _disabledReason(String overlay, JobOptions options, Health? health) {
-  if (!options.calibrate && kCourtOverlays.contains(overlay)) return 'Needs court calibration';
-  if (overlay == 'score' && !options.referee) return 'Needs the referee layer';
-  if (health != null && !health.supportsOverlay(overlay, kOverlayStage)) {
-    return 'Not installed on this server';
-  }
-  return null;
 }
 
 class _OverlayChip extends StatelessWidget {

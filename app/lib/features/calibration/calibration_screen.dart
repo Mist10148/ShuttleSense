@@ -52,17 +52,22 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
       _submitting = true;
       _error = null;
     });
+    // Skipping drops the court overlays and the referee layer, which need the corners.
+    final options = ref
+        .read(pendingJobOptionsProvider)
+        .copyWith(calibrate: withCorners)
+        .submittable(ref.read(healthProvider).valueOrNull);
     try {
       final job = await ref
           .read(apiClientProvider)
           .createJob(
             videoId: widget.videoId,
-            options: ref.read(pendingJobOptionsProvider),
+            options: options,
             corners: withCorners ? List.of(_corners) : null,
           );
       if (mounted) context.go(Routes.job(job.id));
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

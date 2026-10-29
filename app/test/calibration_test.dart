@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/data/models/health.dart';
+import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/calibration/calibration_screen.dart';
 
 import 'fakes/fake_api_client.dart';
@@ -64,5 +66,39 @@ void main() {
     final after = tester.getCenter(find.byKey(const ValueKey('corner-0')));
     expect(after.dx, greaterThan(before.dx + 20));
     expect(after.dy, lessThan(before.dy - 5));
+  });
+
+  testWidgets('skip sends no court overlays and no referee layer', (tester) async {
+    final api = FakeApiClient();
+    JobOptions? sent;
+    api.onCreateJob = (options) => sent = options;
+    await pumpScreen(
+      tester,
+      const CalibrationScreen(videoId: 'vid1'),
+      api: api,
+      size: laptop,
+      prefs: {
+        'options.overlays': ['trail', 'court', 'minimap', 'score'],
+        'options.calibrate': true,
+        'options.referee': true,
+      },
+    );
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+    expect(sent?.overlays, {'trail'});
+    expect(sent?.referee, isFalse);
+  });
+
+  test('submittable keeps only overlays the server can draw', () {
+    const options = JobOptions(overlays: {'trail', 'strokes', 'score'}, referee: false);
+    const health = Health(
+      version: '1',
+      schemaVersion: '1.0',
+      device: 'cpu',
+      authRequired: false,
+      stages: ['io', 'tracking', 'render'],
+    );
+    expect(options.submittable(health).overlays, {'trail'});
+    expect(options.submittable(null).overlays, {'trail', 'strokes'});
   });
 }

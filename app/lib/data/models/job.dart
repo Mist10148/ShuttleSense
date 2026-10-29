@@ -1,3 +1,4 @@
+import 'health.dart';
 import 'json.dart';
 
 enum JobStatus {
@@ -148,6 +149,28 @@ class JobOptions {
     calibrate: calibrate ?? this.calibrate,
     startScore: startScore,
   );
+
+  /// What to send to the server: no referee without calibration, and only the overlays that
+  /// can be drawn (greyed-out chips keep their remembered choice but are not requested).
+  JobOptions submittable(Health? health) {
+    final base = calibrate ? this : copyWith(referee: false);
+    return base.copyWith(
+      overlays: {
+        for (final o in base.overlays)
+          if (overlayDisabledReason(o, base, health) == null) o,
+      },
+    );
+  }
+}
+
+/// Why an overlay cannot be chosen, or null when it can (T4.3, T5.12).
+String? overlayDisabledReason(String overlay, JobOptions options, Health? health) {
+  if (!options.calibrate && kCourtOverlays.contains(overlay)) return 'Needs court calibration';
+  if (overlay == 'score' && !options.referee) return 'Needs the referee layer';
+  if (health != null && !health.supportsOverlay(overlay, kOverlayStage)) {
+    return 'Not installed on this server';
+  }
+  return null;
 }
 
 /// Overlays that need court calibration (court geometry or court-plane positions).
