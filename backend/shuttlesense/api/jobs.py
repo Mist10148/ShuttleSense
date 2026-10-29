@@ -57,11 +57,19 @@ class JobManager:
         self._enqueued: dict[str, int] = {}
         self._ticket = itertools.count()
 
-        # Jobs interrupted by a server restart cannot resume.
+        # Jobs interrupted by a server restart cannot resume. An interrupted re-render still
+        # has the outputs of its last run (they are only ever replaced whole), so it is done.
         for job in self._jobs.values():
             if job.status in ("queued", "running"):
-                job.status = "failed"
-                job.error = "server restarted before the job finished"
+                if self.has_outputs(job.id):
+                    job.status, job.progress, job.current_stage = "done", 1.0, None
+                    job.finished_at = utcnow()
+                    job.stages = [
+                        StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES
+                    ]
+                else:
+                    job.status = "failed"
+                    job.error = "server restarted before the job finished"
                 storage.save_job(job)
 
     # Lifecycle --------------------------------------------------------------
@@ -112,6 +120,11 @@ class JobManager:
             self._enqueued[job_id] = next(self._ticket)
         self._queue.put(job_id)
         return self.get(job_id)
+
+    def has_outputs(self, job_id: str) -> bool:
+        """True once a run has finished, so the job can be re-rendered even if a later
+        re-render failed."""
+        return self.storage.output_path(job_id, "record").exists()
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

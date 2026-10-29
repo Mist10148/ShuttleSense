@@ -287,7 +287,7 @@ def get_rallies_csv(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResp
 def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
     job = _job_or_404(jobs, job_id)
     overlays = _check_overlays(body.overlays)
-    if job.status != "done":
+    if job.status != "done" and not (job.status == "failed" and jobs.has_outputs(job_id)):
         raise HTTPException(status_code=409, detail="only finished jobs can be re-rendered")
     try:
         updated = jobs.rerender(job_id, overlays)

@@ -419,3 +419,38 @@ def test_fake_pipeline_uses_start_score(tmp_path: Path, tiny_video: Path) -> Non
         job_id = _referee_job(client, tiny_video, start_score={"near": 10, "far": 12})
         record = client.get(f"/jobs/{job_id}/record").json()
         assert record["score"]["near"] >= 10 and record["score"]["far"] >= 12
+
+
+def test_failed_rerender_can_be_retried_and_restart_restores_it(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    from shuttlesense.api.jobs import JobManager
+    from shuttlesense.pipeline import run_pipeline
+
+    fail = {"on": False}
+
+    def pipeline(*args, **kwargs):
+        if fail["on"]:
+            raise RuntimeError("ffmpeg failed")
+        return run_pipeline(*args, **kwargs)
+
+    settings = Settings(storage_dir=tmp_path / "s", device="cpu")
+    with TestClient(create_app(settings, pipeline=pipeline)) as client:
+        video = upload(client, tiny_video).json()
+        job_id = client.post("/jobs", json={"video_id": video["id"]}).json()["id"]
+        assert wait_for(client, job_id)["status"] == "done"
+        fail["on"] = True
+        client.post(f"/jobs/{job_id}/render", json={"overlays": ["boxes"]})
+        assert wait_for(client, job_id)["status"] == "failed"
+        assert client.get(f"/jobs/{job_id}/record").status_code == 200  # old outputs kept
+        fail["on"] = False
+        assert client.post(f"/jobs/{job_id}/render", json={"overlays": []}).status_code == 202
+        assert wait_for(client, job_id)["status"] == "done"
+        storage = client.app.state.storage
+
+    # A re-render interrupted by a restart comes back as done, a first run as failed.
+    job = storage.load_jobs()[0]
+    job.status = "running"
+    storage.save_job(job)
+    restarted = JobManager(storage, config={}, device="cpu")
+    assert restarted.get(job_id).status == "done"
