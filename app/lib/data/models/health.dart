@@ -3,6 +3,7 @@ import 'json.dart';
 /// GET /health (docs/API.md).
 class Health {
   const Health({
+    this.status = 'ok',
     required this.version,
     required this.schemaVersion,
     required this.device,
@@ -10,13 +11,26 @@ class Health {
     required this.stages,
   });
 
+  final String status;
   final String version;
   final String schemaVersion;
   final String device;
   final bool authRequired;
   final List<String> stages;
 
+  /// The clip record version this app understands (backend/shuttlesense/schema.py).
+  static const expectedSchema = '1.0';
+
+  bool get schemaMatches => schemaVersion == expectedSchema;
+
+  /// Whether the backend can produce [overlay] (its stage is installed).
+  bool supportsOverlay(String overlay, Map<String, String> overlayStage) {
+    final stage = overlayStage[overlay];
+    return stage == null || stages.contains(stage);
+  }
+
   factory Health.fromJson(Json j) => Health(
+    status: j['status'] as String? ?? 'ok',
     version: j['version'] as String,
     schemaVersion: j['schema_version'] as String,
     device: j['device'] as String,

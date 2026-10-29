@@ -100,8 +100,13 @@ class ApiClient {
     return VideoInfo.fromJson(res.data!);
   });
 
-  String frameUrl(String videoId, int n, {int maxWidth = 1280}) =>
-      '${config.baseUrl}/videos/$videoId/frames/$n?max_width=$maxWidth';
+  /// Frame JPEG URL. The token goes in the query too, because web image requests cannot
+  /// always send headers.
+  String frameUrl(String videoId, int n, {int maxWidth = 1280}) {
+    final token = config.token;
+    final auth = token == null || token.isEmpty ? '' : '&token=${Uri.encodeQueryComponent(token)}';
+    return '${config.baseUrl}/videos/$videoId/frames/$n?max_width=$maxWidth$auth';
+  }
 
   Future<void> deleteVideo(String videoId) => _call(() => _dio.delete<void>('/videos/$videoId'));
 
@@ -118,6 +123,8 @@ class ApiClient {
         'video_id': videoId,
         'overlays': options.overlays.toList(),
         'referee': options.referee,
+        if (options.startScore != null)
+          'start_score': {'near': options.startScore!.near, 'far': options.startScore!.far},
         if (corners != null)
           'court_corners_px': [
             for (final c in corners) [c.x, c.y],
@@ -148,14 +155,32 @@ class ApiClient {
 
   String hitsCsvUrl(String jobId) => urlWithToken('/jobs/$jobId/hits.csv');
 
-  Future<Score> correctScore(String jobId, {required int rallyIndex, required String winner}) =>
-      _call(() async {
-        final res = await _dio.patch<Json>(
-          '/jobs/$jobId/score',
-          data: {'rally_index': rallyIndex, 'winner': winner},
-        );
-        return Score.fromJson(res.data!);
-      });
+  String ralliesCsvUrl(String jobId) => urlWithToken('/jobs/$jobId/rallies.csv');
+
+  /// Download an export to [savePath] (mobile share sheet, desktop save dialog).
+  Future<void> download(
+    String url,
+    String savePath, {
+    void Function(int received, int total)? onProgress,
+  }) => _call(() => _dio.download(url, savePath, onReceiveProgress: onProgress));
+
+  /// Re-render the annotated video with other overlays (POST /jobs/{id}/render).
+  Future<Job> render(String jobId, Set<String> overlays) => _call(() async {
+    final res = await _dio.post<Json>('/jobs/$jobId/render', data: {'overlays': overlays.toList()});
+    return Job.fromJson(res.data!);
+  });
+
+  Future<ScoreUpdate> correctScore(
+    String jobId, {
+    required int rallyIndex,
+    required String winner,
+  }) => _call(() async {
+    final res = await _dio.patch<Json>(
+      '/jobs/$jobId/score',
+      data: {'rally_index': rallyIndex, 'winner': winner},
+    );
+    return ScoreUpdate.fromJson(res.data!);
+  });
 
   Future<void> deleteJob(String jobId) => _call(() => _dio.delete<void>('/jobs/$jobId'));
 }

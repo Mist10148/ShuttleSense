@@ -32,12 +32,14 @@ class JobOutputs {
     this.video = false,
     this.summary = false,
     this.hitsCsv = false,
+    this.ralliesCsv = false,
   });
 
   final bool record;
   final bool video;
   final bool summary;
   final bool hitsCsv;
+  final bool ralliesCsv;
 
   factory JobOutputs.fromJson(Json? j) => j == null
       ? const JobOutputs()
@@ -46,6 +48,7 @@ class JobOutputs {
           video: j['video'] as bool? ?? false,
           summary: j['summary'] as bool? ?? false,
           hitsCsv: j['hits_csv'] as bool? ?? false,
+          ralliesCsv: j['rallies_csv'] as bool? ?? false,
         );
 }
 
@@ -62,7 +65,11 @@ class Job {
     this.queuePosition,
     this.currentStage,
     this.error,
+    this.startedAt,
     this.finishedAt,
+    this.overlays = const [],
+    this.courtCorners,
+    this.referee = false,
   });
 
   final String id;
@@ -74,8 +81,31 @@ class Job {
   final List<StageState> stages;
   final String? error;
   final DateTime createdAt;
+  final DateTime? startedAt;
   final DateTime? finishedAt;
   final JobOutputs outputs;
+
+  /// Options the job was created with (for retry and re-render).
+  final List<String> overlays;
+  final List<({double x, double y})>? courtCorners;
+  final bool referee;
+
+  /// Time spent running so far (or in total once finished).
+  Duration? elapsed([DateTime? now]) {
+    final start = startedAt;
+    if (start == null) return null;
+    return (finishedAt ?? now ?? DateTime.now().toUtc()).difference(start);
+  }
+
+  /// Rough remaining time from progress and elapsed time; null early on.
+  Duration? eta([DateTime? now]) {
+    final spent = elapsed(now);
+    if (spent == null || progress < 0.05 || progress >= 1) return null;
+    return spent * ((1 - progress) / progress);
+  }
+
+  JobOptions get options =>
+      JobOptions(overlays: overlays.toSet(), referee: referee, calibrate: courtCorners != null);
 
   factory Job.fromJson(Json j) => Job(
     id: j['id'] as String,
@@ -87,19 +117,54 @@ class Job {
     stages: asList(j['stages']).map(StageState.fromJson).toList(),
     error: j['error'] as String?,
     createdAt: asDate(j['created_at'])!,
+    startedAt: asDate(j['started_at']),
     finishedAt: asDate(j['finished_at']),
     outputs: JobOutputs.fromJson(j['outputs'] as Json?),
+    overlays: (j['overlays'] as List<dynamic>? ?? const []).cast<String>(),
+    courtCorners: (j['court_corners_px'] as List<dynamic>?)?.map((p) => asPoint(p)!).toList(),
+    referee: j['referee'] as bool? ?? false,
   );
 }
 
 /// Options chosen on the upload screen and sent with POST /jobs.
 class JobOptions {
-  const JobOptions({required this.overlays, this.referee = false, this.calibrate = true});
+  const JobOptions({
+    required this.overlays,
+    this.referee = false,
+    this.calibrate = true,
+    this.startScore,
+  });
 
   final Set<String> overlays;
   final bool referee;
   final bool calibrate;
+
+  /// For clips that start mid-game (P3 referee).
+  final ({int near, int far})? startScore;
+
+  JobOptions copyWith({Set<String>? overlays, bool? referee, bool? calibrate}) => JobOptions(
+    overlays: overlays ?? this.overlays,
+    referee: referee ?? this.referee,
+    calibrate: calibrate ?? this.calibrate,
+    startScore: startScore,
+  );
 }
+
+/// Overlays that need court calibration (court geometry or court-plane positions).
+const kCourtOverlays = {'court', 'minimap', 'speed', 'score'};
+
+/// The pipeline stage that produces each overlay (GET /health "stages").
+const kOverlayStage = <String, String>{
+  'trail': 'tracking',
+  'pose': 'pose',
+  'boxes': 'pose',
+  'hits': 'hits',
+  'strokes': 'strokes',
+  'court': 'court',
+  'minimap': 'analytics',
+  'speed': 'analytics',
+  'score': 'referee',
+};
 
 /// Overlay names accepted by the backend (backend/shuttlesense/render/overlays.py).
 const kOverlays = <String, String>{

@@ -102,6 +102,48 @@ void main() {
     expect(golden.hits.map((h) => h.stroke), ['serve', 'clear', 'smash']);
     expect(golden.courtCorners, hasLength(4));
     expect(golden.summary!.totalHits, 3);
+    expect(golden.summary!.perPlayer['near']!.hits, 2);
+    // Full feedback list: the clear has one passed and one failed rule.
+    expect(golden.hits[1].feedback, hasLength(2));
+    expect(golden.hits[1].feedback.first.passed, isTrue);
+    expect(golden.hits[1].tip, startsWith('Reach higher'));
+    expect(golden.hits[0].tip, isNull);
+    expect(golden.hits[2].classProbs['smash'], 0.86);
+    // Rallies and the score at a playback position.
+    expect(golden.rallies.single.winner, 'near');
+    expect(golden.rallies.single.landing!.inCourt, isTrue);
+    expect(golden.scoreAt(10), const ScorePair(near: 0, far: 0));
+    expect(golden.scoreAt(58), const ScorePair(near: 1, far: 0));
+    expect(golden.strokesSoFar(30), 2);
+    expect(golden.rallyAt(57), isNull);
+  });
+
+  test('ScoreUpdate parses the correction response', () {
+    final update = ScoreUpdate.fromJson({
+      'score': {
+        'near': 0,
+        'far': 1,
+        'corrections': [
+          {
+            'rally_index': 0,
+            'winner_before': 'near',
+            'winner_after': 'far',
+            'at': '2026-11-05T09:13:01Z',
+          },
+        ],
+      },
+      'rallies': [
+        {
+          'index': 0,
+          'start_frame': 0,
+          'end_frame': 10,
+          'winner': 'far',
+          'score_after': {'near': 0, 'far': 1},
+        },
+      ],
+    });
+    expect(update.score.corrections.single.winnerAfter, 'far');
+    expect(update.rallies.single.scoreAfter, const ScorePair(near: 0, far: 1));
   });
 
   test('Job parses status, stages and outputs', () {
@@ -118,13 +160,28 @@ void main() {
       ],
       'error': null,
       'created_at': '2026-11-05T09:13:01Z',
+      'started_at': '2026-11-05T09:13:02Z',
       'finished_at': null,
       'outputs': {'record': false, 'video': false, 'summary': false, 'hits_csv': false},
+      'overlays': ['trail', 'boxes'],
+      'court_corners_px': [
+        [1, 2],
+        [3, 4],
+        [5, 6],
+        [7, 8],
+      ],
+      'referee': true,
     });
     expect(job.status, JobStatus.running);
     expect(job.status.isFinished, isFalse);
     expect(job.stages.last.progress, 0.35);
     expect(job.outputs.record, isFalse);
+    expect(job.options.overlays, {'trail', 'boxes'});
+    expect(job.options.calibrate, isTrue);
+    expect(job.options.referee, isTrue);
+    final now = DateTime.utc(2026, 11, 5, 9, 13, 12);
+    expect(job.elapsed(now), const Duration(seconds: 10));
+    expect(job.eta(now)!.inSeconds, 13); // 10 s for 42% -> about 13.8 s left
   });
 
   test('ServerConfig.normalizeUrl', () {
