@@ -25,7 +25,7 @@ from shuttlesense import (
 )
 from shuttlesense.analytics import write_exports
 from shuttlesense.config import BACKEND_DIR
-from shuttlesense.schema import ClipRecord
+from shuttlesense.schema import ClipRecord, ScorePair
 from shuttlesense.stage import Stage, StageContext, StageSkipped
 
 
@@ -174,6 +174,11 @@ def run_pipeline(
         cache.save(out_dir, spec.name, key, record)
         on_event(spec.name, "done", 1.0)
 
+    corrections = referee.load_corrections(out_dir)
+    if corrections and record.score is not None:  # made in the app since the last run
+        start = ScorePair(**config.get("start_score", {}) or {})
+        referee.apply_corrections(record, corrections, start)
+        record.summary = analytics.build_summary(record)
     write_exports(record, out_dir)
     (out_dir / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")
     return record

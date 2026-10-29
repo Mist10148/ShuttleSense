@@ -38,7 +38,7 @@ from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
-from shuttlesense.referee import apply_rallies
+from shuttlesense.referee import apply_corrections, save_corrections
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, ScoreCorrection
 
@@ -313,18 +313,16 @@ def correct_score(
         rally = next((r for r in record.rallies if r.index == body.rally_index), None)
         if rally is None:
             raise HTTPException(status_code=404, detail="rally not found")
-        record.score.corrections.append(
-            ScoreCorrection(
-                rally_index=rally.index,
-                winner_before=rally.winner,
-                winner_after=body.winner,
-                at=utcnow(),
-            )
+        correction = ScoreCorrection(
+            rally_index=rally.index,
+            winner_before=rally.winner,
+            winner_after=body.winner,
+            at=utcnow(),
         )
-        rally.winner = body.winner
-        final = apply_rallies(record.rallies, job.start_score)
-        record.score.near, record.score.far = final.near, final.far
+        corrections = [*record.score.corrections, correction]
+        apply_corrections(record, corrections, job.start_score)
         record.summary = build_summary(record)
+        save_corrections(storage.job_dir(job_id), corrections)
         write_exports(record, storage.job_dir(job_id))
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 

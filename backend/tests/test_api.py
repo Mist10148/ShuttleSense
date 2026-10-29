@@ -380,3 +380,42 @@ def test_negative_start_score_is_400(client: TestClient, tiny_video: Path) -> No
     video = upload(client, tiny_video).json()
     body = {"video_id": video["id"], "referee": True, "start_score": {"near": -1, "far": 0}}
     assert client.post("/jobs", json=body).status_code == 400
+
+
+def test_rerender_keeps_score_corrections(
+    tmp_path: Path, tiny_video: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense import pipeline
+    from shuttlesense.pipeline import StageSpec
+    from shuttlesense.schema import Rally, Score
+
+    def referee(record, ctx):
+        record.rallies = [
+            Rally(index=i, start_frame=3 * i, end_frame=3 * i + 2, winner=w)
+            for i, w in enumerate(["near", "near", "far"])
+        ]
+        record.score = Score(near=2, far=1)
+        return record
+
+    stages = [
+        StageSpec(s.name, referee, s.needs_court, s.referee) if s.name == "referee" else s
+        for s in pipeline.STAGES
+    ]
+    monkeypatch.setattr(pipeline, "STAGES", tuple(stages))
+    with make_client(tmp_path) as client:
+        job_id = _referee_job(client, tiny_video)
+        res = client.patch(f"/jobs/{job_id}/score", json={"rally_index": 0, "winner": "far"})
+        assert res.status_code == 200 and res.json()["score"]["far"] == 2
+        assert client.post(f"/jobs/{job_id}/render", json={"overlays": []}).status_code == 202
+        assert wait_for(client, job_id)["status"] == "done"
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert [r["winner"] for r in record["rallies"]] == ["far", "near", "far"]
+        assert (record["score"]["near"], record["score"]["far"]) == (1, 2)
+        assert len(record["score"]["corrections"]) == 1
+
+
+def test_fake_pipeline_uses_start_score(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video, start_score={"near": 10, "far": 12})
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert record["score"]["near"] >= 10 and record["score"]["far"] >= 12

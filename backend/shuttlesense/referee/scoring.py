@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+from pathlib import Path
 
-from shuttlesense.schema import PlayerSide, Rally, ScorePair
+from pydantic import TypeAdapter
+
+from shuttlesense.atomic import atomic_write_text
+from shuttlesense.schema import ClipRecord, PlayerSide, Rally, ScoreCorrection, ScorePair
+
+# Score corrections live next to record.json, so a re-render (which rebuilds the record from
+# the stage cache) can apply them again.
+CORRECTIONS_FILE = "corrections.json"
+_CORRECTIONS = TypeAdapter(list[ScoreCorrection])
 
 
 def game_winner(near: int, far: int) -> PlayerSide | None:
@@ -34,3 +44,33 @@ def apply_rallies(rallies: Sequence[Rally], start: ScorePair | None = None) -> S
         rally.score_after = ScorePair(near=score.near, far=score.far)
         over = game_winner(score.near, score.far) is not None
     return score
+
+
+def load_corrections(out_dir: Path) -> list[ScoreCorrection]:
+    path = out_dir / CORRECTIONS_FILE
+    if not path.exists():
+        return []
+    return _CORRECTIONS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def save_corrections(out_dir: Path, corrections: Sequence[ScoreCorrection]) -> None:
+    data = _CORRECTIONS.dump_python(list(corrections), mode="json")
+    atomic_write_text(out_dir / CORRECTIONS_FILE, json.dumps(data, indent=2))
+
+
+def apply_corrections(
+    record: ClipRecord, corrections: Sequence[ScoreCorrection], start: ScorePair | None = None
+) -> None:
+    """Set the corrected rally winners, keep the correction log and re-score every rally.
+
+    Corrections for rallies that no longer exist (e.g. after a config change) are ignored.
+    """
+    if record.score is None:
+        return
+    by_index = {r.index: r for r in record.rallies}
+    for c in corrections:
+        if c.rally_index in by_index:
+            by_index[c.rally_index].winner = c.winner_after
+    record.score.corrections = list(corrections)
+    final = apply_rallies(record.rallies, start)
+    record.score.near, record.score.far = final.near, final.far

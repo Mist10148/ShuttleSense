@@ -14,7 +14,7 @@ from typing import Any
 from shuttlesense.analytics import write_exports
 from shuttlesense.io import probe
 from shuttlesense.pipeline import STAGE_NAMES, StageEvent
-from shuttlesense.schema import ClipRecord, Court
+from shuttlesense.schema import ClipRecord, Court, ScorePair
 
 GOLDEN_RECORD = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "golden_record.json"
 
@@ -104,6 +104,11 @@ def fake_pipeline(
             f.rally_state = None
         for h in record.hits:
             h.rally_index = None
+    elif record.score is not None:  # same start score and corrections as the real pipeline
+        from shuttlesense.referee import apply_corrections, load_corrections
+
+        start = ScorePair(**(config or {}).get("start_score", {}) or {})
+        apply_corrections(record, load_corrections(out_dir), start)
 
     for name in STAGE_NAMES:
         on_event(name, "running", 0.0)
