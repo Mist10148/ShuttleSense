@@ -54,7 +54,9 @@ stages:
 
   analytics:
     enabled: true
-    speed_smoothing: 3
+    speed_smoothing: 3          # frames, NaN-aware moving average
+    position_smoothing: 5       # frames, player court positions
+    hit_speed_frames: 5         # hit speed = peak in this many frames after the hit
 
   referee:
     enabled: true

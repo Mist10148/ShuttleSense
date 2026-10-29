@@ -1,25 +1,54 @@
 """Estimated shuttle speed from court-plane displacement (F11, FR-11).
 
-Always an estimate: one camera gives a 2D court-plane approximation.
+Always an estimate: one camera gives a 2D court-plane approximation, which underestimates
+shots travelling toward or away from the camera.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+MAX_PLAUSIBLE_KMH = 450.0
 
-def speeds_kmh(court_xy_m: np.ndarray, fps: float, smooth: int = 3) -> np.ndarray:
-    """Per-frame speed in km/h from (N, 2) court positions in meters.
 
-    The first frame gets the second frame's speed. `smooth` is a moving-average window.
-    TODO(T5.6): handle invisible frames (NaN) and replace the moving average with
-    Savitzky-Golay smoothing if it is too noisy.
+def speeds_kmh(court_xy_m: np.ndarray, fps: float, smooth: int = 3, max_gap: int = 2) -> np.ndarray:
+    """Per-frame speed in km/h from (N, 2) court positions in meters; NaN rows are unknown.
+
+    A frame's speed uses the previous valid position if it is at most `max_gap` frames
+    back; otherwise (start of the track or after a longer gap) it is NaN. The first valid
+    frame of a run takes the next frame's speed. `smooth` is a NaN-aware moving average.
+    Values above MAX_PLAUSIBLE_KMH become NaN.
     """
-    if len(court_xy_m) < 2:
-        return np.zeros(len(court_xy_m))
-    step = np.linalg.norm(np.diff(court_xy_m, axis=0), axis=1)
-    mps = np.concatenate([[step[0]], step]) * fps
+    xy = np.asarray(court_xy_m, dtype=float)
+    n = len(xy)
+    raw = np.full(n, np.nan)
+    valid = ~np.isnan(xy).any(axis=1) if n else np.zeros(0, bool)
+    last = None
+    for i in range(n):
+        if not valid[i]:
+            continue
+        if last is not None and i - last <= max_gap:
+            raw[i] = np.linalg.norm(xy[i] - xy[last]) / (i - last) * fps
+        last = i
+    # The first frame of each run borrows the next frame's speed.
+    for i in range(n - 1):
+        if valid[i] and np.isnan(raw[i]) and not np.isnan(raw[i + 1]):
+            raw[i] = raw[i + 1]
+    kmh = raw * 3.6
     if smooth > 1:
-        kernel = np.ones(smooth) / smooth
-        mps = np.convolve(mps, kernel, mode="same")
-    return mps * 3.6
+        half = smooth // 2
+        smoothed = np.full(n, np.nan)
+        for i in np.flatnonzero(~np.isnan(kmh)):
+            window = kmh[max(0, i - half) : i + half + 1]
+            smoothed[i] = np.nanmean(window)
+        kmh = smoothed
+    kmh[kmh > MAX_PLAUSIBLE_KMH] = np.nan
+    return kmh
+
+
+def hit_speed(kmh: np.ndarray, hit_frame: int, after: int = 5) -> float | None:
+    """Peak speed in the `after` frames following a hit, or None."""
+    window = kmh[hit_frame + 1 : hit_frame + 1 + after]
+    if len(window) == 0 or np.isnan(window).all():
+        return None
+    return float(np.nanmax(window))

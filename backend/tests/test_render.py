@@ -122,3 +122,11 @@ def test_court_lines_hit_corners() -> None:
                         court=Court(corners_px=corners, homography=h.tolist()))  # fmt: skip
     outline = court_segments_px(record, RenderState())[:4]
     assert [list(a) for a, _b in outline] == corners
+
+
+def test_status_text() -> None:
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import status_text
+
+    text = status_text(load_golden(), 50)
+    assert text.startswith("In play") and "km/h (est.)" in text and text.endswith("3 strokes")

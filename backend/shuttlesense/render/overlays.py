@@ -208,7 +208,32 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     cv2.addWeighted(overlay, 0.6, img, 0.4, 0, dst=img)
 
 
+def status_text(record: ClipRecord, i: int) -> str:
+    """'In play · 182 km/h (est.) · peak 241 · 3 strokes' for frame i."""
+    from shuttlesense.analytics.stage import strokes_so_far
+
+    parts = []
+    frame = record.frames[i]
+    if frame.rally_state:
+        parts.append("In play" if frame.rally_state == "in_play" else "Between rallies")
+    if frame.shuttle_speed_kmh is not None:
+        parts.append(f"{frame.shuttle_speed_kmh:.0f} km/h (est.)")
+    peaks = [f.shuttle_speed_kmh for f in record.frames[: i + 1] if f.shuttle_speed_kmh]
+    if peaks:
+        parts.append(f"peak {max(peaks):.0f}")
+    count = strokes_so_far(record, i)
+    parts.append(f"{count} stroke{'s' if count != 1 else ''}")
+    return " | ".join(parts)
+
+
+def draw_speed(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Status bar at the bottom left: rally state, estimated speed, peak, stroke count."""
+    _label(img, status_text(record, i), _pt(12 * state.scale, img.shape[0] - 14 * state.scale),
+           style.PANEL, state.scale)  # fmt: skip
+
+
 LAYERS: dict[str, Layer] = {
+    "speed": draw_speed,
     "court": draw_court,
     "trail": draw_trail,
     "pose": draw_pose,
