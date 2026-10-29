@@ -273,7 +273,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 
 ## Roadmap
 
-Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md).
+Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task is also a GitHub issue under its phase milestone.
 
 - [x] **Phase 0 (Oct 29 – Nov 1):** repo structure, docs, backend and app skeletons, CI
 - [ ] **Phase 1 (Nov 2 – 3):** freeze data format and API, TrackNetV3 + pose running, app connects on all platforms
@@ -321,7 +321,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md).
 | [docs/API.md](docs/API.md) | REST endpoints between the app and the backend |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Every library and tool, versions, licenses, rationale |
 | [docs/SETUP.md](docs/SETUP.md) | Installing and running backend and app, weights, datasets, connecting devices |
-| [docs/PHASES.md](docs/PHASES.md) | Phased task plan with owners and done criteria |
+| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 96 tasks (steps, tests, acceptance criteria) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, PRs, code style, definition of done |
 
 ---

@@ -206,6 +206,6 @@ Other cross-device rules:
 | Models | notebooks + `scripts/` | metrics from the PRD on held-out data, logged to `docs/` results tables |
 | App logic | `flutter test` | JSON model parsing, breakpoint selection, repositories with fake API |
 | App UI | widget tests | shell switches navigation at each breakpoint; screens render without overflow at 360, 800, 1280 dp |
-| End-to-end | manual checklist (PHASES.md, Phase 7) | full flow on Android phone, tablet, Windows, Chrome |
+| End-to-end | manual checklist ([T7.4](phases/phase-7-release.md#t74)) | full flow on Android phone, tablet, Windows, Chrome |
 
 CI (`.github/workflows/`) runs backend lint + tests and app analyze + tests + web build on every push and PR.

@@ -4,7 +4,7 @@ Team workflow for the 3-week build. Setup is in [docs/SETUP.md](docs/SETUP.md); 
 
 ## Picking up work
 
-1. Every task in [PHASES.md](docs/PHASES.md) has an ID (e.g. `T2.3`). It also exists as a GitHub issue on the project board with the same ID in the title.
+1. Every task has an ID (e.g. `T2.3`) and a detailed card in its phase file under [docs/phases/](docs/phases/) (overview: [PHASES.md](docs/PHASES.md)). It also exists as a GitHub issue titled `[T2.3] …`, labelled with its phase, owner and area, under the phase milestone.
 2. Assign yourself, move the card to **In progress**, and branch from the latest `main`.
 3. If a task turns out bigger than a day, split it into sub-issues and tell the lead.
 
@@ -77,7 +77,7 @@ Never commit videos, datasets or weights (`.gitignore` blocks the common extensi
 
 A task is done when:
 
-1. Its "done when" criterion in PHASES.md is met.
+1. The acceptance criteria on its task card in `docs/phases/` are met.
 2. Tests cover the logic that can be tested without a GPU.
 3. Docs are updated if behaviour, config, schema or API changed.
-4. It is merged to `main` with green CI, and its status in PHASES.md is flipped to ✅ in the same PR.
+4. It is merged to `main` with green CI, its status in the phase file is flipped to ✅ in the same PR, and the PR closes the issue (`Closes #<n>`).

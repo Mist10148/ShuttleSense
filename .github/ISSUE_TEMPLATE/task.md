@@ -1,6 +1,6 @@
 ---
 name: Task
-about: A task from docs/PHASES.md
+about: A task from docs/phases/ (see docs/PHASES.md)
 title: "[T<id>] "
 labels: task
 ---
@@ -14,6 +14,6 @@ labels: task
 
 ## Done when
 
-<!-- Copy the "done when" criterion from docs/PHASES.md -->
+<!-- Copy the acceptance criteria from the task card in docs/phases/phase-N-*.md -->
 
 ## Notes

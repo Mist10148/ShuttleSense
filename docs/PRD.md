@@ -249,7 +249,7 @@ The phone-footage results are reported even if they are low: the gap between bro
 
 ## Timeline and team
 
-Features freeze on Nov 18, two days before the final demo. The detailed task list with owners is in [PHASES.md](PHASES.md).
+Features freeze on Nov 18, two days before the final demo. The detailed task list with owners is in [PHASES.md](PHASES.md) and the per-phase files in [phases/](phases/).
 
 ```mermaid
 gantt

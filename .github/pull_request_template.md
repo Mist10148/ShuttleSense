@@ -1,6 +1,6 @@
 ## Task
 
-Closes #<issue> · Task `T<id>` from docs/PHASES.md
+Closes #<issue> · Task `T<id>` (card in docs/phases/)
 
 ## What changed
 
@@ -20,4 +20,4 @@ Closes #<issue> · Task `T<id>` from docs/PHASES.md
 
 - [ ] Clip record or API changed? `schema.py`, Dart models, DATA_FORMAT.md / API.md and tests updated together, lead approved
 - [ ] Docs updated (README, SETUP.md, configs) if behaviour changed
-- [ ] Task status flipped to ✅ in docs/PHASES.md
+- [ ] Task status flipped to ✅ in its docs/phases/ file
