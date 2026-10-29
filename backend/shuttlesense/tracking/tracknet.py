@@ -40,6 +40,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
 
     Sources, in order: a precomputed upstream CSV (`stages.tracking.precomputed_csv`, handy
     for running TrackNetV3's predict.py separately, e.g. on Colab), else the model itself.
+    The CSV is in source frames and pixels (predict.py run on the original video) unless
+    `stages.tracking.precomputed_space` is "normalized" (e.g. a tracking.csv from this
+    pipeline).
     Either way the trajectory is cleaned with outlier removal and short-gap interpolation.
     """
     cfg = ctx.stage_config("tracking")
@@ -49,7 +52,12 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         path = BACKEND_DIR / precomputed  # absolute paths stay absolute
         if not path.exists():
             raise FileNotFoundError(f"precomputed tracking CSV not found: {path}")
-        xy, visible = read_tracking_csv(path, n)
+        step, scale = 1, (1.0, 1.0)
+        reader = ctx.reader
+        if reader is not None and cfg.get("precomputed_space", "source") == "source":
+            step = reader.step
+            scale = (reader.width / reader.source.width, reader.height / reader.source.height)
+        xy, visible = read_tracking_csv(path, n, step=step, scale=scale)
     else:
         try:
             import torch  # noqa: F401  (requirements/ml.txt)

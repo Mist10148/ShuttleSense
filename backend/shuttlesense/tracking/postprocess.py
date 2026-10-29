@@ -97,17 +97,31 @@ def write_tracking_csv(
             writer.writerow([i, int(vis), f"{x:.1f}", f"{y:.1f}", source[i] if source else ""])
 
 
-def read_tracking_csv(path: Path, num_frames: int) -> tuple[np.ndarray, np.ndarray]:
-    """Read a TrackNetV3-style CSV (Frame/Visibility/X/Y or frame/visible/x/y columns)."""
+def read_tracking_csv(
+    path: Path,
+    num_frames: int,
+    *,
+    step: int = 1,
+    scale: tuple[float, float] = (1.0, 1.0),
+) -> tuple[np.ndarray, np.ndarray]:
+    """Read a TrackNetV3-style CSV (Frame/Visibility/X/Y or frame/visible/x/y columns).
+
+    Upstream predict.py writes source frame numbers and source pixels. Pass the reader's
+    frame `step` and the source-to-normalized pixel `scale` to map them onto the record;
+    rows between kept frames are dropped.
+    """
     xy = np.zeros((num_frames, 2))
     visible = np.zeros(num_frames, dtype=int)
     with path.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             row = {k.lower(): v for k, v in row.items()}
-            i = int(row["frame"])
+            source_frame = int(float(row["frame"]))
+            if source_frame % step:
+                continue
+            i = source_frame // step
             if 0 <= i < num_frames:
                 visible[i] = int(float(row.get("visible", row.get("visibility", 0))))
-                xy[i] = float(row["x"]), float(row["y"])
+                xy[i] = float(row["x"]) * scale[0], float(row["y"]) * scale[1]
     return xy, visible
 
 

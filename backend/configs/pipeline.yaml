@@ -21,6 +21,7 @@ stages:
     max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
     outlier_px: 80              # isolated detection this far from the track is dropped
     # precomputed_csv: path/to/upstream_predict.csv   # use TrackNetV3 predict.py output
+    # precomputed_space: source   # source = original frames/pixels; normalized = our tracking.csv
     trail_length: 12            # FR-2: 8 to 15 positions
 
   pose:

@@ -58,3 +58,25 @@ def test_stage_reads_precomputed_csv(tmp_path: Path) -> None:
     assert record.frames[1].shuttle.visible == 1  # 1-frame gap interpolated
     assert (record.frames[1].shuttle.x, record.frames[1].shuttle.y) == (20.0, 30.0)
     assert (tmp_path / "out" / "tracking.csv").read_text().splitlines()[2].endswith("interp")
+
+
+def test_precomputed_csv_maps_source_frames_and_pixels(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    # 60 fps 1080p source, normalized to 30 fps 720p: keep even frames, scale by 2/3.
+    rows = ["Frame,Visibility,X,Y"] + [f"{i},1,{300 + i},{600}" for i in range(8)]
+    (tmp_path / "up.csv").write_text("\n".join(rows) + "\n")
+    reader = SimpleNamespace(
+        step=2, width=1280, height=720, source=SimpleNamespace(width=1920, height=1080)
+    )
+    record = ClipRecord(clip_id="c", fps=30, width=1280, height=720, num_frames=4,
+                        frames=[Frame(frame=i) for i in range(4)])  # fmt: skip
+    ctx = StageContext(
+        video_path=tmp_path / "v.mp4",
+        out_dir=tmp_path / "out",
+        config={"stages": {"tracking": {"precomputed_csv": str(tmp_path / "up.csv")}}},
+        reader=reader,
+    )
+    record = tracking_run(record, ctx)
+    assert [f.shuttle.x for f in record.frames] == [200.0, 201.3, 202.7, 204.0]
+    assert record.frames[3].shuttle.y == 400.0
