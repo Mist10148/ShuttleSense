@@ -3,10 +3,10 @@
     "short_name": "ShuttleSense",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "ShuttleSense client for phone, tablet, laptop and web.",
-    "orientation": "portrait-primary",
+    "background_color": "#2E7D4F",
+    "theme_color": "#2E7D4F",
+    "description": "Badminton rally analysis: shuttle tracking, strokes, court stats.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

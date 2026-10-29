@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Gallery picker on Android 13+; older versions use READ_EXTERNAL_STORAGE. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <!-- Talk to the ShuttleSense backend on the LAN or through a tunnel -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
