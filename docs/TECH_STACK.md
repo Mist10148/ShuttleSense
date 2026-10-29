@@ -96,6 +96,29 @@ Platform notes:
 | Source control | GitHub (`Mist10148/ShuttleSense`) | Issues + Projects board mirrors [PHASES.md](PHASES.md) |
 | CI | GitHub Actions | Backend: ruff + pytest. App: analyze + test + web build |
 
+## Third-party licenses
+
+License audit for T7.13. ShuttleSense is MIT.
+
+**Direct dependencies.** Every direct dependency in the tables above is under a permissive license (MIT, BSD-3, Apache-2.0, PSF or MPL-2.0). None is GPL or AGPL. Ultralytics YOLO-pose (AGPL-3.0) was ruled out for this reason (see [DECISIONS.md](DECISIONS.md) D2).
+
+**Need a check before distributing (T7.6):**
+
+| Component | How it is used | What to check |
+| --- | --- | --- |
+| ffmpeg (with libx264 for H.264) | Run as a separate program by `render/writer.py`. It is not linked or shipped. | Fine as long as releases do not bundle an ffmpeg binary. Many builds with libx264 are GPL. |
+| media_kit_libs_video | Bundles libmpv and FFmpeg inside the app builds | Check the license of the bundled build (LGPL or GPL) and keep its notices in the release. |
+| TrackNetV3, InpaintNet and stroke weights | Downloaded from Hugging Face, never committed | Keep upstream's MIT notice next to the weights. |
+| ShuttleSet annotations and match videos | Downloaded by `download_shuttleset.py` into gitignored `backend/data/`. Videos are never redistributed. | Follow the dataset's terms of use. |
+| Transitive packages | Pulled in by the packages above | Python: run `pip install pip-licenses && pip-licenses --from=mixed --order=license` in the ML venv. Dart: run `flutter pub deps` and check each package on pub.dev. |
+
+**Media in the repo** (checked with `git ls-files`, 2026-10-30):
+- The only media files are the default Flutter launcher icons, the launch image and the web icons under `app/android`, `app/ios` and `app/web`.
+- There are no videos, photos of people, datasets or weights.
+- `backend/data/`, `backend/weights/`, `backend/storage/` and `samples/` are gitignored.
+
+**Privacy.** `DELETE /videos/{id}` removes the upload folder and every job made from it. `DELETE /jobs/{id}` removes the job folder. Wipe the demo server's `backend/storage/` after the demo.
+
 ## Version policy
 
 - Backend: exact pins (`==`) in `requirements/*.txt`. Upgrades happen in a dedicated PR that runs the full test suite and one end-to-end clip.
