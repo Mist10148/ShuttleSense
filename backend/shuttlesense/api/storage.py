@@ -6,6 +6,7 @@ storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.c
 
 from __future__ import annotations
 
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -21,8 +22,16 @@ OUTPUT_FILES = {
 }
 
 
+_ID = re.compile(r"[0-9a-f]{12}")
+
+
 def new_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def is_id(value: str) -> bool:
+    """True for ids made by new_id. Anything else (e.g. "..\\x") must never become a path."""
+    return _ID.fullmatch(value) is not None
 
 
 class Storage:
@@ -36,9 +45,13 @@ class Storage:
     # Videos -----------------------------------------------------------------
 
     def video_dir(self, video_id: str) -> Path:
+        if not is_id(video_id):
+            raise ValueError(f"invalid video id: {video_id!r}")
         return self.videos_dir / video_id
 
     def video_source(self, video_id: str) -> Path | None:
+        if not is_id(video_id):
+            return None
         matches = sorted(self.video_dir(video_id).glob("source.*"))
         return matches[0] if matches else None
 
@@ -46,17 +59,23 @@ class Storage:
         (self.video_dir(info.id) / "meta.json").write_text(info.model_dump_json(), encoding="utf-8")
 
     def load_video_meta(self, video_id: str) -> VideoInfoOut | None:
+        if not is_id(video_id):
+            return None
         path = self.video_dir(video_id) / "meta.json"
         if not path.exists():
             return None
         return VideoInfoOut.model_validate_json(path.read_text(encoding="utf-8"))
 
     def delete_video(self, video_id: str) -> None:
+        if not is_id(video_id):
+            return
         shutil.rmtree(self.video_dir(video_id), ignore_errors=True)
 
     # Jobs -------------------------------------------------------------------
 
     def job_dir(self, job_id: str) -> Path:
+        if not is_id(job_id):
+            raise ValueError(f"invalid job id: {job_id!r}")
         return self.jobs_dir / job_id
 
     def output_path(self, job_id: str, key: str) -> Path:
@@ -77,4 +96,6 @@ class Storage:
         return jobs
 
     def delete_job(self, job_id: str) -> None:
+        if not is_id(job_id):
+            return
         shutil.rmtree(self.job_dir(job_id), ignore_errors=True)

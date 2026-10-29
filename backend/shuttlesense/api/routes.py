@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
-import shutil
+import hmac
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
+from fastapi import (
+    Path as PathParam,
+)
 from fastapi.responses import FileResponse
 
 from shuttlesense import __version__
@@ -51,7 +63,7 @@ def require_token(
         return
     header = request.headers.get("authorization", "")
     supplied = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else token
-    if supplied != settings.token:
+    if not supplied or not hmac.compare_digest(supplied.encode(), settings.token.encode()):
         raise HTTPException(status_code=401, detail="missing or invalid token")
 
 
@@ -96,27 +108,36 @@ def upload_video(
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
         raise HTTPException(status_code=415, detail="unsupported video type; use MP4, MOV or AVI")
+    limit = settings.max_upload_mb * 1024 * 1024
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit + 64 * 1024:  # allow for multipart framing
+        raise HTTPException(status_code=413, detail="upload too large")
     video_id = new_id()
     target_dir = storage.video_dir(video_id)
     target_dir.mkdir(parents=True)
     target = target_dir / f"source{suffix}"
-    with target.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
-    size = target.stat().st_size
-    if size > settings.max_upload_mb * 1024 * 1024:
-        storage.delete_video(video_id)
-        raise HTTPException(status_code=413, detail="upload too large")
+    saved = False
     try:
-        meta = probe(target)
-    except ValueError as exc:
-        storage.delete_video(video_id)
-        raise HTTPException(status_code=415, detail=str(exc)) from exc
-    try:
-        io_cfg = request.app.state.jobs.config.get("stages", {}).get("io", {})
-        check_duration(meta, io_cfg.get("max_duration_s", 300))
-    except ValueError as exc:
-        storage.delete_video(video_id)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        size = 0
+        with target.open("wb") as out:
+            while chunk := file.file.read(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(status_code=413, detail="upload too large")
+                out.write(chunk)
+        try:
+            meta = probe(target)
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        try:
+            io_cfg = request.app.state.jobs.config.get("stages", {}).get("io", {})
+            check_duration(meta, io_cfg.get("max_duration_s", 300))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        saved = True
+    finally:
+        if not saved:  # rejected, or the client went away mid-upload
+            storage.delete_video(video_id)
     info = VideoInfoOut(
         id=video_id,
         filename=file.filename or target.name,
@@ -139,7 +160,7 @@ def get_video(video_id: str, storage: StorageDep) -> VideoInfoOut:
 @router.get("/videos/{video_id}/frames/{n}")
 def get_frame(
     video_id: str,
-    n: int,
+    n: Annotated[int, PathParam(ge=0)],
     storage: StorageDep,
     max_width: Annotated[int, Query(ge=64, le=3840)] = 1280,
 ) -> Response:
@@ -147,7 +168,8 @@ def get_frame(
 
     info = _video_or_404(storage, video_id)
     source = storage.video_source(video_id)
-    frame = read_frame(source, n) if source else None
+    in_range = info.num_frames <= 0 or n < info.num_frames  # 0 = unknown frame count
+    frame = read_frame(source, n) if source and in_range else None
     if frame is None:
         raise HTTPException(status_code=404, detail="frame not found")
     if frame.shape[1] > max_width:
@@ -193,6 +215,8 @@ def _check_overlays(names: list[str] | None) -> list[str]:
 @router.post("/jobs", response_model=Job, status_code=202)
 def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
     video = _video_or_404(storage, body.video_id)
+    if body.start_score is not None and min(body.start_score.near, body.start_score.far) < 0:
+        raise HTTPException(status_code=400, detail="start_score cannot be negative")
     if body.court_corners_px is not None:
         try:
             validate_corners(body.court_corners_px)

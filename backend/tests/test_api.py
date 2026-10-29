@@ -353,3 +353,30 @@ def test_queue_position_follows_enqueue_order(tmp_path: Path) -> None:
     manager.rerender(older.id, [])  # back of the queue, although it was created first
     assert manager.get(newer.id).queue_position == 0
     assert manager.get(older.id).queue_position == 1
+
+
+def test_ids_that_are_not_ours_are_not_found(client: TestClient, tiny_video: Path) -> None:
+    for bad in ("..", "..%5C..%5Cstorage", "missing"):
+        assert client.get(f"/videos/{bad}").status_code == 404
+        assert client.delete(f"/videos/{bad}").status_code == 404
+        assert client.get(f"/jobs/{bad}").status_code == 404
+    assert client.post("/jobs", json={"video_id": "../videos"}).status_code == 404
+
+
+def test_frame_out_of_range_is_404(client: TestClient, tiny_video: Path) -> None:
+    video = upload(client, tiny_video).json()
+    assert client.get(f"/videos/{video['id']}/frames/9").status_code == 200
+    assert client.get(f"/videos/{video['id']}/frames/10").status_code == 404
+    assert client.get(f"/videos/{video['id']}/frames/-1").status_code == 422
+
+
+def test_upload_over_size_limit_leaves_nothing_behind(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, max_upload_mb=0) as client:
+        assert upload(client, tiny_video).status_code == 413
+    assert list((tmp_path / "storage" / "videos").iterdir()) == []
+
+
+def test_negative_start_score_is_400(client: TestClient, tiny_video: Path) -> None:
+    video = upload(client, tiny_video).json()
+    body = {"video_id": video["id"], "referee": True, "start_score": {"near": -1, "far": 0}}
+    assert client.post("/jobs", json=body).status_code == 400

@@ -1519,6 +1519,7 @@
             "name": "n",
             "required": true,
             "schema": {
+              "minimum": 0,
               "title": "N",
               "type": "integer"
             }
