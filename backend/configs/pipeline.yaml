@@ -74,3 +74,4 @@ stages:
     enabled: true
     codec: libx264
     crf: 23
+    minimap_corner: top-right   # top-left | top-right | bottom-left | bottom-right

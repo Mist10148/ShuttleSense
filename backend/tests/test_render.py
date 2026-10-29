@@ -130,3 +130,21 @@ def test_status_text() -> None:
 
     text = status_text(load_golden(), 50)
     assert text.startswith("In play") and "km/h (est.)" in text and text.endswith("3 strokes")
+
+
+def test_minimap_layer_draws_in_corner() -> None:
+    from shuttlesense.analytics.stage import run as analytics_run
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import RenderState, draw_minimap, minimap_rect
+    from shuttlesense.stage import StageContext
+
+    record = analytics_run(load_golden(), StageContext(video_path=None, out_dir=None))
+    img = np.zeros((720, 1280, 3), np.uint8)
+    draw_minimap(img, record, 10, RenderState())
+    x, y, w, h = minimap_rect(img.shape, record.court.court_size_m, "top-right")
+    assert h == 144 and x + w < 1280 and y < 50
+    inside = img[y : y + h, x : x + w]
+    assert inside.any()
+    outside = img.copy()
+    outside[y : y + h, x : x + w] = 0
+    assert not outside.any()

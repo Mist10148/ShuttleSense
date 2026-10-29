@@ -20,6 +20,7 @@ HIT = bgr("#FFD600")
 IN_COURT = bgr("#2E7D32")
 OUT_COURT = bgr("#C62828")
 UNCERTAIN = bgr("#9E9E9E")
+MINIMAP_BG = bgr("#2E7D4F")  # app seed colour
 
 PLAYER_COLORS = {"near": NEAR, "far": FAR}
 

@@ -232,7 +232,54 @@ def draw_speed(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
            style.PANEL, state.scale)  # fmt: skip
 
 
+def minimap_rect(img_shape: tuple[int, ...], size: tuple[float, float], corner: str,
+                 height_frac: float = 0.2) -> tuple[int, int, int, int]:  # fmt: skip
+    """(x, y, w, h) of the minimap: `height_frac` of the frame tall, court aspect ratio."""
+    fh, fw = img_shape[:2]
+    margin = max(4, int(fh * 0.02))
+    h = max(20, int(fh * height_frac))
+    w = max(10, int(h * size[0] / size[1]))
+    x = margin if "left" in corner else fw - w - margin
+    y = margin if "top" in corner else fh - h - margin
+    return x, y, w, h
+
+
+def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Top-down court in a corner with both players and the shuttle (same geometry as the app)."""
+    import cv2
+
+    from shuttlesense.court import court_lines
+
+    pos = record.frames[i].court_positions
+    if record.court is None or pos is None:
+        return
+    size = record.court.court_size_m
+    corner = state.stage("render").get("minimap_corner", "top-right")
+    x, y, w, h = minimap_rect(img.shape, size, corner)
+
+    def to_px(p: tuple[float, float]) -> tuple[int, int]:
+        # Court y grows toward the far baseline: draw the near side at the bottom, like the app.
+        # Points off the court (players behind the baseline) are pinned to the panel edge.
+        px = min(max(int(x + p[0] / size[0] * w), x + radius + 1), x + w - radius - 2)
+        py = min(max(int(y + h - p[1] / size[1] * h), y + radius + 1), y + h - radius - 2)
+        return px, py
+
+    radius = max(2, int(h / 40))
+    panel = img.copy()
+    cv2.rectangle(panel, (x, y), (x + w - 1, y + h - 1), style.MINIMAP_BG, -1)
+    cv2.addWeighted(panel, 0.75, img, 0.25, 0, dst=img)
+    for group in court_lines(size).values():
+        for a, b in group:
+            cv2.line(img, to_px(a), to_px(b), style.COURT, 1, cv2.LINE_AA)
+    for key, color in (("near", style.NEAR), ("far", style.FAR), ("shuttle", style.SHUTTLE)):
+        p = getattr(pos, key)
+        if p is not None:
+            r = radius if key != "shuttle" else max(2, radius - 1)
+            cv2.circle(img, to_px(p), r, color, -1, cv2.LINE_AA)
+
+
 LAYERS: dict[str, Layer] = {
+    "minimap": draw_minimap,
     "speed": draw_speed,
     "court": draw_court,
     "trail": draw_trail,
