@@ -13,7 +13,9 @@ import '../models/video_info.dart';
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(serverConfigProvider);
   if (config == null) throw StateError('No server configured');
-  return ApiClient(config);
+  final api = ApiClient(config);
+  ref.onDispose(api.close);
+  return api;
 });
 
 /// Waits after failed polls: 2, 4, 8, 16, then 30 s; one more failure gives up.
@@ -30,15 +32,21 @@ const kPollBackoff = [
 /// "Lost connection" (the job keeps running on the server).
 final jobProvider = StreamProvider.autoDispose.family<Job, String>((ref, jobId) async* {
   final api = ref.watch(apiClientProvider);
+  // The loop must not outlive the screen, even while it is backing off.
+  var alive = true;
+  ref.onDispose(() => alive = false);
   var failures = 0;
-  while (true) {
+  while (alive) {
     final Job job;
     try {
       job = await api.getJob(jobId);
       failures = 0;
     } on ApiException catch (e) {
-      // A missing job will not come back; anything else may be a network blip.
-      if (e.statusCode == 404 || failures >= kPollBackoff.length) rethrow;
+      // Client errors (missing job, wrong token) will not fix themselves; anything else
+      // (no answer, 5xx) may be a network blip or a restarting server.
+      final status = e.statusCode;
+      final clientError = status != null && status < 500;
+      if (clientError || failures >= kPollBackoff.length) rethrow;
       await Future<void>.delayed(kPollBackoff[failures++]);
       continue;
     }

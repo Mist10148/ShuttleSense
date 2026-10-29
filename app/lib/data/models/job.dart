@@ -9,6 +9,9 @@ enum JobStatus {
   cancelled;
 
   bool get isFinished => this == done || this == failed || this == cancelled;
+
+  /// Unknown values (a newer server) count as running, so polling carries on.
+  static JobStatus parse(String value) => values.asNameMap()[value] ?? JobStatus.running;
 }
 
 class StageState {
@@ -95,7 +98,9 @@ class Job {
   Duration? elapsed([DateTime? now]) {
     final start = startedAt;
     if (start == null) return null;
-    return (finishedAt ?? now ?? DateTime.now().toUtc()).difference(start);
+    final spent = (finishedAt ?? now ?? DateTime.now().toUtc()).difference(start);
+    // The device clock may be behind the server's.
+    return spent.isNegative ? Duration.zero : spent;
   }
 
   /// Rough remaining time from progress and elapsed time; null early on.
@@ -111,7 +116,7 @@ class Job {
   factory Job.fromJson(Json j) => Job(
     id: j['id'] as String,
     videoId: j['video_id'] as String,
-    status: JobStatus.values.byName(j['status'] as String),
+    status: JobStatus.parse(j['status'] as String),
     queuePosition: asInt(j['queue_position']),
     currentStage: j['current_stage'] as String?,
     progress: asDouble(j['progress']) ?? 0,

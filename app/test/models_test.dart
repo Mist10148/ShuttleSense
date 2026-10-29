@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 
@@ -191,5 +192,38 @@ void main() {
       'https://abc.trycloudflare.com',
     );
     expect(ServerConfig.normalizeUrl(''), '');
+  });
+
+  test('server error details: strings, 422 lists, and non-JSON bodies', () {
+    expect(errorDetail({'detail': 'upload too large'}), 'upload too large');
+    expect(
+      errorDetail({
+        'detail': [
+          {
+            'loc': ['body', 'rally_index'],
+            'msg': 'Field required',
+            'type': 'missing',
+          },
+        ],
+      }),
+      'Field required',
+    );
+    expect(errorDetail('<html>413 Request Entity Too Large</html>'), isNull);
+    expect(errorDetail(null), isNull);
+  });
+
+  test('unknown job status keeps polling; elapsed never negative', () {
+    expect(JobStatus.parse('done'), JobStatus.done);
+    expect(JobStatus.parse('cancelling'), JobStatus.running);
+    final job = Job.fromJson({
+      'id': 'j',
+      'video_id': 'v',
+      'status': 'running',
+      'progress': 0.5,
+      'stages': <dynamic>[],
+      'created_at': '2026-11-05T09:13:01Z',
+      'started_at': '2026-11-05T09:13:01Z',
+    });
+    expect(job.elapsed(DateTime.utc(2026, 11, 5, 9, 12)), Duration.zero);
   });
 }

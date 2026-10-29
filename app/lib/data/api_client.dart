@@ -18,6 +18,19 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// The server's error text: FastAPI's `detail` string, or the first message of a 422
+/// validation list. Null for bodies that are not ShuttleSense errors (e.g. a proxy's HTML).
+String? errorDetail(Object? data) {
+  if (data is! Map) return null;
+  final detail = data['detail'];
+  if (detail is String) return detail;
+  if (detail is List && detail.isNotEmpty && detail.first is Map) {
+    final msg = (detail.first as Map)['msg'];
+    if (msg is String) return msg;
+  }
+  return null;
+}
+
 /// Typed client for every endpoint in docs/API.md.
 class ApiClient {
   ApiClient(this.config, {Dio? dio})
@@ -48,23 +61,40 @@ class ApiClient {
     return token == null || token.isEmpty ? base : '$base?token=${Uri.encodeQueryComponent(token)}';
   }
 
+  /// Frees the connection pool once the client is replaced (server changed).
+  void close() => _dio.close(force: true);
+
   Future<T> _call<T>(Future<T> Function() request) async {
     try {
       return await request();
     } on DioException catch (e) {
       final status = e.response?.statusCode;
-      final data = e.response?.data;
-      final detail = data is Map ? data['detail']?.toString() : null;
       final message = switch (e.type) {
         DioExceptionType.connectionTimeout ||
         DioExceptionType.connectionError => 'Cannot reach server at ${config.baseUrl}',
+        DioExceptionType.sendTimeout ||
+        DioExceptionType.receiveTimeout => 'The server took too long to answer',
+        DioExceptionType.badCertificate => 'The server\'s HTTPS certificate is not trusted',
         DioExceptionType.cancel => 'Cancelled',
         _ when status == 401 => 'Wrong or missing access token',
-        _ => detail ?? e.message ?? 'Request failed',
+        _ => errorDetail(e.response?.data) ?? _statusMessage(status),
       };
       throw ApiException(message, statusCode: status);
+    } on FormatException {
+      throw ApiException('Unexpected response from the server');
+    } on TypeError {
+      // fromJson met a field of the wrong type: not a ShuttleSense server, or a newer one.
+      throw ApiException('Unexpected response from the server');
     }
   }
+
+  static String _statusMessage(int? status) => switch (status) {
+    413 => 'The video is larger than the server accepts',
+    415 => 'Unsupported video type; use MP4, MOV or AVI',
+    final s? when s >= 500 => 'Server error ($s). Check the server log.',
+    final s? => 'Request failed ($s)',
+    null => 'Request failed',
+  };
 
   // Health -------------------------------------------------------------------
 

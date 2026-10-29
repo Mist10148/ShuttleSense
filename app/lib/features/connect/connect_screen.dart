@@ -13,8 +13,20 @@ import '../../shared/widgets/page_scaffold.dart';
 typedef HealthCheck = Future<Health> Function(ServerConfig config);
 
 final healthCheckProvider = Provider<HealthCheck>(
-  (ref) =>
-      (config) => ApiClient(config).health(),
+  (ref) => (config) async {
+    final api = ApiClient(config);
+    try {
+      final health = await api.health();
+      // /health is public, so make one authenticated call to catch a mistyped token now
+      // rather than on the first upload.
+      if (health.authRequired && (config.token?.isNotEmpty ?? false)) {
+        await api.listJobs(limit: 1);
+      }
+      return health;
+    } finally {
+      api.close();
+    }
+  },
 );
 
 /// C1 / FR-C1: enter the backend URL and optional token, check /health, save.
@@ -98,7 +110,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       );
       context.go(Routes.home);
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
