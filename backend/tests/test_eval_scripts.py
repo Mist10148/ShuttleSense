@@ -1,4 +1,4 @@
-"""Smoke tests for the evaluation and benchmark scripts (T2.9, T2.10, T3.7, T3.13, T6.7)."""
+"""Smoke tests for the evaluation and benchmark scripts (T2.9, T2.10, T3.7, T3.13, T6.7, T7.2)."""
 
 from __future__ import annotations
 
@@ -190,3 +190,31 @@ def test_eval_rallies_boundaries_and_score(tmp_path: Path) -> None:
     md = eval_rallies.to_markdown(results, 1.0, eval_rallies.pooled(results))
     eval_rallies.write_report({"clips": results}, md, out)
     assert "| rally01 | 2 | 1 | 1 | 50.0% | 100.0% | 1-1 / 1-0 |" in out.read_text(encoding="utf-8")
+
+
+def test_eval_phone_scores_hits_strokes_counts_and_rallies(tmp_path: Path) -> None:
+    eval_phone = load_script("eval_phone")
+    record = load_golden()  # hits: 5 near serve, 25 far clear, 45 near smash; rally 0-55
+    gt = write_csv(tmp_path / "labels" / "rally01.csv",
+                   ["time_s", "player", "stroke", "start_s", "end_s", "winner"],
+                   [[5 / 30, "near", "serve", "", "", ""],
+                    [26 / 30, "far", "clear", "", "", ""],  # 1 frame off: still matched
+                    [45 / 30, "near", "drop", "", "", ""],  # matched, wrong stroke
+                    [52 / 30, "far", "", "", "", ""],  # missed by the detector, no stroke
+                    ["", "", "", 0.0, 1.8, "near"]])  # fmt: skip
+    hits, rallies = eval_phone.read_labels(gt)
+    assert len(hits) == 4 and hits[3]["stroke"] is None and rallies[0]["winner"] == "near"
+    result = eval_phone.evaluate_clip(record, hits, rallies)
+    assert result["tolerance_frames"] == 3
+    assert result["hits"]["matched"] == 3 and result["hits"]["recall"] == pytest.approx(0.75)
+    assert result["stroke"]["accuracy"] == pytest.approx(2 / 3)
+    assert result["stroke"]["confusion"]["drop->smash"] == 1
+    assert result["count_error"]["per_rally"] == [1]
+    assert result["rallies"]["boundary_accuracy"] == 1.0
+
+    overall = eval_phone.pooled({"rally01": result})
+    assert overall["stroke_accuracy"] == pytest.approx(2 / 3)
+    assert overall["count_error_mean"] == 1.0 and overall["boundary_accuracy"] == 1.0
+    out = tmp_path / "results" / "phone.md"
+    eval_phone.write_report(overall, eval_phone.to_markdown({"rally01": result}, overall), out)
+    assert "| rally01 | 3 / 4 |" in out.read_text(encoding="utf-8")
