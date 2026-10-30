@@ -1,4 +1,4 @@
-# Phase 6 — P3 referee (stretch)
+# Phase 6 — P3 referee
 
 [← Phase 5](phase-5-analysis.md) · [Phase overview](../PHASES.md) · Next: [Phase 7 — Freeze, evaluation, release →](phase-7-release.md)
 
@@ -7,8 +7,8 @@
 | **Dates** | Mon Nov 16 – Wed Nov 18, 2026 |
 | **Goal** | Rally state, landing and in/out estimation, and an assisted BWF scoreboard with manual correction |
 | **Owners** | M3 (referee logic), M1 (API), M6 (app scoreboard), M2 (overlays) |
-| **Entry criteria** | **Go/no-go on Mon Nov 16:** Phases 2–5 exit gates passed or only cosmetic issues open. If not, skip this phase and move F14–F16 to Future work (see [cut lines](../PHASES.md#cut-lines)) |
-| **Exit gate** | On team footage, rally boundaries ≥ 80% correct, score updates after each rally and corrections persist; or the phase is formally cut at the freeze |
+| **Entry criteria** | Phases 2–5 exit gates passed or only cosmetic issues open. Since PRD v1.2 this phase is committed scope ([D17](../DECISIONS.md)); line calls, overrides and live use continue in [Phase 8](phase-8-live-coach.md) |
+| **Exit gate** | On team footage, rally boundaries ≥ 80% correct, score updates after each rally and corrections persist |
 | **Milestone** | `Phase 6 — P3 referee` (due Nov 18) |
 
 ## Tasks
@@ -54,7 +54,7 @@
 - [ ] Landing frame = first frame after the last hit where the shuttle's vertical image velocity drops to ~0 and it stays (from T6.1's end rule), or the last visible frame.
 - [ ] Project the shuttle position at the landing frame with `image_to_court`; the shuttle is on the floor there, so the projection is valid.
 - [ ] In/out for singles: inside `0 ≤ x ≤ 5.18`, `0 ≤ y ≤ 13.40` (long service line for singles = baseline).
-- [ ] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app.
+- [ ] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app. (T8.3 replaces the fixed margin with an uncertainty band from homography and tracking error and adds `line_calls[]`.)
 - [ ] Fill `rallies[].landing`.
 
 **Tests.** `test_referee.py::test_inside_court_is_in`, `::test_close_to_line_is_uncertain`, `::test_landing_frame_is_after_last_hit`.
@@ -156,4 +156,4 @@
 1. Process a multi-rally team clip with the referee layer on.
 2. Show rally state changes and the score updating in the video and the app.
 3. Correct one rally in the app; show the score change and the correction log.
-4. Decide: ship P3, ship it labelled "beta", or cut it to Future work.
+4. Confirm the line calls in [Phase 8](phase-8-live-coach.md) use the same landings and that every call shows its confidence.

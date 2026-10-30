@@ -1,6 +1,6 @@
 # Phase 7 — Freeze, evaluation, release
 
-[← Phase 6](phase-6-referee.md) · [Phase overview](../PHASES.md)
+[← Phase 6](phase-6-referee.md) · [Phase overview](../PHASES.md) · Also: [Phase 8 — Live mode, line calls and coaching](phase-8-live-coach.md)
 
 | | |
 | --- | --- |

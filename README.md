@@ -9,11 +9,11 @@
 ![Status](https://img.shields.io/badge/status-in%20development-yellow)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-ShuttleSense turns a single video of a badminton singles rally into coaching and match insights. It tracks the shuttlecock frame by frame, draws pose skeletons on both players, detects every hit, classifies each stroke, gives simple form feedback, and maps the rally onto a top-down court view with estimated shuttle speed and an assisted scoreboard.
+ShuttleSense turns a badminton singles rally, from an uploaded video or a live camera feed, into coaching and match insights. It tracks the shuttlecock frame by frame, draws pose skeletons on both players, detects every hit, classifies each stroke, gives simple form feedback, and maps the rally onto a top-down court view with estimated shuttle speed, an assisted scoreboard and automated in/out calls. A session summary lists the top things to fix, and a coach chat answers questions from your own session data.
 
 Results are viewed in one **Flutter app** that runs on a phone, a tablet, a laptop or in a browser. The heavy computer vision runs on a **Python backend** on a laptop GPU or in Google Colab.
 
-> **Status:** in development (3-week build, November 2026). Features ship in priority tiers: P1 core, P2 analysis, P3 referee. See the [phased task plan](docs/PHASES.md).
+> **Status:** in development (3-week build, November 2026). Features ship in priority tiers: P1 core, P2 analysis, P3 referee, live mode and coaching. See the [phased task plan](docs/PHASES.md).
 
 ---
 
@@ -58,10 +58,13 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 - [ ] **Stroke counter:** running stroke count per rally
 - [ ] **Stats export:** rally summary and per-hit table as JSON and CSV, shareable from the app
 
-### P3: Referee layer (stretch goals)
-- [ ] **Rally state:** "In play" or "Between rallies"
-- [ ] **Landing and in/out:** estimated landing point with a confidence value
+### P3: Referee layer, live mode and coaching
+- [ ] **Upload or Live:** pick a clip, or point a camera at the court and see results while the rally is played
+- [ ] **Rally state:** "In play" or "Between rallies", rally timer and shot count
+- [ ] **Line calls:** IN / OUT per landing with margin and confidence; calls near a line are UNCERTAIN and ask you to confirm or override
 - [ ] **Assisted scoreboard:** BWF 21-point rally scoring with manual correction in the app
+- [ ] **Session coaching notes:** pattern-level cues ("late split-step on 4 of 6 net shots") and the top 3 fixes, each linked to the moments that show it
+- [ ] **Coach chat:** ask about your session; answers come only from the clip record and cite moments you can tap to seek
 
 ---
 
@@ -211,7 +214,7 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 | `--corners` | Court corners as `x1,y1,x2,y2,x3,y3,x4,y4` (enables P2 and P3 features) |
 | `--calibrate` | Opens a window to click the 4 court corners instead of `--corners` (needs `pip install opencv-python`) |
 | `--overlays` | Comma-separated: `trail,pose,boxes,hits,strokes,court,minimap,speed,score` (default: all) |
-| `--no-referee` | Skip the P3 referee layer |
+| `--no-referee` | Skip the referee layer (rally state, line calls, score) |
 | `--tracking-csv` | Use a TrackNetV3 `predict.py` CSV instead of running the tracker |
 | `--fake` | Return the golden record scaled to the video (no models; for app and demo testing) |
 | `--config` | Pipeline YAML to use instead of `configs/pipeline.yaml` |
@@ -270,6 +273,8 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
+| Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured yet |
+| Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps | ≤ 300 ms | Not measured yet |
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
@@ -287,13 +292,15 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - [ ] **Phase 3 (Nov 3 – 13):** ShuttleSet clips, hit detection, stroke classifier and ablation
 - [ ] **Phase 4 (Nov 5 – 13):** app MVP on phone, tablet, laptop and web
 - [ ] **Phase 5 (Nov 9 – 17):** court calibration, minimap, speed, feedback, exports
-- [ ] **Phase 6 (Nov 16 – 18):** referee layer (stretch)
+- [ ] **Phase 6 (Nov 16 – 18):** referee layer
+- [ ] **Phase 8 (Nov 9 – 18):** live mode, line calls, session coaching notes, coach chat
 - [ ] **Phase 7 (Nov 18 – 20):** feature freeze, evaluation, release builds, final demo
 
 ### Future work
 - Automatic court line detection (no taps)
 - Doubles support
-- On-device or real-time processing on phones and edge devices
+- On-device processing on phones and edge devices (live mode streams to the backend)
+- Multi-camera line calls
 - Fine-tuning on amateur footage from local courts
 - Transformer-based stroke model and a learned hit detector
 
@@ -303,7 +310,9 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 
 - **Camera angle:** the pretrained models learned from elevated, behind-the-court broadcast footage. Side-view phone clips will be less accurate; film from an elevated position behind the baseline for best results.
 - **Speed is estimated:** one camera gives a 2D court-plane approximation, so speed is underestimated when the shuttle travels toward or away from the camera.
-- **In/out calls are not official:** close calls are flagged as uncertain, and the scoreboard always allows manual correction.
+- **Line calls are automated estimates, not official calls:** with one camera they are not Hawk-Eye-level officiating and are never labelled "official" or "certified". Each call shows its confidence; calls inside the uncertainty band (set from calibration and tracking error) are UNCERTAIN until you confirm them, and every call and point can be overridden.
+- **Live latency has two parts:** shuttle and player overlays aim for ≤ 300 ms, but hits, strokes and line calls need a few frames of look-ahead, so they arrive about 0.5 to 1 s after the event. When the backend falls behind it drops frames or lowers resolution and shows "reduced quality".
+- **Live from a browser or Windows webcam is lower frame rate** than from a phone, which reduces tracking quality.
 - **Needs a backend:** phones and tablets do not run the models; they need the laptop backend on the same network or the Colab tunnel.
 - **Singles only** in this version.
 
@@ -313,7 +322,8 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 
 - Only record people who have agreed to be filmed.
 - Uploaded videos are processed on the team's own machine or in your own Colab session and are not kept by this project; jobs can be deleted from the app.
-- Form feedback is heuristic guidance, not professional coaching or injury advice.
+- Form feedback, session notes and coach chat answers are heuristic guidance, not professional coaching or injury advice; the chat refuses to diagnose injuries.
+- The coach chat sends a text digest of the clip record (stroke table, form results, rally stats, line calls, notes) to the Claude API when the backend owner sets an API key. No video, frames or images are sent. See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ---
 
@@ -327,7 +337,8 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 | [docs/API.md](docs/API.md) | REST endpoints between the app and the backend |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Every library and tool, versions, licenses, rationale |
 | [docs/SETUP.md](docs/SETUP.md) | Installing and running backend and app, weights, datasets, connecting devices |
-| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 96 tasks (steps, tests, acceptance criteria) |
+| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 108 tasks (steps, tests, acceptance criteria) |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | What stays on your backend and exactly what the coach chat sends to the Claude API |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release checklist: version bump, builds, signing, smoke tests, tagging |

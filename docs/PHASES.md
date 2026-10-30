@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 8 phases (0–7) and **96 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone.
+The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone.
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -10,10 +10,11 @@ The 3-week build is split into 8 phases (0–7) and **96 tasks**. This page is t
 | 3 | [Dataset and classifier](phases/phase-3-classifier.md) | Nov 3 – Nov 13 | 14 | Hit F1 ≥ 0.75, stroke macro accuracy ≥ 70%, ablation done, strokes in video and app |
 | 4 | [App MVP](phases/phase-4-app-mvp.md) | Nov 5 – Nov 13 | 13 | Full P1 flow on phone, tablet, Windows, Chrome |
 | 5 | [P2 analysis](phases/phase-5-analysis.md) | Nov 9 – Nov 17 | 14 | Calibration, minimap, speed, counter, feedback, exports |
-| 6 | [P3 referee (stretch)](phases/phase-6-referee.md) | Nov 16 – Nov 18 | 7 | Rally state + scoreboard with correction, or formally cut |
+| 6 | [P3 referee](phases/phase-6-referee.md) | Nov 16 – Nov 18 | 7 | Rally state + scoreboard with correction on team footage |
 | 7 | [Freeze, evaluation, release](phases/phase-7-release.md) | Nov 18 – Nov 20 | 14 | `v1.0.0` release, README results, demo delivered |
+| 8 | [Live mode, line calls and coaching](phases/phase-8-live-coach.md) | Nov 9 – Nov 18 | 12 | Upload and Live both end in a results view with line calls, coaching notes and chat; live runs against the fake source in CI |
 
-**Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · P3 go/no-go Mon Nov 16 · **feature freeze Wed Nov 18** · final demo Fri Nov 20.
+**Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · **feature freeze Wed Nov 18** · final demo Fri Nov 20. Since PRD v1.2 the referee layer is committed scope; the old P3 go/no-go on Nov 16 is gone ([D17](DECISIONS.md)).
 
 ---
 
@@ -31,7 +32,7 @@ Acceptance criteria   measurable "done when", tied to the PRD
 Risks      known pitfalls and the fallback
 ```
 
-- **Priority:** `P1` core (must ship) · `P2` analysis · `P3` stretch · `C` client app.
+- **Priority:** `P1` core (must ship) · `P2` analysis · `P3` referee, live mode and coaching (committed since PRD v1.2) · `C` client app.
 - **Area:** `backend`, `ml`, `data`, `app`, `docs`, `infra`; used as the GitHub label.
 - **Refs:** feature (F#), client feature (C#) and requirement (FR-#) IDs from the [PRD](PRD.md).
 - **Status:** ⬜ open · ✅ done. Flip it in the PR that completes the task and close the issue (`Closes #<n>` in the PR body).
@@ -68,8 +69,8 @@ gantt
     Phase 4 app MVP                :p4, 2026-11-05, 9d
     Phase 5 analysis               :p5, 2026-11-09, 9d
     section Week 3
-    P3 go/no-go                    :milestone, 2026-11-16, 0d
-    Phase 6 referee (stretch)      :p6, 2026-11-16, 3d
+    Phase 8 live + coach           :p8, 2026-11-09, 10d
+    Phase 6 referee                :p6, 2026-11-16, 3d
     Feature freeze                 :milestone, crit, 2026-11-18, 0d
     Phase 7 eval + release         :p7, 2026-11-18, 3d
     Final demo                     :milestone, crit, 2026-11-20, 0d
@@ -90,6 +91,8 @@ flowchart LR
     P3 --> P5
     P4 --> P5
     P5 --> P6[Phase 6<br/>referee]
+    P5 --> P8[Phase 8<br/>live + coach]
+    P8 --> P7
     P5 --> P7[Phase 7<br/>freeze + release]
     P6 --> P7
 ```
@@ -128,17 +131,20 @@ Overload plan:
 - **M2:** if Phase 2 runs late, M1 takes T5.3 court outline and T5.14 minimap overlay.
 - If more is needed, apply the cut lines below. Re-check this table at every phase gate.
 
+Phase 8 (about 70 h, see its file) is not in the table above yet: most of its code landed with the scope change on Oct 31, and what remains is evaluation (M4), device checks (M6) and tuning (M3). Re-balance at the Nov 13 gate.
+
 ## Cut lines
 
 If the schedule slips, cut in this order (first = first to go) and record it in the PRD's Future work:
 
-1. Phase 6 entirely (P3 referee: T6.1–T6.7).
-2. T5.12 re-render from the app (overlays are chosen once before processing).
-3. T5.14 minimap in the rendered video (the app minimap stays).
-4. T5.11 summary chart (downloads stay).
-5. T4.11 accessibility extras beyond text scaling; T4.13 icon and splash.
-6. iOS build (Android, Windows and Web remain).
-7. T2.3 InpaintNet rectification (keep simple interpolation).
+1. T8.8 + T8.11 coach chat (session notes stay; chat is already disabled when no API key is set).
+2. Live mode on iOS and web (T8.9 on Android and Windows stays).
+3. T5.12 re-render from the app (overlays are chosen once before processing).
+4. T5.14 minimap in the rendered video (the app minimap stays).
+5. T5.11 summary chart (downloads stay).
+6. T4.11 accessibility extras beyond text scaling; T4.13 icon and splash.
+7. iOS build (Android, Windows and Web remain).
+8. T2.3 InpaintNet rectification (keep simple interpolation).
 
 **Never cut:** T2.1–T2.8 perception, T3.5–T3.10 hits and strokes, T4.1–T4.7 app MVP, T7.2–T7.6 evaluation, testing and release.
 
@@ -181,4 +187,5 @@ The parts of each task that need no data, GPU, devices or team decisions are alr
 | [4](phases/phase-4-app-mvp.md) | T4.1 Connect · T4.2 Upload · T4.3 Options + start · T4.4 Processing · T4.5 Results layout · T4.6 Video player · T4.7 Timeline · T4.8 History · T4.9 States + theming · T4.10 Platform config · T4.11 Accessibility · T4.12 Widget tests · T4.13 Icon + splash |
 | [5](phases/phase-5-analysis.md) | T5.1 Calibration UI · T5.2 Homography stage · T5.3 Court overlay · T5.4 Court positions · T5.5 App minimap · T5.6 Speed · T5.7 Stroke counter · T5.8 Feedback rules · T5.9 Tips in app · T5.10 Exports · T5.11 Downloads + chart · T5.12 Re-render · T5.13 Speed sanity · T5.14 Minimap overlay |
 | [6](phases/phase-6-referee.md) | T6.1 Rally state · T6.2 Landing in/out · T6.3 Scoring · T6.4 Correction API · T6.5 App scoreboard · T6.6 Score overlays · T6.7 Rally evaluation |
+| [8](phases/phase-8-live-coach.md) | T8.1 Scope docs · T8.2 Schema 1.1 · T8.3 Line calls · T8.4 Session notes · T8.5 Incremental stages · T8.6 Live socket · T8.7 Fake live source · T8.8 Coach chat API · T8.9 App mode + live · T8.10 App calls + summary · T8.11 App chat · T8.12 Line-call + latency eval |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |
