@@ -1,5 +1,8 @@
 # Pipeline settings. Thresholds live here, not in code (CONTRIBUTING.md).
-# Each stage reads its own block via StageContext.stage_config("<name>").
+# Each stage reads its own block via StageContext.stage_config("<name>"). Exceptions: pose
+# also reads court.court_size_m; render reads tracking.trail_length and
+# hits.marker_duration_s. Display-only keys (weight, trail_length, marker_duration_s) are
+# left out of the stage cache keys, so changing them only re-renders.
 # Any stage may set `weight:` (share of job progress; defaults tracking 4, pose 4,
 # render 2, others 0.2) and `enabled: false`.
 
@@ -15,7 +18,8 @@ stages:
   tracking:
     enabled: true
     tracknet_weights: weights/tracknet/TrackNet_best.pt
-    # Read by the TrackNetV3 inference in tracknet.predict (T2.2, T2.3), not wired yet.
+    # inpaintnet_weights, batch_size and use_inpaintnet are for the TrackNetV3 inference in
+    # tracknet.predict (T2.2, T2.3), which is not wired yet; nothing reads them so far.
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)

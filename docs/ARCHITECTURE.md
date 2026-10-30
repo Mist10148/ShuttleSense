@@ -47,7 +47,7 @@ flowchart TD
     FB --> RD["render · F7<br/>overlays → H.264 MP4"]
     AN --> RD
     RF --> RD
-    RD --> OUT["outputs/<job_id>/<br/>record.json · annotated.mp4 · summary.json · hits.csv"]
+    RD --> OUT["storage/jobs/<job_id>/<br/>record.json · annotated.mp4 · summary.json · hits.csv · rallies.csv"]
 ```
 
 Rules every stage follows:
@@ -56,7 +56,7 @@ Rules every stage follows:
 2. **Stages are pure functions** with the shape `run(record: ClipRecord, ctx: StageContext) -> ClipRecord`. `StageContext` carries the config, the video reader, the device and a progress callback.
 3. **Stages can be disabled.** `pipeline.py` builds the stage list from `configs/pipeline.yaml` and the job request. If court corners are missing, `court`, the court-dependent part of `analytics`, and `referee` are skipped and their fields stay `null`.
 4. **Heavy imports are lazy.** `torch`, `onnxruntime`, `rtmlib` are imported inside functions, so the API server, the tests and CI run without ML dependencies installed.
-5. **Each stage caches its output** under `outputs/<job_id>/cache/<stage>.json` so re-rendering with different overlays does not re-run tracking or pose.
+5. **Each stage caches its output** under `<job folder>/cache/<stage>.json` so re-rendering with different overlays does not re-run tracking or pose. The key covers the stage's config block (without display-only keys such as `trail_length`) and any other block it reads (pose reads `court`), see `cache.py`.
 
 ### Stage ownership
 
@@ -65,12 +65,12 @@ Rules every stage follows:
 | io | `shuttlesense/io` | `clip_id`, `fps`, `width`, `height`, `num_frames`, `frames[].frame` | Mist | F1 |
 | tracking | `shuttlesense/tracking` | `frames[].shuttle` | Member 2 | F2 |
 | pose | `shuttlesense/pose` | `frames[].players` | Member 5 | F3, F4 |
-| court | `shuttlesense/court` | `court`, `frames[].court_positions` | Member 2 | F9 |
+| court | `shuttlesense/court` | `court` | Member 2 | F9 |
 | hits | `shuttlesense/hits` | `hits[]` (frame, player) | Member 5 | F5 |
-| strokes | `shuttlesense/strokes` | `hits[].stroke`, `hits[].confidence` | Member 5 | F6 |
+| strokes | `shuttlesense/strokes` | `hits[].stroke`, `hits[].confidence`, `hits[].class_probs` | Member 5 | F6 |
 | feedback | `shuttlesense/feedback` | `hits[].feedback` | Member 6 | F8 |
-| analytics | `shuttlesense/analytics` | `hits[].speed_kmh`, `frames[].shuttle_speed_kmh`, `summary` | Member 2 | F10–F13 |
-| referee | `shuttlesense/referee` | `rallies[]`, `score` | Member 3 | F14–F16 |
+| analytics | `shuttlesense/analytics` | `hits[].speed_kmh`, `frames[].court_positions`, `frames[].shuttle_speed_kmh`, `summary` | Member 2 | F10–F13 |
+| referee | `shuttlesense/referee` | `rallies[]`, `score`, `hits[].rally_index`, `frames[].rally_state` | Member 3 | F14–F16 |
 | render | `shuttlesense/render` | writes `annotated.mp4` | Member 2 / Mist | F7 |
 
 ## 3. Backend layout
@@ -115,17 +115,20 @@ stateDiagram-v2
     running --> running: stage progress updates
     running --> done: all enabled stages finished
     running --> failed: exception in a stage
-    queued --> cancelled: DELETE /jobs/{id}
-    running --> cancelled: DELETE /jobs/{id}
-    done --> [*]
-    failed --> [*]
-    cancelled --> [*]
+    queued --> [*]: DELETE /jobs/{id} (cancel)
+    running --> [*]: DELETE /jobs/{id} (cancel)
+    done --> queued: POST /jobs/{id}/render
+    failed --> queued: POST /jobs/{id}/render (earlier run finished)
+    done --> [*]: DELETE /jobs/{id}
+    failed --> [*]: DELETE /jobs/{id}
 ```
+
+A cancelled job is deleted with its files, so `cancelled` is never stored or returned (docs/API.md). A re-render saves the last run's overlays and stage states to `previous.json`; a failure or a server restart puts them back, since the outputs on disk are still those of that run.
 
 - One worker thread processes one job at a time (one GPU). Extra jobs wait in a FIFO queue; `GET /jobs/{id}` reports `queue_position`.
 - Job state lives in memory and is mirrored to `storage/jobs/<job_id>/job.json` so a restarted server can list finished jobs.
-- Files: `storage/videos/<video_id>/source.<ext>` for uploads, `storage/jobs/<job_id>/` for `record.json`, `annotated.mp4`, `summary.json`, `hits.csv`, `cache/`.
-- `DELETE /jobs/{id}` and `DELETE /videos/{id}` remove the files (privacy requirement).
+- Files: `storage/videos/<video_id>/source.<ext>` + `meta.json` for uploads, `storage/jobs/<job_id>/` for `job.json`, `record.json`, `annotated.mp4`, `summary.json`, `hits.csv`, `rallies.csv`, `tracking.csv`, `timings.json`, `corrections.json` (score corrections), `cache/`.
+- `DELETE /jobs/{id}` and `DELETE /videos/{id}` remove the files (privacy requirement). `job.json` / `meta.json` go first; a file Windows keeps locked (e.g. a video still streaming) is removed at the next server start.
 
 ## 4. App layout
 
@@ -191,11 +194,14 @@ Other cross-device rules:
 
 | Setting | Where | Default |
 | --- | --- | --- |
-| `SHUTTLESENSE_HOST` / `SHUTTLESENSE_PORT` | backend env | `0.0.0.0` / `8000` |
+| Host / port | `uvicorn` flags | `--host 0.0.0.0 --port 8000` (see SETUP.md) |
 | `SHUTTLESENSE_STORAGE_DIR` | backend env | `backend/storage` |
 | `SHUTTLESENSE_TOKEN` | backend env | unset (no auth); **set it whenever a tunnel is used** |
 | `SHUTTLESENSE_DEVICE` | backend env | `cuda` if available, else `cpu` |
 | `SHUTTLESENSE_CORS_ORIGINS` | backend env | `*` |
+| `SHUTTLESENSE_MAX_UPLOAD_MB` | backend env | `1024` |
+| `SHUTTLESENSE_CONFIG` | backend env | `backend/configs/pipeline.yaml` |
+| `SHUTTLESENSE_FAKE_PIPELINE` | backend env | unset (real pipeline) |
 | Server URL + token | app, saved with `shared_preferences` | entered on the connect screen |
 | `API_BASE_URL` | app, `--dart-define` | optional pre-fill for builds |
 
