@@ -50,6 +50,24 @@ void main() {
     expect(find.text('Smash'), findsNothing);
   });
 
+  testWidgets('stroke filter shows one class, then all again', (tester) async {
+    await pumpTimeline(tester);
+    await tester.tap(find.byTooltip('Filter by stroke'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Smash').last); // the menu item, above the row
+    await tester.pumpAndSettle();
+    expect(find.text('Serve'), findsNothing);
+    expect(find.text('Clear'), findsNothing);
+    expect(find.text('Smash'), findsNWidgets(2)); // the filter chip and the row
+
+    await tester.tap(find.byTooltip('Filter by stroke'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All strokes').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Serve'), findsOneWidget);
+    expect(find.text('Clear'), findsOneWidget);
+  });
+
   testWidgets('low confidence shows a question mark', (tester) async {
     await pumpTimeline(
       tester,

@@ -105,6 +105,21 @@ void main() {
       expect(find.text('Connected: ShuttleSense 0.2.0 on CUDA'), findsOneWidget);
     });
 
+    testWidgets('a good server is saved and remembered as recent', (tester) async {
+      await pumpScreen(
+        tester,
+        const ConnectScreen(),
+        overrides: [healthCheckProvider.overrideWithValue((_) async => health())],
+      );
+      await tester.enterText(find.byType(TextField).first, '10.0.0.5:8000/');
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('server.baseUrl'), 'http://10.0.0.5:8000');
+      expect(prefs.getStringList('server.recent'), ['http://10.0.0.5:8000']);
+      expect(find.text('Connected: ShuttleSense 0.2.0 on CUDA'), findsOneWidget);
+    });
+
     testWidgets('recent servers become chips', (tester) async {
       await pumpScreen(
         tester,
