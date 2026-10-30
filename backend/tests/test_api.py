@@ -422,6 +422,53 @@ def test_upload_over_size_limit_leaves_nothing_behind(tmp_path: Path, tiny_video
     assert list((tmp_path / "storage" / "videos").iterdir()) == []
 
 
+def test_chunked_upload_over_size_limit_is_stopped_early(tmp_path: Path) -> None:
+    # Driven over raw ASGI: TestClient reads the whole body before sending it.
+    import asyncio
+
+    app = create_app(Settings(storage_dir=tmp_path / "s", device="cpu", max_upload_mb=0))
+    boundary = "x" * 16
+    head = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="big.mp4"\r\n'
+        "Content-Type: video/mp4\r\n\r\n"
+    ).encode()
+    chunks = [head] + [b"\0" * 65536] * 64  # 4 MB against a 64 KB limit, no Content-Length
+    read = {"n": 0}
+    statuses = []
+
+    async def receive() -> dict:
+        i = read["n"]
+        read["n"] += 1
+        if i >= len(chunks):
+            return {"type": "http.disconnect"}
+        return {"type": "http.request", "body": chunks[i], "more_body": i + 1 < len(chunks)}
+
+    async def send(message: dict) -> None:
+        if message["type"] == "http.response.start":
+            statuses.append(message["status"])
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/videos",
+        "raw_path": b"/videos",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"content-type", f"multipart/form-data; boundary={boundary}".encode()),
+            (b"transfer-encoding", b"chunked"),
+        ],
+        "client": ("test", 1),
+        "server": ("test", 80),
+    }
+    asyncio.run(app(scope, receive, send))
+    assert statuses == [413]
+    assert read["n"] < len(chunks)  # stopped before the whole body was read
+
+
 def test_negative_start_score_is_400(client: TestClient, tiny_video: Path) -> None:
     video = upload(client, tiny_video).json()
     body = {"video_id": video["id"], "referee": True, "start_score": {"near": -1, "far": 0}}
