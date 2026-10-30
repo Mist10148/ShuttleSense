@@ -99,6 +99,8 @@ void main() {
       ('phone', phone, true),
       ('phone landscape', const Size(780, 360), true),
       ('tablet', tablet, false),
+      ('tablet landscape', const Size(1100, 800), false),
+      ('short desktop window', const Size(1000, 540), false),
       ('laptop', laptop, false),
       ('wide desktop', const Size(1920, 1080), false),
     ]) {
@@ -113,6 +115,16 @@ void main() {
         }
       });
     }
+
+    testWidgets('a short window keeps the timeline usable', (tester) async {
+      await pumpLayout(tester, const Size(1000, 540));
+      expect(tester.getSize(find.byType(ListView)).height, greaterThan(120));
+      // A tall tablet still shows the video at full width.
+      await pumpLayout(tester, tablet);
+      final video = tester.getSize(find.byType(AspectRatio));
+      expect(video.width / video.height, closeTo(16 / 9, 0.01));
+      expect(video.width, greaterThan(400));
+    });
 
     test('side panel stays between 300 and 400 dp', () {
       expect(ResultsLayout.sidePanelWidth(800), 300);

@@ -100,10 +100,12 @@ class ResultsLayout extends StatelessWidget {
             flex: 3,
             child: Column(
               children: [
-                video,
+                // In a short window (1000x540, say) a full-width video would leave the
+                // timeline a few pixels, so the video gives up height first.
+                Flexible(flex: 3, child: video),
                 status,
                 const SizedBox(height: 8),
-                Expanded(child: timeline),
+                Expanded(flex: 2, child: timeline),
               ],
             ),
           ),
