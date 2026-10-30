@@ -110,7 +110,16 @@ License audit for T7.13. ShuttleSense is MIT.
 | media_kit_libs_video | Bundles libmpv and FFmpeg inside the app builds | Check the license of the bundled build (LGPL or GPL) and keep its notices in the release. |
 | TrackNetV3, InpaintNet and stroke weights | Downloaded from Hugging Face, never committed | Keep upstream's MIT notice next to the weights. |
 | ShuttleSet annotations and match videos | Downloaded by `download_shuttleset.py` into gitignored `backend/data/`. Videos are never redistributed. | Follow the dataset's terms of use. |
-| Transitive packages | Pulled in by the packages above | Python: run `pip install pip-licenses && pip-licenses --from=mixed --order=license` in the ML venv. Dart: run `flutter pub deps` and check each package on pub.dev. |
+| rtmlib, onnxruntime-gpu, scipy, huggingface-hub, tqdm | ML stack; not in the scanned venv below | Apache-2.0, MIT, BSD-3, Apache-2.0, MPL-2.0 AND MIT. Run the scan again in the laptop/Colab ML venv at the freeze. |
+
+**Transitive packages** (scanned 2026-10-30; nothing GPL or AGPL):
+
+| Side | How | Result |
+| --- | --- | --- |
+| Python | `pip-licenses --from=mixed --order=license` in a venv with `base.txt`, `dev.txt`, CPU torch and matplotlib (54 packages) | MIT 22 · BSD (2-, 3-clause, unspecified) 21 · Apache-2.0 7 (incl. opencv-python-headless and torch, whose bundled parts add BSL-1.0, ISC, Zlib and LLVM-exception) · PSF 2 (matplotlib, typing_extensions) · MPL-2.0 1 (certifi) · MIT-CMU 1 (pillow) |
+| Dart | Each package's LICENSE in the pub cache, for the 115 hosted packages in `pubspec.lock` | BSD-3-Clause 76 (Flutter and Dart team packages) · MIT 34 (incl. dio, riverpod, fl_chart, file_picker, media_kit) · Apache-2.0 4 · MPL-2.0 1 (dbus, used only on Linux by file_picker_linux and wakelock_plus) |
+
+MPL-2.0 is file-level copyleft: shipping these packages unmodified inside an MIT app is fine; changes to their own files would have to stay MPL. The native libmpv/FFmpeg inside `media_kit_libs_*` is the one open item above.
 
 **Media in the repo** (checked with `git ls-files`, 2026-10-30):
 - The only media files are the default Flutter launcher icons, the launch image and the web icons under `app/android`, `app/ios` and `app/web`.
