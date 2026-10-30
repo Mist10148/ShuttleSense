@@ -103,6 +103,17 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, '/jobs/job1/results');
   });
 
+  testWidgets('polling keeps going through rate limiting', (tester) async {
+    final api = FakeApiClient()..failWith = ApiException('Too many requests', statusCode: 429);
+    await pumpScreen(tester, const ProcessingScreen(jobId: 'job1'), api: api, settle: false);
+    await tester.pump();
+    api.failWith = null;
+    await tester.pump(kPollBackoff.first);
+    await tester.pumpAndSettle();
+    expect(find.text('Lost connection to server'), findsNothing);
+    expect(api.calls.where((c) => c == 'getJob job1'), hasLength(2));
+  });
+
   testWidgets('polling backs off on errors before giving up', (tester) async {
     final api = FakeApiClient()..failWith = ApiException('Cannot reach server');
     await pumpScreen(tester, const ProcessingScreen(jobId: 'job1'), api: api, settle: false);

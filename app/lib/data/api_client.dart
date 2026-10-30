@@ -14,6 +14,16 @@ class ApiException implements Exception {
   final String message;
   final int? statusCode;
 
+  /// No answer from ShuttleSense itself: no response at all, or a gateway in front of it
+  /// (the Cloudflare tunnel answers 502/530 once Colab has stopped).
+  bool get unreachable =>
+      statusCode == null ||
+      const {502, 503, 504, 520, 521, 522, 523, 524, 530}.contains(statusCode);
+
+  /// Worth asking again: unreachable, a server error, a request timeout or rate limiting.
+  /// Other client errors (missing job, wrong token) will not fix themselves.
+  bool get retryable => unreachable || statusCode! >= 500 || statusCode == 408 || statusCode == 429;
+
   @override
   String toString() => message;
 }

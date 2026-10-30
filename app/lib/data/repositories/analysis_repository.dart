@@ -42,11 +42,9 @@ final jobProvider = StreamProvider.autoDispose.family<Job, String>((ref, jobId) 
       job = await api.getJob(jobId);
       failures = 0;
     } on ApiException catch (e) {
-      // Client errors (missing job, wrong token) will not fix themselves; anything else
-      // (no answer, 5xx) may be a network blip or a restarting server.
-      final status = e.statusCode;
-      final clientError = status != null && status < 500;
-      if (clientError || failures >= kPollBackoff.length) rethrow;
+      // No answer, 5xx, 408 or 429 may be a network blip or a restarting server; other
+      // client errors (missing job, wrong token) will not fix themselves.
+      if (!e.retryable || failures >= kPollBackoff.length) rethrow;
       await Future<void>.delayed(kPollBackoff[failures++]);
       continue;
     }

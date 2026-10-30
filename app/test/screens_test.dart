@@ -63,6 +63,29 @@ void main() {
     expect(find.textContaining('Server unreachable'), findsNothing);
   });
 
+  testWidgets('offline banner shows when the tunnel answers for a stopped server', (tester) async {
+    final api = FakeApiClient()..failWith = ApiException('Server error (530)', statusCode: 530);
+    await pumpScreen(tester, const OfflineBanner(child: Text('content')), api: api);
+    expect(find.textContaining('Server unreachable'), findsOneWidget);
+  });
+
+  testWidgets('offline banner stays hidden for a wrong token', (tester) async {
+    final api = FakeApiClient()..failWith = ApiException('Wrong token', statusCode: 401);
+    await pumpScreen(tester, const OfflineBanner(child: Text('content')), api: api);
+    expect(find.textContaining('Server unreachable'), findsNothing);
+  });
+
+  test('which errors are worth retrying', () {
+    expect(ApiException('x').retryable, isTrue);
+    for (final status in [408, 429, 500, 502, 530]) {
+      expect(ApiException('x', statusCode: status).retryable, isTrue, reason: '$status');
+    }
+    for (final status in [400, 401, 404, 409]) {
+      expect(ApiException('x', statusCode: status).retryable, isFalse, reason: '$status');
+    }
+    expect(ApiException('x', statusCode: 500).unreachable, isFalse);
+  });
+
   testWidgets('offline banner checks the server again by itself', (tester) async {
     final api = FakeApiClient()..failWith = ApiException('Cannot reach server at http://fake');
     await pumpScreen(tester, const OfflineBanner(child: Text('content')), api: api);

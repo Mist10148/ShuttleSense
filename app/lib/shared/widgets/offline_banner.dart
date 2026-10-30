@@ -14,7 +14,7 @@ class OfflineBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(healthProvider);
     final error = health.error;
-    final offline = error is ApiException && error.statusCode == null;
+    final offline = error is ApiException && error.unreachable;
     final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
