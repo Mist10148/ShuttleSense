@@ -50,3 +50,23 @@ def test_class_proportions_close_to_overall(splits_module) -> None:
         for cls in overall:
             share = part[cls] / sum(part.values()) - overall[cls] / sum(overall.values())
             assert abs(share) <= 0.05
+
+
+def test_counts_from_shuttleset_annotations(splits_module, tmp_path) -> None:
+    sample = Path(__file__).parent / "fixtures" / "shuttleset_sample.csv"
+    for match in ("m01", "m02"):
+        (tmp_path / match).mkdir()
+        (tmp_path / match / "set1.csv").write_bytes(sample.read_bytes())
+    (tmp_path / "match_list.csv").write_text("match_id\n", encoding="utf-8")  # not a match folder
+    counts = splits_module.read_annotation_counts(tmp_path)
+    assert sorted(counts) == ["m01", "m02"]
+    # 19 types: 4 drives and "unknown" are excluded.
+    assert sum(counts["m01"].values()) == 14
+    assert counts["m01"] == {
+        "smash": 2,
+        "clear": 1,
+        "drop": 2,
+        "net_shot": 4,
+        "lift": 3,
+        "serve": 2,
+    }

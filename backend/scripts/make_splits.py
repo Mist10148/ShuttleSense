@@ -1,7 +1,9 @@
 """Split ShuttleSet matches into train/val/test by match (task T3.4).
 
-Usage: python scripts/make_splits.py [--sizes 31,6,7] [--seed 42]
-Reads data/clips/<match_id>/index.csv, writes data/splits.json and configs/splits.json.
+Usage: python scripts/make_splits.py [--sizes 31,6,7] [--seed 42] [--from-annotations]
+Reads data/clips/<match_id>/index.csv, or with --from-annotations the ShuttleSet CSVs in
+data/shuttleset/<match_id>/set*.csv (no clips needed), and writes data/splits.json and
+configs/splits.json.
 """
 
 from __future__ import annotations
@@ -83,15 +85,49 @@ def read_class_counts(clips_dir: Path) -> dict[str, dict[str, int]]:
     return counts
 
 
+def read_annotation_counts(shuttleset_dir: Path) -> dict[str, dict[str, int]]:
+    """Class counts per match straight from the ShuttleSet annotations.
+
+    Clip extraction skips a few strokes near rally boundaries, so these counts are slightly
+    higher than the index.csv ones, but the class balance per match is the same."""
+    from shuttlesense.strokes.labels import map_label
+
+    counts: dict[str, dict[str, int]] = {}
+    for match_dir in sorted(p for p in shuttleset_dir.glob("m*") if p.is_dir()):
+        c: Counter = Counter()
+        for path in sorted(match_dir.glob("set*.csv")):
+            with path.open(newline="", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    label = map_label(row["type"])
+                    if label is not None:
+                        c[label] += 1
+        if c:
+            counts[match_dir.name] = dict(c)
+    return counts
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sizes", default="31,6,7", help="train,val,test match counts")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--clips", type=Path, default=DATA_DIR / "clips")
+    parser.add_argument(
+        "--from-annotations",
+        action="store_true",
+        help="count classes from data/shuttleset/ instead of the extracted clips",
+    )
+    parser.add_argument("--shuttleset", type=Path, default=DATA_DIR / "shuttleset")
     args = parser.parse_args()
-    counts = read_class_counts(args.clips)
-    if not counts:
-        raise SystemExit(f"no index.csv files under {args.clips}; run extract_clips.py first")
+    if args.from_annotations:
+        counts = read_annotation_counts(args.shuttleset)
+        if not counts:
+            raise SystemExit(
+                f"no set*.csv files under {args.shuttleset}; run download_shuttleset.py"
+            )
+    else:
+        counts = read_class_counts(args.clips)
+        if not counts:
+            raise SystemExit(f"no index.csv files under {args.clips}; run extract_clips.py first")
     sizes = tuple(int(v) for v in args.sizes.split(","))
     result = {**make_splits(counts, sizes, args.seed), "seed": args.seed}
     text = json.dumps(result, indent=2) + "\n"
