@@ -32,7 +32,7 @@ from typing import Any
 
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.evaluation import hit_metrics, match_events, rally_boundary_accuracy
-from shuttlesense.schema import STROKE_CLASSES, ClipRecord
+from shuttlesense.schema import STROKE_CLASSES, ClipRecord, load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 SIDES = ("near", "far")
@@ -217,7 +217,7 @@ def main() -> None:
 
     results = {}
     for rec_path, gt in zip(args.record, args.gt, strict=True):
-        record = ClipRecord.model_validate_json(rec_path.read_text(encoding="utf-8"))
+        record = load_record(rec_path.read_text(encoding="utf-8"))
         hits, rallies = read_labels(gt)
         results[gt.stem] = evaluate_clip(
             record, hits, rallies, args.tolerance_s, args.rally_tolerance

@@ -32,7 +32,7 @@ from typing import Any
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.evaluation import rally_boundary_accuracy
 from shuttlesense.referee import apply_rallies
-from shuttlesense.schema import ClipRecord, Rally, ScorePair
+from shuttlesense.schema import Rally, ScorePair, load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 SIDES = ("near", "far")
@@ -66,7 +66,7 @@ def read_rally_labels(path: Path) -> list[dict[str, Any]]:
 def read_predicted(path: Path) -> list[dict[str, Any]]:
     """Predicted rallies from record.json or rallies.csv: {start_s, end_s, winner, score}."""
     if path.suffix.lower() == ".json":
-        record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        record = load_record(path.read_text(encoding="utf-8"))
         fps = record.fps or 30.0
         return [
             {

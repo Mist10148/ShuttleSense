@@ -1,5 +1,73 @@
 {
   "$defs": {
+    "Chat": {
+      "properties": {
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          },
+          "title": "Messages",
+          "type": "array"
+        }
+      },
+      "title": "Chat",
+      "type": "object"
+    },
+    "ChatMessage": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/Moment"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "text",
+        "at"
+      ],
+      "title": "ChatMessage",
+      "type": "object"
+    },
+    "Coaching": {
+      "properties": {
+        "session_notes": {
+          "items": {
+            "$ref": "#/$defs/SessionNote"
+          },
+          "title": "Session Notes",
+          "type": "array"
+        },
+        "top_fixes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Top Fixes",
+          "type": "array"
+        }
+      },
+      "title": "Coaching",
+      "type": "object"
+    },
     "Court": {
       "properties": {
         "corners_px": {
@@ -191,6 +259,18 @@
           ],
           "default": null,
           "title": "Tip"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
         }
       },
       "required": [
@@ -414,6 +494,148 @@
       "title": "Landing",
       "type": "object"
     },
+    "LineCall": {
+      "description": "Automated in/out call for one landing; never an official call.",
+      "properties": {
+        "call": {
+          "enum": [
+            "in",
+            "out"
+          ],
+          "title": "Call",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "court": {
+          "default": "singles",
+          "enum": [
+            "singles",
+            "doubles"
+          ],
+          "title": "Court",
+          "type": "string"
+        },
+        "frame": {
+          "title": "Frame",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "landing_xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Landing Xy",
+          "type": "array"
+        },
+        "margin_cm": {
+          "title": "Margin Cm",
+          "type": "number"
+        },
+        "override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineCallOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rally_index": {
+          "title": "Rally Index",
+          "type": "integer"
+        },
+        "time_s": {
+          "title": "Time S",
+          "type": "number"
+        },
+        "uncertain": {
+          "title": "Uncertain",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "rally_index",
+        "frame",
+        "time_s",
+        "call",
+        "landing_xy",
+        "margin_cm",
+        "confidence",
+        "uncertain"
+      ],
+      "title": "LineCall",
+      "type": "object"
+    },
+    "LineCallOverride": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "call": {
+          "enum": [
+            "in",
+            "out"
+          ],
+          "title": "Call",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call",
+        "at"
+      ],
+      "title": "LineCallOverride",
+      "type": "object"
+    },
+    "Moment": {
+      "description": "A point on the timeline the app can seek to.",
+      "properties": {
+        "frame": {
+          "title": "Frame",
+          "type": "integer"
+        },
+        "hit_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hit Id"
+        },
+        "time_s": {
+          "title": "Time S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "frame",
+        "time_s"
+      ],
+      "title": "Moment",
+      "type": "object"
+    },
     "Player": {
       "properties": {
         "bbox": {
@@ -602,6 +824,53 @@
       "title": "Rally",
       "type": "object"
     },
+    "RallyEvent": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "frame": {
+          "title": "Frame",
+          "type": "integer"
+        },
+        "rally_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rally Index"
+        },
+        "time_s": {
+          "title": "Time S",
+          "type": "number"
+        },
+        "type": {
+          "enum": [
+            "rally_start",
+            "rally_end",
+            "hit",
+            "landing",
+            "score"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frame",
+        "time_s",
+        "type"
+      ],
+      "title": "RallyEvent",
+      "type": "object"
+    },
     "Score": {
       "properties": {
         "corrections": {
@@ -683,6 +952,71 @@
         }
       },
       "title": "ScorePair",
+      "type": "object"
+    },
+    "SessionNote": {
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "moments": {
+          "items": {
+            "$ref": "#/$defs/Moment"
+          },
+          "title": "Moments",
+          "type": "array"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "number"
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "enum": [
+                "smash",
+                "clear",
+                "drop",
+                "net_shot",
+                "lift",
+                "serve"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "rule",
+        "text",
+        "count",
+        "total",
+        "severity"
+      ],
+      "title": "SessionNote",
       "type": "object"
     },
     "Shuttle": {
@@ -779,9 +1113,31 @@
     }
   },
   "properties": {
+    "chat": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Chat"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "clip_id": {
       "title": "Clip Id",
       "type": "string"
+    },
+    "coaching": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Coaching"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "court": {
       "anyOf": [
@@ -816,6 +1172,22 @@
       "title": "Hits",
       "type": "array"
     },
+    "line_calls": {
+      "items": {
+        "$ref": "#/$defs/LineCall"
+      },
+      "title": "Line Calls",
+      "type": "array"
+    },
+    "mode": {
+      "default": "upload",
+      "enum": [
+        "upload",
+        "live"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
     "num_frames": {
       "title": "Num Frames",
       "type": "integer"
@@ -827,8 +1199,15 @@
       "title": "Rallies",
       "type": "array"
     },
+    "rally_events": {
+      "items": {
+        "$ref": "#/$defs/RallyEvent"
+      },
+      "title": "Rally Events",
+      "type": "array"
+    },
     "schema_version": {
-      "default": "1.0",
+      "default": "1.1",
       "title": "Schema Version",
       "type": "string"
     },

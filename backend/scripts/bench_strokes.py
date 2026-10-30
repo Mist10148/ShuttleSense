@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from shuttlesense.config import BACKEND_DIR, load_config
-from shuttlesense.schema import ClipRecord, Hit
+from shuttlesense.schema import ClipRecord, Hit, load_record
 from shuttlesense.stage import StageContext
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
@@ -148,7 +148,7 @@ def main() -> None:
         raise SystemExit("torch is not installed: pip install -r requirements/ml.txt") from None
 
     if args.record:
-        record = ClipRecord.model_validate_json(args.record.read_text(encoding="utf-8"))
+        record = load_record(args.record.read_text(encoding="utf-8"))
     else:
         record = synthetic_record(args.duration_s, args.hits_per_min)
     devices = available_devices([d for d in args.devices.split(",") if d])

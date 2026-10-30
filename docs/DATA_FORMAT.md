@@ -45,12 +45,15 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
-## Schema v1.0
+## Schema v1.1
+
+v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[].value`, `line_calls`, `rally_events`, `coaching` and `chat`. `schema.migrate()` upgrades a 1.0 `record.json` when it is read (API, scripts, fake pipeline), so old jobs keep working and gain line calls derived from their rallies. The app accepts any `1.x`.
 
 ```jsonc
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "clip_id": "match03_rally12",          // unique per processed clip
+  "mode": "upload",                       // v1.1: "upload" | "live" (a saved live session)
   "source_name": "rally12.mp4",          // original file name, informational
   "fps": 30.0,
   "width": 1280,
@@ -93,8 +96,8 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
       "class_probs": {"smash": 0.81, "clear": 0.09, "drop": 0.05, "net_shot": 0.02, "lift": 0.02, "serve": 0.01},
       "speed_kmh": 182.0,                                      // F11, estimated
       "feedback": [                                            // F8
-        {"rule": "contact_above_head", "passed": true,  "tip": null},
-        {"rule": "elbow_extension",    "passed": false, "tip": "Extend your hitting arm fully at contact."}
+        {"rule": "contact_above_head", "passed": true,  "tip": null, "value": 0.12},
+        {"rule": "elbow_extension",    "passed": false, "tip": "Extend your hitting arm fully at contact.", "value": 131.0}  // v1.1: measured quantity
       ],
       "rally_index": 0                                         // F14, null if rallies not detected
     }
@@ -128,9 +131,51 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
       "near": {"hits": 4, "stroke_counts": {"smash": 2, "clear": 1, "drop": 1}, "peak_speed_kmh": 182.0},
       "far":  {"hits": 3, "stroke_counts": {"clear": 1, "net_shot": 1, "lift": 1}, "peak_speed_kmh": 95.0}
     }
+  },
+
+  "line_calls": [                                              // v1.1, F20; empty without referee or court
+    {
+      "id": 0,
+      "rally_index": 0,
+      "frame": 400, "time_s": 13.333,                         // landing frame, tap-to-seek
+      "call": "in",                                           // "in" | "out": automated, never official
+      "landing_xy": [4.9, 12.1],                               // court meters
+      "margin_cm": 28.0,                                       // signed distance to the nearest relevant line, + inside
+      "confidence": 0.72,
+      "uncertain": false,                                      // |margin| inside the uncertainty band
+      "court": "singles",                                      // "singles" | "doubles" lines
+      "override": null                                         // {"call": "out", "at": "...Z"} after the user confirms or overrides
+    }
+  ],
+
+  "rally_events": [                                            // v1.1: what live mode streamed, in order
+    {"frame": 12,  "time_s": 0.4,    "type": "rally_start", "rally_index": 0, "data": {}},
+    {"frame": 42,  "time_s": 1.4,    "type": "hit",         "rally_index": 0, "data": {"hit_id": 0}},
+    {"frame": 400, "time_s": 13.333, "type": "landing",     "rally_index": 0, "data": {"line_call_id": 0}},
+    {"frame": 410, "time_s": 13.667, "type": "rally_end",   "rally_index": 0, "data": {}},
+    {"frame": 410, "time_s": 13.667, "type": "score",       "rally_index": 0, "data": {"near": 11, "far": 9}}
+  ],
+
+  "coaching": {                                                // v1.1, F21; null before the feedback stage
+    "session_notes": [
+      {"id": "elbow_extension:smash", "rule": "elbow_extension", "stroke": "smash",
+       "text": "Bent elbow at contact on 3 of 5 smashes", "count": 3, "total": 5, "severity": 1.0,
+       "moments": [{"frame": 42, "time_s": 1.4, "hit_id": 0}]}
+    ],
+    "top_fixes": ["elbow_extension:smash"]                    // note ids, most important first, at most 3
+  },
+
+  "chat": {                                                    // v1.1, F22; null until the first question
+    "messages": [
+      {"role": "user", "text": "Why did my smashes land short?", "at": "2026-11-17T10:30:00Z", "citations": []},
+      {"role": "assistant", "text": "Your elbow was bent at contact on 3 of 5 smashes [t=1.4s]...",
+       "at": "2026-11-17T10:30:04Z", "citations": [{"frame": 42, "time_s": 1.4, "hit_id": 0}]}
+    ]
   }
 }
 ```
+
+Every `frame` / `time_s` pair (hits, line calls, rally events, note moments, chat citations) is a seek target: the app seeks to `time_s` minus a short lead.
 
 ### Stroke classes
 

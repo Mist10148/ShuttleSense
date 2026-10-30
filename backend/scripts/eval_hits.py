@@ -42,6 +42,7 @@ from typing import Any
 from shuttlesense.config import BACKEND_DIR, load_config
 from shuttlesense.evaluation import hit_metrics
 from shuttlesense.schema import ClipRecord
+from shuttlesense.schema import load_record as parse_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 SIDES = ("near", "far")
@@ -66,7 +67,7 @@ Event = tuple[int, str]
 
 
 def load_record(path: Path) -> ClipRecord:
-    return ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
+    return parse_record(path.read_text(encoding="utf-8"))
 
 
 def read_hit_labels(path: Path, fps: float, step: int = 1, offset: int = 0) -> list[Event]:

@@ -1,4 +1,4 @@
-"""Clip record schema v1.0 — the shared per-clip data format.
+"""Clip record schema v1.1 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -7,15 +7,19 @@ reads and writes a ClipRecord; the API serves it as JSON to the app.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 PlayerSide = Literal["near", "far"]
 StrokeClass = Literal["smash", "clear", "drop", "net_shot", "lift", "serve"]
 RallyState = Literal["in_play", "between_rallies"]
+Mode = Literal["upload", "live"]
+Call = Literal["in", "out"]
+CourtType = Literal["singles", "doubles"]
+RallyEventType = Literal["rally_start", "rally_end", "hit", "landing", "score"]
 
 STROKE_CLASSES: tuple[StrokeClass, ...] = ("smash", "clear", "drop", "net_shot", "lift", "serve")
 NUM_KEYPOINTS = 17  # COCO layout
@@ -68,6 +72,7 @@ class FeedbackItem(BaseModel):
     rule: str
     passed: bool
     tip: str | None = None
+    value: float | None = None  # measured quantity (degrees, ratio, ...), v1.1
 
 
 class Hit(BaseModel):
@@ -116,6 +121,74 @@ class Score(ScorePair):
     corrections: list[ScoreCorrection] = Field(default_factory=list)
 
 
+class Moment(BaseModel):
+    """A point on the timeline the app can seek to."""
+
+    frame: int
+    time_s: float
+    hit_id: int | None = None
+
+
+class LineCallOverride(BaseModel):
+    call: Call
+    at: datetime
+
+
+class LineCall(BaseModel):
+    """Automated in/out call for one landing; never an official call."""
+
+    id: int
+    rally_index: int
+    frame: int
+    time_s: float
+    call: Call
+    landing_xy: Point  # court meters
+    margin_cm: float  # signed distance to the nearest relevant line, positive inside
+    confidence: float
+    uncertain: bool
+    court: CourtType = "singles"
+    override: LineCallOverride | None = None
+
+    @property
+    def effective_call(self) -> Call:
+        return self.override.call if self.override else self.call
+
+
+class RallyEvent(BaseModel):
+    frame: int
+    time_s: float
+    type: RallyEventType
+    rally_index: int | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionNote(BaseModel):
+    id: str
+    rule: str
+    stroke: StrokeClass | None = None
+    text: str
+    count: int  # strokes that showed the pattern
+    total: int  # strokes the rule was checked on
+    severity: float
+    moments: list[Moment] = Field(default_factory=list)
+
+
+class Coaching(BaseModel):
+    session_notes: list[SessionNote] = Field(default_factory=list)
+    top_fixes: list[str] = Field(default_factory=list)  # SessionNote ids, most important first
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+    at: datetime
+    citations: list[Moment] = Field(default_factory=list)
+
+
+class Chat(BaseModel):
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
 class PlayerSummary(BaseModel):
     hits: int = 0
     stroke_counts: dict[StrokeClass, int] = Field(default_factory=dict)
@@ -132,6 +205,7 @@ class Summary(BaseModel):
 class ClipRecord(BaseModel):
     schema_version: str = SCHEMA_VERSION
     clip_id: str
+    mode: Mode = "upload"
     source_name: str | None = None
     fps: float
     width: int
@@ -143,3 +217,29 @@ class ClipRecord(BaseModel):
     rallies: list[Rally] = Field(default_factory=list)
     score: Score | None = None
     summary: Summary | None = None
+    line_calls: list[LineCall] = Field(default_factory=list)
+    rally_events: list[RallyEvent] = Field(default_factory=list)
+    coaching: Coaching | None = None
+    chat: Chat | None = None
+
+
+def migrate(data: dict[str, Any]) -> dict[str, Any]:
+    """Upgrade an older record dict to SCHEMA_VERSION in place and return it.
+
+    1.0 -> 1.1 only adds optional fields, so the defaults fill them.
+    """
+    version = str(data.get("schema_version", "1.0"))
+    if version == SCHEMA_VERSION:
+        return data
+    if version.split(".")[0] != SCHEMA_VERSION.split(".")[0]:
+        raise ValueError(f"cannot migrate clip record {version} to {SCHEMA_VERSION}")
+    data["schema_version"] = SCHEMA_VERSION
+    data.setdefault("mode", "upload")
+    return data
+
+
+def load_record(text: str | bytes) -> ClipRecord:
+    """Parse a record.json of any supported version."""
+    import json
+
+    return ClipRecord.model_validate(migrate(json.loads(text)))

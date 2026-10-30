@@ -1,6 +1,7 @@
 {
- "schema_version": "1.0",
+ "schema_version": "1.1",
  "clip_id": "golden",
+ "mode": "upload",
  "source_name": "golden.mp4",
  "fps": 30.0,
  "width": 1280,
@@ -13144,7 +13145,8 @@
     {
      "rule": "serve_contact_below_waist",
      "passed": true,
-     "tip": null
+     "tip": null,
+     "value": null
     }
    ],
    "rally_index": 0
@@ -13169,12 +13171,14 @@
     {
      "rule": "clear_contact_above_head",
      "passed": true,
-     "tip": null
+     "tip": null,
+     "value": null
     },
     {
      "rule": "clear_arm_extension",
      "passed": false,
-     "tip": "Reach higher: straighten your arm at contact"
+     "tip": "Reach higher: straighten your arm at contact",
+     "value": null
     }
    ],
    "rally_index": 0
@@ -13199,12 +13203,14 @@
     {
      "rule": "smash_contact_above_head",
      "passed": true,
-     "tip": null
+     "tip": null,
+     "value": null
     },
     {
      "rule": "smash_elbow_angle",
      "passed": false,
-     "tip": "Fully extend your elbow when you hit the smash"
+     "tip": "Fully extend your elbow when you hit the smash",
+     "value": null
     }
    ],
    "rally_index": 0
@@ -13259,5 +13265,9 @@
     "peak_speed_kmh": 118.0
    }
   }
- }
+ },
+ "line_calls": [],
+ "rally_events": [],
+ "coaching": null,
+ "chat": null
 }

@@ -6,7 +6,6 @@ Lets the app and demos show non-empty results without a GPU or weights. Enabled 
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -14,13 +13,13 @@ from typing import Any
 from shuttlesense.analytics import write_exports
 from shuttlesense.io import FrameReader
 from shuttlesense.pipeline import STAGE_NAMES, StageEvent
-from shuttlesense.schema import ClipRecord, Court, ScorePair
+from shuttlesense.schema import ClipRecord, Court, ScorePair, load_record
 
 GOLDEN_RECORD = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "golden_record.json"
 
 
 def load_golden() -> ClipRecord:
-    return ClipRecord.model_validate(json.loads(GOLDEN_RECORD.read_text(encoding="utf-8")))
+    return load_record(GOLDEN_RECORD.read_text(encoding="utf-8"))
 
 
 def _scale_xy(x: float | None, y: float | None, sx: float, sy: float):

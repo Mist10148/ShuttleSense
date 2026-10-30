@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -19,7 +20,7 @@ from fastapi import (
 from fastapi import (
     Path as PathParam,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from shuttlesense import __version__
 from shuttlesense.analytics import build_summary, write_exports
@@ -40,7 +41,7 @@ from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.referee import apply_corrections, game_winner, save_corrections
 from shuttlesense.render import OVERLAYS
-from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, ScoreCorrection
+from shuttlesense.schema import SCHEMA_VERSION, ScoreCorrection, load_record, migrate
 
 
 def get_storage(request: Request) -> Storage:
@@ -258,10 +259,12 @@ def _output_or_404(storage: Storage, jobs: JobManager, job_id: str, key: str) ->
 
 
 @router.get("/jobs/{job_id}/record")
-def get_record(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResponse:
-    return FileResponse(
-        _output_or_404(storage, jobs, job_id, "record"), media_type="application/json"
-    )
+def get_record(job_id: str, storage: StorageDep, jobs: JobsDep) -> Response:
+    path = _output_or_404(storage, jobs, job_id, "record")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("schema_version") == SCHEMA_VERSION:
+        return FileResponse(path, media_type="application/json")
+    return JSONResponse(migrate(data))  # a job from before the last schema bump
 
 
 @router.get("/jobs/{job_id}/video")
@@ -312,7 +315,7 @@ def correct_score(
         raise HTTPException(status_code=409, detail="wait until the job has finished")
     path = _output_or_404(storage, jobs, job_id, "record")
     with jobs.job_lock(job_id):  # read-modify-write of record.json
-        record = ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        record = load_record(path.read_text(encoding="utf-8"))
         if record.score is None or not record.rallies:
             raise HTTPException(status_code=409, detail="referee stage did not run for this job")
         rally = next((r for r in record.rallies if r.index == body.rally_index), None)

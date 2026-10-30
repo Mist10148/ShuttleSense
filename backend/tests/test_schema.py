@@ -4,11 +4,16 @@ from pathlib import Path
 
 from snapshots import assert_matches_snapshot
 
-from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord
+import json
+
+import pytest
+
+from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord, load_record, migrate
 
 EXAMPLE = {
-    "schema_version": "1.0",
+    "schema_version": "1.1",
     "clip_id": "match03_rally12",
+    "mode": "live",
     "source_name": "rally12.mp4",
     "fps": 30.0,
     "width": 1280,
@@ -46,7 +51,14 @@ EXAMPLE = {
             "confidence": 0.81,
             "class_probs": {"smash": 0.81, "clear": 0.19},
             "speed_kmh": 182.0,
-            "feedback": [{"rule": "elbow_extension", "passed": False, "tip": "Extend your arm."}],
+            "feedback": [
+                {
+                    "rule": "elbow_extension",
+                    "passed": False,
+                    "tip": "Extend your arm.",
+                    "value": 131.0,
+                }
+            ],
             "rally_index": 0,
         }
     ],
@@ -63,6 +75,51 @@ EXAMPLE = {
     ],
     "score": {"near": 11, "far": 9, "corrections": []},
     "summary": None,
+    "line_calls": [
+        {
+            "id": 0,
+            "rally_index": 0,
+            "frame": 400,
+            "time_s": 13.333,
+            "call": "in",
+            "landing_xy": [4.9, 12.1],
+            "margin_cm": 28.0,
+            "confidence": 0.72,
+            "uncertain": False,
+            "court": "singles",
+            "override": None,
+        }
+    ],
+    "rally_events": [
+        {"frame": 12, "time_s": 0.4, "type": "rally_start", "rally_index": 0, "data": {}},
+        {
+            "frame": 400,
+            "time_s": 13.333,
+            "type": "landing",
+            "rally_index": 0,
+            "data": {"call": "in"},
+        },
+    ],
+    "coaching": {
+        "session_notes": [
+            {
+                "id": "elbow_extension:smash",
+                "rule": "elbow_extension",
+                "stroke": "smash",
+                "text": "Bent elbow at contact on 1 of 1 smashes",
+                "count": 1,
+                "total": 1,
+                "severity": 1.0,
+                "moments": [{"frame": 42, "time_s": 1.4, "hit_id": 0}],
+            }
+        ],
+        "top_fixes": ["elbow_extension:smash"],
+    },
+    "chat": {
+        "messages": [
+            {"role": "user", "text": "Why short?", "at": "2026-10-31T10:00:00Z", "citations": []},
+        ]
+    },
 }
 
 
@@ -72,6 +129,27 @@ def test_example_from_docs_round_trips() -> None:
     assert again == record
     assert again.hits[0].stroke == "smash"
     assert again.frames[0].players.far is None
+    assert again.mode == "live" and again.line_calls[0].effective_call == "in"
+    assert again.coaching.top_fixes == ["elbow_extension:smash"]
+
+
+def test_migrate_1_0_record() -> None:
+    old = json.loads(json.dumps(EXAMPLE))
+    old["schema_version"] = "1.0"
+    for key in ("mode", "line_calls", "rally_events", "coaching", "chat"):
+        del old[key]
+    for item in old["hits"][0]["feedback"]:
+        del item["value"]
+    record = load_record(json.dumps(old))
+    assert record.schema_version == SCHEMA_VERSION
+    assert record.mode == "upload"
+    assert record.chat is None and record.coaching is None
+    assert record.hits[0].feedback[0].value is None
+
+
+def test_migrate_refuses_other_major_version() -> None:
+    with pytest.raises(ValueError, match="cannot migrate"):
+        migrate({"schema_version": "2.0"})
 
 
 def test_minimal_record_defaults() -> None:
@@ -79,6 +157,7 @@ def test_minimal_record_defaults() -> None:
     assert record.schema_version == SCHEMA_VERSION
     assert record.court is None
     assert record.hits == [] and record.rallies == []
+    assert record.mode == "upload" and record.line_calls == [] and record.chat is None
 
 
 def test_stroke_classes_are_the_six_documented() -> None:
