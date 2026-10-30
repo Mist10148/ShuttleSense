@@ -66,7 +66,7 @@ def detect_hits(
     within max_wrist_distance_px (scaled by cfg["scale"], the frame height / 720); the
     closest player is the hitter. Within
     min_frames_between_hits only the closest-wrist candidate survives, and consecutive hits
-    by the same player (impossible in singles) keep only the closer one.
+    by the same player within a rally (impossible in singles) keep only the closer one.
     """
     idx = np.flatnonzero(np.asarray(visible) > 0)
     if len(idx) < 3:
@@ -96,9 +96,22 @@ def detect_hits(
             kept.append((d, frame, side))
     kept.sort(key=lambda k: k[1])
 
+    # Across a rally break (the shuttle out of sight for rally_break_frames) the same player
+    # may well hit twice in a row: the winner of a rally serves the next one.
+    hidden = np.asarray(visible) <= 0
+    break_len = int(cfg.get("rally_break_frames", 30))
+
+    def same_rally(a: int, b: int) -> bool:
+        run = 0
+        for v in hidden[a:b]:
+            run = run + 1 if v else 0
+            if run >= break_len:
+                return False
+        return True
+
     alternating: list[tuple[float, int, PlayerSide]] = []
     for hit in kept:
-        if alternating and alternating[-1][2] == hit[2]:
+        if alternating and alternating[-1][2] == hit[2] and same_rally(alternating[-1][1], hit[1]):
             if hit[0] < alternating[-1][0]:
                 alternating[-1] = hit
             continue

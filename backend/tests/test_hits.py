@@ -83,3 +83,19 @@ def test_stage_fills_record_hits() -> None:
     ctx = StageContext(video_path=None, out_dir=None, config={"stages": {"hits": CFG}})
     record = hits_run(record, ctx)
     assert [(h.id, h.frame, h.time_s, h.player) for h in record.hits] == [(0, 9, 0.45, "near")]
+
+
+def test_same_player_may_hit_again_after_a_rally_break() -> None:
+    """The winner of a rally serves the next one, so alternation resets across a break."""
+    from shuttlesense.config import load_config
+    from shuttlesense.hits import run as hits_run
+    from shuttlesense.stage import StageContext
+    from shuttlesense.stream.synthetic import synthetic_record
+
+    record, truth = synthetic_record()
+    ctx = StageContext(video_path=None, out_dir=None, config=load_config())
+    hits_run(record, ctx)
+    assert [(h.frame, h.player) for h in record.hits] == [(f, s) for f, s, _ in truth["hits"]]
+    # Near hit the last shot of rally 1 (frame 45) and serves rally 2 (frame 132).
+    assert (45, "near") in [(h.frame, h.player) for h in record.hits]
+    assert (132, "near") in [(h.frame, h.player) for h in record.hits]
