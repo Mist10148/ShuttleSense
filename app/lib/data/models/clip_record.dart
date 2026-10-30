@@ -60,16 +60,18 @@ class ClipRecord {
   }
 
   /// Score shown at [frameIndex]: after the last rally that ended at or before it.
-  /// Before the first rally ends this is the starting score. Null without a referee.
+  /// Before the first scored rally ends this is the starting score. Null without a referee.
   ScorePair? scoreAt(int frameIndex) {
-    if (score == null) return null;
-    var current = const ScorePair(near: 0, far: 0);
+    final total = score;
+    if (total == null) return null;
     final first = rallies.where((r) => r.scoreAfter != null).firstOrNull;
+    // No scored rally (none detected, or the start score is already a finished game): the
+    // score never moved from the start score, which is then the final one.
+    var current = ScorePair(near: total.near, far: total.far);
     if (first != null) {
-      final r0 = rallies.first;
       current = ScorePair(
-        near: first.scoreAfter!.near - (r0.winner == 'near' ? 1 : 0),
-        far: first.scoreAfter!.far - (r0.winner == 'far' ? 1 : 0),
+        near: first.scoreAfter!.near - (first.winner == 'near' ? 1 : 0),
+        far: first.scoreAfter!.far - (first.winner == 'far' ? 1 : 0),
       );
     }
     for (final r in rallies) {

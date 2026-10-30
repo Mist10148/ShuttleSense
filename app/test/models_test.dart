@@ -118,6 +118,28 @@ void main() {
     expect(golden.rallies.single.landing!.inCourt, isTrue);
     expect(golden.scoreAt(10), const ScorePair(near: 0, far: 0));
     expect(golden.scoreAt(58), const ScorePair(near: 1, far: 0));
+    // Started at 10-12 with no rally scored: the start score, not 0-0.
+    final unscored = golden.copyWith(
+      rallies: [const Rally(index: 0, startFrame: 0, endFrame: 40)],
+      score: const Score(near: 10, far: 12),
+    );
+    expect(unscored.scoreAt(50), const ScorePair(near: 10, far: 12));
+    // The first rally was not scored, the second was: back out the second rally's winner.
+    final late = golden.copyWith(
+      rallies: [
+        const Rally(index: 0, startFrame: 0, endFrame: 20, winner: 'far'),
+        const Rally(
+          index: 1,
+          startFrame: 25,
+          endFrame: 50,
+          winner: 'near',
+          scoreAfter: ScorePair(near: 11, far: 12),
+        ),
+      ],
+      score: const Score(near: 11, far: 12),
+    );
+    expect(late.scoreAt(22), const ScorePair(near: 10, far: 12));
+    expect(late.scoreAt(55), const ScorePair(near: 11, far: 12));
     expect(golden.strokesSoFar(30), 2);
     expect(golden.rallyAt(57), isNull);
   });

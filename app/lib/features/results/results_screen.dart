@@ -252,6 +252,16 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     }
   }
 
+  /// Without an annotated video there is no player position to follow, so the timeline
+  /// moves the minimap, status strip and scoreboard to the hit itself.
+  void _seek(Duration position) {
+    if (widget.videoAvailable == true) {
+      _player.seek(position);
+    } else {
+      _frameIndex.value = _record.frameAt(position);
+    }
+  }
+
   @override
   void dispose() {
     _position?.cancel();
@@ -294,7 +304,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
             timeline: StrokeTimeline(
               hits: record.hits,
               currentHitId: currentHit?.id,
-              onSeek: _player.seek,
+              onSeek: _seek,
             ),
             minimap: CourtMinimap(record: record, frameIndex: frameIndex),
             scoreboard: Column(
