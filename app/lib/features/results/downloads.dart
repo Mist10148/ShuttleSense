@@ -44,15 +44,16 @@ class SaveTargets {
   Future<void> openInBrowser(String url) =>
       launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
-  /// Save dialog; returns where the user saved [bytes], or null when cancelled.
-  Future<String?> saveAs(String fileName, Uint8List bytes) async {
+  /// Save dialog; returns the chosen file path (created empty), or null when cancelled.
+  /// The download then streams into it instead of passing the whole file through memory.
+  Future<String?> pickSavePath(String fileName) async {
     final uri = await FilePicker.saveFile(
       dialogTitle: 'Save $fileName',
       fileName: fileName,
-      bytes: bytes,
+      bytes: Uint8List(0),
     );
-    if (uri == null) return null;
-    return uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
+    if (uri == null || uri.scheme != 'file') return null; // desktop dialogs give files
+    return uri.toFilePath();
   }
 
   Future<String> tempPath(String fileName) async =>
@@ -63,7 +64,8 @@ class SaveTargets {
 }
 
 /// Saves [file] for [jobId]: the browser downloads it on web, a save dialog picks the
-/// destination on desktop, and phones download to a temp file and open the share sheet.
+/// destination on desktop (the file downloads straight there), and phones download to a
+/// temp file and open the share sheet.
 /// Returns where the file went (null when cancelled or handed to the browser).
 Future<String?> saveExport(
   ApiClient api,
@@ -84,13 +86,16 @@ Future<String?> saveExport(
       await targets.openInBrowser(url);
       return null;
     case SaveMethod.saveDialog:
-      final temp = File(await targets.tempPath(name));
+      final path = await targets.pickSavePath(name);
+      if (path == null) return null;
       try {
-        await api.download(url, temp.path, onProgress: progress);
-        return await targets.saveAs(name, await temp.readAsBytes());
-      } finally {
-        if (temp.existsSync()) temp.deleteSync();
+        await api.download(url, path, onProgress: progress);
+      } catch (_) {
+        final partial = File(path); // no half-written file left where the user saved
+        if (partial.existsSync()) partial.deleteSync();
+        rethrow;
       }
+      return path;
     case SaveMethod.share:
       final path = await targets.tempPath(name);
       await api.download(url, path, onProgress: progress);

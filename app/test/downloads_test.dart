@@ -22,10 +22,12 @@ class FakeTargets extends SaveTargets {
   Future<void> openInBrowser(String url) async => events.add('open $url');
 
   @override
-  Future<String?> saveAs(String fileName, Uint8List bytes) async {
-    events.add('saveAs $fileName ${bytes.length}');
-    return '${dir.path}/saved/$fileName';
+  Future<String?> pickSavePath(String fileName) async {
+    events.add('pickSavePath $fileName');
+    return cancelSave ? null : '${dir.path}/saved_$fileName';
   }
+
+  bool cancelSave = false;
 
   @override
   Future<String> tempPath(String fileName) async => '${dir.path}/$fileName';
@@ -79,7 +81,7 @@ void main() {
       expect(targets.events, ['open http://fake:8000/jobs/job1/hits.csv']);
     });
 
-    test('desktop downloads, then asks where to save', () async {
+    test('desktop asks where to save, then downloads straight there', () async {
       final api = FakeApiClient();
       final targets = FakeTargets(dir);
       final progress = <double>[];
@@ -92,10 +94,25 @@ void main() {
         onProgress: progress.add,
       );
       expect(api.calls.single, 'download http://fake:8000/jobs/job1/rallies.csv');
-      expect(targets.events, ['saveAs job1_rallies.csv 4']);
-      expect(path, endsWith('saved/job1_rallies.csv'));
-      expect(File('${dir.path}/job1_rallies.csv').existsSync(), isFalse); // temp copy removed
+      expect(targets.events, ['pickSavePath job1_rallies.csv']);
+      expect(path, endsWith('saved_job1_rallies.csv'));
+      expect(File(path!).readAsStringSync(), 'data');
+      expect(File('${dir.path}/job1_rallies.csv').existsSync(), isFalse); // no temp copy
       expect(progress, [1.0]);
+    });
+
+    test('desktop save cancelled in the dialog downloads nothing', () async {
+      final api = FakeApiClient();
+      final targets = FakeTargets(dir)..cancelSave = true;
+      final path = await saveExport(
+        api,
+        'job1',
+        ExportFile.video,
+        method: SaveMethod.saveDialog,
+        targets: targets,
+      );
+      expect(path, isNull);
+      expect(api.calls, isEmpty);
     });
 
     test('mobile downloads to a temp file and opens the share sheet', () async {
