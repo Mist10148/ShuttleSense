@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,7 +50,12 @@ class UploadLimit:
         await self.app(scope, limited, send)
 
 
-def create_app(settings: Settings | None = None, pipeline: PipelineFn | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    pipeline: PipelineFn | None = None,
+    chat_client: Any | None = None,
+) -> FastAPI:
+    """`chat_client` replaces the Claude API client (tests); otherwise one is made from the key."""
     settings = settings or get_settings()
     if pipeline is None:
         pipeline = run_pipeline
@@ -66,6 +72,11 @@ def create_app(settings: Settings | None = None, pipeline: PipelineFn | None = N
         app.state.storage = storage
         app.state.jobs = jobs
         app.state.settings = settings
+        app.state.chat_client = chat_client
+        if chat_client is None and settings.chat_key:
+            import anthropic
+
+            app.state.chat_client = anthropic.AsyncAnthropic(api_key=settings.chat_key)
         app.state.live = LiveManager(
             app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s
         )

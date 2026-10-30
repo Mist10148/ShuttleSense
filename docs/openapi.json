@@ -15,6 +15,22 @@
         "title": "Body_upload_video_videos_post",
         "type": "object"
       },
+      "ChatRequest": {
+        "description": "POST /jobs/{id}/chat.",
+        "properties": {
+          "message": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -33,6 +49,16 @@
           "auth_required": {
             "title": "Auth Required",
             "type": "boolean"
+          },
+          "chat_available": {
+            "default": false,
+            "title": "Chat Available",
+            "type": "boolean"
+          },
+          "chat_max_messages": {
+            "default": 0,
+            "title": "Chat Max Messages",
+            "type": "integer"
           },
           "device": {
             "title": "Device",
@@ -1093,6 +1119,72 @@
           }
         },
         "summary": "Get Job"
+      }
+    },
+    "/jobs/{job_id}/chat": {
+      "post": {
+        "description": "Ask the coach about a finished job; the answer streams as Server-Sent Events.",
+        "operationId": "chat_jobs__job_id__chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat"
       }
     },
     "/jobs/{job_id}/hits.csv": {

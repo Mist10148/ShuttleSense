@@ -91,6 +91,12 @@ ruff check . && ruff format --check . && pytest
 | `SHUTTLESENSE_CORS_ORIGINS` | `*` | Comma-separated origins for the web build |
 | `SHUTTLESENSE_MAX_UPLOAD_MB` | `1024` | Upload size limit |
 | `SHUTTLESENSE_CONFIG` | `configs/pipeline.yaml` | Pipeline config file |
+| `SHUTTLESENSE_LIVE_SESSION_TTL_S` | `60` | How long a dropped live session waits for the app to resume before it is saved |
+| `SHUTTLESENSE_ANTHROPIC_API_KEY` | unset (falls back to `ANTHROPIC_API_KEY`) | Turns the coach chat on. Keep it in the backend's environment only, never in the app or the repo; see [PRIVACY.md](PRIVACY.md) for what is sent |
+| `SHUTTLESENSE_CHAT_MODEL` | `claude-opus-5-5` | Claude model for the coach chat |
+| `SHUTTLESENSE_CHAT_EFFORT` | `medium` | `low` to `max`; lower is cheaper and faster |
+| `SHUTTLESENSE_CHAT_MAX_MESSAGES` | `20` | Questions allowed per session |
+| `SHUTTLESENSE_CHAT_MAX_DIGEST_CHARS` | `24000` | Session data sent per question; longer sessions are summarized per rally |
 | `SHUTTLESENSE_FAKE_PIPELINE` | `0` | `1` returns the golden record (`backend/tests/fixtures/golden_record.json`) scaled to each upload instead of running models, so the app shows full results without a GPU. CLI equivalent: `python -m shuttlesense.run --fake ...` |
 
 ## 4. Backend on Google Colab (fallback)

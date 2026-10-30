@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated
 
@@ -20,12 +22,13 @@ from fastapi import (
 from fastapi import (
     Path as PathParam,
 )
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from shuttlesense import __version__
 from shuttlesense.analytics import build_summary, write_exports
 from shuttlesense.api.jobs import JobBusy, JobManager
 from shuttlesense.api.models import (
+    ChatRequest,
     Health,
     Job,
     JobCreate,
@@ -52,7 +55,14 @@ from shuttlesense.referee import (
     save_overrides,
 )
 from shuttlesense.render import OVERLAYS
-from shuttlesense.schema import SCHEMA_VERSION, ScoreCorrection, load_record, migrate
+from shuttlesense.schema import (
+    SCHEMA_VERSION,
+    Chat,
+    ChatMessage,
+    ScoreCorrection,
+    load_record,
+    migrate,
+)
 
 
 def get_storage(request: Request) -> Storage:
@@ -97,6 +107,8 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         device=request.app.state.device,
         auth_required=bool(settings.token),
         stages=request.app.state.available_stages,
+        chat_available=request.app.state.chat_client is not None,
+        chat_max_messages=settings.chat_max_messages,
     )
 
 
@@ -376,6 +388,60 @@ def override_line_call(
         record.coaching = build_coaching(record, _feedback_config(jobs))
         write_exports(record, job_dir)
     return LineCallUpdate(line_calls=record.line_calls, score=record.score, rallies=record.rallies)
+
+
+@router.post("/jobs/{job_id}/chat")
+async def chat(
+    job_id: str,
+    body: ChatRequest,
+    request: Request,
+    storage: StorageDep,
+    jobs: JobsDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> StreamingResponse:
+    """Ask the coach about a finished job; the answer streams as Server-Sent Events."""
+    from shuttlesense.coach.chat import ChatError, ChatSettings, stream_answer
+    from shuttlesense.coach.digest import build_digest
+
+    client = request.app.state.chat_client
+    if client is None:
+        raise HTTPException(status_code=503, detail="coach chat is off: no Claude API key set")
+    job = _job_or_404(jobs, job_id)
+    if job.status != "done":
+        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    path = _output_or_404(storage, jobs, job_id, "record")
+    record = await asyncio.to_thread(lambda: load_record(path.read_text(encoding="utf-8")))
+    history = record.chat.messages if record.chat else []
+    if sum(m.role == "user" for m in history) >= settings.chat_max_messages:
+        raise HTTPException(status_code=429, detail="question limit for this session reached")
+    question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
+    digest = build_digest(record, settings.chat_max_digest_chars)
+    chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)
+
+    async def events() -> AsyncIterator[str]:
+        try:
+            async for event in stream_answer(client, digest, history, question.text, chat_settings):
+                if event["type"] == "done":
+                    answer = ChatMessage.model_validate(event["message"])
+                    await asyncio.to_thread(_save_chat, storage, jobs, job_id, [question, answer])
+                yield f"data: {json.dumps(event)}\n\n"
+        except ChatError as exc:
+            error = {"type": "error", "status": exc.status, "detail": exc.detail}
+            yield f"data: {json.dumps(error)}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache"})  # fmt: skip
+
+
+def _save_chat(
+    storage: Storage, jobs: JobManager, job_id: str, messages: list[ChatMessage]
+) -> None:
+    path = storage.output_path(job_id, "record")
+    with jobs.job_lock(job_id):  # read-modify-write of record.json
+        record = load_record(path.read_text(encoding="utf-8"))
+        record.chat = record.chat or Chat()
+        record.chat.messages.extend(messages)
+        write_exports(record, storage.job_dir(job_id))
 
 
 @router.delete("/jobs/{job_id}", status_code=204)

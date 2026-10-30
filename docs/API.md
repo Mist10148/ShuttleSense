@@ -46,7 +46,9 @@ Liveness and capability check used by the connect screen.
   "schema_version": "1.1",
   "device": "cuda",
   "auth_required": true,
-  "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"]
+  "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"],
+  "chat_available": true,
+  "chat_max_messages": 20
 }
 ```
 
@@ -210,6 +212,16 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
+
+### `POST /jobs/{job_id}/chat`
+
+Ask the coach about a finished job (F22, [D18](DECISIONS.md)). Body `{"message": "Why did my smashes land short?"}` (1 to 1000 characters). The answer streams as Server-Sent Events (`text/event-stream`), one JSON object per `data:` line:
+
+- `{"type": "delta", "text": "..."}`: the next piece of the answer, as written;
+- `{"type": "done", "message": {...}, "disclaimer": "..."}`: the final chat message (`role`, `text`, `at`, `citations`). Citations are `[t=12.3s]` markers that matched a moment in the session data (hits, line calls, rally starts and ends, note moments); markers that matched nothing are removed from `text`, so the app should show this text in place of the streamed one;
+- `{"type": "error", "status": 429, "detail": "..."}`: the Claude API failed (rate limit, rejected key, offline); nothing is saved.
+
+The question and the answer are appended to `record.chat.messages`. What is sent to the Claude API is listed in [PRIVACY.md](PRIVACY.md). `503` when the backend has no API key (`/health` reports `chat_available: false`), `409` unless the job is `done`, `429` after `chat_max_messages` questions (in `/health`), `422` for an empty or too long message.
 
 ### `DELETE /jobs/{job_id}`
 

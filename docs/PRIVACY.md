@@ -22,7 +22,7 @@ When you send a chat message, the backend sends Anthropic:
 | A text digest of the clip record: per-hit time, player side (near/far), stroke, confidence, estimated speed, form rule results; per-rally length, winner, score and line call (in/out, margin, confidence); session notes and summary counts | Keypoints, raw shuttle tracks, court corners |
 | Clip duration and frame rate | File names, server address, token, IP of the phone |
 
-The digest is capped in size; long sessions are summarized per rally. The exact text is built by `backend/shuttlesense/coach/digest.py`.
+The digest is capped in size (`SHUTTLESENSE_CHAT_MAX_DIGEST_CHARS`); long sessions are summarized per rally. The model is `claude-opus-5-5` unless the backend owner sets `SHUTTLESENSE_CHAT_MODEL`; if it declines a request, the API's server-side fallback may answer with another Claude model. The exact text is built by `backend/shuttlesense/coach/digest.py`.
 
 Anthropic's handling of API data is described in its commercial terms and privacy policy. The chat history is saved in the clip record (`chat.messages`) on your backend and deleted with the job.
 

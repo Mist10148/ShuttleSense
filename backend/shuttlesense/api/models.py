@@ -24,6 +24,14 @@ class Health(BaseModel):
     device: str
     auth_required: bool
     stages: list[str]
+    chat_available: bool = False  # a Claude API key is configured on this backend
+    chat_max_messages: int = 0  # questions allowed per session
+
+
+class ChatRequest(BaseModel):
+    """POST /jobs/{id}/chat."""
+
+    message: str = Field(min_length=1, max_length=1000)
 
 
 class VideoInfoOut(BaseModel):

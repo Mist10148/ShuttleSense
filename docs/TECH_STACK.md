@@ -75,6 +75,12 @@ Platform notes:
 
 **Rejected:** Ultralytics YOLO / YOLO-pose (AGPL-3.0, would force the whole repo to AGPL); MediaPipe Pose (single-person, needs a separate detector and per-crop calls; kept as a documented alternative); Gradio/Streamlit (replaced by the Flutter app).
 
+### Coach chat (requirements/base.txt)
+
+| Library | Version | License | Why |
+| --- | --- | --- | --- |
+| anthropic (Claude API Python SDK) | 2.3.0 | Apache-2.0 | Coach chat (F22, D18): streams answers from the Claude API. Pure Python with small dependencies (`httpx2`, `jiter`, `anyio`), so it stays in the base install and CI; it is only used when an API key is set. Model `claude-opus-5-5` by default with the server-side refusal fallback on |
+
 ### Development (requirements/dev.txt)
 
 | Tool | Version | Use |

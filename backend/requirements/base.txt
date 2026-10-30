@@ -8,3 +8,4 @@ numpy==2.5.4
 opencv-python-headless==5.0.0.93
 pandas==3.1.0
 pyyaml==6.0.3
+anthropic==2.3.0
