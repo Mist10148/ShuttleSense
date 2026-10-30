@@ -77,6 +77,10 @@ def available_stages(config: dict[str, Any] | None = None) -> list[str]:
         cfg = stage_cfg.get(spec.name, {})
         if not cfg.get("enabled", True):
             continue
+        precomputed = cfg.get("precomputed_csv")  # tracking from a CSV needs no model
+        if precomputed and (BACKEND_DIR / precomputed).is_file():
+            names.append(spec.name)
+            continue
         if not all(_installed(m) for m in spec.requires):
             continue
         paths = [cfg.get(key) for key in spec.weights]

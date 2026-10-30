@@ -63,6 +63,15 @@ def test_available_stages_skip_missing_weights() -> None:
     assert "court" not in available_stages({"stages": {"court": {"enabled": False}}})
 
 
+def test_tracking_from_a_precomputed_csv_counts_as_available(tmp_path: Path) -> None:
+    csv = tmp_path / "ball.csv"
+    csv.write_text("Frame,Visibility,X,Y\n")
+    tracking = {"tracknet_weights": "weights/does-not-exist.pt", "precomputed_csv": str(csv)}
+    assert "tracking" in available_stages({"stages": {"tracking": tracking}})
+    tracking["precomputed_csv"] = str(tmp_path / "missing.csv")
+    assert "tracking" not in available_stages({"stages": {"tracking": tracking}})
+
+
 def test_openapi_snapshot(client: TestClient) -> None:
     docs = Path(__file__).resolve().parents[2] / "docs" / "openapi.json"
     assert_matches_snapshot(client.app.openapi(), docs)
