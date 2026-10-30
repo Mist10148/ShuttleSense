@@ -46,6 +46,7 @@ stages:
     min_angle_deg: 60           # direction change threshold
     max_wrist_distance_px: 120  # at 720p
     min_frames_between_hits: 8
+    rally_break_frames: 30      # shuttle unseen this long = new rally, same hitter allowed
     marker_duration_s: 0.5
 
   strokes:
@@ -93,3 +94,15 @@ stages:
     codec: libx264
     crf: 23
     minimap_corner: top-right   # top-left | top-right | bottom-left | bottom-right
+
+# Live sessions (F19, D16): WS /live, see docs/ARCHITECTURE.md
+live:
+  budget_ms: 300               # p95 frame arrival -> frame event target on the team GPU
+  tick_every: 5                # frames between runs of the windowed hits/referee stages
+  max_window_frames: 900       # the window never grows past 30 s at 30 fps
+  background_frames: 30        # TrackNet background median from the first frames
+  check_every: 30              # processed frames between quality checks
+  max_drop_rate: 0.2           # skipping more than this share of frames lowers quality
+  scales: [1.0, 0.75, 0.5]     # perception input scale per quality level (0, 1, 2)
+  max_fps: 30
+  target_height: 720

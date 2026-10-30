@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from shuttlesense import analytics, feedback, hits, referee
+from shuttlesense.config import load_config
+from shuttlesense.stage import StageContext
+from shuttlesense.stream.analyzer import StreamAnalyzer, planned_classifier
+from shuttlesense.stream.perception import ReplayPerception
+from shuttlesense.stream.session import LiveSession, StartRequest, normalized_size
+from shuttlesense.stream.synthetic import CORNERS, synthetic_record
+
+CONFIG = load_config()
+
+
+def _offline(record):
+    record = record.model_copy(deep=True)
+    ctx = StageContext(video_path=None, out_dir=None, config=CONFIG)
+    for stage in (hits, feedback, analytics, referee):
+        stage.run(record, ctx)
+    return record
+
+
+def _live(record, **kwargs):
+    a = StreamAnalyzer(clip_id="live", fps=record.fps, width=record.width, height=record.height,
+                       court=record.court, config=CONFIG, **kwargs)  # fmt: skip
+    events = []
+    for f in record.frames:
+        events += a.add_frame(f.shuttle, f.players)
+    return a, a.finalize(), events
+
+
+def test_offline_live_parity() -> None:
+    record, truth = synthetic_record()
+    off = _offline(record)
+    _, live, _ = _live(record)
+    assert [(h.frame, h.player) for h in live.hits] == [(h.frame, h.player) for h in off.hits]
+    assert [(h.frame, h.player) for h in off.hits] == [(f, s) for f, s, _ in truth["hits"]]
+    key = [(r.start_frame, r.end_frame, r.winner) for r in off.rallies]
+    assert [(r.start_frame, r.end_frame, r.winner) for r in live.rallies] == key
+    calls = [(c.frame, c.call, c.uncertain) for c in off.line_calls]
+    assert [(c.frame, c.call, c.uncertain) for c in live.line_calls] == calls
+    assert calls == [(63, "in", False), (204, "out", False), (327, "in", True)]
+    assert (live.score.near, live.score.far) == (off.score.near, off.score.far)
+    assert live.mode == "live" and live.rally_events and live.summary.total_hits == 10
+
+
+def test_events_arrive_in_order_and_lag_is_bounded() -> None:
+    record, truth = synthetic_record()
+    a, _, events = _live(record)
+    frames = [e for e in events if e["type"] == "frame"]
+    assert len(frames) == len(record.frames)
+    # A hit is announced once its look-ahead has passed, never later than a tick after that.
+    seen = 0
+    for e in events:
+        if e["type"] == "frame":
+            seen = e["frame"]
+        if e["type"] == "hit":
+            assert a.hit_lag <= seen - e["hit"]["frame"] < a.hit_lag + a.tick_every
+    kinds = [e["type"] for e in events if e["type"] != "frame"]
+    assert kinds.count("line_call") == 3 and kinds.count("score") == 3
+    in_play = [e for e in events if e["type"] == "rally" and e["state"] == "in_play"]
+    # Same starts as offline: the first rally counts from frame 0 (the toss is in view).
+    assert [e["start_frame"] for e in in_play] == [0, 132, 273]
+
+
+def test_override_and_correction_rescore() -> None:
+    record, _ = synthetic_record()
+    a, live, _ = _live(record)
+    uncertain = next(c for c in live.line_calls if c.uncertain)
+    assert live.rallies[uncertain.rally_index].winner is None
+    events = a.override(uncertain.id, "out")
+    assert events[0]["line_call"]["override"]["call"] == "out"
+    # The far player hit the last shot of that rally out.
+    assert a.record.rallies[uncertain.rally_index].winner == "near"
+    assert events[1]["score"]["near"] == 3
+    a.correct(0, "far")
+    assert (a.record.score.near, a.record.score.far) == (2, 1)
+    with pytest.raises(KeyError):
+        a.override(99, "in")
+
+
+def test_planned_classifier_labels_hits() -> None:
+    from shuttlesense.stream.synthetic import planned_strokes
+
+    record, truth = synthetic_record()
+    _, live, _ = _live(record, classify=planned_classifier(planned_strokes(truth)))
+    assert [h.stroke for h in live.hits][:3] == ["serve", "clear", "smash"]
+
+
+def test_replay_perception_scales_to_the_session() -> None:
+    record, _ = synthetic_record()
+    p = ReplayPerception(record, (640, 360))
+    shuttle, players = p(np.zeros((360, 640, 3), np.uint8), 10)
+    src = record.frames[10].shuttle
+    assert shuttle.x == pytest.approx(src.x / 2, abs=0.01)
+    assert shuttle.y == pytest.approx(src.y / 2, abs=0.01)
+    assert players.near.bbox[3] == pytest.approx(record.frames[10].players.near.bbox[3] / 2)
+
+
+def test_normalized_size_matches_io() -> None:
+    assert normalized_size(1920, 1080, 720) == (1280, 720)
+    assert normalized_size(641, 361, 720) == (640, 360)
+
+
+class SlowPerception:
+    available = {"tracking": True, "pose": True}
+
+    def __init__(self, record, size) -> None:
+        self.replay = ReplayPerception(record, size)
+
+    def __call__(self, frame, index):
+        import time
+
+        time.sleep(0.02)
+        return self.replay(frame, index)
+
+
+def test_session_degrades_when_over_budget(tmp_path) -> None:
+    from shuttlesense.stream.fake_source import blank_frames, encode
+
+    record, _ = synthetic_record()
+    config = {**CONFIG, "live": {"budget_ms": 5, "check_every": 10}}
+    corners = [(x / 2, y / 2) for x, y in CORNERS]
+    session = LiveSession(
+        session_id="s", request=StartRequest(fps=30, width=640, height=360), config=config,
+        perception=SlowPerception(record, (640, 360)), court_corners=corners,
+        recording=tmp_path / "rec.mp4",
+    )  # fmt: skip
+    import time
+
+    events = []
+    for i, frame in enumerate(blank_frames(25)):
+        data = encode(frame, i, 0.0)
+        events += session.process(data[12:], i, 0.0, time.monotonic())
+    degraded = [e for e in events if e["type"] == "degraded"]
+    assert degraded and degraded[0]["level"] == 1 and "budget" in degraded[0]["reason"]
+    assert session.level == 2  # two checks over budget
+    frame_events = [e for e in events if e["type"] == "frame"]
+    assert all("latency_ms" in e for e in frame_events)
+    session.skip(encode(next(blank_frames(1)), 25, 0.0)[12:], 25, 0.0)
+    record = session.finish()
+    assert record.num_frames == 26 and session.stats.skipped == 1
+    assert (tmp_path / "rec.mp4").stat().st_size > 0
