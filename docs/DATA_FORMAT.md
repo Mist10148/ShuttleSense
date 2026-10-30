@@ -122,7 +122,7 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 
   "summary": {                                                 // F13
     "total_hits": 7,
-    "stroke_counts": {"smash": 2, "clear": 2, "drop": 1, "net_shot": 1, "lift": 1, "serve": 0},
+    "stroke_counts": {"smash": 2, "clear": 2, "drop": 1, "net_shot": 1, "lift": 1},  // classes with no hit are left out
     "peak_speed_kmh": 182.0,
     "per_player": {
       "near": {"hits": 4, "stroke_counts": {"smash": 2, "clear": 1, "drop": 1}, "peak_speed_kmh": 182.0},
@@ -168,7 +168,7 @@ Produced by `scripts/extract_clips.py` and `scripts/extract_features.py` under `
 backend/data/
 ├── shuttleset/                 # raw annotations from the ShuttleSet repo
 ├── videos/                     # match videos (not redistributed)
-├── clips/<match_id>/<rally>_<hit>.mp4
+├── clips/<match_id>/<set>_<rally>_<stroke>.mp4 + index.csv
 ├── features/<match_id>.npz     # X: [N, T, F] pose+shuttle windows, y: [N], meta
 └── splits.json                 # {"train": [match_ids], "val": [...], "test": [...]} — split by match
 ```

@@ -203,7 +203,7 @@
 
 **Outputs.** Working script, `match_list.csv`, stroke-type count table posted on the issue.
 
-**Acceptance criteria.** 44 matches listed; stroke counts total ≈ 36,492.
+**Acceptance criteria.** 44 matches listed; stroke counts total ≈ 36,492 (the released CSVs hold 36,484).
 
 **Risks.** Match videos are on YouTube and not redistributable: only download for research use, keep them in Drive `videos/` (team only), never in the repo.
 

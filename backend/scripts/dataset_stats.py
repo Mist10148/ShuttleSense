@@ -1,10 +1,10 @@
 """Dataset statistics and class balance report for the stroke classifier (T3.13).
 
-Usage: python scripts/dataset_stats.py [--clips data/clips] [--splits data/splits.json]
+Usage: python scripts/dataset_stats.py [--clips data/clips] [--splits configs/splits.json]
                 [--shuttleset data/shuttleset] [--min-train 500]
                 [--out ../docs/results/dataset.md]
 
-Input:  data/clips/<match_id>/index.csv (extract_clips.py), data/splits.json (make_splits.py;
+Input:  data/clips/<match_id>/index.csv (extract_clips.py), configs/splits.json (make_splits.py;
         optional, matches missing from it are "unassigned") and the ShuttleSet annotations
         data/shuttleset/<match_id>/set*.csv (optional, to count strokes that were annotated
         but never cut into a clip).
@@ -143,7 +143,7 @@ def write_report(stats: dict[str, Any], markdown: str, out_md: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clips", type=Path, default=DATA_DIR / "clips")
-    parser.add_argument("--splits", type=Path, default=DATA_DIR / "splits.json")
+    parser.add_argument("--splits", type=Path, default=BACKEND_DIR / "configs" / "splits.json")
     parser.add_argument("--shuttleset", type=Path, default=DATA_DIR / "shuttleset")
     parser.add_argument("--min-train", type=int, default=500)
     parser.add_argument("--out", type=Path, default=RESULTS_DIR / "dataset.md")

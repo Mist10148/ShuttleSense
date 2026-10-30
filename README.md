@@ -224,9 +224,10 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 cd backend
 python scripts/download_shuttleset.py      # annotations + match list
 python scripts/extract_clips.py            # cut per-stroke clips (videos in data/videos/)
-python scripts/make_splits.py              # train/val/test split by match
 python scripts/extract_features.py         # pose + shuttle features per clip
-python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
+python scripts/train_stroke_classifier.py --seeds 1,2,3          # split: configs/splits.json
+python scripts/train_stroke_classifier.py --seeds 1,2,3 --pose-only   # ablation
+python scripts/make_figures.py             # docs/results/strokes.md + figures
 ```
 
 ---
@@ -235,7 +236,7 @@ python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
 
 | Dataset | Used for | Notes |
 | --- | --- | --- |
-| [ShuttleSet](https://arxiv.org/abs/2306.04948) (KDD 2023) | Training and testing the stroke classifier | 44 elite singles matches, 36,492 expert-annotated strokes in 18 types, merged into 6 classes; split by match |
+| [ShuttleSet](https://arxiv.org/abs/2306.04948) (KDD 2023) | Training and testing the stroke classifier | 44 elite singles matches, 36,492 expert-annotated strokes in 18 types (the released CSVs hold 36,484, some marked unknown), merged into 6 classes; split by match |
 | Shuttlecock Trajectory Dataset | Through TrackNetV3's pretrained weights | Not retrained |
 | Team-recorded phone footage | Evaluation and demo only | 5 to 10 rallies, recorded with consent and labeled by hand |
 

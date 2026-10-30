@@ -3,7 +3,7 @@
 # Any stage may set `weight:` (share of job progress; defaults tracking 4, pose 4,
 # render 2, others 0.2) and `enabled: false`.
 
-seed: 42
+seed: 42  # reserved: no pipeline stage is random yet (training seeds: stroke_cnn.yaml)
 
 stages:
   io:
@@ -15,6 +15,7 @@ stages:
   tracking:
     enabled: true
     tracknet_weights: weights/tracknet/TrackNet_best.pt
+    # Read by the TrackNetV3 inference in tracknet.predict (T2.2, T2.3), not wired yet.
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)

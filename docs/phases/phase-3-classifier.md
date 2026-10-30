@@ -20,7 +20,7 @@
 | [T3.1](#t31) | Clip extraction, matches 1–22 | M3 | 10 h | T1.9 | ⬜ | [#35](https://github.com/Mist10148/ShuttleSense/issues/35) |
 | [T3.2](#t32) | Clip extraction, matches 23–44 | M4 | 10 h | T1.9 | ⬜ | [#36](https://github.com/Mist10148/ShuttleSense/issues/36) |
 | [T3.3](#t33) | Final 18 → 6 label mapping | M4 | 3 h | T1.9 | ⬜ | [#37](https://github.com/Mist10148/ShuttleSense/issues/37) |
-| [T3.4](#t34) | Match-level train/val/test split | M4 | 2 h | T3.3 | ⬜ | [#38](https://github.com/Mist10148/ShuttleSense/issues/38) |
+| [T3.4](#t34) | Match-level train/val/test split | M4 | 2 h | T3.3 | ✅ | [#38](https://github.com/Mist10148/ShuttleSense/issues/38) |
 | [T3.5](#t35) | Feature extraction to `.npz` windows | M5 | 10 h | T2.2, T2.5, T3.1, T3.2 | ⬜ | [#39](https://github.com/Mist10148/ShuttleSense/issues/39) |
 | [T3.6](#t36) | Rule-based hit detector stage | M5 | 8 h | T2.3, T2.5 | ⬜ | [#40](https://github.com/Mist10148/ShuttleSense/issues/40) |
 | [T3.7](#t37) | Hit detection evaluation and tuning | M3 | 5 h | T3.6, T3.4 | ⬜ | [#41](https://github.com/Mist10148/ShuttleSense/issues/41) |
@@ -76,11 +76,11 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M4 · **Estimate:** 3 h · **Priority:** P1 · **Area:** data · **Refs:** F6 · **Depends on:** T1.9 · **Blocks:** T3.4, T3.5, T3.13
 
 **Steps**
-- [ ] Compare the stroke type names printed by T1.9 with `backend/shuttlesense/strokes/labels.py::SHUTTLESET_TO_CLASS`; fix spelling/translation differences (ShuttleSet labels may be Chinese with English translations).
+- [x] Compare the stroke type names printed by T1.9 with `backend/shuttlesense/strokes/labels.py::SHUTTLESET_TO_CLASS`; fix spelling/translation differences (ShuttleSet labels may be Chinese with English translations). The CSVs are Chinese only: `SHUTTLESET_ZH_TO_EN` (D12).
 - [ ] Decide drive-family strokes: keep excluded (default) or merge into `clear`/`lift` by height; record the reason in `docs/DECISIONS.md`.
 - [ ] Decide `rush` (net kill) → `net_shot` or `smash`; `push` → `lift` or `net_shot`.
-- [ ] Update `SHUTTLESET_TO_CLASS` and the table in DATA_FORMAT.md in the same PR.
-- [ ] Output class counts after mapping.
+- [x] Update `SHUTTLESET_TO_CLASS` and the table in DATA_FORMAT.md in the same PR.
+- [x] Output class counts after mapping. See `docs/results/dataset.md`.
 
 **Tests.** `test_label_mapping_covers_18_types` (exists; update), `test_every_shuttleset_type_in_data_is_mapped` (reads a small sample annotations CSV fixture).
 
@@ -94,8 +94,8 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M4 · **Estimate:** 2 h · **Priority:** P1 · **Area:** data · **Refs:** F6, Success metrics · **Depends on:** T3.3 · **Blocks:** T3.7, T3.8
 
 **Steps**
-- [ ] In `extract_features.py` (or a new `scripts/make_splits.py`), split the 44 matches ≈ 70/15/15 (31/6/7) with seed 42, stratified so each split has a similar class distribution (greedy assignment by class counts).
-- [ ] Write `data/splits.json` `{"train": [...], "val": [...], "test": [...], "seed": 42}`; commit a copy to `backend/configs/splits.json` (small, no data) so everyone uses the same split.
+- [x] In `extract_features.py` (or a new `scripts/make_splits.py`), split the 44 matches ≈ 70/15/15 (31/6/7) with seed 42, stratified so each split has a similar class distribution (greedy assignment by class counts).
+- [x] Write `data/splits.json` `{"train": [...], "val": [...], "test": [...], "seed": 42}`; commit a copy to `backend/configs/splits.json` (small, no data) so everyone uses the same split. Made from the annotations (`--from-annotations`, D13); proportions within 0.5 pp of the overall.
 
 **Tests.** `tests/test_splits.py::test_no_match_in_two_splits`, `::test_split_is_deterministic`.
 
@@ -229,7 +229,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M4 · **Estimate:** 4 h · **Priority:** P2 · **Area:** ml · **Refs:** Metrics · **Depends on:** T3.9 · **Blocks:** T7.9
 
 **Steps**
-- [ ] Notebook `backend/notebooks/stroke_results.ipynb` (outputs cleared before commit): normalized confusion matrix, per-class F1 bars, ablation comparison, examples of the most confused pairs.
+- [x] Notebook `backend/notebooks/stroke_results.ipynb` (outputs cleared before commit): normalized confusion matrix, per-class F1 bars, ablation comparison, examples of the most confused pairs. Done as `scripts/make_figures.py` instead of a notebook, so the figures regenerate from the metrics files.
 - [ ] Export PNGs to `docs/results/` (small files only).
 
 **Acceptance criteria.** Figures committed and referenced from `docs/results/strokes.md`.
@@ -256,7 +256,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 
 **Steps**
 - [ ] Measure strokes stage time for a 1-minute rally on GPU and CPU; add to `timings.json`.
-- [ ] Ensure CPU inference works (map checkpoint to CPU) so laptops without CUDA still classify.
+- [x] Ensure CPU inference works (map checkpoint to CPU) so laptops without CUDA still classify.
 
 **Acceptance criteria.** Stage takes < 5 s on GPU and < 30 s on CPU for a 1-minute clip.
 

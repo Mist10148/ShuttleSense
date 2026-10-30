@@ -16,7 +16,7 @@
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
 | [T5.1](#t51) | App calibration screen polish | M1 | 5 h | T4.3 | ⬜ | [#62](https://github.com/Mist10148/ShuttleSense/issues/62) |
-| [T5.2](#t52) | Court homography stage and validation | M2 | 3 h | T1.1 | ⬜ | [#63](https://github.com/Mist10148/ShuttleSense/issues/63) |
+| [T5.2](#t52) | Court homography stage and validation | M2 | 3 h | T1.1 | ✅ | [#63](https://github.com/Mist10148/ShuttleSense/issues/63) |
 | [T5.3](#t53) | Court outline overlay | M2 | 3 h | T5.2, T2.6 | ⬜ | [#64](https://github.com/Mist10148/ShuttleSense/issues/64) |
 | [T5.4](#t54) | Court-plane positions for players and shuttle | M2 | 6 h | T5.2, T2.5 | ⬜ | [#65](https://github.com/Mist10148/ShuttleSense/issues/65) |
 | [T5.5](#t55) | App minimap synced to playback | M6 | 4 h | T5.4, T4.6 | ⬜ | [#66](https://github.com/Mist10148/ShuttleSense/issues/66) |
@@ -61,10 +61,10 @@
 **Inputs.** Existing `court/homography.py` (`compute_homography`, `validate_corners`, `image_to_court`, `run`).
 
 **Steps**
-- [ ] Add `court_to_image(h, points_m)` (inverse homography) for drawing.
-- [ ] Sanity check after computing H: the projected court area should cover 10–95% of the frame; otherwise raise `ValueError("corners look wrong")` → 400 from `POST /jobs`.
-- [ ] Scale corners if the job was created on a downscaled frame (corners are always in normalized video px — verify against `X-Frame-Width`).
-- [ ] Store `court_size_m` from config so doubles courts could be added later.
+- [x] Add `court_to_image(h, points_m)` (inverse homography) for drawing.
+- [x] Sanity check after computing H: the projected court area should cover 10–95% of the frame; otherwise raise `ValueError("corners look wrong")` → 400 from `POST /jobs`.
+- [x] Scale corners if the job was created on a downscaled frame (corners are always in normalized video px — verify against `X-Frame-Width`).
+- [x] Store `court_size_m` from config so doubles courts could be added later.
 
 **Tests.** Existing `tests/test_court.py`; add `test_court_to_image_inverts_image_to_court`, `test_tiny_court_rejected`.
 

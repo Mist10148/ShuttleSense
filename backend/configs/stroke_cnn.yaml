@@ -4,7 +4,7 @@ seed: 42
 
 data:
   features_dir: data/features
-  splits: data/splits.json
+  splits: configs/splits.json   # committed match split (T3.4), rewritten by make_splits.py
   window_frames: 32
   use_trajectory: true          # false for the pose-only ablation
   classes: [smash, clear, drop, net_shot, lift, serve]

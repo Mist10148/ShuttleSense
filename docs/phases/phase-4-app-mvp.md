@@ -28,7 +28,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 | [T4.9](#t49) | Error, empty, loading and offline states; theming | M6 | 4 h | T4.1–T4.8 | ⬜ | [#57](https://github.com/Mist10148/ShuttleSense/issues/57) |
 | [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ⬜ | [#58](https://github.com/Mist10148/ShuttleSense/issues/58) |
 | [T4.11](#t411) | Accessibility pass | M4 | 3 h | T4.9 | ⬜ | [#59](https://github.com/Mist10148/ShuttleSense/issues/59) |
-| [T4.12](#t412) | Widget tests with a fake API | M4 | 6 h | T4.4 | ⬜ | [#60](https://github.com/Mist10148/ShuttleSense/issues/60) |
+| [T4.12](#t412) | Widget tests with a fake API | M4 | 6 h | T4.4 | ✅ | [#60](https://github.com/Mist10148/ShuttleSense/issues/60) |
 | [T4.13](#t413) | App icon and splash screen | M4 | 2 h | — | ⬜ | [#61](https://github.com/Mist10148/ShuttleSense/issues/61) |
 
 ---
@@ -240,10 +240,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M4 · **Estimate:** 6 h · **Priority:** C · **Area:** app · **Refs:** ARCHITECTURE §6 · **Depends on:** T4.4 · **Blocks:** T4.1–T4.8 tests
 
 **Steps**
-- [ ] `test/fakes/fake_api_client.dart`: implements `ApiClient`'s public methods with in-memory jobs/videos and scripted progress.
-- [ ] Override `apiClientProvider` in tests; helper `pumpScreen(tester, widget, size: phone)`.
-- [ ] Golden record fixture (T1.10) for results tests.
-- [ ] Run every screen at 360×780, 800×1100, 1280×800 and assert `tester.takeException()` is null.
+- [x] `test/fakes/fake_api_client.dart`: implements `ApiClient`'s public methods with in-memory jobs/videos and scripted progress.
+- [x] Override `apiClientProvider` in tests; helper `pumpScreen(tester, widget, size: phone)`.
+- [x] Golden record fixture (T1.10) for results tests.
+- [x] Run every screen at 360×780, 800×1100, 1280×800 and assert `tester.takeException()` is null.
 
 **Acceptance criteria.** ≥ 1 test per screen; CI `flutter test` green.
 

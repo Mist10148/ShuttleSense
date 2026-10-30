@@ -183,7 +183,7 @@ Every pipeline feature reads from and writes to one shared per-clip record; its 
 
 ### Data
 
-- **ShuttleSet** (KDD 2023): 44 elite singles matches, 36,492 expert-annotated strokes in 18 types. The team merges these into 6 classes and splits by match so no match appears in both training and test sets.
+- **ShuttleSet** (KDD 2023): 44 elite singles matches, 36,492 expert-annotated strokes in 18 types (the released CSVs hold 36,484, of which 1,407 are marked unknown). The team merges these into 6 classes and splits by match so no match appears in both training and test sets.
 - **Shuttlecock Trajectory Dataset:** used through TrackNetV3's pretrained weights; no retraining planned.
 - **Team phone footage:** 5 to 10 rallies recorded with consent and labeled by hand, used only for evaluation and the demo.
 

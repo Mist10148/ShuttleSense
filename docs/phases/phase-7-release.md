@@ -42,7 +42,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 **Steps**
 - [ ] Record 5–10 consented singles rallies (setup as in T0.10), at least 2 with a different camera height/angle.
 - [ ] Label in `labels/<clip>.csv` (Drive): for every hit `time_s, player (near/far), stroke (6 classes)`; for every rally `start_s, end_s, winner, in/out`.
-- [ ] Use a simple tool: `scripts/label_clip.py` (OpenCV player with keys: space pause, ←/→ frame step, 1–6 stroke class, n/f player, r rally start/end) writing the CSV.
+- [x] Use a simple tool: `scripts/label_clip.py` (OpenCV player with keys: space pause, ←/→ frame step, 1–6 stroke class, n/f player, r rally start/end) writing the CSV.
 - [ ] Second person (M3) checks 2 clips; disagreements resolved and noted.
 
 **Acceptance criteria.** ≥ 5 labelled clips with ≥ 100 hits total; consent recorded for every person.
@@ -56,7 +56,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 
 **Steps**
 - [ ] Process every labelled clip with the frozen pipeline (with calibration).
-- [ ] `scripts/eval_phone.py`: match predicted hits to labels (±3 frames at 30 fps), stroke accuracy on matched hits, stroke count error per rally, rally boundary accuracy (T6.7), hit F1.
+- [x] `scripts/eval_phone.py`: match predicted hits to labels (±3 frames at 30 fps), stroke accuracy on matched hits, stroke count error per rally, rally boundary accuracy (T6.7), hit F1.
 - [ ] Write `docs/results/phone.md`; report even if low, and discuss the broadcast vs phone gap.
 
 **Acceptance criteria.** Numbers in README Evaluation; gap analysis written.
@@ -121,7 +121,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 
 **Steps**
 - [ ] `flutter build apk --release` (signed), `flutter build windows --release` (zip `build/windows/x64/runner/Release/`), `flutter build web --release` (zip `build/web/`).
-- [ ] Optional: GitHub Actions `release.yml` on tag push that builds web + APK and attaches them.
+- [x] Optional: GitHub Actions `release.yml` on tag push that builds web + APK and attaches them.
 - [ ] Create GitHub Release `v1.0.0` with the three artifacts, install notes (link to SETUP.md), known limitations and the evaluation summary.
 - [ ] Install the APK on a clean phone and the Windows zip on another laptop to verify.
 
@@ -220,7 +220,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 **Owner:** M1 · **Estimate:** 2 h · **Priority:** P1 · **Area:** docs · **Refs:** NFR Licensing, NFR Privacy, Ethics · **Depends on:** feature freeze · **Blocks:** T7.6
 
 **Steps**
-- [ ] List every Python and Dart dependency with its license (`pip-licenses`, `flutter pub deps` + pub.dev); confirm none is AGPL/GPL-incompatible with MIT; add a "Third-party licenses" table to TECH_STACK.md.
+- [x] List every Python and Dart dependency with its license (`pip-licenses`, `flutter pub deps` + pub.dev); confirm none is AGPL/GPL-incompatible with MIT; add a "Third-party licenses" table to TECH_STACK.md.
 - [ ] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
 - [ ] Confirm the backend deletes uploads on `DELETE` and that the demo server's storage is wiped after the demo.
 

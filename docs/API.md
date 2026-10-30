@@ -136,11 +136,12 @@ Job object, polled by the processing screen every 1 to 2 s.
   "outputs": {"record": false, "video": false, "summary": false, "hits_csv": false, "rallies_csv": false},
   "court_corners_px": [[212, 650], [1068, 650], [880, 210], [400, 210]],
   "overlays": ["trail", "pose", "boxes", "hits", "strokes"],
-  "referee": false
+  "referee": false,
+  "start_score": null
 }
 ```
 
-`court_corners_px`, `overlays` and `referee` echo the options the job was created with, so the app can retry or re-render with the same settings.
+`court_corners_px`, `overlays`, `referee` and `start_score` echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
@@ -158,7 +159,7 @@ Export files (F13). Served with `Content-Disposition: attachment`. CSV files are
 
 ### `POST /jobs/{job_id}/render`
 
-Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns `202` and the Job object with the new `overlays`; the job goes back to `queued`/`running`, the cached stages report `done` immediately and only `io` and `render` actually run. `409` unless the job is `done`; `400` for unknown overlays.
+Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns `202` and the Job object with the new `overlays`; the job goes back to `queued`/`running`, the cached stages report `done` immediately and only `io` and `render` actually run. `409` while the job is queued or running, or when it never produced outputs (a `failed` job whose earlier run finished can be re-rendered again); `400` for unknown overlays.
 
 ### `PATCH /jobs/{job_id}/score`
 
@@ -168,7 +169,7 @@ Correct the winner of a rally (F16). Body:
 {"rally_index": 3, "winner": "far"}
 ```
 
-Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally, `409` if the referee stage did not run.
+Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`) or if the referee stage did not run.
 
 ### `DELETE /jobs/{job_id}`
 
