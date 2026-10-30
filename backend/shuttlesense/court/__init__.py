@@ -9,7 +9,7 @@ from shuttlesense.court.homography import (
     run,
     validate_corners,
 )
-from shuttlesense.court.lines import court_lines
+from shuttlesense.court.lines import court_lines, play_bounds, service_bounds
 
 __all__ = [
     "check_court_area",
@@ -18,6 +18,8 @@ __all__ = [
     "court_lines",
     "court_to_image",
     "image_to_court",
+    "play_bounds",
     "run",
+    "service_bounds",
     "validate_corners",
 ]
