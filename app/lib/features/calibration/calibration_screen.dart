@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/video_info.dart';
@@ -268,6 +269,8 @@ class _FrameCanvasState extends ConsumerState<_FrameCanvas> {
 
   @override
   Widget build(BuildContext context) {
+    // "Change server" clears the config; this tree may rebuild once before the redirect.
+    if (ref.watch(serverConfigProvider) == null) return const SizedBox.shrink();
     final api = ref.watch(apiClientProvider);
     final info = widget.info;
     return InteractiveViewer(

@@ -93,13 +93,16 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       _busy = true;
       _error = null;
     });
+    // Read before the await: using ref after the screen is closed throws.
+    final checkHealth = ref.read(healthCheckProvider);
+    final configs = ref.read(serverConfigProvider.notifier);
     try {
-      final health = await ref.read(healthCheckProvider)(config);
+      final health = await checkHealth(config);
       if (health.authRequired && config.token == null) {
         throw ApiException('This server needs an access token');
       }
       if (!health.schemaMatches && (!mounted || !await _confirmSchema(health))) return;
-      await ref.read(serverConfigProvider.notifier).save(config);
+      await configs.save(config);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

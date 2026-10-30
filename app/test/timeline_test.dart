@@ -6,8 +6,8 @@ import 'package:shuttlesense_app/features/results/widgets/stroke_timeline.dart';
 
 import 'fakes/fake_api_client.dart';
 
-Future<List<Duration>> pumpTimeline(WidgetTester tester, {List<Hit>? hits, int? current}) async {
-  final seeks = <Duration>[];
+Future<List<Hit>> pumpTimeline(WidgetTester tester, {List<Hit>? hits, int? current}) async {
+  final seeks = <Hit>[];
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light(),
@@ -37,9 +37,9 @@ void main() {
     final seeks = await pumpTimeline(tester);
     await tester.tap(find.text('Clear'));
     // Clear at frame 25 / 30 fps = 0.833 s; minus 0.5 s.
-    expect(seeks.single, const Duration(microseconds: 333000));
+    expect(seekTarget(seeks.single), const Duration(microseconds: 333000));
     await tester.tap(find.text('Serve'));
-    expect(seeks.last, Duration.zero); // never negative
+    expect(seekTarget(seeks.last), Duration.zero); // never negative
   });
 
   testWidgets('player filter hides the other side', (tester) async {

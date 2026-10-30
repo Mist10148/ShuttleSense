@@ -7,6 +7,12 @@ import '../../../shared/widgets/message_view.dart';
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
 
+/// Video position to seek to for [hit]: [kSeekLead] before it, never negative.
+Duration seekTarget(Hit hit) {
+  final target = hit.position - kSeekLead;
+  return target.isNegative ? Duration.zero : target;
+}
+
 /// Height of one timeline row, used to auto-scroll to the current hit.
 const double kTimelineRowHeight = 72;
 
@@ -17,8 +23,8 @@ class StrokeTimeline extends StatefulWidget {
   final List<Hit> hits;
   final int? currentHitId;
 
-  /// Called with the position to seek to (the hit minus [kSeekLead]).
-  final ValueChanged<Duration> onSeek;
+  /// Called with the tapped hit; a video seeks to [seekTarget], other views go to the hit.
+  final ValueChanged<Hit> onSeek;
 
   @override
   State<StrokeTimeline> createState() => _StrokeTimelineState();
@@ -128,7 +134,7 @@ class _HitRow extends StatelessWidget {
 
   final Hit hit;
   final bool selected;
-  final ValueChanged<Duration> onSeek;
+  final ValueChanged<Hit> onSeek;
 
   @override
   Widget build(BuildContext context) {
@@ -140,18 +146,17 @@ class _HitRow extends StatelessWidget {
       if (hit.speedKmh != null) '~${hit.speedKmh!.round()} km/h (est.)',
       ?hit.tip,
     ].join(' · ');
-    final target = hit.position - kSeekLead;
     return Semantics(
       button: true,
       label: '$player player, $stroke at ${formatClock(hit.timeS)}',
       hint: 'Double tap to jump to this hit. Long press for details.',
       excludeSemantics: true,
       // The tile's own actions are excluded with its semantics, so give them back here.
-      onTap: () => onSeek(target.isNegative ? Duration.zero : target),
+      onTap: () => onSeek(hit),
       onLongPress: () => showHitDetails(context, hit),
       child: ListTile(
         selected: selected,
-        onTap: () => onSeek(target.isNegative ? Duration.zero : target),
+        onTap: () => onSeek(hit),
         onLongPress: () => showHitDetails(context, hit),
         leading: CircleAvatar(
           radius: 14,

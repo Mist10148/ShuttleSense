@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/health.dart';
@@ -42,6 +43,8 @@ class ResultsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // "Change server" clears the config; this tree may rebuild once before the redirect.
+    if (ref.watch(serverConfigProvider) == null) return const SizedBox.shrink();
     final job = ref.watch(jobProvider(jobId));
     final record = ref.watch(recordProvider(jobId));
     final api = ref.watch(apiClientProvider);
@@ -77,7 +80,9 @@ class ResultsScreen extends ConsumerWidget {
           ),
         ],
       ),
+      // A failed refresh (e.g. after a score correction) keeps the results on screen.
       body: record.when(
+        skipError: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => MessageView(
           icon: Icons.error_outline,
@@ -109,9 +114,11 @@ Future<void> showRerenderSheet(BuildContext context, WidgetRef ref, Job job) asy
         _OverlaySheet(options: job.options, health: ref.read(healthProvider).valueOrNull),
   );
   if (chosen == null || !context.mounted) return;
+  // The screen may be gone when the request returns; the container outlives it.
+  final container = ProviderScope.containerOf(context, listen: false);
   try {
-    await ref.read(apiClientProvider).render(job.id, chosen);
-    ref.invalidate(jobProvider(job.id));
+    await container.read(apiClientProvider).render(job.id, chosen);
+    container.invalidate(jobProvider(job.id));
     if (context.mounted) context.go(Routes.job(job.id));
   } on Exception catch (e) {
     if (context.mounted) {
@@ -255,11 +262,12 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 
   /// Without an annotated video there is no player position to follow, so the timeline
   /// moves the minimap, status strip and scoreboard to the hit itself.
-  void _seek(Duration position) {
+  void _seek(Hit hit) {
     if (widget.videoAvailable == true) {
-      _player.seek(position);
+      _player.seek(seekTarget(hit));
     } else {
-      _frameIndex.value = _record.frameAt(position);
+      final last = _record.numFrames == 0 ? 0 : _record.numFrames - 1;
+      _frameIndex.value = hit.frame.clamp(0, last);
     }
   }
 
