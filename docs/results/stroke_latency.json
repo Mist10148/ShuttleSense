@@ -1,0 +1,15 @@
+{
+  "model": "random init (configs/stroke_cnn.yaml)",
+  "hits": 40,
+  "duration_s": 60.0,
+  "devices": [
+    {
+      "device": "cpu",
+      "runs": 5,
+      "median_s": 0.0169,
+      "max_s": 0.0182,
+      "first_run_s": 0.1062,
+      "load_s": null
+    }
+  ]
+}
