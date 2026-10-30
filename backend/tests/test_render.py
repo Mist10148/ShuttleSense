@@ -47,6 +47,29 @@ def test_writer_opencv_fallback(tmp_path: Path) -> None:
     assert _count(out) == 8
 
 
+def test_writer_reports_ffmpeg_error_instead_of_broken_pipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    from shuttlesense.render import writer as writer_module
+
+    # Stands in for an ffmpeg that rejects the input and exits before reading any frame.
+    fail = "import sys; sys.stderr.write('width not divisible by 2'); sys.exit(1)"
+    monkeypatch.setattr(writer_module.shutil, "which", lambda _name: sys.executable)
+    monkeypatch.setattr(
+        writer_module, "ffmpeg_command", lambda *a, **k: [sys.executable, "-c", fail]
+    )
+    out = tmp_path / "out.mp4"
+    writer = VideoWriter(out, fps=25, size=(640, 480))
+    with pytest.raises(RuntimeError, match="width not divisible by 2"), writer:
+        for img in _frames(200, size=(640, 480)):  # far more than the pipe buffer holds
+            writer.write(img)
+    assert writer._proc is not None and writer._proc.returncode == 1
+    assert not out.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
 def _record_with_track():
     from shuttlesense.schema import ClipRecord, Frame, Shuttle
 

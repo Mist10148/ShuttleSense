@@ -87,10 +87,25 @@ class VideoWriter:
             frame = cv2.resize(frame, self.size)
         if self._proc is not None:
             assert self._proc.stdin is not None
-            self._proc.stdin.write(np.ascontiguousarray(frame, dtype=np.uint8).tobytes())
+            try:
+                self._proc.stdin.write(np.ascontiguousarray(frame, dtype=np.uint8).tobytes())
+            except OSError as e:  # BrokenPipeError, or EINVAL on Windows: ffmpeg has exited
+                code, err = self._finish_ffmpeg()
+                raise RuntimeError(f"ffmpeg failed ({code}): {err or e}") from e
         elif self._cv is not None:
             self._cv.write(frame)
         self.frames += 1
+
+    def _finish_ffmpeg(self) -> tuple[int, str]:
+        """Close ffmpeg's input, always reap it, and return (exit code, last stderr lines)."""
+        assert self._proc is not None
+        try:
+            if self._proc.stdin is not None:
+                self._proc.stdin.close()
+        except OSError:
+            pass  # the pipe is already broken; wait() below still reaps the process
+        err = self._proc.stderr.read().decode(errors="replace") if self._proc.stderr else ""
+        return self._proc.wait(), err.strip()[-500:]
 
     def __exit__(
         self,
@@ -99,13 +114,10 @@ class VideoWriter:
         tb: TracebackType | None,
     ) -> None:
         try:
-            if self._proc is not None:
-                assert self._proc.stdin is not None
-                self._proc.stdin.close()
-                err = self._proc.stderr.read().decode(errors="replace") if self._proc.stderr else ""
-                code = self._proc.wait()
+            if self._proc is not None and self._proc.returncode is None:
+                code, err = self._finish_ffmpeg()
                 if code != 0 and exc_type is None:
-                    raise RuntimeError(f"ffmpeg failed ({code}): {err.strip()[-500:]}")
+                    raise RuntimeError(f"ffmpeg failed ({code}): {err}")
             if self._cv is not None:
                 self._cv.release()
             if exc_type is None:
