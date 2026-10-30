@@ -97,6 +97,11 @@ class Storage:
     def output_path(self, job_id: str, key: str) -> Path:
         return self.job_dir(job_id) / OUTPUT_FILES[key]
 
+    def previous_path(self, job_id: str) -> Path:
+        """Overlays and stage states of the last finished run, kept while a re-render is
+        queued or running so a restart or a failure can put them back."""
+        return self.job_dir(job_id) / "previous.json"
+
     def save_job(self, job: Job) -> None:
         d = self.job_dir(job.id)
         d.mkdir(parents=True, exist_ok=True)

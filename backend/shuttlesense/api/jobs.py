@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 import queue
 import threading
@@ -12,6 +13,7 @@ from typing import Any
 
 from shuttlesense.api.models import Job, JobOutputs, StageState, utcnow
 from shuttlesense.api.storage import OUTPUT_FILES, Storage
+from shuttlesense.atomic import atomic_write_text
 from shuttlesense.pipeline import STAGE_NAMES, run_pipeline
 
 # Signature of run_pipeline, injectable for tests.
@@ -58,7 +60,8 @@ class JobManager:
         self._ticket = itertools.count()
 
         # Jobs interrupted by a server restart cannot resume. An interrupted re-render still
-        # has the outputs of its last run (they are only ever replaced whole), so it is done.
+        # has the outputs of its last run (they are only ever replaced whole), so it is done,
+        # with the overlays and stage states of that run.
         for job in self._jobs.values():
             if job.status in ("queued", "running"):
                 if self.has_outputs(job.id):
@@ -67,6 +70,7 @@ class JobManager:
                     job.stages = [
                         StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES
                     ]
+                    self._restore_previous(job, stages=True)
                 else:
                     job.status = "failed"
                     job.error = "server restarted before the job finished"
@@ -109,17 +113,36 @@ class JobManager:
                 return None
             if job.status in ("queued", "running"):
                 raise JobBusy(job_id)
+            previous = self.storage.previous_path(job_id)
+            if not previous.exists():  # after a failed re-render it still holds the last good run
+                state = {
+                    "overlays": job.overlays,
+                    "stages": [s.model_dump() for s in job.stages],
+                }
+                atomic_write_text(previous, json.dumps(state))
             job.overlays = list(overlays)
             job.status = "queued"
             job.progress = 0.0
             job.error = None
             job.current_stage = None
+            job.started_at = None
             job.finished_at = None
             job.stages = [StageState(name=n) for n in STAGE_NAMES]
             self.storage.save_job(job)
             self._enqueued[job_id] = next(self._ticket)
         self._queue.put(job_id)
         return self.get(job_id)
+
+    def _restore_previous(self, job: Job, *, stages: bool) -> None:
+        """Put back what rerender() saved, so the job describes the outputs on disk."""
+        path = self.storage.previous_path(job.id)
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        job.overlays = list(state.get("overlays", job.overlays))
+        if stages and state.get("stages"):
+            job.stages = [StageState.model_validate(s) for s in state["stages"]]
 
     def has_outputs(self, job_id: str) -> bool:
         """True once a run has finished, so the job can be re-rendered even if a later
@@ -176,7 +199,9 @@ class JobManager:
             except Exception:  # keep the worker alive (e.g. disk full while saving job.json)
                 log.exception("job %s could not be run", job_id)
                 try:
-                    self._update(job_id, status="failed", error="internal server error")
+                    self._update(
+                        job_id, status="failed", error="internal server error", finished_at=utcnow()
+                    )
                 except Exception:
                     log.exception("job %s could not be marked failed", job_id)
             finally:
@@ -262,6 +287,10 @@ class JobManager:
         except Exception as exc:  # report any stage failure to the client
             log.exception("job %s failed", job_id)
             error = str(exc) or type(exc).__name__
+            with self._lock:
+                job_now = self._jobs.get(job_id)
+                if job_now is not None:  # a failed re-render keeps the outputs of the last run
+                    self._restore_previous(job_now, stages=False)
             self._update(job_id, status="failed", error=error, finished_at=utcnow())
             return
         finally:
@@ -272,6 +301,7 @@ class JobManager:
             self.storage.delete_job(job_id)
             return
         outputs = {key: (out_dir / name).exists() for key, name in OUTPUT_FILES.items()}
+        self.storage.previous_path(job_id).unlink(missing_ok=True)
         self._update(
             job_id,
             status="done",

@@ -499,3 +499,48 @@ def test_failed_rerender_can_be_retried_and_restart_restores_it(
     storage.save_job(job)
     restarted = JobManager(storage, config={}, device="cpu")
     assert restarted.get(job_id).status == "done"
+
+
+def test_rerender_resets_started_at_and_restart_restores_last_run(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    from shuttlesense.api.jobs import JobManager
+
+    with make_client(tmp_path) as client:
+        video = upload(client, tiny_video).json()
+        job = client.post("/jobs", json={"video_id": video["id"], "overlays": ["trail"]}).json()
+        done = wait_for(client, job["id"])
+        storage = client.app.state.storage
+        manager = client.app.state.jobs
+        manager.stop()  # keep the re-render queued
+        queued = manager.rerender(job["id"], ["boxes"])
+        assert queued.started_at is None and queued.overlays == ["boxes"]
+
+    # Interrupted by a restart: done again, describing the outputs of the last run.
+    restarted = JobManager(storage, config={}, device="cpu")
+    job_now = restarted.get(job["id"])
+    assert job_now.status == "done"
+    assert job_now.overlays == ["trail"]
+    assert [s.status for s in job_now.stages] == [s["status"] for s in done["stages"]]
+
+
+def test_failed_rerender_keeps_overlays_of_the_last_run(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.pipeline import run_pipeline
+
+    fail = {"on": False}
+
+    def pipeline(*args, **kwargs):
+        if fail["on"]:
+            raise RuntimeError("ffmpeg failed")
+        return run_pipeline(*args, **kwargs)
+
+    settings = Settings(storage_dir=tmp_path / "s", device="cpu")
+    with TestClient(create_app(settings, pipeline=pipeline)) as client:
+        video = upload(client, tiny_video).json()
+        job = client.post("/jobs", json={"video_id": video["id"], "overlays": ["trail"]}).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        fail["on"] = True
+        client.post(f"/jobs/{job['id']}/render", json={"overlays": ["boxes"]})
+        failed = wait_for(client, job["id"])
+        assert failed["status"] == "failed" and failed["overlays"] == ["trail"]
+        assert failed["finished_at"] is not None
