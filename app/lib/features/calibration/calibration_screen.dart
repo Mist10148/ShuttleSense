@@ -285,7 +285,14 @@ class _FrameCanvasState extends ConsumerState<_FrameCanvas> {
               );
               Offset toCanvas(Corner c) => Offset(c.x / scale, c.y / scale);
               return GestureDetector(
-                onTapUp: (d) => widget.onTap(toVideo(d.localPosition)),
+                onTapUp: (d) {
+                  // The handles are raw Listeners, outside the gesture arena, so a tap on one
+                  // reaches this detector too: it must not drop a new corner on top of it.
+                  final onHandle = widget.corners.any(
+                    (c) => (toCanvas(c) - d.localPosition).distance <= kHandleRadius,
+                  );
+                  if (!onHandle) widget.onTap(toVideo(d.localPosition));
+                },
                 child: Stack(
                   fit: StackFit.expand,
                   children: [

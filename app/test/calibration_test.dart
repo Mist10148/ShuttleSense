@@ -57,6 +57,16 @@ void main() {
     expect(startButton(tester).onPressed, isNull);
   });
 
+  testWidgets('tapping a corner handle does not add a corner', (tester) async {
+    await pumpScreen(tester, const CalibrationScreen(videoId: 'vid1'), size: laptop);
+    await tapCorner(tester, const Offset(0.2, 0.9));
+    await tester.tap(find.byKey(const ValueKey('corner-0')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('corner-1')), findsNothing);
+    await tapCorner(tester, const Offset(0.8, 0.9));
+    expect(find.byKey(const ValueKey('corner-1')), findsOneWidget);
+  });
+
   testWidgets('dragging a handle moves a corner', (tester) async {
     await pumpScreen(tester, const CalibrationScreen(videoId: 'vid1'), size: laptop);
     await tapCorner(tester, const Offset(0.2, 0.9));
