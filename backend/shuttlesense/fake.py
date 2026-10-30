@@ -64,6 +64,17 @@ def scale_record(
     for rally in record.rallies:
         rally.start_frame = dst_index(rally.start_frame)
         rally.end_frame = dst_index(rally.end_frame)
+    for call in record.line_calls:
+        call.frame = dst_index(call.frame)
+        call.time_s = round(call.frame / fps, 3) if fps else 0.0
+    if record.coaching is not None:
+        for note in record.coaching.session_notes:
+            for m in note.moments:
+                m.frame = dst_index(m.frame)
+                m.time_s = round(m.frame / fps, 3) if fps else 0.0
+    from shuttlesense.referee import build_events
+
+    record.rally_events = build_events(record)
     return record
 
 
@@ -108,15 +119,18 @@ def fake_pipeline(
         record.court = None
     if not referee_enabled:
         record.rallies, record.score = [], None
+        record.line_calls, record.rally_events = [], []
         for f in record.frames:
             f.rally_state = None
         for h in record.hits:
             h.rally_index = None
     elif record.score is not None:  # same start score and corrections as the real pipeline
-        from shuttlesense.referee import apply_corrections, load_corrections
+        from shuttlesense.referee import apply_corrections, apply_user_changes, build_events
 
         start = ScorePair(**(config or {}).get("start_score", {}) or {})
-        apply_corrections(record, load_corrections(out_dir), start)
+        if not apply_user_changes(record, out_dir, start):
+            apply_corrections(record, [], start)  # still re-score from the start score
+            record.rally_events = build_events(record)
 
     for name in STAGE_NAMES:
         on_event(name, "running", 0.0)

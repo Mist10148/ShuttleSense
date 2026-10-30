@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shuttlesense.schema import PlayerSide, Rally, Score, ScorePair
+from shuttlesense.schema import Call, LineCall, PlayerSide, Rally, Score, ScorePair
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
@@ -60,6 +60,20 @@ class ScoreCorrectionIn(BaseModel):
 class ScoreUpdate(BaseModel):
     """PATCH /jobs/{id}/score response: the new score and every rally's score_after."""
 
+    score: Score
+    rallies: list[Rally]
+
+
+class LineCallOverrideBody(BaseModel):
+    """PATCH /jobs/{id}/line-calls/{n}: confirm (same call) or override (other call)."""
+
+    call: Call
+
+
+class LineCallUpdate(BaseModel):
+    """PATCH /jobs/{id}/line-calls/{n} response: calls, rallies and score after re-scoring."""
+
+    line_calls: list[LineCall]
     score: Score
     rallies: list[Rally]
 

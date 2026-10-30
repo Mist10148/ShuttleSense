@@ -43,7 +43,7 @@ Liveness and capability check used by the connect screen.
 {
   "status": "ok",
   "version": "0.1.0",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "device": "cuda",
   "auth_required": true,
   "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"]
@@ -170,6 +170,14 @@ Correct the winner of a rally (F16). Body:
 ```
 
 Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`) or if the referee stage did not run.
+
+### `PATCH /jobs/{job_id}/line-calls/{call_id}`
+
+Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"call": "out"}`; sending the backend's own call confirms it. The decision is stored per rally in `line_call_overrides.json` in the job folder (re-applied after every re-render, like score corrections) and the call gets `override: {"call", "at"}`. A confirmed or overridden call counts as certain, so its rally winner is decided again from the landing side or the last hitter; explicit score corrections still take precedence. Returns `{"line_calls": [...], "score": {...}, "rallies": [...]}` and regenerates the exports. `404` for an unknown call or a job without the referee layer; `409` unless the job is `done`.
+
+### `GET /jobs/{job_id}/record` and older records
+
+A record written by an older 1.x backend is upgraded on the fly (`schema.migrate`): missing fields get their defaults and `line_calls` / `rally_events` are derived from the rallies. The file on disk is not rewritten.
 
 ### `DELETE /jobs/{job_id}`
 

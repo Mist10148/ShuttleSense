@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from snapshots import assert_matches_snapshot
-
-import json
-
 import pytest
+from snapshots import assert_matches_snapshot
 
 from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord, load_record, migrate
 

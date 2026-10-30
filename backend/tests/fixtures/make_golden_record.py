@@ -15,6 +15,7 @@ import numpy as np
 
 from shuttlesense.analytics.export import build_summary
 from shuttlesense.court import compute_homography, image_to_court
+from shuttlesense.referee import build_events, derive_from_rallies
 from shuttlesense.schema import (
     ClipRecord,
     Court,
@@ -151,6 +152,10 @@ def build() -> ClipRecord:
         ],
         score=Score(near=1, far=0),
     )
+    record.line_calls = derive_from_rallies(record)
+    landing = record.rallies[0].landing
+    landing.confidence = record.line_calls[0].confidence
+    record.rally_events = build_events(record)
     record.summary = build_summary(record)
     return record
 

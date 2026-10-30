@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import codecs
+import json
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -312,6 +313,47 @@ def test_score_correction_recomputes_following_rallies(
         assert summary["score"]["far"] == 2
         rallies_csv = client.get(f"/jobs/{job_id}/rallies.csv").content.decode("utf-8-sig")
         assert rallies_csv.splitlines()[1].endswith(",0,1")
+
+
+def test_line_call_override_rescores(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        record = client.get(f"/jobs/{job_id}/record").json()
+        call = record["line_calls"][0]
+        assert call["call"] == "in" and record["score"]["near"] == 1
+        res = client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "out"})
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["line_calls"][0]["override"]["call"] == "out"
+        # The near player hit the last shot out, so the rally goes to far.
+        assert body["rallies"][0]["winner"] == "far"
+        assert (body["score"]["near"], body["score"]["far"]) == (0, 1)
+        again = client.get(f"/jobs/{job_id}/record").json()
+        assert again["line_calls"][0]["override"]["call"] == "out"
+        assert any(
+            e["type"] == "landing" and e["data"]["call"] == "out" for e in again["rally_events"]
+        )
+        # A re-render rebuilds the record from the cache and keeps the override.
+        client.post(f"/jobs/{job_id}/render", json={"overlays": ["trail"]})
+        assert wait_for(client, job_id)["status"] == "done"
+        rerendered = client.get(f"/jobs/{job_id}/record").json()
+        assert rerendered["line_calls"][0]["override"]["call"] == "out"
+        assert rerendered["score"]["far"] == 1
+        assert client.patch(f"/jobs/{job_id}/line-calls/9", json={"call": "in"}).status_code == 404
+
+
+def test_old_record_is_migrated_when_served(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        path = tmp_path / "storage" / "jobs" / job_id / "record.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["schema_version"] = "1.0"
+        for key in ("mode", "line_calls", "rally_events", "coaching", "chat"):
+            data.pop(key, None)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        served = client.get(f"/jobs/{job_id}/record").json()
+        assert served["schema_version"] == "1.1" and served["mode"] == "upload"
+        assert served["line_calls"][0]["call"] == "in"
 
 
 def test_correction_409_without_referee(tmp_path: Path, tiny_video: Path) -> None:

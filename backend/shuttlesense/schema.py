@@ -226,7 +226,8 @@ class ClipRecord(BaseModel):
 def migrate(data: dict[str, Any]) -> dict[str, Any]:
     """Upgrade an older record dict to SCHEMA_VERSION in place and return it.
 
-    1.0 -> 1.1 only adds optional fields, so the defaults fill them.
+    1.0 -> 1.1 only adds optional fields; the defaults fill them, and line calls and rally
+    events are derived from the rallies so old jobs show calls in the app.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:
@@ -235,6 +236,14 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"cannot migrate clip record {version} to {SCHEMA_VERSION}")
     data["schema_version"] = SCHEMA_VERSION
     data.setdefault("mode", "upload")
+    if not data.get("line_calls") and data.get("rallies"):
+        from shuttlesense.referee import build_events, derive_from_rallies
+
+        record = ClipRecord.model_validate(data)
+        record.line_calls = derive_from_rallies(record)
+        record.rally_events = build_events(record)
+        data["line_calls"] = [c.model_dump(mode="json") for c in record.line_calls]
+        data["rally_events"] = [e.model_dump(mode="json") for e in record.rally_events]
     return data
 
 

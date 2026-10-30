@@ -13226,7 +13226,7 @@
     "x_m": 1.9,
     "y_m": 10.2,
     "in_court": true,
-    "confidence": 0.92
+    "confidence": 1.0
    },
    "winner": "near",
    "score_after": {
@@ -13266,8 +13266,95 @@
    }
   }
  },
- "line_calls": [],
- "rally_events": [],
+ "line_calls": [
+  {
+   "id": 0,
+   "rally_index": 0,
+   "frame": 55,
+   "time_s": 1.833,
+   "call": "in",
+   "landing_xy": [
+    1.9,
+    10.2
+   ],
+   "margin_cm": 190.0,
+   "confidence": 1.0,
+   "uncertain": false,
+   "court": "singles",
+   "override": null
+  }
+ ],
+ "rally_events": [
+  {
+   "frame": 0,
+   "time_s": 0.0,
+   "type": "rally_start",
+   "rally_index": 0,
+   "data": {}
+  },
+  {
+   "frame": 5,
+   "time_s": 0.167,
+   "type": "hit",
+   "rally_index": 0,
+   "data": {
+    "hit_id": 0,
+    "player": "near",
+    "stroke": "serve"
+   }
+  },
+  {
+   "frame": 25,
+   "time_s": 0.833,
+   "type": "hit",
+   "rally_index": 0,
+   "data": {
+    "hit_id": 1,
+    "player": "far",
+    "stroke": "clear"
+   }
+  },
+  {
+   "frame": 45,
+   "time_s": 1.5,
+   "type": "hit",
+   "rally_index": 0,
+   "data": {
+    "hit_id": 2,
+    "player": "near",
+    "stroke": "smash"
+   }
+  },
+  {
+   "frame": 55,
+   "time_s": 1.833,
+   "type": "landing",
+   "rally_index": 0,
+   "data": {
+    "line_call_id": 0,
+    "call": "in"
+   }
+  },
+  {
+   "frame": 55,
+   "time_s": 1.833,
+   "type": "rally_end",
+   "rally_index": 0,
+   "data": {
+    "winner": "near"
+   }
+  },
+  {
+   "frame": 55,
+   "time_s": 1.833,
+   "type": "score",
+   "rally_index": 0,
+   "data": {
+    "near": 1,
+    "far": 0
+   }
+  }
+ ],
  "coaching": null,
  "chat": null
 }

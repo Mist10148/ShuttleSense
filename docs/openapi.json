@@ -350,6 +350,163 @@
         "title": "Landing",
         "type": "object"
       },
+      "LineCall": {
+        "description": "Automated in/out call for one landing; never an official call.",
+        "properties": {
+          "call": {
+            "enum": [
+              "in",
+              "out"
+            ],
+            "title": "Call",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "court": {
+            "default": "singles",
+            "enum": [
+              "singles",
+              "doubles"
+            ],
+            "title": "Court",
+            "type": "string"
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "landing_xy": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Landing Xy",
+            "type": "array"
+          },
+          "margin_cm": {
+            "title": "Margin Cm",
+            "type": "number"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineCallOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rally_index": {
+            "title": "Rally Index",
+            "type": "integer"
+          },
+          "time_s": {
+            "title": "Time S",
+            "type": "number"
+          },
+          "uncertain": {
+            "title": "Uncertain",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "rally_index",
+          "frame",
+          "time_s",
+          "call",
+          "landing_xy",
+          "margin_cm",
+          "confidence",
+          "uncertain"
+        ],
+        "title": "LineCall",
+        "type": "object"
+      },
+      "LineCallOverride": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "call": {
+            "enum": [
+              "in",
+              "out"
+            ],
+            "title": "Call",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call",
+          "at"
+        ],
+        "title": "LineCallOverride",
+        "type": "object"
+      },
+      "LineCallOverrideBody": {
+        "description": "PATCH /jobs/{id}/line-calls/{n}: confirm (same call) or override (other call).",
+        "properties": {
+          "call": {
+            "enum": [
+              "in",
+              "out"
+            ],
+            "title": "Call",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call"
+        ],
+        "title": "LineCallOverrideBody",
+        "type": "object"
+      },
+      "LineCallUpdate": {
+        "description": "PATCH /jobs/{id}/line-calls/{n} response: calls, rallies and score after re-scoring.",
+        "properties": {
+          "line_calls": {
+            "items": {
+              "$ref": "#/components/schemas/LineCall"
+            },
+            "title": "Line Calls",
+            "type": "array"
+          },
+          "rallies": {
+            "items": {
+              "$ref": "#/components/schemas/Rally"
+            },
+            "title": "Rallies",
+            "type": "array"
+          },
+          "score": {
+            "$ref": "#/components/schemas/Score"
+          }
+        },
+        "required": [
+          "line_calls",
+          "score",
+          "rallies"
+        ],
+        "title": "LineCallUpdate",
+        "type": "object"
+      },
       "Rally": {
         "properties": {
           "end_frame": {
@@ -982,6 +1139,83 @@
           }
         },
         "summary": "Get Hits Csv"
+      }
+    },
+    "/jobs/{job_id}/line-calls/{call_id}": {
+      "patch": {
+        "description": "Confirm or override an automated call; the rally winner and score follow.",
+        "operationId": "override_line_call_jobs__job_id__line_calls__call_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineCallOverrideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineCallUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Override Line Call"
       }
     },
     "/jobs/{job_id}/rallies.csv": {

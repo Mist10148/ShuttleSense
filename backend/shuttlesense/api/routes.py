@@ -29,6 +29,8 @@ from shuttlesense.api.models import (
     Health,
     Job,
     JobCreate,
+    LineCallOverrideBody,
+    LineCallUpdate,
     RenderRequest,
     ScoreCorrectionIn,
     ScoreUpdate,
@@ -39,7 +41,15 @@ from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
-from shuttlesense.referee import apply_corrections, game_winner, save_corrections
+from shuttlesense.referee import (
+    LineCallOverrideIn,
+    apply_corrections,
+    apply_user_changes,
+    game_winner,
+    load_overrides,
+    save_corrections,
+    save_overrides,
+)
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ScoreCorrection, load_record, migrate
 
@@ -333,6 +343,32 @@ def correct_score(
         save_corrections(storage.job_dir(job_id), corrections)
         write_exports(record, storage.job_dir(job_id))
     return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+@router.patch("/jobs/{job_id}/line-calls/{call_id}", response_model=LineCallUpdate)
+def override_line_call(
+    job_id: str, call_id: int, body: LineCallOverrideBody, storage: StorageDep, jobs: JobsDep
+) -> LineCallUpdate:
+    """Confirm or override an automated call; the rally winner and score follow."""
+    job = _job_or_404(jobs, job_id)
+    if job.status != "done":
+        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    path = _output_or_404(storage, jobs, job_id, "record")
+    job_dir = storage.job_dir(job_id)
+    with jobs.job_lock(job_id):
+        record = load_record(path.read_text(encoding="utf-8"))
+        call = next((c for c in record.line_calls if c.id == call_id), None)
+        if call is None or record.score is None:
+            raise HTTPException(status_code=404, detail="line call not found")
+        overrides = [o for o in load_overrides(job_dir) if o.rally_index != call.rally_index]
+        overrides.append(
+            LineCallOverrideIn(rally_index=call.rally_index, call=body.call, at=utcnow())
+        )
+        save_overrides(job_dir, overrides)
+        apply_user_changes(record, job_dir, job.start_score)
+        record.summary = build_summary(record)
+        write_exports(record, job_dir)
+    return LineCallUpdate(line_calls=record.line_calls, score=record.score, rallies=record.rallies)
 
 
 @router.delete("/jobs/{job_id}", status_code=204)

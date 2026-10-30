@@ -195,10 +195,8 @@ def run_pipeline(
         cache.save(out_dir, spec.name, key, record)
         on_event(spec.name, "done", 1.0)
 
-    corrections = referee.load_corrections(out_dir)
-    if corrections and record.score is not None:  # made in the app since the last run
-        start = ScorePair(**config.get("start_score", {}) or {})
-        referee.apply_corrections(record, corrections, start)
+    start = ScorePair(**config.get("start_score", {}) or {})
+    if referee.apply_user_changes(record, out_dir, start):  # made in the app since the last run
         record.summary = analytics.build_summary(record)
     write_exports(record, out_dir)
     (out_dir / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")

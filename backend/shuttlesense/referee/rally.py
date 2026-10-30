@@ -1,7 +1,8 @@
 """Rally state, landing and in/out, and the referee stage (F14–F16, FR-14–FR-16).
 
 In/out calls and the score are estimates: close calls are flagged as uncertain (no winner
-is awarded) and the app always allows a manual correction.
+is awarded) and the app always allows a manual correction. The call itself lives in
+linecalls.py; each landing also becomes a LineCall in record.line_calls.
 """
 
 from __future__ import annotations
@@ -11,11 +12,18 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import ClipRecord, Landing, PlayerSide, Rally, Score, ScorePair
+from shuttlesense.schema import (
+    ClipRecord,
+    Landing,
+    PlayerSide,
+    Rally,
+    RallyEvent,
+    Score,
+    ScorePair,
+)
 from shuttlesense.stage import StageContext, StageSkipped
 
 STATIONARY_PX = 3.0
-LINE_CONFIDENCE_M = 0.3  # confidence reaches 1 this far from the nearest line
 
 
 @dataclass(frozen=True)
@@ -101,22 +109,14 @@ def segment_rallies(
 
 
 def landing_call(
-    point_m: np.ndarray, size: tuple[float, float], margin_m: float
+    point_m: np.ndarray, size: tuple[float, float], band_m: float
 ) -> tuple[bool, float]:
-    """(in_court, confidence) for a landing point in court meters (singles lines are in)."""
-    x, y = float(point_m[0]), float(point_m[1])
-    w, length = size
-    inside = 0.0 <= x <= w and 0.0 <= y <= length
-    d = min(abs(x), abs(x - w), abs(y), abs(y - length))
-    if not inside:
-        # Outside: distance to the court rectangle, not to the far lines.
-        dx = max(-x, 0.0, x - w)
-        dy = max(-y, 0.0, y - length)
-        d = float(np.hypot(dx, dy))
-    confidence = min(1.0, d / LINE_CONFIDENCE_M)
-    if d < margin_m:
-        confidence = min(confidence, 0.49)
-    return inside, round(confidence, 3)
+    """(in_court, confidence) against the singles rally lines with a fixed band."""
+    from shuttlesense.court.lines import play_bounds
+    from shuttlesense.referee.linecalls import call_landing
+
+    call, _, confidence, _ = call_landing(point_m, play_bounds("singles", size), band_m)
+    return call == "in", confidence
 
 
 def rally_winner(
@@ -135,10 +135,37 @@ def rally_winner(
     return "far" if last_hitter == "near" else "near"
 
 
+def build_events(record: ClipRecord) -> list[RallyEvent]:
+    """The rally timeline (start, hits, landing, end, score) in frame order."""
+    fps = record.fps or 1.0
+    calls = {c.rally_index: c for c in record.line_calls}
+    events: list[RallyEvent] = []
+
+    def add(frame: int, kind: str, rally: int | None, **data: Any) -> None:
+        events.append(RallyEvent(frame=frame, time_s=round(frame / fps, 3), type=kind,
+                                 rally_index=rally, data=data))  # fmt: skip
+
+    for r in record.rallies:
+        add(r.start_frame, "rally_start", r.index)
+    for h in record.hits:
+        add(h.frame, "hit", h.rally_index, hit_id=h.id, player=h.player, stroke=h.stroke)
+    for r in record.rallies:
+        call = calls.get(r.index)
+        if call is not None:
+            add(call.frame, "landing", r.index, line_call_id=call.id, call=call.effective_call)
+        add(r.end_frame, "rally_end", r.index, winner=r.winner)
+        if r.score_after is not None:
+            add(r.end_frame, "score", r.index, near=r.score_after.near, far=r.score_after.far)
+    order = {"rally_start": 0, "hit": 1, "landing": 2, "rally_end": 3, "score": 4}
+    events.sort(key=lambda e: (e.frame, order[e.type]))
+    return events
+
+
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
-    """Fill rallies[], hits[].rally_index, frames[].rally_state and score."""
+    """Fill rallies[], line_calls[], rally_events[], hits[].rally_index, rally_state, score."""
     from shuttlesense.analytics.stage import count_strokes
     from shuttlesense.court import image_to_court
+    from shuttlesense.referee.linecalls import line_call_config, make_line_call
     from shuttlesense.referee.scoring import apply_rallies
     from shuttlesense.tracking import track_arrays
 
@@ -149,32 +176,39 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     segments = segment_rallies(visible, np.nan_to_num(xy), [h.frame for h in record.hits], cfg)
 
     size = record.court.court_size_m if record.court else None
-    rallies = []
+    line_cfg = line_call_config(cfg)
+    rallies, calls = [], []
     for index, seg in enumerate(segments):
-        landing = None
+        hits_in = [h for h in record.hits if seg.start <= h.frame <= seg.end]
+        for h in hits_in:
+            h.rally_index = index
+        rally = Rally(index=index, start_frame=seg.start, end_frame=seg.end)
         point = None
         if seg.closed and seg.landing_frame is not None and record.court is not None:
             point = image_to_court(np.asarray(record.court.homography), xy[[seg.landing_frame]])[0]
         # A point near the homography's horizon maps to inf/NaN, which JSON cannot hold.
         if point is not None and np.isfinite(point).all():
-            inside, conf = landing_call(point, size, cfg.get("in_out_margin_m", 0.05))
-            landing = Landing(x_m=round(float(point[0]), 3), y_m=round(float(point[1]), 3),
-                              in_court=inside, confidence=conf)  # fmt: skip
-        hits_in = [h for h in record.hits if seg.start <= h.frame <= seg.end]
+            call = make_line_call(record, rally, seg.landing_frame, point, line_cfg)
+            call.id = len(calls)
+            calls.append(call)
+            x_m, y_m = call.landing_xy
+            rally.landing = Landing(
+                x_m=x_m, y_m=y_m, in_court=call.call == "in", confidence=call.confidence
+            )
         last = hits_in[-1].player if hits_in else None
-        winner = rally_winner(landing, last, size[1] / 2) if size and seg.closed else None
-        rallies.append(Rally(index=index, start_frame=seg.start, end_frame=seg.end,
-                             landing=landing, winner=winner))  # fmt: skip
-        for h in hits_in:
-            h.rally_index = index
+        if size and seg.closed:
+            rally.winner = rally_winner(rally.landing, last, size[1] / 2)
+        rallies.append(rally)
 
     for f in record.frames:
         inside = any(r.start_frame <= f.frame <= r.end_frame for r in rallies)
         f.rally_state = "in_play" if inside else "between_rallies"
     record.rallies = rallies
+    record.line_calls = calls
     count_strokes(record)
     start = ScorePair(**ctx.config.get("start_score", {}) or {})
     final = apply_rallies(record.rallies, start)
     record.score = Score(near=final.near, far=final.far)
+    record.rally_events = build_events(record)
     ctx.progress(1.0)
     return record

@@ -74,3 +74,21 @@ def apply_corrections(
     record.score.corrections = list(corrections)
     final = apply_rallies(record.rallies, start)
     record.score.near, record.score.far = final.near, final.far
+
+
+def apply_user_changes(record: ClipRecord, out_dir: Path, start: ScorePair | None = None) -> bool:
+    """Re-apply the user's line-call overrides, then score corrections, from the job folder.
+
+    Returns whether anything changed. Both files outlive re-renders (D10).
+    """
+    from shuttlesense.referee.linecalls import apply_overrides, load_overrides
+    from shuttlesense.referee.rally import build_events
+
+    overrides = load_overrides(out_dir)
+    corrections = load_corrections(out_dir)
+    if record.score is None or not (overrides or corrections):
+        return False
+    apply_overrides(record, overrides)
+    apply_corrections(record, corrections, start)
+    record.rally_events = build_events(record)
+    return True
