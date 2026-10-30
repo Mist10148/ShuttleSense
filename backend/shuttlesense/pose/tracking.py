@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player
+from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player, Point
 
 
 def foot_point(p: Player) -> tuple[float, float]:
@@ -27,6 +27,7 @@ def filter_players(
     homography: np.ndarray | None = None,
     margin_m: float = 1.5,
     max_players: int = 2,
+    court_size: Point = COURT_SIZE_M,
 ) -> list[Player]:
     """Keep at most `max_players` people who are plausibly players, largest first.
 
@@ -40,7 +41,7 @@ def filter_players(
             from shuttlesense.court import image_to_court
 
             cx, cy = image_to_court(homography, np.array([[fx, fy]]))[0]
-            w, length = COURT_SIZE_M
+            w, length = court_size
             if not (-margin_m <= cx <= w + margin_m and -margin_m <= cy <= length + margin_m):
                 continue
         elif fy < 0.1 * frame_height:

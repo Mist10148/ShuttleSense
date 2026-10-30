@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import ClipRecord, Player
+from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Player
 from shuttlesense.stage import StageContext, StageSkipped
 
 _MODELS: dict[tuple[str, str, str], Any] = {}
@@ -76,6 +76,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     cfg = ctx.stage_config("pose")
     detect = load_detector(cfg.get("backend", "rtmlib"), cfg.get("mode", "balanced"), ctx.device)
     homography = None
+    court_size = tuple(ctx.stage_config("court").get("court_size_m", COURT_SIZE_M))
     if ctx.config.get("court_corners_px"):
         from shuttlesense.court import compute_homography
 
@@ -84,14 +85,16 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             sx = ctx.reader.width / ctx.reader.source.width
             sy = ctx.reader.height / ctx.reader.source.height
             corners = [[x * sx, y * sy] for x, y in corners]
-        homography = compute_homography(corners)
+        homography = compute_homography(corners, court_size)
 
     tracker = PlayerTracker(hold_frames=cfg.get("hold_frames", 5))
     min_score = cfg.get("min_person_score", 0.4)
     total = max(len(ctx.reader), 1)
     for i, frame in ctx.reader:
         people = [p for p in detect(frame) if p.score >= min_score]
-        people = filter_players(people, frame_height=record.height, homography=homography)
+        people = filter_players(
+            people, frame_height=record.height, homography=homography, court_size=court_size
+        )
         near, far = tracker.update(people)
         record.frames[i].players.near = near
         record.frames[i].players.far = far

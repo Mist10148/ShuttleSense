@@ -41,6 +41,18 @@ def test_filters_people_outside_court() -> None:
     assert filter_players([stands, on_court], frame_height=720) == [on_court]
 
 
+def test_filter_uses_the_configured_court_size() -> None:
+    from shuttlesense.court import court_to_image
+
+    doubles = (6.10, 13.40)
+    h = compute_homography(CORNERS, doubles)
+    # Feet 1 m outside the doubles sideline: 7.1 m across, past singles width + 1.5 m margin.
+    fx, fy = court_to_image(h, np.array([[7.1, 3.0]]))[0]
+    player = box(fx, fy)
+    assert filter_players([player], frame_height=720, homography=h, court_size=doubles) == [player]
+    assert filter_players([player], frame_height=720, homography=h) == []
+
+
 def test_hold_missing_player_for_n_frames() -> None:
     tracker = PlayerTracker(hold_frames=2, hold_decay=0.5)
     tracker.update([box(500, 600), box(700, 300)])
