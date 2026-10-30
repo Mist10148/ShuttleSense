@@ -70,6 +70,11 @@ class Storage:
             return None
         return VideoInfoOut.model_validate_json(path.read_text(encoding="utf-8"))
 
+    def hide_video(self, video_id: str) -> None:
+        """Make the video unknown to the API (no meta.json); delete_video removes the rest."""
+        if is_id(video_id):
+            (self.video_dir(video_id) / "meta.json").unlink(missing_ok=True)
+
     def delete_video(self, video_id: str) -> None:
         """Remove an upload. meta.json goes first: while a running job still has the source
         open (Windows cannot delete it then), the video is already gone for the API, and

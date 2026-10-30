@@ -10,7 +10,7 @@ Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [cl
 | --- | --- |
 | Base URL | `http://<laptop-LAN-IP>:8000` or `https://<name>.trycloudflare.com` |
 | Format | JSON (`application/json`), except uploads (`multipart/form-data`) and file downloads |
-| Auth | If the server has `SHUTTLESENSE_TOKEN` set, every request except `GET /health` needs `Authorization: Bearer <token>`. Where headers cannot be set (the web build's `<video>` element), `?token=<token>` is accepted instead |
+| Auth | If the server has `SHUTTLESENSE_TOKEN` set, every request except `GET /health` needs `Authorization: Bearer <token>` (the scheme is case-insensitive). Where headers cannot be set (the web build's `<video>` element), `?token=<token>` is accepted instead |
 | CORS | Allowed origins from `SHUTTLESENSE_CORS_ORIGINS` (default `*`) so the web build works |
 | IDs | URL-safe random strings (`uuid4().hex[:12]`) |
 | Times | ISO 8601 UTC |
@@ -25,7 +25,7 @@ All errors use FastAPI's shape with a stable `detail`:
 
 | Status | When |
 | --- | --- |
-| 400 | Invalid input (bad corners, unsupported overlay name) |
+| 400 | Invalid input (bad corners, unsupported overlay name, clip longer than `stages.io.max_duration_s`, bad `start_score`) |
 | 401 | Missing or wrong bearer token |
 | 404 | Unknown video or job id, or a result file that is not produced yet |
 | 409 | Action not allowed in the current job state (e.g. score correction before referee ran) |
@@ -103,7 +103,7 @@ Start processing.
 | `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features. `400` if they are not a convex quadrilateral in that order, or if the court they outline covers less than 10% or more than 95% of the frame ("corners look wrong") |
 | `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all nine (overlays whose stage did not run are simply not drawn) |
 | `referee` | no | Run the P3 referee layer; default `false` |
-| `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0 |
+| `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative or already a finished game (e.g. 21–15) |
 
 Response `202`: a Job object (below).
 

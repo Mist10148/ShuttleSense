@@ -143,6 +143,7 @@ def test_token_required_when_configured(tmp_path: Path, tiny_video: Path) -> Non
         assert c.get("/jobs").status_code == 401
         assert c.get("/jobs", headers={"Authorization": "Bearer nope"}).status_code == 401
         assert c.get("/jobs", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+        assert c.get("/jobs", headers={"Authorization": "bearer s3cret"}).status_code == 200
         assert c.get("/jobs?token=s3cret").status_code == 200
         assert upload(c, tiny_video, headers={"Authorization": "Bearer s3cret"}).status_code == 201
 
@@ -425,6 +426,33 @@ def test_negative_start_score_is_400(client: TestClient, tiny_video: Path) -> No
     video = upload(client, tiny_video).json()
     body = {"video_id": video["id"], "referee": True, "start_score": {"near": -1, "far": 0}}
     assert client.post("/jobs", json=body).status_code == 400
+
+
+def test_finished_game_start_score_is_400(client: TestClient, tiny_video: Path) -> None:
+    video = upload(client, tiny_video).json()
+    body = {"video_id": video["id"], "referee": True, "start_score": {"near": 21, "far": 15}}
+    assert client.post("/jobs", json=body).status_code == 400
+    body["start_score"] = {"near": 21, "far": 20}  # deuce: still on
+    assert client.post("/jobs", json=body).status_code == 202
+
+
+def test_deleted_video_rejects_new_jobs_during_delete(
+    client: TestClient, tiny_video: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    video = upload(client, tiny_video).json()
+    jobs = client.app.state.jobs
+    real = jobs.delete_for_video
+    racing = {}
+
+    def delete_for_video(video_id: str) -> None:
+        # A POST /jobs arriving between the job snapshot and the delete.
+        racing["status"] = client.post("/jobs", json={"video_id": video_id}).status_code
+        real(video_id)
+
+    monkeypatch.setattr(jobs, "delete_for_video", delete_for_video)
+    assert client.delete(f"/videos/{video['id']}").status_code == 204
+    assert racing["status"] == 404
+    assert jobs.list() == []
 
 
 def test_rerender_keeps_score_corrections(

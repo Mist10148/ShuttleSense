@@ -38,7 +38,7 @@ from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
-from shuttlesense.referee import apply_corrections, save_corrections
+from shuttlesense.referee import apply_corrections, game_winner, save_corrections
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord, ScoreCorrection
 
@@ -61,8 +61,8 @@ def require_token(
     """Bearer token check when SHUTTLESENSE_TOKEN is set."""
     if not settings.token:
         return
-    header = request.headers.get("authorization", "")
-    supplied = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else token
+    scheme, _, value = request.headers.get("authorization", "").partition(" ")
+    supplied = value.strip() if scheme.lower() == "bearer" else token  # schemes ignore case
     if not supplied or not hmac.compare_digest(supplied.encode(), settings.token.encode()):
         raise HTTPException(status_code=401, detail="missing or invalid token")
 
@@ -188,6 +188,8 @@ def get_frame(
 @router.delete("/videos/{video_id}", status_code=204)
 def delete_video(video_id: str, storage: StorageDep, jobs: JobsDep) -> Response:
     _video_or_404(storage, video_id)
+    # Hide the video first so a POST /jobs racing this delete gets a 404, not an orphan job.
+    storage.hide_video(video_id)
     jobs.delete_for_video(video_id)
     storage.delete_video(video_id)
     return Response(status_code=204)
@@ -215,8 +217,11 @@ def _check_overlays(names: list[str] | None) -> list[str]:
 @router.post("/jobs", response_model=Job, status_code=202)
 def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
     video = _video_or_404(storage, body.video_id)
-    if body.start_score is not None and min(body.start_score.near, body.start_score.far) < 0:
-        raise HTTPException(status_code=400, detail="start_score cannot be negative")
+    if body.start_score is not None:
+        if min(body.start_score.near, body.start_score.far) < 0:
+            raise HTTPException(status_code=400, detail="start_score cannot be negative")
+        if game_winner(body.start_score.near, body.start_score.far) is not None:
+            raise HTTPException(status_code=400, detail="start_score is already a finished game")
     if body.court_corners_px is not None:
         try:
             validate_corners(body.court_corners_px)

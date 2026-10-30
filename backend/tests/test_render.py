@@ -194,6 +194,10 @@ def test_score_layer_updates_after_rally() -> None:
     img = np.zeros((90, 160, 3), np.uint8)
     draw_score(img, record, 15, RenderState())
     assert img.any()
+    # Every rally after the game was won (score_after None): the final score stays up.
+    for r in record.rallies:
+        r.score_after = None
+    assert score_at(record, 35) == (6, 7)
     record.score = None
     blank = np.zeros((90, 160, 3), np.uint8)
     draw_score(blank, record, 15, RenderState())

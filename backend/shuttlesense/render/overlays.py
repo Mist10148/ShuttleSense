@@ -282,7 +282,7 @@ def score_at(record: ClipRecord, i: int) -> tuple[int, int] | None:
     """Score after the last rally that ended at or before frame i (None without a referee)."""
     if record.score is None:
         return None
-    near = far = 0
+    near, far = record.score.near, record.score.far  # no counted rally: the start score
     first = next((r.score_after for r in record.rallies if r.score_after is not None), None)
     if first is not None and record.rallies:
         # Back out the first rally to find the starting score.
