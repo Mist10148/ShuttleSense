@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | [T1.1](#t11) | Freeze clip record v1.0 | M1 + all | 4 h | T0.3 | ⬜ | [#13](https://github.com/Mist10148/ShuttleSense/issues/13) |
 | [T1.2](#t12) | Freeze API contract v1.0 | M1 + M6 | 3 h | T0.3, T0.4 | ⬜ | [#14](https://github.com/Mist10148/ShuttleSense/issues/14) |
-| [T1.3](#t13) | Add TrackNetV3 as a pinned git submodule | M2 | 2 h | — | ⬜ | [#15](https://github.com/Mist10148/ShuttleSense/issues/15) |
+| [T1.3](#t13) | Add TrackNetV3 as a pinned git submodule | M2 | 2 h | — | ✅ | [#15](https://github.com/Mist10148/ShuttleSense/issues/15) |
 | [T1.4](#t14) | Weights download with checksums | M2 | 3 h | T1.3, T0.9 | ⬜ | [#16](https://github.com/Mist10148/ShuttleSense/issues/16) |
 | [T1.5](#t15) | Pose model spike: rtmlib vs Keypoint R-CNN | M5 | 6 h | T0.10 | ⬜ | [#17](https://github.com/Mist10148/ShuttleSense/issues/17) |
 | [T1.6](#t16) | Install and pin the ML stack on laptop and Colab | M1 | 4 h | — | ⬜ | [#18](https://github.com/Mist10148/ShuttleSense/issues/18) |
@@ -83,11 +83,11 @@
 **Owner:** M2 · **Estimate:** 2 h · **Priority:** P1 · **Area:** ml · **Refs:** F2 · **Depends on:** — · **Blocks:** T1.4, T2.2
 
 **Steps**
-- [ ] `git submodule add https://github.com/qaz812345/TrackNetV3 backend/third_party/TrackNetV3`.
-- [ ] Check out the latest tagged/stable commit; record the commit hash and the upstream license (MIT) in TECH_STACK.md.
-- [ ] Read the upstream `predict.py` and note: expected input size, sequence length, how `TrackNet` and `InpaintNet` are constructed, the output CSV format. Write these notes as a module docstring in `backend/shuttlesense/tracking/tracknet.py`.
-- [ ] Make it importable without modifying upstream code: in `tracknet.py`, add `_tracknet_path()` that inserts `backend/third_party/TrackNetV3` into `sys.path` lazily.
-- [ ] Update `actions/checkout` in both workflows with `submodules: recursive` (backend CI only needs the code, not weights).
+- [x] `git submodule add https://github.com/qaz812345/TrackNetV3 backend/third_party/TrackNetV3`.
+- [x] Pin commit `6eda442ada1740573f200f836d93edc9a541ee86`; record its MIT license in TECH_STACK.md.
+- [x] Read upstream `predict.py` and document its input and output conventions in `backend/shuttlesense/tracking/tracknet.py`.
+- [x] Add the upstream path lazily in `tracknet.py` without modifying upstream code.
+- [x] Set `submodules: recursive` in both CI checkout steps.
 
 **Outputs.** Submodule at a pinned commit; integration notes.
 

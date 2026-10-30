@@ -281,7 +281,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 
 Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task is also a GitHub issue under its phase milestone.
 
-- [x] **Phase 0 (Oct 29 – Nov 1):** repo structure, docs, backend and app skeletons, CI
+- [ ] **Phase 0 (Oct 29 – Nov 1):** repo structure, docs, backend and app skeletons, CI are in place; team setup, shared assets and the phase gate remain
 - [ ] **Phase 1 (Nov 2 – 3):** freeze data format and API, TrackNetV3 + pose running, app connects on all platforms
 - [ ] **Phase 2 (Nov 2 – 6):** P1 perception and overlay video
 - [ ] **Phase 3 (Nov 3 – 13):** ShuttleSet clips, hit detection, stroke classifier and ablation

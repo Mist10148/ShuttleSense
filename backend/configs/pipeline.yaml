@@ -18,8 +18,7 @@ stages:
   tracking:
     enabled: true
     tracknet_weights: weights/tracknet/TrackNet_best.pt
-    # inpaintnet_weights, batch_size and use_inpaintnet are for the TrackNetV3 inference in
-    # tracknet.predict (T2.2, T2.3), which is not wired yet; nothing reads them so far.
+    # InpaintNet is optional: raw TrackNet detections are kept if its weights are missing.
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)
