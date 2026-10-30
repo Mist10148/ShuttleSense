@@ -110,6 +110,38 @@ def _inpaint_mask(xy: np.ndarray, visible: np.ndarray, height: int) -> np.ndarra
     return mask
 
 
+def track_windows(
+    model: Any,
+    windows: list[list[np.ndarray]],
+    bg_mode: str,
+    median: np.ndarray | None,
+    device: str,
+    frame_size: tuple[int, int],
+) -> list[list[tuple[float, float, int]]]:
+    """Shuttle (x, y, visible) in frame pixels for every frame of each seq_len window.
+
+    Shared by the offline stage (non-overlapping windows) and live sessions (a sliding
+    window over the newest frames). Call inside torch.inference_mode().
+    """
+    import torch
+
+    batch = torch.from_numpy(np.stack([_track_input(w, bg_mode, median) for w in windows]))
+    with torch.autocast("cuda", enabled=device.startswith("cuda")):
+        heatmaps = model(batch.to(device)).float().cpu().numpy()
+    out = []
+    for sequence in heatmaps:
+        points = []
+        for heatmap in sequence:
+            x, y, vis = heatmap_to_xy(heatmap)
+            if vis:
+                px = scale_to_video(np.array([[x, y]]), INPUT_SIZE, frame_size)[0]
+                points.append((float(px[0]), float(px[1]), 1))
+            else:
+                points.append((0.0, 0.0, 0))
+        out.append(points)
+    return out
+
+
 def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """Return (xy, visible, source) for each normalized frame."""
     import torch
@@ -135,23 +167,19 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
                 if not frames:
                     break
                 frames.extend([frames[-1]] * (seq_len - len(frames)))
-                inputs.append(_track_input(frames, bg_mode, median))
+                inputs.append(frames)
                 starts.append(window_start)
             if not inputs:
                 break
-            batch = torch.from_numpy(np.stack(inputs)).to(ctx.device)
-            with torch.autocast("cuda", enabled=ctx.device.startswith("cuda")):
-                heatmaps = model(batch).float().cpu().numpy()
-            for window_start, sequence in zip(starts, heatmaps, strict=True):
-                for offset, heatmap in enumerate(sequence):
+            size = (reader.width, reader.height)
+            results = track_windows(model, inputs, bg_mode, median, ctx.device, size)
+            for window_start, points in zip(starts, results, strict=True):
+                for offset, (x, y, vis) in enumerate(points):
                     i = window_start + offset
                     if i >= n:
                         break
-                    x, y, vis = heatmap_to_xy(heatmap)
                     if vis:
-                        xy[i] = scale_to_video(
-                            np.array([[x, y]]), INPUT_SIZE, (reader.width, reader.height)
-                        )[0]
+                        xy[i] = (x, y)
                         visible[i] = 1
                         source[i] = "net"
             ctx.progress(min(0.9, 0.9 * (start + len(inputs) * seq_len) / n))
