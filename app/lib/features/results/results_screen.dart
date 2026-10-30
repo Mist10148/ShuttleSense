@@ -67,8 +67,9 @@ class ResultsScreen extends ConsumerWidget {
                   value: file,
                   enabled: switch (file) {
                     ExportFile.video => outputs?.video ?? true,
+                    ExportFile.summary => outputs?.summary ?? true,
+                    ExportFile.hitsCsv => outputs?.hitsCsv ?? true,
                     ExportFile.ralliesCsv => outputs?.ralliesCsv ?? true,
-                    _ => true,
                   },
                   child: Text(file.label),
                 ),

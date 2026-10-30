@@ -58,7 +58,9 @@ class ServerConfigNotifier extends Notifier<ServerConfig?> {
 
   @override
   ServerConfig? build() {
-    final url = _prefs.getString(_urlKey) ?? kDefaultBaseUrl;
+    // An empty saved address means the user left the server: the build-time default must
+    // not silently reconnect them.
+    final url = _prefs.getString(_urlKey) ?? ServerConfig.normalizeUrl(kDefaultBaseUrl);
     if (url.isEmpty) return null;
     return ServerConfig(baseUrl: url, token: _prefs.getString(_tokenKey));
   }
@@ -82,7 +84,7 @@ class ServerConfigNotifier extends Notifier<ServerConfig?> {
   }
 
   Future<void> clear() async {
-    await _prefs.remove(_urlKey);
+    await _prefs.setString(_urlKey, '');
     await _prefs.remove(_tokenKey);
     state = null;
   }

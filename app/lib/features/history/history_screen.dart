@@ -141,7 +141,16 @@ class _JobTile extends ConsumerWidget {
         }, semanticLabel: job.status.name),
         title: Text(title, overflow: TextOverflow.ellipsis),
         subtitle: Text('$when · ${job.status.name} · ${job.id}'),
-        onTap: () => context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+        onTap: () {
+          if (job.status == JobStatus.done && !hasResults(job)) {
+            // Finished, but its record is gone (e.g. the server's storage was wiped).
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('This job has no results on the server any more.')),
+            );
+            return;
+          }
+          context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id));
+        },
         trailing: IconButton(
           tooltip: 'Delete',
           icon: const Icon(Icons.delete_outline),

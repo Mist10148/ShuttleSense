@@ -24,7 +24,7 @@ class FakeTargets extends SaveTargets {
   @override
   Future<String?> saveAs(String fileName, Uint8List bytes) async {
     events.add('saveAs $fileName ${bytes.length}');
-    return '${dir.path}/$fileName';
+    return '${dir.path}/saved/$fileName';
   }
 
   @override
@@ -87,7 +87,8 @@ void main() {
       );
       expect(api.calls.single, 'download http://fake:8000/jobs/job1/rallies.csv');
       expect(targets.events, ['saveAs job1_rallies.csv 4']);
-      expect(path, endsWith('job1_rallies.csv'));
+      expect(path, endsWith('saved/job1_rallies.csv'));
+      expect(File('${dir.path}/job1_rallies.csv').existsSync(), isFalse); // temp copy removed
       expect(progress, [1.0]);
     });
 

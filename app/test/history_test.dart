@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
+import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/history/history_screen.dart';
 
 import 'fakes/fake_api_client.dart';
@@ -10,6 +11,19 @@ void main() {
   testWidgets('shows the video filename', (tester) async {
     await pumpScreen(tester, const HistoryScreen());
     expect(find.text('rally01.mp4'), findsOneWidget);
+  });
+
+  testWidgets('a finished job whose record is gone says so instead of opening', (tester) async {
+    final json = jobJson()..['outputs'] = {'record': false, 'video': false};
+    final visited = await pumpScreen(
+      tester,
+      const HistoryScreen(),
+      api: FakeApiClient(jobs: [Job.fromJson(json)]),
+    );
+    await tester.tap(find.text('rally01.mp4'));
+    await tester.pump();
+    expect(find.text('This job has no results on the server any more.'), findsOneWidget);
+    expect(visited, isEmpty);
   });
 
   testWidgets('delete asks first, then deletes the job only', (tester) async {

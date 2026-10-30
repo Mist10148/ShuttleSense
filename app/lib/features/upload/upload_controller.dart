@@ -48,10 +48,10 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   }
 
   Future<void> set(JobOptions options) async {
-    // The referee layer and the court overlays need a calibrated court.
-    final next = options.calibrate
-        ? options
-        : options.copyWith(referee: false, overlays: options.overlays.difference(kCourtOverlays));
+    // The referee layer needs a calibrated court. Court overlays stay remembered while
+    // calibration is off (greyed out, and left out by JobOptions.submittable), so turning it
+    // back on restores them.
+    final next = options.calibrate ? options : options.copyWith(referee: false);
     state = next;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setStringList(_overlaysKey, next.overlays.toList());

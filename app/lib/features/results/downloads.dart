@@ -84,9 +84,13 @@ Future<String?> saveExport(
       await targets.openInBrowser(url);
       return null;
     case SaveMethod.saveDialog:
-      final temp = await targets.tempPath(name);
-      await api.download(url, temp, onProgress: progress);
-      return targets.saveAs(name, await File(temp).readAsBytes());
+      final temp = File(await targets.tempPath(name));
+      try {
+        await api.download(url, temp.path, onProgress: progress);
+        return await targets.saveAs(name, await temp.readAsBytes());
+      } finally {
+        if (temp.existsSync()) temp.deleteSync();
+      }
     case SaveMethod.share:
       final path = await targets.tempPath(name);
       await api.download(url, path, onProgress: progress);

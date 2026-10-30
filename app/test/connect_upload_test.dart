@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
@@ -31,6 +33,20 @@ void main() {
       expect(ServerConfig.validateUrl('https://abc.trycloudflare.com'), isNull);
       expect(ServerConfig.validateUrl('http://'), isNotNull);
       expect(ServerConfig.validateUrl('my server'), isNotNull);
+    });
+
+    test('leaving the server does not fall back to a build-time default', () async {
+      SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://10.0.0.5:8000'});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+      expect(container.read(serverConfigProvider)!.baseUrl, 'http://10.0.0.5:8000');
+      await container.read(serverConfigProvider.notifier).clear();
+      expect(prefs.getString('server.baseUrl'), ''); // kept, so the default is not used
+      container.invalidate(serverConfigProvider);
+      expect(container.read(serverConfigProvider), isNull);
     });
 
     test('mixed content only for https pages calling http servers', () {
@@ -128,6 +144,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(chip('Minimap').onSelected, isNull);
       expect(chip('Court outline').selected, isFalse);
+    });
+
+    testWidgets('turning calibration off and on again keeps the court overlays', (tester) async {
+      await pumpScreen(tester, const UploadScreen(), size: tablet);
+      FilterChip chip(String label) =>
+          tester.widget<FilterChip>(find.widgetWithText(FilterChip, label));
+      expect(chip('Court outline').selected, isTrue);
+      await tester.tap(find.text('Calibrate court'));
+      await tester.pumpAndSettle();
+      expect(chip('Court outline').selected, isFalse); // greyed out
+      await tester.tap(find.text('Calibrate court'));
+      await tester.pumpAndSettle();
+      expect(chip('Court outline').selected, isTrue);
     });
 
     testWidgets('overlay choices are remembered', (tester) async {

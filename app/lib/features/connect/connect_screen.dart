@@ -98,7 +98,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       if (health.authRequired && config.token == null) {
         throw ApiException('This server needs an access token');
       }
-      if (!health.schemaMatches && !await _confirmSchema(health)) return;
+      if (!health.schemaMatches && (!mounted || !await _confirmSchema(health))) return;
       await ref.read(serverConfigProvider.notifier).save(config);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -151,7 +151,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final recent = ref.read(serverConfigProvider.notifier).recent;
-    final mixed = kIsWeb && ServerConfig.isMixedContent(Uri.base.scheme, _url.text.trim());
+    final mixed =
+        kIsWeb &&
+        ServerConfig.isMixedContent(Uri.base.scheme, ServerConfig.normalizeUrl(_url.text));
     return PageScaffold(
       title: 'Connect to server',
       maxWidth: 480,
