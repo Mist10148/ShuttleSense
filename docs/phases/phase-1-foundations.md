@@ -128,7 +128,7 @@
 - [ ] torchvision: `keypointrcnn_resnet50_fpn(weights="DEFAULT")` in eval mode on CUDA, same clips, same metrics.
 - [ ] For each: fps on RTX 4050 and T4; % of frames where both players are detected; visual check of 30 random frames (far player is the hard case); behaviour with motion blur during smashes.
 - [ ] Also try rtmlib `mode="performance"` if the far player is often missed.
-- [ ] Write the decision with a results table in TECH_STACK.md ("Pose spike results") and set `configs/pipeline.yaml stages.pose.backend` and `mode`.
+- [ ] Write the decision with a results table in TECH_STACK.md ("Pose spike results") and set `configs/pipeline.yaml stages.pose.backend` and `mode`. Both backends already run in the pipeline (`rtmlib`, `keypoint_rcnn`), so the switch is that one config line.
 
 **Outputs.** Notebook, results table, config default.
 
