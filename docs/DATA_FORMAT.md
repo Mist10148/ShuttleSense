@@ -136,17 +136,18 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 
 The six output classes use these exact identifiers: `smash`, `clear`, `drop`, `net_shot`, `lift`, `serve`.
 
-Draft mapping from ShuttleSet's 18 annotated types (finalized by Member 4 in task T3.3; record the final table here):
+Mapping from ShuttleSet's 18 annotated types plus "unknown" (task T3.3; `strokes/labels.py` holds the same table). The annotation CSVs name types in Chinese; the English names follow the ShuttleSet paper:
 
-| ShuttleSet type | ShuttleSense class |
-| --- | --- |
-| smash, wrist smash | `smash` |
-| clear | `clear` |
-| drop, passive drop | `drop` |
-| net shot, return net, cross-court net shot, rush | `net_shot` |
-| lob, defensive return lob, push | `lift` |
-| short service, long service | `serve` |
-| drive, driven flight, back-court drive, defensive return drive | excluded from training (no matching class); report count |
+| ShuttleSet type (CSV) | English name | ShuttleSense class |
+| --- | --- | --- |
+| 殺球, 點扣 | smash, wrist smash | `smash` |
+| 長球 | clear | `clear` |
+| 切球, 過度切球 | drop, passive drop | `drop` |
+| 放小球, 擋小球, 勾球, 撲球 | net shot, return net, cross-court net shot, rush | `net_shot` |
+| 挑球, 防守回挑, 推球 | lob, defensive return lob, push | `lift` |
+| 發短球, 發長球 | short service, long service | `serve` |
+| 平球, 小平球, 後場抽平球, 防守回抽 | drive, driven flight, back-court drive, defensive return drive | excluded from training (no matching class); report count |
+| 未知球種 | unknown | excluded |
 
 ## Derived exports
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import codecs
 import csv
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ from shuttlesense.hits import direction_changes
 from shuttlesense.pose import assign_sides
 from shuttlesense.referee import game_winner
 from shuttlesense.schema import ClipRecord, Hit, Player
-from shuttlesense.strokes import SHUTTLESET_TO_CLASS, map_label
+from shuttlesense.strokes import SHUTTLESET_TO_CLASS, SHUTTLESET_ZH_TO_EN, map_label
 from shuttlesense.tracking import interpolate_gaps
 
 
@@ -49,12 +50,26 @@ def test_speed_constant_motion() -> None:
     np.testing.assert_allclose(kmh, 0.5 * 30 * 3.6)
 
 
-def test_label_mapping_covers_18_types() -> None:
-    assert len(SHUTTLESET_TO_CLASS) == 18
+def test_label_mapping_covers_18_types_and_unknown() -> None:
+    assert len(SHUTTLESET_TO_CLASS) == 19
+    assert set(SHUTTLESET_ZH_TO_EN.values()) == set(SHUTTLESET_TO_CLASS)
     assert map_label(" Wrist Smash ") == "smash"
     assert map_label("drive") is None
+    assert map_label("殺球") == "smash"
+    assert map_label(" 挑球 ") == "lift"
+    assert map_label("未知球種") is None
     with pytest.raises(KeyError):
         map_label("tennis serve")
+
+
+def test_every_shuttleset_type_in_data_is_mapped() -> None:
+    """The ShuttleSet CSVs name types in Chinese; every one of them must map (T3.3)."""
+    sample = Path(__file__).parent / "fixtures" / "shuttleset_sample.csv"
+    with sample.open(newline="", encoding="utf-8") as f:
+        types = {row["type"] for row in csv.DictReader(f)}
+    assert len(types) == 19
+    labels = {t: map_label(t) for t in types}
+    assert set(labels.values()) == {"smash", "clear", "drop", "net_shot", "lift", "serve", None}
 
 
 @pytest.mark.parametrize(

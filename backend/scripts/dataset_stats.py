@@ -46,7 +46,7 @@ def collect(
     clips_dir: Path, splits: dict[str, list[str]], shuttleset_dir: Path | None = None
 ) -> dict[str, Any]:
     """Count every index.csv row by class, split, player and exclusion reason."""
-    from shuttlesense.strokes.labels import map_label
+    from shuttlesense.strokes.labels import english_type, map_label
 
     split_of = {m: s for s in SPLITS for m in splits.get(s, [])}
     by_split: dict[str, Counter] = {}
@@ -61,7 +61,7 @@ def collect(
             rows = list(csv.DictReader(f))
         missing = sum(1 for r in rows if not (index.parent / r["clip"]).exists())
         for row in rows:
-            raw = row["shuttleset_type"].strip().lower()
+            raw = english_type(row["shuttleset_type"])
             try:
                 label = map_label(raw)
             except KeyError:
