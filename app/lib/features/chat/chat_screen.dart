@@ -1,0 +1,269 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/responsive/breakpoints.dart';
+import '../../core/router/app_router.dart';
+import '../../data/api_client.dart';
+import '../../data/models/clip_record.dart';
+import '../../data/repositories/analysis_repository.dart';
+import '../../shared/disclaimers.dart';
+import '../../shared/widgets/message_view.dart';
+import '../results/widgets/session_summary.dart';
+
+class ChatState {
+  const ChatState({this.messages = const [], this.streaming, this.busy = false, this.error});
+
+  final List<ChatMessage> messages;
+
+  /// The answer as it streams in, before the server's checked version replaces it.
+  final String? streaming;
+  final bool busy;
+  final String? error;
+
+  int get questions => messages.where((m) => m.fromUser).length;
+}
+
+/// F22: one chat per job, saved in the record on the server.
+class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
+  @override
+  ChatState build(String jobId) {
+    final record = ref.read(recordProvider(jobId)).valueOrNull;
+    return ChatState(messages: record?.chat ?? const []);
+  }
+
+  Future<void> send(String text) async {
+    final question = text.trim();
+    if (question.isEmpty || state.busy) return;
+    final asked = ChatMessage(role: 'user', text: question, at: DateTime.now().toUtc());
+    state = ChatState(messages: [...state.messages, asked], streaming: '', busy: true);
+    try {
+      await for (final event in ref.read(apiClientProvider).chat(arg, question)) {
+        switch (event['type']) {
+          case 'delta':
+            state = ChatState(
+              messages: state.messages,
+              streaming: '${state.streaming ?? ''}${event['text']}',
+              busy: true,
+            );
+          case 'done':
+            final answer = ChatMessage.fromJson(event['message'] as Map<String, dynamic>);
+            state = ChatState(messages: [...state.messages, answer]);
+          case 'error':
+            state = ChatState(
+              messages: state.messages.where((m) => m != asked).toList(),
+              error: event['detail'] as String? ?? 'The coach could not answer',
+            );
+        }
+      }
+      // The record on the server now holds the chat; refresh it for next time.
+      ref.invalidate(recordProvider(arg));
+    } on ApiException catch (e) {
+      state = ChatState(
+        messages: state.messages.where((m) => m != asked).toList(),
+        error: e.message,
+      );
+    } finally {
+      if (state.busy) state = ChatState(messages: state.messages, error: state.error);
+    }
+  }
+}
+
+final chatControllerProvider = AutoDisposeNotifierProviderFamily<ChatController, ChatState, String>(
+  ChatController.new,
+);
+
+const kSuggestedQuestions = [
+  'What should I fix first?',
+  'Why did my smashes land short?',
+  'How did I lose my rallies?',
+];
+
+class ChatScreen extends ConsumerStatefulWidget {
+  const ChatScreen({super.key, required this.jobId});
+
+  final String jobId;
+
+  @override
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  final _input = TextEditingController();
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  void _send([String? text]) {
+    final message = text ?? _input.text;
+    _input.clear();
+    ref.read(chatControllerProvider(widget.jobId).notifier).send(message);
+  }
+
+  void _seek(Moment m) {
+    ref.read(seekRequestProvider(widget.jobId).notifier).state = m;
+    context.go(Routes.results(widget.jobId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final health = ref.watch(healthProvider).valueOrNull;
+    final available = health?.chatAvailable ?? false;
+    final state = ref.watch(chatControllerProvider(widget.jobId));
+    final limit = health?.chatMaxMessages ?? 0;
+    final atLimit = limit > 0 && state.questions >= limit;
+    final theme = Theme.of(context);
+    final gutter = Breakpoints.gutter(Breakpoints.of(context));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ask your coach')),
+      body: SafeArea(
+        child: !available
+            ? MessageView(
+                icon: Icons.forum_outlined,
+                message: health == null
+                    ? 'Checking the server…'
+                    : 'Coach chat is off on this server',
+                detail:
+                    'The server owner has not set a Claude API key. Session notes in the Coach '
+                    'tab still work.\n\n$kChatPrivacy',
+              )
+            : MaxWidth(
+                maxWidth: 800,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 0),
+                      child: Text(kChatPrivacy, style: theme.textTheme.bodySmall),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: EdgeInsets.all(gutter),
+                        children: [
+                          if (state.messages.isEmpty && state.streaming == null) ...[
+                            Text(
+                              'Ask about your strokes, rallies, line calls or what to work on. '
+                              'Answers come only from this session\'s data.',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final q in kSuggestedQuestions)
+                                  ActionChip(label: Text(q), onPressed: () => _send(q)),
+                              ],
+                            ),
+                          ],
+                          for (final m in state.messages) _Bubble(message: m, onSeek: _seek),
+                          if (state.streaming != null)
+                            _Bubble(
+                              message: ChatMessage(
+                                role: 'assistant',
+                                text: state.streaming!.isEmpty ? '…' : state.streaming!,
+                              ),
+                              onSeek: _seek,
+                            ),
+                          if (state.error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                state.error!,
+                                style: TextStyle(color: theme.colorScheme.error),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _input,
+                              enabled: !state.busy && !atLimit,
+                              maxLength: 1000,
+                              minLines: 1,
+                              maxLines: 4,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _send(),
+                              decoration: InputDecoration(
+                                labelText: atLimit
+                                    ? 'Question limit for this session reached'
+                                    : 'Your question',
+                                counterText: limit > 0 ? '${state.questions} of $limit' : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            tooltip: 'Send',
+                            onPressed: state.busy || atLimit ? null : _send,
+                            icon: state.busy
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.send),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
+                      child: Text(
+                        kCoachingDisclaimer,
+                        style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _Bubble extends StatelessWidget {
+  const _Bubble({required this.message, required this.onSeek});
+
+  final ChatMessage message;
+  final ValueChanged<Moment> onSeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final user = message.fromUser;
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Card(
+          color: user ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  label: user ? 'You asked' : 'Coach answered',
+                  child: SelectableText(message.text),
+                ),
+                if (message.citations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  MomentChips(moments: message.citations, onSeek: onSeek),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

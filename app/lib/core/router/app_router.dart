@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/calibration/calibration_screen.dart';
+import '../../features/chat/chat_screen.dart';
 import '../../features/connect/connect_screen.dart';
 import '../../features/history/history_screen.dart';
 import '../../features/processing/processing_screen.dart';
@@ -22,6 +23,7 @@ abstract final class Routes {
   static String calibrate(String videoId) => '/videos/$videoId/calibrate';
   static String job(String jobId) => '/jobs/$jobId';
   static String results(String jobId) => '/jobs/$jobId/results';
+  static String chat(String jobId) => '/jobs/$jobId/results/chat';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -64,6 +66,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                         path: 'results',
                         builder: (context, state) =>
                             ResultsScreen(jobId: state.pathParameters['jobId']!),
+                        routes: [
+                          GoRoute(
+                            path: 'chat',
+                            builder: (context, state) =>
+                                ChatScreen(jobId: state.pathParameters['jobId']!),
+                          ),
+                        ],
                       ),
                     ],
                   ),

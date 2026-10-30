@@ -75,6 +75,7 @@ class Job {
     this.courtCorners,
     this.referee = false,
     this.startScore,
+    this.mode = 'upload',
   });
 
   final String id;
@@ -95,6 +96,11 @@ class Job {
   final List<({double x, double y})>? courtCorners;
   final bool referee;
   final ({int near, int far})? startScore;
+
+  /// upload, or live for a saved live session.
+  final String mode;
+
+  bool get isLive => mode == 'live';
 
   /// Time spent running so far (or in total once finished).
   Duration? elapsed([DateTime? now]) {
@@ -139,6 +145,7 @@ class Job {
       final Json s => (near: asInt(s['near']) ?? 0, far: asInt(s['far']) ?? 0),
       _ => null,
     },
+    mode: j['mode'] as String? ?? 'upload',
   );
 }
 

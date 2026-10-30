@@ -4,7 +4,7 @@ import '../../../core/responsive/breakpoints.dart';
 
 /// Arranges the result zones for phone, tablet and laptop (docs/ARCHITECTURE.md §4).
 ///
-/// compact:  video, status, then tabs (Timeline · Minimap · Score)
+/// compact:  video, status, then tabs (Timeline · Minimap · Score, and Coach when given)
 /// medium:   video + status + timeline on the left, minimap + score panel on the right
 /// expanded: video + status with a side panel on top, full-width timeline below
 /// phone landscape (height < 500): video + status on the left, the tabs on the right
@@ -16,6 +16,7 @@ class ResultsLayout extends StatelessWidget {
     required this.timeline,
     required this.minimap,
     required this.scoreboard,
+    this.coach,
   });
 
   final Widget video;
@@ -23,6 +24,9 @@ class ResultsLayout extends StatelessWidget {
   final Widget timeline;
   final Widget minimap;
   final Widget scoreboard;
+
+  /// Session notes and the way into the chat (F21, F22); first in the side panel.
+  final Widget? coach;
 
   @override
   Widget build(BuildContext context) {
@@ -47,14 +51,15 @@ class ResultsLayout extends StatelessWidget {
       (width * 0.3).clamp(300.0, 400.0).clamp(0.0, width * 0.4);
 
   Widget _tabs() => DefaultTabController(
-    length: 3,
+    length: coach == null ? 3 : 4,
     child: Column(
       children: [
-        const TabBar(
+        TabBar(
           tabs: [
-            Tab(text: 'Timeline'),
-            Tab(text: 'Minimap'),
-            Tab(text: 'Score'),
+            const Tab(text: 'Timeline'),
+            const Tab(text: 'Minimap'),
+            const Tab(text: 'Score'),
+            if (coach != null) const Tab(text: 'Coach'),
           ],
         ),
         Expanded(
@@ -63,9 +68,22 @@ class ResultsLayout extends StatelessWidget {
               timeline,
               SingleChildScrollView(padding: const EdgeInsets.all(12), child: minimap),
               SingleChildScrollView(padding: const EdgeInsets.all(12), child: scoreboard),
+              if (coach != null)
+                SingleChildScrollView(padding: const EdgeInsets.all(12), child: coach),
             ],
           ),
         ),
+      ],
+    ),
+  );
+
+  Widget _panel() => SingleChildScrollView(
+    child: Column(
+      children: [
+        if (coach != null) ...[coach!, const SizedBox(height: 16)],
+        minimap,
+        const SizedBox(height: 16),
+        scoreboard,
       ],
     ),
   );
@@ -80,12 +98,18 @@ class ResultsLayout extends StatelessWidget {
     ],
   );
 
+  /// Video and status scroll when a line-call banner or warning makes them taller than
+  /// their share, so the tabs never get squeezed out.
   Widget _compact() {
     return Column(
       children: [
-        video,
-        status,
-        Expanded(child: _tabs()),
+        Flexible(
+          flex: 3,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [video, status]),
+          ),
+        ),
+        Expanded(flex: 2, child: _tabs()),
       ],
     );
   }
@@ -110,12 +134,7 @@ class ResultsLayout extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          SizedBox(
-            width: panel,
-            child: SingleChildScrollView(
-              child: Column(children: [minimap, const SizedBox(height: 16), scoreboard]),
-            ),
-          ),
+          SizedBox(width: panel, child: _panel()),
         ],
       ),
     );
@@ -141,12 +160,7 @@ class ResultsLayout extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 24),
-                SizedBox(
-                  width: panel,
-                  child: SingleChildScrollView(
-                    child: Column(children: [minimap, const SizedBox(height: 16), scoreboard]),
-                  ),
-                ),
+                SizedBox(width: panel, child: _panel()),
               ],
             ),
           ),

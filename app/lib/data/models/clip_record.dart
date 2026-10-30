@@ -390,6 +390,21 @@ class Rally {
   );
 }
 
+/// PATCH /jobs/{id}/line-calls/{n} response.
+class LineCallUpdate {
+  const LineCallUpdate({required this.lineCalls, required this.score, required this.rallies});
+
+  final List<LineCall> lineCalls;
+  final Score score;
+  final List<Rally> rallies;
+
+  factory LineCallUpdate.fromJson(Json j) => LineCallUpdate(
+    lineCalls: asList(j['line_calls']).map(LineCall.fromJson).toList(),
+    score: Score.fromJson(j['score'] as Json),
+    rallies: asList(j['rallies']).map(Rally.fromJson).toList(),
+  );
+}
+
 /// PATCH /jobs/{id}/score response.
 class ScoreUpdate {
   const ScoreUpdate({required this.score, required this.rallies});

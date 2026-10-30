@@ -9,6 +9,8 @@ class Health {
     required this.device,
     required this.authRequired,
     required this.stages,
+    this.chatAvailable = false,
+    this.chatMaxMessages = 0,
   });
 
   final String status;
@@ -17,6 +19,10 @@ class Health {
   final String device;
   final bool authRequired;
   final List<String> stages;
+
+  /// The backend has a Claude API key, so the coach chat works.
+  final bool chatAvailable;
+  final int chatMaxMessages;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
@@ -37,5 +43,7 @@ class Health {
     device: j['device'] as String,
     authRequired: j['auth_required'] as bool,
     stages: (j['stages'] as List<dynamic>).cast<String>(),
+    chatAvailable: j['chat_available'] as bool? ?? false,
+    chatMaxMessages: asInt(j['chat_max_messages']) ?? 0,
   );
 }

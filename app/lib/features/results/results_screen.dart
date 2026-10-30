@@ -15,8 +15,10 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import 'downloads.dart';
 import 'widgets/court_minimap.dart';
+import 'widgets/line_call_banner.dart';
 import 'widgets/results_layout.dart';
 import 'widgets/scoreboard.dart';
+import 'widgets/session_summary.dart';
 import 'widgets/status_strip.dart';
 import 'widgets/stroke_timeline.dart';
 import 'widgets/summary_chart.dart';
@@ -262,12 +264,41 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 
   /// Without an annotated video there is no player position to follow, so the timeline
   /// moves the minimap, status strip and scoreboard to the hit itself.
-  void _seek(Hit hit) {
+  void _seek(Hit hit) => _seekMoment(Moment(frame: hit.frame, timeS: hit.timeS));
+
+  /// Same for any timeline moment (session notes, line calls, chat citations).
+  void _seekMoment(Moment m) {
     if (widget.videoAvailable == true) {
-      _player.seek(seekTarget(hit));
+      final target = m.position - kSeekLead;
+      _player.seek(target.isNegative ? Duration.zero : target);
     } else {
       final last = _record.numFrames == 0 ? 0 : _record.numFrames - 1;
-      _frameIndex.value = hit.frame.clamp(0, last);
+      _frameIndex.value = m.frame.clamp(0, last);
+    }
+  }
+
+  /// F20: confirm or override a line call; the server re-scores and rebuilds the notes.
+  Future<void> _decide(LineCall call, String decision) async {
+    setState(() => _correcting = true);
+    try {
+      final update = await ref
+          .read(apiClientProvider)
+          .overrideLineCall(widget.jobId, call.id, decision);
+      if (!mounted) return;
+      setState(
+        () => _record = _record.copyWith(
+          lineCalls: update.lineCalls,
+          rallies: update.rallies,
+          score: update.score,
+        ),
+      );
+      ref.invalidate(recordProvider(widget.jobId));
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _correcting = false);
     }
   }
 
@@ -281,6 +312,13 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 
   @override
   Widget build(BuildContext context) {
+    // A chat citation asked to play a moment of this job.
+    ref.listen(seekRequestProvider(widget.jobId), (_, moment) {
+      if (moment == null) return;
+      _seekMoment(moment);
+      ref.read(seekRequestProvider(widget.jobId).notifier).state = null;
+    });
+    final chatAvailable = ref.watch(healthProvider).valueOrNull?.chatAvailable ?? false;
     final record = _record;
     final fps = record.fps == 0 ? 30.0 : record.fps;
     final chart = SummaryChart(summary: record.summary); // does not change with the frame
@@ -292,6 +330,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
         builder: (context, frameIndex, _) {
           final frame = record.frame(frameIndex);
           final currentHit = record.hitAt(frameIndex);
+          final call = bannerCall(record, frameIndex);
           return ResultsLayout(
             video: VideoPanel(
               controller: _controller,
@@ -308,6 +347,12 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   peakSpeedKmh: record.summary?.peakSpeedKmh,
                   strokeCount: record.strokesSoFar(frameIndex),
                 ),
+                if (call != null)
+                  LineCallBanner(
+                    call: call,
+                    busy: _correcting,
+                    onDecide: (decision) => _decide(call, decision),
+                  ),
               ],
             ),
             timeline: StrokeTimeline(
@@ -327,6 +372,12 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                 const SizedBox(height: 16),
                 chart,
               ],
+            ),
+            coach: SessionSummary(
+              record: record,
+              onSeek: _seekMoment,
+              chatAvailable: chatAvailable,
+              onAskCoach: () => context.go(Routes.chat(widget.jobId)),
             ),
           );
         },

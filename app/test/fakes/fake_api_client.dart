@@ -230,4 +230,60 @@ class FakeApiClient extends ApiClient {
   @override
   Future<void> deleteJob(String jobId) =>
       _answer('deleteJob $jobId', () => jobs.removeWhere((j) => j.id == jobId));
+
+  @override
+  Future<LineCallUpdate> overrideLineCall(String jobId, int callId, String call) =>
+      _answer('overrideLineCall $jobId $callId $call', () {
+        final calls = [
+          for (final c in record.lineCalls)
+            c.id == callId
+                ? LineCall(
+                    id: c.id,
+                    rallyIndex: c.rallyIndex,
+                    frame: c.frame,
+                    timeS: c.timeS,
+                    call: c.call,
+                    landing: c.landing,
+                    marginCm: c.marginCm,
+                    confidence: c.confidence,
+                    uncertain: c.uncertain,
+                    overrideCall: call,
+                  )
+                : c,
+        ];
+        record = record.copyWith(lineCalls: calls);
+        return LineCallUpdate(
+          lineCalls: calls,
+          score: record.score ?? const Score(near: 0, far: 0),
+          rallies: record.rallies,
+        );
+      });
+
+  /// Events the next chat() streams back (docs/API.md, POST /jobs/{id}/chat).
+  List<Json> chatEvents = [
+    {'type': 'delta', 'text': 'Your elbow was bent '},
+    {'type': 'delta', 'text': 'on the smash [t=1.5s].'},
+    {
+      'type': 'done',
+      'message': {
+        'role': 'assistant',
+        'text': 'Your elbow was bent on the smash [t=1.5s].',
+        'at': '2026-11-05T09:20:00Z',
+        'citations': [
+          {'frame': 45, 'time_s': 1.5, 'hit_id': 2},
+        ],
+      },
+      'disclaimer': 'Heuristic guidance',
+    },
+  ];
+
+  @override
+  Stream<Json> chat(String jobId, String message) async* {
+    calls.add('chat $jobId $message');
+    final error = failWith;
+    if (error != null) throw error;
+    for (final e in chatEvents) {
+      yield e;
+    }
+  }
 }

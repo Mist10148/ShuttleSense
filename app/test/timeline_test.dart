@@ -30,7 +30,9 @@ void main() {
     expect(find.text('Serve'), findsOneWidget);
     expect(find.text('Smash'), findsOneWidget);
     expect(find.textContaining('86% · ~241 km/h (est.)'), findsOneWidget);
-    expect(find.textContaining('Fully extend your elbow'), findsOneWidget);
+    // The clear and the smash both missed elbow_extension; the serve moved its feet.
+    expect(find.textContaining('Straighten your hitting arm'), findsNWidgets(2));
+    expect(find.textContaining('Keep both feet still'), findsOneWidget);
   });
 
   testWidgets('tap seeks half a second before the hit', (tester) async {
@@ -83,8 +85,8 @@ void main() {
     await tester.longPress(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(find.text('Form feedback'), findsOneWidget);
-    expect(find.text('Clear contact above head'), findsOneWidget);
-    expect(find.text('Clear arm extension'), findsOneWidget);
+    expect(find.text('Contact above head'), findsOneWidget);
+    expect(find.text('Elbow extension'), findsOneWidget);
     expect(find.byIcon(Icons.cancel), findsOneWidget);
     expect(find.text('Heuristic guidance, not professional coaching.'), findsOneWidget);
   });

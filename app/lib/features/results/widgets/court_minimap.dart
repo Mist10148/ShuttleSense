@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -12,7 +13,8 @@ const double kShortServiceFromNetM = 1.98;
 /// Shuttle positions kept in the fading trail.
 const int kTrailLength = 15;
 
-/// F10: top-down court with both players, the shuttle trail and the current rally's hits.
+/// F10: top-down court with both players, the shuttle trail, the current rally's hits and
+/// the landing of every line call so far (F20: green in, red out, amber still uncertain).
 class CourtMinimap extends StatelessWidget {
   const CourtMinimap({super.key, required this.record, required this.frameIndex});
 
@@ -54,6 +56,7 @@ class CourtPainter extends CustomPainter {
     required this.frame,
     required this.trail,
     required this.hitMarks,
+    this.landings = const [],
     required this.lines,
     required this.surface,
     required this.players,
@@ -80,11 +83,16 @@ class CourtPainter extends CustomPainter {
               case final p?)
             (h.player, p),
     ];
+    final landings = [
+      for (final c in record.lineCalls)
+        if (c.frame <= frameIndex) (c.landing, c.isIn, c.needsReview),
+    ];
     return CourtPainter(
       frameIndex: frameIndex,
       frame: record.frame(frameIndex),
       trail: trail,
       hitMarks: marks,
+      landings: landings,
       lines: lines,
       surface: surface,
       players: players,
@@ -95,6 +103,9 @@ class CourtPainter extends CustomPainter {
   final FrameInfo? frame;
   final List<CourtPoint> trail;
   final List<(String, CourtPoint)> hitMarks;
+
+  /// (landing point, called in, waiting for review), oldest first.
+  final List<(CourtPoint, bool, bool)> landings;
   final Color lines;
   final Color surface;
   final PlayerColors players;
@@ -129,6 +140,27 @@ class CourtPainter extends CustomPainter {
       line,
     );
 
+    for (var i = 0; i < landings.length; i++) {
+      final (p, isIn, review) = landings[i];
+      final color = review
+          ? Colors.amber.shade700
+          : isIn
+          ? Colors.green.shade600
+          : Colors.red.shade600;
+      final latest = i == landings.length - 1;
+      final o = toCanvas((
+        x: p.x.clamp(-0.5, kCourtWidthM + 0.5),
+        y: p.y.clamp(-0.5, kCourtLengthM + 0.5),
+      ));
+      canvas.drawCircle(
+        o,
+        latest ? 6 : 4,
+        Paint()
+          ..color = color.withValues(alpha: latest ? 1 : 0.6)
+          ..style = latest ? PaintingStyle.fill : PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
     for (final (side, p) in hitMarks) {
       final c = side == 'near' ? players.near : players.far;
       final mark = Paint()
@@ -167,5 +199,6 @@ class CourtPainter extends CustomPainter {
       old.surface != surface ||
       old.players != players ||
       old.trail.length != trail.length ||
-      old.hitMarks.length != hitMarks.length;
+      old.hitMarks.length != hitMarks.length ||
+      !listEquals(old.landings, landings);
 }

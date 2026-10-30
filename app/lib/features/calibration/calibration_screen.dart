@@ -129,7 +129,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
               ),
             ),
             Expanded(
-              child: _FrameCanvas(
+              child: _VideoFrameCanvas(
                 info: info,
                 frame: _frame,
                 corners: _corners,
@@ -244,8 +244,9 @@ class _DiagramPainter extends CustomPainter {
   bool shouldRepaint(_DiagramPainter old) => old.next != next || old.accent != accent;
 }
 
-class _FrameCanvas extends ConsumerStatefulWidget {
-  const _FrameCanvas({
+/// A frame of an uploaded video, fetched from the server.
+class _VideoFrameCanvas extends ConsumerWidget {
+  const _VideoFrameCanvas({
     required this.info,
     required this.frame,
     required this.corners,
@@ -260,31 +261,64 @@ class _FrameCanvas extends ConsumerStatefulWidget {
   final void Function(int index, Corner corner) onMove;
 
   @override
-  ConsumerState<_FrameCanvas> createState() => _FrameCanvasState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    // "Change server" clears the config; this tree may rebuild once before the redirect.
+    if (ref.watch(serverConfigProvider) == null) return const SizedBox.shrink();
+    final api = ref.watch(apiClientProvider);
+    return CornerCanvas(
+      image: NetworkImage(api.frameUrl(info.id, frame), headers: api.authHeaders),
+      width: info.width,
+      height: info.height,
+      corners: corners,
+      onTap: onTap,
+      onMove: onMove,
+    );
+  }
 }
 
-class _FrameCanvasState extends ConsumerState<_FrameCanvas> {
+/// Tap and drag the 4 court corners on [image], in [width] x [height] image pixels.
+/// Used on a frame of an uploaded video and on a still from the live camera.
+class CornerCanvas extends StatefulWidget {
+  const CornerCanvas({
+    super.key,
+    required this.image,
+    required this.width,
+    required this.height,
+    required this.corners,
+    required this.onTap,
+    required this.onMove,
+  });
+
+  final ImageProvider image;
+  final int width;
+  final int height;
+  final List<Corner> corners;
+  final ValueChanged<Corner> onTap;
+  final void Function(int index, Corner corner) onMove;
+
+  @override
+  State<CornerCanvas> createState() => _CornerCanvasState();
+}
+
+class _CornerCanvasState extends State<CornerCanvas> {
   int? _dragging;
   Offset? _loupe;
 
   @override
   Widget build(BuildContext context) {
-    // "Change server" clears the config; this tree may rebuild once before the redirect.
-    if (ref.watch(serverConfigProvider) == null) return const SizedBox.shrink();
-    final api = ref.watch(apiClientProvider);
-    final info = widget.info;
+    final width = widget.width, height = widget.height;
     return InteractiveViewer(
       maxScale: 6,
       panEnabled: _dragging == null,
       child: Center(
         child: AspectRatio(
-          aspectRatio: info.aspectRatio,
+          aspectRatio: height == 0 ? 16 / 9 : width / height,
           child: LayoutBuilder(
             builder: (context, box) {
-              final scale = info.width / box.maxWidth; // video px per dp
+              final scale = width / box.maxWidth; // image px per dp
               Corner toVideo(Offset p) => (
-                x: (p.dx * scale).clamp(0, info.width.toDouble()),
-                y: (p.dy * scale).clamp(0, info.height.toDouble()),
+                x: (p.dx * scale).clamp(0, width.toDouble()),
+                y: (p.dy * scale).clamp(0, height.toDouble()),
               );
               Offset toCanvas(Corner c) => Offset(c.x / scale, c.y / scale);
               return GestureDetector(
@@ -299,9 +333,8 @@ class _FrameCanvasState extends ConsumerState<_FrameCanvas> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      api.frameUrl(info.id, widget.frame),
-                      headers: api.authHeaders,
+                    Image(
+                      image: widget.image,
                       fit: BoxFit.fill,
                       gaplessPlayback: true,
                       errorBuilder: (_, _, _) =>

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../core/config/server_config.dart';
@@ -221,6 +223,61 @@ class ApiClient {
     );
     return ScoreUpdate.fromJson(res.data!);
   });
+
+  /// F20: confirm (same call) or override an automated line call.
+  Future<LineCallUpdate> overrideLineCall(String jobId, int callId, String call) => _call(() async {
+    final res = await _dio.patch<Json>('/jobs/$jobId/line-calls/$callId', data: {'call': call});
+    return LineCallUpdate.fromJson(res.data!);
+  });
+
+  /// WS /live address for this server (ws:// or wss://, token as a query parameter).
+  Uri liveUri() {
+    final base = Uri.parse(config.baseUrl);
+    final token = config.token;
+    return base.replace(
+      scheme: base.scheme == 'https' ? 'wss' : 'ws',
+      path: '${base.path.replaceAll(RegExp(r'/+$'), '')}/live',
+      queryParameters: token == null || token.isEmpty ? null : {'token': token},
+    );
+  }
+
+  /// F22: ask the coach. Yields the server-sent events of docs/API.md (delta, done, error).
+  Stream<Json> chat(String jobId, String message) async* {
+    final Response<ResponseBody> res;
+    try {
+      res = await _dio.post<ResponseBody>(
+        '/jobs/$jobId/chat',
+        data: {'message': message},
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: const Duration(minutes: 3),
+        ),
+      );
+    } on DioException catch (e) {
+      // The body of an error response is a stream too; read its detail.
+      var detail = e.message;
+      final body = e.response?.data;
+      if (body is ResponseBody) {
+        final text = await utf8.decodeStream(body.stream);
+        try {
+          detail = errorDetail(jsonDecode(text)) ?? detail;
+        } on FormatException {
+          detail = text;
+        }
+      }
+      throw ApiException(
+        detail ?? 'The coach is not available',
+        statusCode: e.response?.statusCode,
+      );
+    }
+    final lines = res.data!.stream
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines) {
+      if (line.startsWith('data: ')) yield jsonDecode(line.substring(6)) as Json;
+    }
+  }
 
   Future<void> deleteJob(String jobId) => _call(() => _dio.delete<void>('/jobs/$jobId'));
 }

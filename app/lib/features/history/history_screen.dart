@@ -140,7 +140,7 @@ class _JobTile extends ConsumerWidget {
           _ => Icons.hourglass_top,
         }, semanticLabel: job.status.name),
         title: Text(title, overflow: TextOverflow.ellipsis),
-        subtitle: Text('$when · ${job.status.name} · ${job.id}'),
+        subtitle: Text('${job.isLive ? 'Live · ' : ''}$when · ${job.status.name} · ${job.id}'),
         onTap: () {
           if (job.status == JobStatus.done && !hasResults(job)) {
             // Finished, but its record is gone (e.g. the server's storage was wiped).
