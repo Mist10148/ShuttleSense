@@ -33,9 +33,11 @@ class ClipRecord {
   final Score? score;
   final Summary? summary;
 
-  int frameAt(Duration position) => (position.inMicroseconds * fps / Duration.microsecondsPerSecond)
-      .floor()
-      .clamp(0, numFrames == 0 ? 0 : numFrames - 1);
+  /// The frame shown at [position]. Players report positions in whole microseconds, a hair
+  /// before a frame's start (1/30 s is 33333.3 µs), so a tiny tolerance keeps that frame
+  /// from reading as the previous one.
+  int frameAt(Duration position) =>
+      frameIndexAt(position, fps).clamp(0, numFrames == 0 ? 0 : numFrames - 1);
 
   FrameInfo? frame(int index) => index >= 0 && index < frames.length ? frames[index] : null;
 
@@ -399,3 +401,11 @@ const kStrokeLabels = <String, String>{
   'lift': 'Lift',
   'serve': 'Serve',
 };
+
+/// Frame index at [position] for [fps], tolerant of whole-microsecond rounding.
+int frameIndexAt(Duration position, double fps) =>
+    (position.inMicroseconds * fps / Duration.microsecondsPerSecond + 1e-3).floor();
+
+/// Start of frame [index] for [fps], rounded up so [frameIndexAt] maps it back to [index].
+Duration frameStart(int index, double fps) =>
+    Duration(microseconds: (index * Duration.microsecondsPerSecond / fps).ceil());

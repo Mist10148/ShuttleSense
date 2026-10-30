@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
+import 'package:shuttlesense_app/data/models/clip_record.dart';
 import 'package:shuttlesense_app/features/results/downloads.dart';
 import 'package:shuttlesense_app/features/results/widgets/summary_chart.dart';
 import 'package:shuttlesense_app/features/results/widgets/video_panel.dart';
@@ -127,6 +128,18 @@ void main() {
     target.position = Duration.zero;
     await stepFrame(target, 25, -1);
     expect(target.position, Duration.zero);
+  });
+
+  test('frame steps at 30 fps land on every frame in turn', () async {
+    final target = FakeTarget()..position = Duration.zero;
+    for (var i = 1; i <= 90; i++) {
+      await stepFrame(target, 30, 1);
+      expect(frameIndexAt(target.position, 30), i);
+    }
+    for (var i = 89; i >= 0; i--) {
+      await stepFrame(target, 30, -1);
+      expect(frameIndexAt(target.position, 30), i);
+    }
   });
 
   testWidgets('speed buttons and shortcuts drive the player', (tester) async {

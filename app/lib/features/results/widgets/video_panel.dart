@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 
 /// Playback speeds offered for reviewing strokes.
@@ -81,12 +82,12 @@ class MediaKitTarget implements PlaybackTarget {
   Future<void> setRate(double rate) => player.setRate(rate);
 }
 
-/// Step one video frame forward (+1) or back (-1), pausing first.
+/// Step one video frame forward (+1) or back (-1), pausing first. Works on frame indices, so
+/// repeated steps never drift onto the previous frame through microsecond rounding.
 Future<void> stepFrame(PlaybackTarget target, double fps, int direction) async {
   if (target.playing) await target.playOrPause();
-  final frame = Duration(microseconds: (Duration.microsecondsPerSecond / fps).round());
-  final next = target.position + frame * direction;
-  await target.seek(next.isNegative ? Duration.zero : next);
+  final next = frameIndexAt(target.position, fps) + direction;
+  await target.seek(next <= 0 ? Duration.zero : frameStart(next, fps));
 }
 
 /// Speed and frame-step buttons under the video (T4.6).

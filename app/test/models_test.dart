@@ -89,6 +89,9 @@ void main() {
     test('maps playback position to frame and current hit', () {
       expect(record.frameAt(const Duration(seconds: 2)), 60);
       expect(record.frameAt(const Duration(hours: 1)), 899);
+      // A player reports frame 1 at 30 fps as 33333 µs, just before 1/30 s.
+      expect(record.frameAt(const Duration(microseconds: 33333)), 1);
+      expect(record.frameAt(const Duration(microseconds: 33000)), 0);
       expect(record.hitAt(10), isNull);
       expect(record.hitAt(60)!.id, 0);
       expect(record.hitAt(100)!.id, 1);
