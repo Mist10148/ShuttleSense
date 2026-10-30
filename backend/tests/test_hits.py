@@ -57,6 +57,22 @@ def test_hits_alternate_players() -> None:
     assert hits == [(19, "near"), (29, "far")]
 
 
+def test_jump_across_unfilled_gap_is_not_a_hit() -> None:
+    # Moving right, lost for frames 10-24, back further left still moving right: the jump
+    # across the gap looks like two reversals but the shuttle never turned.
+    xy = np.array([[100.0 + 10 * i, 200.0] for i in range(40)])
+    xy[25:] -= 250.0
+    visible = np.ones(40)
+    visible[10:25] = 0
+    near = wrists_at(40, {9: tuple(xy[9]), 25: tuple(xy[25])})
+    assert detect_hits(xy, visible, near, [None] * 40, CFG) == []
+    # A real turn right after the gap is still found.
+    xy2 = xy.copy()
+    xy2[31:, 0] = xy2[30, 0] - 10 * np.arange(1, 10)
+    near2 = wrists_at(40, {30: tuple(xy2[30])})
+    assert detect_hits(xy2, visible, near2, [None] * 40, CFG) == [(30, "near")]
+
+
 def test_stage_fills_record_hits() -> None:
     xy = bounce_track([10])
     frames = [Frame(frame=i, shuttle=Shuttle(x=x, y=y, visible=1)) for i, (x, y) in enumerate(xy)]

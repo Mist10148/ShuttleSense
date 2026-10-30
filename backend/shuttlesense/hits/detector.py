@@ -60,9 +60,11 @@ def detect_hits(
 ) -> list[tuple[int, PlayerSide]]:
     """Hits as (frame, player), in frame order.
 
-    Candidates are sharp direction changes and down-to-up flips of the visible trajectory.
-    A candidate counts if a confident wrist is within max_wrist_distance_px (scaled by
-    cfg["scale"], the frame height / 720); the closest player is the hitter. Within
+    Candidates are sharp direction changes and down-to-up flips within runs of consecutive
+    visible frames: the jump across a gap that tracking left unfilled (the shuttle out of
+    view, say) is not a movement of the shuttle. A candidate counts if a confident wrist is
+    within max_wrist_distance_px (scaled by cfg["scale"], the frame height / 720); the
+    closest player is the hitter. Within
     min_frames_between_hits only the closest-wrist candidate survives, and consecutive hits
     by the same player (impossible in singles) keep only the closer one.
     """
@@ -70,7 +72,12 @@ def detect_hits(
     if len(idx) < 3:
         return []
     pts = np.asarray(xy, dtype=float)[idx]
-    cand = set(direction_changes(pts, cfg.get("min_angle_deg", 60))) | set(vertical_flips(pts))
+    cand: set[int] = set()
+    breaks = np.flatnonzero(np.diff(idx) > 1) + 1
+    for start, end in zip([0, *breaks], [*breaks, len(idx)], strict=True):
+        run = pts[start:end]
+        local = set(direction_changes(run, cfg.get("min_angle_deg", 60))) | set(vertical_flips(run))
+        cand |= {start + i for i in local}
     max_dist = cfg.get("max_wrist_distance_px", 120) * cfg.get("scale", 1.0)
 
     scored: list[tuple[float, int, PlayerSide]] = []
