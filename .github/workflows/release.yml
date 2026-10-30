@@ -1,0 +1,94 @@
+name: release
+
+# Builds the app for a version tag (git tag -a v1.0.0 ...; git push origin v1.0.0) and
+# attaches the builds to a draft GitHub Release for the lead to check and publish (T7.6).
+# Without the signing secrets the APK is signed with the debug key: fine for testing, but
+# build the store/demo APK locally with key.properties as docs/RELEASE.md describes.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.41.6"
+
+jobs:
+  android-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - name: Build APK
+        run: flutter build apk --release
+      - name: Build web
+        run: flutter build web --release
+      - name: Package
+        run: |
+          mkdir -p ../dist
+          cp build/app/outputs/flutter-apk/app-release.apk "../dist/shuttlesense-${GITHUB_REF_NAME}.apk"
+          (cd build/web && zip -qr "../../../dist/shuttlesense-${GITHUB_REF_NAME}-web.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-web
+          path: dist/*
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build Windows
+        run: flutter build windows --release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ../dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* `
+            -DestinationPath "../dist/shuttlesense-$env:GITHUB_REF_NAME-windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android-web, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
+            --title "ShuttleSense ${GITHUB_REF_NAME#v}" \
+            --notes "Draft built by release.yml. Before publishing: add the evaluation summary and known limitations (docs/RELEASE.md), and replace the debug-signed APK with the signed one."

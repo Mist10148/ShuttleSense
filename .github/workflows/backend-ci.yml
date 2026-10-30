@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # TrackNetV3 lives in backend/third_party as a submodule (T1.3).
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -31,4 +34,5 @@ jobs:
           ruff check .
           ruff format --check .
       - name: Test
-        run: pytest
+        # gpu tests need CUDA, weights and the team's sample clips.
+        run: pytest -m "not gpu"
