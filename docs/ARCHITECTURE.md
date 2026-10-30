@@ -24,6 +24,7 @@ flowchart LR
 - **One Flutter codebase** (`app/`) builds for Android, iOS/iPadOS, Web and Windows. It never runs models; it uploads, collects input (court corners, overlay choices, score corrections) and presents results.
 - **One Python backend** (`backend/`) holds the CV pipeline and a FastAPI server. It runs on any NVIDIA GPU machine (primary: the team laptop) or inside Colab, where `scripts/serve_colab.py` opens a cloudflared tunnel.
 - Communication is plain REST + JSON, with file upload/download for videos. Polling (every 1 to 2 s) is used for job progress; it works through tunnels and on every Flutter platform without extra plumbing.
+- **Live mode** (D16) adds one WebSocket, `WS /live`: the app sends JPEG camera frames and gets JSON events back (see [Live sessions](#live-sessions)). The coach chat (D18) is the only call that leaves the backend: a text digest of the record goes to the Claude API, and only when the backend has an API key ([PRIVACY.md](PRIVACY.md)).
 
 ### Why client/server and not on-device
 
@@ -94,11 +95,13 @@ backend/
 │   ├── evaluation.py           # hit / tracking / rally metrics for the eval scripts
 │   ├── run.py                  # CLI: python -m shuttlesense.run
 │   ├── io/ tracking/ pose/ court/ hits/ strokes/ feedback/ analytics/ referee/ render/
+│   ├── stream/                 # live: perception per frame, windowed analyzer, session, fake source
 │   └── api/
 │       ├── main.py             # FastAPI app factory, CORS, job manager startup
 │       ├── settings.py         # env-driven settings (SHUTTLESENSE_*)
 │       ├── storage.py          # per-video / per-job folders on disk
 │       ├── jobs.py             # in-memory job registry + single GPU worker thread
+│       ├── live.py             # WS /live: live sessions, resume, saving to a job
 │       └── routes.py           # endpoints from API.md, token check
 ├── scripts/                    # weights/data download, clip extraction, training, Colab serving
 ├── notebooks/                  # Colab notebook (runs the backend with a tunnel)
@@ -125,10 +128,39 @@ stateDiagram-v2
 
 A cancelled job is deleted with its files, so `cancelled` is never stored or returned (docs/API.md). A re-render saves the last run's overlays and stage states to `previous.json`; a failure or a server restart puts them back, since the outputs on disk are still those of that run.
 
-- One worker thread processes one job at a time (one GPU). Extra jobs wait in a FIFO queue; `GET /jobs/{id}` reports `queue_position`.
+- One worker thread processes one job at a time (one GPU). Extra jobs wait in a FIFO queue; `GET /jobs/{id}` reports `queue_position`. A live session holds the same GPU lock: it cannot start while a job runs (`busy`), and queued jobs wait until it ends.
 - Job state lives in memory and is mirrored to `storage/jobs/<job_id>/job.json` so a restarted server can list finished jobs.
 - Files: `storage/videos/<video_id>/source.<ext>` + `meta.json` for uploads, `storage/jobs/<job_id>/` for `job.json`, `record.json`, `annotated.mp4`, `summary.json`, `hits.csv`, `rallies.csv`, `tracking.csv`, `timings.json`, `corrections.json` (score corrections), `cache/`.
 - `DELETE /jobs/{id}` and `DELETE /videos/{id}` remove the files (privacy requirement). `job.json` / `meta.json` go first; a file Windows keeps locked (e.g. a video still streaming) is removed at the next server start.
+
+### Live sessions
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant WS as WS /live
+    participant S as LiveSession (worker thread)
+    App->>WS: start {fps, width, height, corners, start_score, court}
+    WS-->>App: started {session_id, stages available}
+    loop every camera frame
+        App->>WS: header (frame index, capture ms) + JPEG
+        WS->>S: newest frame (older waiting frames: record only)
+        S-->>App: frame {shuttle, players, court, speed, rally_state, latency_ms}
+        S-->>App: hit / rally / line_call / score (when settled)
+        S-->>App: stats, degraded {level, reason}
+    end
+    App->>WS: override / correct (any time)
+    App->>WS: stop
+    WS-->>App: saved {job_id}
+```
+
+- **Shared stage code (D20).** `stream/perception.py` runs the offline models frame by frame: TrackNetV3 on a sliding window of its last `seq_len` frames (`tracking.tracknet.track_windows`, also used by the offline stage) and the pose detector with the same near/far tracker. `stream/analyzer.py` then runs the *offline* `hits`, `strokes`, `feedback`, `analytics` and `referee` stage functions on a window of frames since the last finished rally, every `live.tick_every` frames, and commits what has settled. `tests/test_stream.py::test_offline_live_parity` checks that a clip gives the same hits, rallies, line calls and score both ways.
+- **Live-only differences.** The TrackNet background median comes from the first `live.background_frames` frames (offline: the whole clip); InpaintNet, outlier removal, gap filling and centred keypoint smoothing are off because they need future frames; court positions and speed are computed per frame without centred smoothing.
+- **Latency budget.** The `frame` event (provisional overlay) is sent as soon as perception finishes on that frame; the target is p95 ≤ `live.budget_ms` (300 ms) from arrival on the team GPU. Hits are committed `hit_lag` frames later (the largest look-ahead of hit suppression, the stroke window, feedback and hit speed: 17 frames ≈ 0.57 s at 30 fps), plus at most one tick. A line call waits for the referee's rest rule (the shuttle still for `stationary_frames_end` = 20 frames ≈ 0.67 s). Measured numbers are in [EVALUATION.md](EVALUATION.md).
+- **Degrade path.** Frames are processed newest first: while one frame is in perception, any that arrive meanwhile are decoded and recorded but skipped (they appear in the record without a shuttle). Every `check_every` processed frames the session compares p95 latency with the budget and the skipped share with `max_drop_rate`, steps the perception input scale down (1.0 → 0.75 → 0.5) or back up, and sends `degraded {level, reason}`; the app shows "Reduced quality".
+- **Disconnects.** A socket that drops without `stop` leaves the session waiting `SHUTTLESENSE_LIVE_SESSION_TTL_S` (60 s) for `resume {session_id}`; after that it is saved as if stopped. Only one session runs at a time.
+- **Saving.** `stop` writes the recording to `storage/videos/<id>/source.mp4`, the record (`mode: "live"`) and exports to a new job folder, registers a job with `mode: "live"`, and renders `annotated.mp4` in the background. The job then shows in History like an upload. Re-rendering a live job re-analyses the recording with the offline pipeline.
+- **Fake mode.** With `SHUTTLESENSE_FAKE_PIPELINE=1` the camera image is ignored and synthetic rallies (`stream/synthetic.py`) are replayed on a synthetic court, through the same analyzer, so CI and the app can be tested without a GPU, weights or camera. `python -m shuttlesense.live_replay` replays a video or synthetic frames into a running server and reports latency.
 
 ## 4. App layout
 

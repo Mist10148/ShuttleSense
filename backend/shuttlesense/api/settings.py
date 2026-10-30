@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 1024
     config: Path = DEFAULT_CONFIG
     fake_pipeline: bool = False
+    live_session_ttl_s: float = 60.0  # a dropped live session waits this long for a resume
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -55,6 +55,8 @@ class JobManager:
         self._lock = threading.Lock()
         self._job_locks: dict[str, threading.Lock] = {}
         self._worker: threading.Thread | None = None
+        # One GPU: a job runs only while no live session holds it, and the other way round.
+        self.gpu = threading.Lock()
         # FIFO order of the queue, for queue_position (created_at is wrong after a re-render).
         self._enqueued: dict[str, int] = {}
         self._ticket = itertools.count()
@@ -227,7 +229,34 @@ class JobManager:
         config = dict(self.config)
         if job.start_score is not None:
             config["start_score"] = job.start_score.model_dump()
+        config["mode"] = job.mode
         return config
+
+    def add(self, job: Job) -> Job:
+        """Register a job made outside the queue (a saved live session)."""
+        with self._lock:
+            self._jobs[job.id] = job
+            self.storage.save_job(job)
+        return job
+
+    def finish_outside(self, job_id: str, *, error: str | None = None) -> None:
+        """Mark a job registered with add() done (or failed) once its outputs are written."""
+        out_dir = self.storage.job_dir(job_id)
+        outputs = {key: (out_dir / name).exists() for key, name in OUTPUT_FILES.items()}
+        if error is not None:
+            self._update(job_id, status="failed", error=error, finished_at=utcnow(),
+                         current_stage=None, outputs=JobOutputs(**outputs))  # fmt: skip
+            return
+        stages = [StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES]
+        self._update(
+            job_id,
+            status="done",
+            progress=1.0,
+            current_stage=None,
+            finished_at=utcnow(),
+            outputs=JobOutputs(**outputs),
+            stages=stages,
+        )
 
     def stage_weight(self, name: str) -> float:
         """Relative cost of a stage for overall progress (stages.<name>.weight)."""
@@ -270,17 +299,18 @@ class JobManager:
         self._update(job_id, status="running", started_at=utcnow())
         out_dir = self.storage.job_dir(job_id)
         try:
-            self.pipeline(
-                source,
-                out_dir,
-                clip_id=job_id,
-                config=self.job_config(job),
-                court_corners_px=job.court_corners_px,
-                overlays=job.overlays,
-                referee_enabled=job.referee,
-                device=self.device,
-                on_event=lambda n, s, p: self._on_event(job_id, n, s, p),
-            )
+            with self.gpu:
+                self.pipeline(
+                    source,
+                    out_dir,
+                    clip_id=job_id,
+                    config=self.job_config(job),
+                    court_corners_px=job.court_corners_px,
+                    overlays=job.overlays,
+                    referee_enabled=job.referee,
+                    device=self.device,
+                    on_event=lambda n, s, p: self._on_event(job_id, n, s, p),
+                )
         except JobCancelled:
             self.storage.delete_job(job_id)
             return

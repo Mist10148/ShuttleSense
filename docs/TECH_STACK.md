@@ -51,7 +51,7 @@ Platform notes:
 | --- | --- | --- | --- | --- |
 | Language | Python | 3.11–3.13 (CI: 3.12) | PSF | Required by the ML ecosystem; Colab ships 3.12 |
 | Web framework | FastAPI | 0.162.0 | MIT | Typed request/response models, automatic OpenAPI docs at `/docs`, background workers |
-| ASGI server | Uvicorn | 0.54.0 | BSD-3 | Standard FastAPI server, runs the same on Windows and Colab |
+| ASGI server | Uvicorn | 0.54.0 | BSD-3 | Standard FastAPI server, runs the same on Windows and Colab. The `[standard]` extra brings `websockets` (BSD-3), which serves `WS /live` and is the client in `shuttlesense.live_replay`; no extra pin needed |
 | Validation / schema | pydantic | 2.14.1 | MIT | One definition of the clip record used by pipeline, API and tests |
 | Settings | pydantic-settings | 2.16.2 | MIT | `SHUTTLESENSE_*` environment variables |
 | Uploads | python-multipart | 0.0.32 | Apache-2.0 | Multipart parsing for `POST /videos` |

@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shuttlesense.schema import Call, LineCall, PlayerSide, Rally, Score, ScorePair
+from shuttlesense.schema import Call, LineCall, Mode, PlayerSide, Rally, Score, ScorePair
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
@@ -110,3 +110,4 @@ class Job(BaseModel):
     overlays: list[str] = Field(default_factory=list)
     referee: bool = False
     start_score: ScorePair | None = None
+    mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)

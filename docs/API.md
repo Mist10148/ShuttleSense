@@ -179,6 +179,38 @@ Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"ca
 
 A record written by an older 1.x backend is upgraded on the fly (`schema.migrate`): missing fields get their defaults and `line_calls` / `rally_events` are derived from the rallies. The file on disk is not rewritten.
 
+### `WS /live`
+
+Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers cannot set headers on a WebSocket). Design and latency budget: [Architecture → Live sessions](ARCHITECTURE.md#live-sessions).
+
+**Client → server**
+
+| Message | Format | Notes |
+| --- | --- | --- |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2"}` | First message. Corners are in the pixels of the frames the app will send |
+| `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
+| frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Frames larger than 720p are scaled down |
+| `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override |
+| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction |
+| `stop` | `{"type": "stop"}` | Ends and saves the session |
+
+**Server → client** (JSON)
+
+| Event | Payload |
+| --- | --- |
+| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms` |
+| `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (boxes and keypoints), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
+| `hit` | `hit`: a clip-record hit (stroke, confidence, feedback, speed); sent about `hit_lag` frames after the contact |
+| `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
+| `line_call` | `line_call`: a clip-record line call (again after an override) |
+| `score` | `score` and every `rallies[]` entry |
+| `stats` | `received`, `processed`, `skipped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames |
+| `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
+| `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) |
+
+Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
+
 ### `DELETE /jobs/{job_id}`
 
 Cancels a queued/running job or deletes a finished job's outputs. `204`.

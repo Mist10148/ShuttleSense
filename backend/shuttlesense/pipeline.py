@@ -141,8 +141,9 @@ def run_pipeline(
     disabled = [n for n, opts in config.get("stages", {}).items() if not opts.get("enabled", True)]
 
     record = ClipRecord(
-        clip_id=clip_id, source_name=video_path.name, fps=0, width=0, height=0, num_frames=0
-    )
+        clip_id=clip_id, source_name=video_path.name, fps=0, width=0, height=0, num_frames=0,
+        mode=config.get("mode", "upload"),
+    )  # fmt: skip
     plan = plan_stages(
         has_court=bool(court_corners_px), referee_enabled=referee_enabled, disabled=disabled
     )

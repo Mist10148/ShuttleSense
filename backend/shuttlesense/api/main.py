@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from shuttlesense import __version__
 from shuttlesense.api.jobs import JobManager, PipelineFn
+from shuttlesense.api.live import LiveManager, ws_router
 from shuttlesense.api.routes import public, router
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage
@@ -64,12 +65,17 @@ def create_app(settings: Settings | None = None, pipeline: PipelineFn | None = N
         )
         app.state.storage = storage
         app.state.jobs = jobs
+        app.state.settings = settings
+        app.state.live = LiveManager(
+            app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s
+        )
         app.state.device = device
         app.state.available_stages = (
             list(STAGE_NAMES) if settings.fake_pipeline else available_stages(jobs.config)
         )
         jobs.start()
         yield
+        await app.state.live.shutdown()
         jobs.stop()
 
     app = FastAPI(title="ShuttleSense API", version=__version__, lifespan=lifespan)
@@ -85,6 +91,7 @@ def create_app(settings: Settings | None = None, pipeline: PipelineFn | None = N
     app.add_middleware(UploadLimit, limit=settings.max_upload_mb * 1024 * 1024 + 64 * 1024)
     app.include_router(public)
     app.include_router(router)
+    app.include_router(ws_router)
     return app
 
 

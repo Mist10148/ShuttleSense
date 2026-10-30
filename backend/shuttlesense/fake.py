@@ -107,6 +107,7 @@ def fake_pipeline(
     )
     record.clip_id = clip_id
     record.source_name = video_path.name
+    record.mode = (config or {}).get("mode", "upload")
     if court_corners_px:
         from shuttlesense.court import compute_homography
 

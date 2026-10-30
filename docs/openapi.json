@@ -139,6 +139,15 @@
             "title": "Id",
             "type": "string"
           },
+          "mode": {
+            "default": "upload",
+            "enum": [
+              "upload",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "outputs": {
             "$ref": "#/components/schemas/JobOutputs"
           },
