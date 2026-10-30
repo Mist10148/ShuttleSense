@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from shuttlesense.analytics import write_exports
-from shuttlesense.io import probe
+from shuttlesense.io import FrameReader
 from shuttlesense.pipeline import STAGE_NAMES, StageEvent
 from shuttlesense.schema import ClipRecord, Court, ScorePair
 
@@ -81,20 +81,29 @@ def fake_pipeline(
     on_event: StageEvent = lambda _name, _status, _progress: None,
 ) -> ClipRecord:
     """Drop-in replacement for run_pipeline that never touches a model."""
-    info = probe(video_path)
+    # Same normalized size, fps and frame count as the real io stage (<= 720p, even sizes).
+    io_cfg = (config or {}).get("stages", {}).get("io", {})
+    reader = FrameReader(
+        video_path,
+        target_height=io_cfg.get("target_height", 720),
+        max_fps=io_cfg.get("max_fps", 30),
+    )
     record = scale_record(
         load_golden(),
-        fps=info.fps,
-        width=info.width,
-        height=info.height,
-        num_frames=info.num_frames,
+        fps=reader.fps,
+        width=reader.width,
+        height=reader.height,
+        num_frames=len(reader),
     )
     record.clip_id = clip_id
     record.source_name = video_path.name
     if court_corners_px:
         from shuttlesense.court import compute_homography
 
-        corners = tuple(tuple(float(v) for v in c) for c in court_corners_px)
+        # Tapped on the source frame; the record uses normalized pixels (as court.run).
+        sx = reader.width / reader.source.width
+        sy = reader.height / reader.source.height
+        corners = tuple((float(x) * sx, float(y) * sy) for x, y in court_corners_px)
         record.court = Court(corners_px=corners, homography=compute_homography(corners).tolist())
     else:
         record.court = None
@@ -113,12 +122,11 @@ def fake_pipeline(
     for name in STAGE_NAMES:
         on_event(name, "running", 0.0)
         if name == "render":
-            from shuttlesense.io import FrameReader
             from shuttlesense.render import render_video
 
             render_video(
                 record,
-                FrameReader(video_path, target_height=info.height, max_fps=info.fps),
+                reader,
                 out_dir / "annotated.mp4",
                 overlays=overlays,
                 config=config,

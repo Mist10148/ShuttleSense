@@ -168,6 +168,18 @@ def test_fake_cli(tmp_path: Path, tiny_video: Path) -> None:
     assert (tmp_path / "out" / "hits.csv").read_text().count("\n") == 4
 
 
+def test_fake_record_is_normalized_like_the_io_stage(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.fake import fake_pipeline
+
+    config = {"stages": {"io": {"target_height": 46}}}  # 160x90 -> 82x46, as FrameReader
+    corners = [[20, 80], [140, 80], [120, 10], [40, 10]]
+    record = fake_pipeline(
+        tiny_video, tmp_path, clip_id="c", config=config, court_corners_px=corners
+    )
+    assert (record.width, record.height) == (82, 46)
+    assert record.court.corners_px[0] == pytest.approx((20 * 82 / 160, 80 * 46 / 90))
+
+
 def test_upload_over_duration_limit_is_400(tmp_path: Path, tiny_video: Path) -> None:
     config = tmp_path / "pipeline.yaml"
     config.write_text("stages:\n  io:\n    max_duration_s: 0.1\n")

@@ -42,6 +42,21 @@ def test_reader_downsamples_60_to_30fps(tmp_path: Path) -> None:
     assert len(reader.batch(8, 5)) == 2
 
 
+@pytest.mark.parametrize(
+    ("src_fps", "step"), [(30.0, 1), (30.3, 1), (40.0, 2), (50.0, 2), (60.0, 2), (100.0, 4)]
+)
+def test_reader_step_keeps_fps_at_most_max(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, src_fps: float, step: int
+) -> None:
+    from shuttlesense.io import video
+
+    info = video.VideoInfo(fps=src_fps, width=64, height=48, num_frames=120)
+    monkeypatch.setattr(video, "probe", lambda _path: info)
+    reader = FrameReader(tmp_path / "c.mp4", target_height=720, max_fps=30)
+    assert reader.step == step
+    assert reader.fps <= 30 * 1.02
+
+
 def test_reader_resizes_to_target_height(tmp_path: Path) -> None:
     clip = make_clip(tmp_path / "big.mp4", fps=25, size=(320, 180), frames=3)
     reader = FrameReader(clip, target_height=90, max_fps=30)

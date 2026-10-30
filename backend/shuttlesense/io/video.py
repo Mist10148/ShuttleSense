@@ -97,7 +97,8 @@ class FrameReader:
     """Normalized frames: height <= target_height, even width and height, fps <= max_fps.
 
     Frames are only ever scaled down. When the source fps is above max_fps, every k-th frame
-    is kept with k = round(src_fps / max_fps), and fps becomes src_fps / k.
+    is kept with k = ceil(src_fps / max_fps) and fps becomes src_fps / k; a source up to 2%
+    over max_fps (e.g. 30.3 fps) keeps every frame rather than dropping to half.
     Indices are normalized frame indices (what record.frames[] uses).
     """
 
@@ -110,7 +111,9 @@ class FrameReader:
             src_frames = _count_frames(self.path)
         self.source_frames = src_frames
         src_fps = self.source.fps
-        self.step = max(1, round(src_fps / max_fps)) if max_fps and src_fps > max_fps else 1
+        self.step = (
+            max(1, math.ceil(src_fps / max_fps - 0.02)) if max_fps and src_fps > max_fps else 1
+        )
         self.fps = src_fps / self.step
         if target_height and self.source.height > target_height:
             scale = target_height / self.source.height
