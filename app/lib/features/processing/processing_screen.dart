@@ -76,8 +76,13 @@ class ProcessingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen(jobProvider(jobId), (_, next) {
-      if (next.valueOrNull?.status == JobStatus.done) context.go(Routes.results(jobId));
+    ref.listen(jobProvider(jobId), (prev, next) {
+      // Only a fresh poll counts: after a re-render the provider is invalidated and, while it
+      // reloads, still holds the old "done" job, which must not send the user back to the
+      // old results.
+      if (next.isLoading || next.valueOrNull?.status != JobStatus.done) return;
+      if (prev?.valueOrNull?.status == JobStatus.done && prev?.isLoading == false) return;
+      context.go(Routes.results(jobId));
     });
     final job = ref.watch(jobProvider(jobId));
 

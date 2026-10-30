@@ -1,5 +1,12 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
@@ -54,6 +61,48 @@ void main() {
     expect(visited, ['/jobs/job2']);
   });
 
+  testWidgets('a finished job opens the results', (tester) async {
+    final done = Job.fromJson(jobJson());
+    final visited = await pumpScreen(
+      tester,
+      const ProcessingScreen(jobId: 'job1'),
+      overrides: [fixedJob(done)],
+    );
+    expect(visited, ['/jobs/job1/results']);
+  });
+
+  testWidgets('a re-render shows progress instead of the old results', (tester) async {
+    // First build: the finished job. After the re-render invalidates the provider: queued.
+    final builds = <StreamController<Job>>[];
+    final router = await pumpJobRoutes(tester, [
+      jobProvider.overrideWith((ref, _) {
+        final controller = StreamController<Job>();
+        ref.onDispose(controller.close);
+        builds.add(controller);
+        return controller.stream;
+      }),
+    ]);
+    builds.last.add(Job.fromJson(jobJson()));
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, '/jobs/job1/results');
+
+    // What showRerenderSheet does after POST /render.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProcessingScreen, skipOffstage: false)),
+    );
+    container.invalidate(jobProvider('job1'));
+    router.go('/jobs/job1');
+    await pumpFrames(tester);
+    expect(router.routeInformationProvider.value.uri.path, '/jobs/job1');
+
+    builds.last.add(Job.fromJson(jobJson(status: 'queued', progress: 0)));
+    await pumpFrames(tester);
+    expect(router.routeInformationProvider.value.uri.path, '/jobs/job1');
+    builds.last.add(Job.fromJson(jobJson()));
+    await pumpFrames(tester);
+    expect(router.routeInformationProvider.value.uri.path, '/jobs/job1/results');
+  });
+
   testWidgets('polling backs off on errors before giving up', (tester) async {
     final api = FakeApiClient()..failWith = ApiException('Cannot reach server');
     await pumpScreen(tester, const ProcessingScreen(jobId: 'job1'), api: api, settle: false);
@@ -66,4 +115,46 @@ void main() {
     expect(find.text('Lost connection to server'), findsOneWidget);
     expect(api.calls.where((c) => c == 'getJob job1'), hasLength(kPollBackoff.length + 1));
   });
+}
+
+/// The app's own nesting: results is a child of the processing route, so the processing
+/// screen (and its listener) stays mounted under the results screen.
+Future<GoRouter> pumpJobRoutes(WidgetTester tester, List<Override> overrides) async {
+  setSize(tester, phone);
+  SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000'});
+  final preferences = await SharedPreferences.getInstance();
+  final router = GoRouter(
+    initialLocation: '/jobs/job1',
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => const Text('home')),
+      GoRoute(
+        path: '/jobs/:jobId',
+        builder: (_, state) => ProcessingScreen(jobId: state.pathParameters['jobId']!),
+        routes: [
+          GoRoute(
+            path: 'results',
+            builder: (_, _) => const Scaffold(body: Text('results')),
+          ),
+        ],
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(preferences),
+        apiClientProvider.overrideWithValue(FakeApiClient()),
+        ...overrides,
+      ],
+      child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
+    ),
+  );
+  return router;
+}
+
+/// Spinners never settle, so pump a fixed number of frames instead.
+Future<void> pumpFrames(WidgetTester tester) async {
+  for (var i = 0; i < 5; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
