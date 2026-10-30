@@ -264,6 +264,10 @@ class JobManager:
             error = str(exc) or type(exc).__name__
             self._update(job_id, status="failed", error=error, finished_at=utcnow())
             return
+        finally:
+            # DELETE /videos while this job ran: the source was open, so finish the delete.
+            if self.storage.video_deleted(job.video_id):
+                self.storage.delete_video(job.video_id)
         if self.get(job_id) is None:  # deleted while the last stage was finishing
             self.storage.delete_job(job_id)
             return

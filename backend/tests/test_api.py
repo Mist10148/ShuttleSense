@@ -339,6 +339,51 @@ def test_worker_survives_storage_errors(tmp_path: Path, tiny_video: Path) -> Non
         assert second["status"] == "failed" and second["error"] == "AssertionError"
 
 
+def test_video_deleted_during_its_job_is_removed_when_the_job_stops(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    import shutil
+
+    app_ref = {}
+
+    def pipeline(source, _out_dir, *, on_event, **_kwargs):
+        # DELETE /videos/{id} arrives while the job holds the source open: as on Windows,
+        # only meta.json can be removed now.
+        storage = app_ref["app"].state.jobs.storage
+        rmtree = shutil.rmtree
+        shutil.rmtree = lambda *a, **k: None
+        try:
+            app_ref["client"].delete(f"/videos/{source.parent.name}")
+        finally:
+            shutil.rmtree = rmtree
+        assert storage.video_deleted(source.parent.name)
+        on_event("io", "running", 0.0)  # the worker notices the cancellation
+
+    app = create_app(Settings(storage_dir=tmp_path / "s", device="cpu"), pipeline=pipeline)
+    app_ref["app"] = app
+    with TestClient(app) as c:
+        app_ref["client"] = c
+        video = upload(c, tiny_video).json()
+        job_id = c.post("/jobs", json={"video_id": video["id"]}).json()["id"]
+        video_dir = app.state.jobs.storage.video_dir(video["id"])
+        deadline = time.time() + 10
+        while video_dir.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        assert not video_dir.exists()
+        assert c.get(f"/jobs/{job_id}").status_code == 404
+        assert c.get(f"/videos/{video['id']}/frames/0").status_code == 404
+
+
+def test_unreadable_job_file_is_skipped(tmp_path: Path) -> None:
+    from shuttlesense.api.storage import Storage
+
+    storage = Storage(tmp_path / "s")
+    bad = storage.jobs_dir / ("c" * 12)
+    bad.mkdir()
+    (bad / "job.json").write_text("{not json", encoding="utf-8")
+    assert storage.load_jobs() == []
+
+
 def test_queue_position_follows_enqueue_order(tmp_path: Path) -> None:
     from shuttlesense.api.jobs import JobManager
     from shuttlesense.api.models import Job

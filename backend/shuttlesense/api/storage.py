@@ -6,6 +6,7 @@ storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.c
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import uuid
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from shuttlesense.api.models import Job, VideoInfoOut
 from shuttlesense.atomic import atomic_write_text
+
+log = logging.getLogger(__name__)
 
 OUTPUT_FILES = {
     "record": "record.json",
@@ -68,9 +71,21 @@ class Storage:
         return VideoInfoOut.model_validate_json(path.read_text(encoding="utf-8"))
 
     def delete_video(self, video_id: str) -> None:
+        """Remove an upload. meta.json goes first: while a running job still has the source
+        open (Windows cannot delete it then), the video is already gone for the API, and
+        the job worker removes the rest once the job stops (JobManager)."""
         if not is_id(video_id):
             return
-        shutil.rmtree(self.video_dir(video_id), ignore_errors=True)
+        d = self.video_dir(video_id)
+        (d / "meta.json").unlink(missing_ok=True)
+        shutil.rmtree(d, ignore_errors=True)
+        if d.exists():
+            log.info("video %s is still in use; it is removed when its job stops", video_id)
+
+    def video_deleted(self, video_id: str) -> bool:
+        """True if delete_video ran but could not remove every file."""
+        d = self.video_dir(video_id)
+        return d.exists() and not (d / "meta.json").exists()
 
     # Jobs -------------------------------------------------------------------
 
@@ -92,8 +107,8 @@ class Storage:
         for path in self.jobs_dir.glob("*/job.json"):
             try:
                 jobs.append(Job.model_validate_json(path.read_text(encoding="utf-8")))
-            except ValueError:
-                continue
+            except (OSError, ValueError) as exc:  # one bad file must not stop the server
+                log.warning("skipping unreadable %s: %s", path, exc)
         return jobs
 
     def delete_job(self, job_id: str) -> None:
