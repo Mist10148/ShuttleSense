@@ -65,7 +65,7 @@ Platform notes:
 | Concern | Choice | Version | License | Why |
 | --- | --- | --- | --- | --- |
 | Deep learning | PyTorch | 2.15.0 (CUDA wheel) | BSD-3 | TrackNetV3 is PyTorch; stroke CNN training |
-| Shuttle tracking | TrackNetV3 (git submodule) | pinned commit | MIT | State of the art for tiny, blurred shuttles; pretrained weights; trajectory rectification |
+| Shuttle tracking | TrackNetV3 (git submodule) | `6eda442ada1740573f200f836d93edc9a541ee86` | MIT | State of the art for tiny, blurred shuttles; pretrained weights; trajectory rectification |
 | Person + pose | rtmlib (RTMDet + RTMPose) | 0.0.16 | Apache-2.0 | Multi-person, fast on ONNX Runtime, no mmcv install; COCO-17 keypoints |
 | Inference runtime | onnxruntime-gpu | 1.31.1 | MIT | Runs RTMDet/RTMPose on CUDA; CPU fallback with `onnxruntime` |
 | Fallback pose | torchvision Keypoint R-CNN | 0.30.0 | BSD-3 | `stages.pose.backend: keypoint_rcnn` (in code; weights fetched to the torch hub cache on first use). Used only if rtmlib fails the Phase 1 spike |
