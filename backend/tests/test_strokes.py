@@ -105,3 +105,55 @@ def test_training_script_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
     model, ckpt = classify.load_classifier("stroke.pt", "cpu")
     assert ckpt["window_frames"] == 32 and not model.training
+
+
+def test_make_figures_summarizes_seeds_and_ablation(tmp_path: Path) -> None:
+    import json
+
+    from shuttlesense.strokes.metrics import classification_report
+
+    spec = importlib.util.spec_from_file_location(
+        "make_figures", Path(__file__).resolve().parent.parent / "scripts" / "make_figures.py"
+    )
+    figures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(figures)
+
+    classes = list(STROKE_CLASSES)
+    rng = np.random.default_rng(0)
+    y = np.repeat(np.arange(6), 20)
+    for name, noise in [("m_seed1", 0.1), ("m_seed2", 0.2), ("m_pose_only_seed1", 0.4),
+                        ("m_pose_only_seed2", 0.5)]:  # fmt: skip
+        pred = np.where(rng.random(len(y)) < noise, (y + 1) % 6, y)
+        report = classification_report(y, pred, classes)
+        (tmp_path / f"{name}.json").write_text(json.dumps({"test": report}), encoding="utf-8")
+    (tmp_path / "m_seed3.json").write_text("{}", encoding="utf-8")  # no test section: ignored
+    (tmp_path / "other_seed1.json").write_text("{}", encoding="utf-8")
+
+    runs = figures.collect(tmp_path, "m")
+    assert [r["seed"] for r in runs["full"]] == [1, 2] and len(runs["pose_only"]) == 2
+    summary = figures.summarize(runs, classes)
+    full, pose = summary["variants"]["full"], summary["variants"]["pose_only"]
+    assert full["macro_accuracy"]["mean"] > pose["macro_accuracy"]["mean"]
+    assert full["macro_accuracy"]["std"] > 0
+    assert sum(map(sum, full["confusion_matrix"])) == 2 * len(y)
+    assert full["confused_pairs"][0]["predicted"] != full["confused_pairs"][0]["true"]
+    text = figures.to_markdown(summary, ["strokes_confusion.png"])
+    assert "| pose + shuttle | 1, 2 |" in text and "![strokes_confusion.png]" in text
+
+    pytest.importorskip("matplotlib")
+    written = figures.plot(summary, tmp_path / "results")
+    assert written == ["strokes_confusion.png", "strokes_per_class_f1.png", "strokes_ablation.png"]
+    assert all((tmp_path / "results" / f).stat().st_size > 1000 for f in written)
+
+
+def test_training_outputs_are_named_per_seed() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "train_stroke_classifier",
+        Path(__file__).resolve().parent.parent / "scripts" / "train_stroke_classifier.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    base = Path("weights/strokes/stroke_cnn.pt")
+    assert module.output_path(base, "", 3).name == "stroke_cnn_seed3.pt"
+    assert module.output_path(base, "_pose_only", 3).name == "stroke_cnn_pose_only_seed3.pt"
+    assert module.output_path(base, "", None).name == "stroke_cnn.pt"

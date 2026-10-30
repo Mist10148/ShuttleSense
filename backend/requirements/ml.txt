@@ -6,3 +6,5 @@ onnxruntime-gpu==1.31.1
 scipy==1.18.1
 huggingface-hub==2.3.0
 tqdm==4.70.1
+# Results figures (scripts/make_figures.py).
+matplotlib==3.11.2

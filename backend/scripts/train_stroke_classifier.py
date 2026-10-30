@@ -1,12 +1,16 @@
 """Train the 1D CNN stroke classifier (T3.8, T3.9).
 
 Usage: python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
-                [--pose-only] [--seed 42] [--epochs N] [--train m01,m02 --val m03]
+                [--pose-only] [--seed 42 | --seeds 1,2,3] [--epochs N]
+                [--train m01,m02 --val m03]
 
-Reads data/features/<match_id>.npz and the match split (data.splits). Saves the best
-checkpoint on val macro-F1 as {state_dict, in_features, window_frames, classes, config,
-use_trajectory}
-and per-epoch + test metrics as JSON.
+Reads data/features/<match_id>.npz and the match split (data.splits). For each seed, saves
+the best checkpoint on val macro-F1 as {state_dict, in_features, window_frames, classes,
+config, use_trajectory} to <checkpoint>_seed<seed>.pt, and per-epoch + test metrics to
+<metrics>_seed<seed>.json ("_pose_only" before "_seed" for the ablation). The seed with the
+best val macro-F1 is also copied to <checkpoint>.pt, the file the pipeline loads.
+scripts/make_figures.py turns the metrics files into docs/results/strokes.md (mean +- std
+over seeds, full vs pose-only).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -141,6 +146,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=BACKEND_DIR / "configs" / "stroke_cnn.yaml")
     parser.add_argument("--pose-only", action="store_true", help="ablation: drop shuttle features")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--seeds", help="comma-separated seeds, one run each (T3.9: 3 seeds)")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--train", help="comma-separated match ids (overrides the split file)")
     parser.add_argument("--val", help="comma-separated match ids")
@@ -160,21 +166,38 @@ def main() -> None:
     else:
         splits = json.loads((BACKEND_DIR / cfg["data"]["splits"]).read_text(encoding="utf-8"))
     use_trajectory = cfg["data"].get("use_trajectory", True) and not args.pose_only
-    seed = args.seed if args.seed is not None else cfg.get("seed", 42)
+    if args.seeds:
+        seeds = [int(s) for s in args.seeds.split(",") if s]
+    else:
+        seeds = [args.seed if args.seed is not None else cfg.get("seed", 42)]
     device = detect_device(args.device)
-    result = train(cfg, splits, use_trajectory=use_trajectory, seed=seed, device=device)
-
     suffix = "" if use_trajectory else "_pose_only"
-    ckpt = BACKEND_DIR / cfg["output"]["checkpoint"]
-    ckpt = ckpt.with_name(f"{ckpt.stem}{suffix}{ckpt.suffix}")
-    ckpt.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(result.pop("checkpoint"), ckpt)
-    metrics = BACKEND_DIR / cfg["output"]["metrics"]
-    metrics = metrics.with_name(f"{metrics.stem}{suffix}_seed{seed}{metrics.suffix}")
-    metrics.parent.mkdir(parents=True, exist_ok=True)
-    metrics.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    test = result.get("test", {})
-    print(f"saved {ckpt.name}; test macro accuracy {test.get('macro_accuracy', float('nan')):.3f}")
+    ckpt_base = BACKEND_DIR / cfg["output"]["checkpoint"]
+    metrics_base = BACKEND_DIR / cfg["output"]["metrics"]
+    best_f1, best_ckpt = -1.0, None
+    for seed in seeds:
+        result = train(cfg, splits, use_trajectory=use_trajectory, seed=seed, device=device)
+        ckpt = output_path(ckpt_base, suffix, seed)
+        ckpt.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(result.pop("checkpoint"), ckpt)
+        metrics = output_path(metrics_base, suffix, seed)
+        metrics.parent.mkdir(parents=True, exist_ok=True)
+        metrics.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        test = result.get("test", {})
+        acc = test.get("macro_accuracy", float("nan"))
+        print(f"seed {seed}: saved {ckpt.name}; test macro accuracy {acc:.3f}")
+        if result["best_val_macro_f1"] > best_f1:
+            best_f1, best_ckpt = result["best_val_macro_f1"], ckpt
+    if best_ckpt is not None:
+        default = output_path(ckpt_base, suffix, None)
+        shutil.copyfile(best_ckpt, default)
+        print(f"{default.name} <- {best_ckpt.name} (best val macro-F1 {best_f1:.3f})")
+
+
+def output_path(base: Path, suffix: str, seed: int | None) -> Path:
+    """<stem><suffix>_seed<seed><ext>, or <stem><suffix><ext> without a seed."""
+    tag = "" if seed is None else f"_seed{seed}"
+    return base.with_name(f"{base.stem}{suffix}{tag}{base.suffix}")
 
 
 if __name__ == "__main__":
