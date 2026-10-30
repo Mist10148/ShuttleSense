@@ -185,7 +185,8 @@ class _Header extends StatelessWidget {
     final elapsed = job.elapsed();
     final eta = job.eta();
     final timing = [
-      if (elapsed != null) 'Elapsed ${formatDuration(elapsed)}',
+      // A queued re-render may still carry the first run's start (servers before the fix).
+      if (elapsed != null && job.status != JobStatus.queued) 'Elapsed ${formatDuration(elapsed)}',
       if (eta != null && job.status == JobStatus.running) 'about ${formatDuration(eta)} left',
     ].join(' · ');
     final percent = (job.progress * 100).round();

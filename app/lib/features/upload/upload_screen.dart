@@ -52,8 +52,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   @override
   void dispose() {
-    // Leaving the screen (e.g. for History) stops the upload; otherwise it would finish
-    // with nobody left to start the job, leaving an orphan video on the server.
+    // Leaving the screen (Back, Change server) stops the upload; otherwise it would finish
+    // with nobody left to start the job, leaving an orphan video on the server. Switching
+    // to another tab keeps this screen mounted, so the upload carries on.
     _cancel?.cancel();
     super.dispose();
   }

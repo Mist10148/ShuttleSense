@@ -50,6 +50,20 @@ void main() {
     expect(api.calls, contains('deleteJob job1'));
   });
 
+  testWidgets('queued re-render shows no elapsed time from the earlier run', (tester) async {
+    // jobJson keeps started_at for queued jobs, like an older server after a re-render.
+    final queued = Job.fromJson(jobJson(status: 'queued', progress: 0));
+    await pumpScreen(
+      tester,
+      const ProcessingScreen(jobId: 'job1'),
+      overrides: [fixedJob(queued)],
+      settle: false, // the queued progress bar animates forever
+    );
+    await tester.pump();
+    expect(find.textContaining('Waiting in queue'), findsOneWidget);
+    expect(find.textContaining('Elapsed'), findsNothing);
+  });
+
   testWidgets('failed job can be retried with the same options', (tester) async {
     final api = FakeApiClient(
       jobs: [Job.fromJson(jobJson(status: 'failed', error: 'stage pose failed'))],
