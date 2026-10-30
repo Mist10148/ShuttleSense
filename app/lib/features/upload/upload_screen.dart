@@ -40,13 +40,22 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       allowedExtensions: gallery ? null : const ['mp4', 'mov', 'avi'],
     );
     if (files.isEmpty) return;
-    final size = await files.first.length() ?? 0;
+    final size = await files.first.length();
     if (!mounted) return;
+    final problem = uploadSizeProblem(size, web: kIsWeb);
     setState(() {
-      _file = files.first;
-      _size = size;
-      _error = null;
+      _file = problem == null ? files.first : null;
+      _size = problem == null ? size! : 0;
+      _error = problem;
     });
+  }
+
+  @override
+  void dispose() {
+    // Leaving the screen (e.g. for History) stops the upload; otherwise it would finish
+    // with nobody left to start the job, leaving an orphan video on the server.
+    _cancel?.cancel();
+    super.dispose();
   }
 
   Future<void> _upload() async {
@@ -57,18 +66,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final options = ref
         .read(pendingJobOptionsProvider)
         .submittable(ref.read(healthProvider).valueOrNull);
+    final cancel = CancelToken();
     setState(() {
       _progress = 0;
       _sent = 0;
       _error = null;
-      _cancel = CancelToken();
+      _cancel = cancel;
     });
     try {
       final video = await api.uploadVideo(
         stream: file.readAsByteStream(),
         length: _size,
         filename: file.name,
-        cancelToken: _cancel,
+        cancelToken: cancel,
         onProgress: (sent, total) {
           if (mounted && total > 0) {
             setState(() {
@@ -86,8 +96,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         if (mounted) context.go(Routes.job(job.id));
       }
     } on ApiException catch (e) {
-      // The picked file is kept so the user can retry without choosing it again.
-      if (mounted) setState(() => _error = e.message);
+      // The picked file is kept so the user can retry without choosing it again. A cancel
+      // the user asked for is not an error.
+      if (mounted) setState(() => _error = cancel.isCancelled ? null : e.message);
     } finally {
       if (mounted) {
         setState(() {

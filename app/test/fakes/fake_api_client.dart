@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -120,6 +121,36 @@ class FakeApiClient extends ApiClient {
 
   @override
   Future<Health> health() => _answer('health', () => healthInfo);
+
+  /// While set, uploads report half the bytes sent and wait for it (or a cancel).
+  Completer<void>? uploadGate;
+
+  /// Thrown by uploadVideo once the gate opens.
+  ApiException? uploadError;
+
+  /// The cancel token of the last upload.
+  CancelToken? uploadCancel;
+
+  @override
+  Future<VideoInfo> uploadVideo({
+    required Stream<List<int>> stream,
+    required int length,
+    required String filename,
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    calls.add('uploadVideo $filename $length');
+    uploadCancel = cancelToken;
+    onProgress?.call(length ~/ 2, length);
+    final gate = uploadGate;
+    if (gate != null) {
+      await Future.any([gate.future, if (cancelToken != null) cancelToken.whenCancel]);
+    }
+    if (cancelToken?.isCancelled ?? false) throw ApiException('Cancelled');
+    final error = uploadError ?? failWith;
+    if (error != null) throw error;
+    return videos['vid1']!;
+  }
 
   @override
   Future<VideoInfo> getVideo(String videoId) => _answer('getVideo $videoId', () {

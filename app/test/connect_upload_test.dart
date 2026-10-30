@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
@@ -8,6 +11,7 @@ import 'package:shuttlesense_app/features/upload/upload_controller.dart';
 import 'package:shuttlesense_app/features/upload/upload_screen.dart';
 
 import 'fakes/fake_api_client.dart';
+import 'fakes/fake_file_picker.dart';
 import 'helpers.dart';
 
 Health health({String schema = '1.0', bool auth = false, List<String> stages = kAllStages}) =>
@@ -138,6 +142,87 @@ void main() {
       final pose = tester.widget<FilterChip>(find.widgetWithText(FilterChip, 'Skeletons'));
       expect(boxes.selected, isTrue);
       expect(pose.selected, isFalse);
+    });
+
+    const mb = 1024 * 1024;
+
+    /// Picks a [size]-byte "rally.mp4" with calibration off, so a finished upload starts the job.
+    Future<(FakeApiClient, List<String>)> pickVideo(WidgetTester tester, {int? size = mb}) async {
+      FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', size)]);
+      final api = FakeApiClient()..uploadGate = Completer<void>();
+      final visited = await pumpScreen(
+        tester,
+        const UploadScreen(),
+        api: api,
+        size: tablet,
+        prefs: {'options.calibrate': false},
+      );
+      await tester.tap(find.text('Choose video'));
+      await tester.pumpAndSettle();
+      return (api, visited);
+    }
+
+    Future<void> startUpload(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('Upload and analyze'));
+      await tester.tap(find.text('Upload and analyze'));
+      await tester.pump();
+    }
+
+    testWidgets('upload shows progress, then starts the job', (tester) async {
+      final (api, visited) = await pickVideo(tester, size: 10 * mb);
+      expect(find.text('rally.mp4'), findsOneWidget);
+      await startUpload(tester);
+      expect(find.text('Uploading 5.0 MB of 10.0 MB (50%)'), findsOneWidget);
+      expect(
+        tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value,
+        0.5,
+      );
+      api.uploadGate!.complete();
+      await tester.pumpAndSettle();
+      expect(api.calls, contains('createJob vid1 ${api.calls.last.split(' ').last}'));
+      expect(visited, ['/jobs/job2']);
+    });
+
+    testWidgets('cancel resets the upload without an error', (tester) async {
+      final (api, visited) = await pickVideo(tester);
+      await startUpload(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(api.uploadCancel!.isCancelled, isTrue);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Cancelled'), findsNothing);
+      expect(find.text('Upload and analyze'), findsOneWidget); // file kept for a retry
+      expect(visited, isEmpty);
+    });
+
+    testWidgets('a failed upload shows the server message', (tester) async {
+      final (api, _) = await pickVideo(tester);
+      api.uploadError = ApiException('Video is longer than 5 minutes', statusCode: 400);
+      await startUpload(tester);
+      api.uploadGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Video is longer than 5 minutes'), findsOneWidget);
+      expect(find.text('Upload and analyze'), findsOneWidget);
+    });
+
+    testWidgets('leaving the screen cancels the upload', (tester) async {
+      final (api, _) = await pickVideo(tester);
+      await startUpload(tester);
+      await tester.pumpWidget(const SizedBox());
+      expect(api.uploadCancel!.isCancelled, isTrue);
+    });
+
+    testWidgets('a file of unknown size is not accepted', (tester) async {
+      final (api, _) = await pickVideo(tester, size: null);
+      expect(find.textContaining('Could not read the size'), findsOneWidget);
+      expect(find.text('rally.mp4'), findsNothing);
+      expect(api.calls.where((c) => c.startsWith('uploadVideo')), isEmpty);
+    });
+
+    test('browser uploads have a lower cap', () {
+      expect(uploadSizeProblem(600 * mb, web: false), isNull);
+      expect(uploadSizeProblem(600 * mb, web: true), contains('at most 512.0 MB'));
+      expect(uploadSizeProblem(0, web: false), 'This file is empty.');
     });
 
     test('formatBytes', () {
