@@ -11,17 +11,22 @@ from shuttlesense.schema import STROKE_CLASSES, ClipRecord
 from shuttlesense.stage import StageContext, StageSkipped
 from shuttlesense.strokes.features import POSE_FEATURES, build_window
 
-_MODELS: dict[tuple[str, str], Any] = {}
+_MODELS: dict[tuple[str, str, int, int], Any] = {}
 
 
 def load_classifier(path: str, device: str):
-    """(model, checkpoint dict), cached per (path, device) so the API worker loads it once."""
-    key = (path, device)
-    if key in _MODELS:
-        return _MODELS[key]
+    """(model, checkpoint dict), cached per (path, device) so the API worker loads it once.
+
+    The key also holds the file's size and mtime: replacing the weights while the server
+    runs loads the new ones (the stage cache already notices the change, see cache.py).
+    """
     weights = BACKEND_DIR / path
     if not weights.exists():
         raise StageSkipped("stroke model not installed")
+    stat = weights.stat()
+    key = (path, device, stat.st_size, stat.st_mtime_ns)
+    if key in _MODELS:
+        return _MODELS[key]
     try:
         import torch
     except ImportError as exc:

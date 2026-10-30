@@ -57,6 +57,22 @@ def test_config_change_invalidates_cache(counting_stages, tiny_video: Path, tmp_
     assert counting_stages["tracking"] == 3
 
 
+def test_display_only_keys_keep_the_cache(counting_stages, tiny_video: Path, tmp_path: Path):
+    run_pipeline(tiny_video, tmp_path, clip_id="c")
+    display = {"tracking": {"trail_length": 15, "weight": 9}, "hits": {"marker_duration_s": 2}}
+    run_pipeline(tiny_video, tmp_path, clip_id="c", config={"stages": display})
+    assert counting_stages["tracking"] == 1
+
+
+def test_pose_key_includes_court_block() -> None:
+    from shuttlesense import cache
+
+    singles = {"court": {"court_size_m": [5.18, 13.4]}}
+    doubles = {"court": {"court_size_m": [6.1, 13.4]}}
+    assert cache.key_config("pose", singles) != cache.key_config("pose", doubles)
+    assert cache.key_config("tracking", singles) == cache.key_config("tracking", doubles)
+
+
 def test_file_changed_in_place_invalidates_cache(
     counting_stages, tiny_video: Path, tmp_path: Path
 ) -> None:

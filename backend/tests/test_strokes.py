@@ -105,6 +105,16 @@ def test_training_script_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
     model, ckpt = classify.load_classifier("stroke.pt", "cpu")
     assert ckpt["window_frames"] == 32 and not model.training
+    assert classify.load_classifier("stroke.pt", "cpu")[0] is model  # loaded once
+
+    # New weights dropped in while the server runs are loaded, not the cached model.
+    import os
+
+    result["checkpoint"]["window_frames"] = 24
+    torch.save(result["checkpoint"], tmp_path / "stroke.pt")
+    stat = (tmp_path / "stroke.pt").stat()
+    os.utime(tmp_path / "stroke.pt", ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    assert classify.load_classifier("stroke.pt", "cpu")[1]["window_frames"] == 24
 
 
 def test_make_figures_summarizes_seeds_and_ablation(tmp_path: Path) -> None:

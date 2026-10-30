@@ -1,7 +1,8 @@
 """Per-stage cache: out_dir/cache/<stage>.json holds the fields a stage owns (T2.8).
 
 A stage is skipped when its cache file exists and its key matches. Keys are chained: each
-one hashes the stage's config block, whether its packages and weights are installed, the
+one hashes the stage's config block (without display-only keys, plus any other block the stage
+reads, see key_config), whether its packages and weights are installed, the
 size and modification time of every file the config block names (weights, a precomputed
 tracking CSV), the video file, the schema version, the job inputs (court corners) and the
 previous stage's key, so changing an upstream stage invalidates everything after it. A stage
@@ -30,6 +31,25 @@ OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "analytics": (("hits", "summary"), ("court_positions", "shuttle_speed_kmh")),
     "referee": (("hits", "rallies", "score"), ("rally_state",)),
 }
+
+
+# Keys that only change drawing (read by render) or progress. Leaving them out of the key keeps
+# a re-render with a longer trail from re-running tracking and every stage after it.
+DISPLAY_ONLY = frozenset({"weight", "trail_length", "marker_duration_s"})
+
+# Config blocks a stage reads besides its own.
+EXTRA_BLOCKS: dict[str, tuple[str, ...]] = {"pose": ("court",)}
+
+
+def key_config(stage: str, stages_config: dict[str, Any]) -> dict[str, Any]:
+    """The part of stages.<...> config that can change what `stage` writes."""
+
+    def strip(block: dict[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in block.items() if k not in DISPLAY_ONLY}
+
+    own = strip(stages_config.get(stage, {}))
+    extra = {name: strip(stages_config.get(name, {})) for name in EXTRA_BLOCKS.get(stage, ())}
+    return {**own, "_blocks": extra} if extra else own
 
 
 def initial_key(video_path: Path, config: dict[str, Any]) -> str:
