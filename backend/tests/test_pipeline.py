@@ -57,6 +57,26 @@ def test_config_change_invalidates_cache(counting_stages, tiny_video: Path, tmp_
     assert counting_stages["tracking"] == 3
 
 
+def test_file_changed_in_place_invalidates_cache(
+    counting_stages, tiny_video: Path, tmp_path: Path
+) -> None:
+    import os
+
+    csv_path = tmp_path / "track.csv"
+    csv_path.write_text("Frame,Visibility,X,Y\n", encoding="utf-8")
+    config = {"stages": {"tracking": {"precomputed_csv": str(csv_path)}}}
+    out = tmp_path / "out"
+    run_pipeline(tiny_video, out, clip_id="c", config=config)
+    run_pipeline(tiny_video, out, clip_id="c", config=config)
+    assert counting_stages["tracking"] == 1
+    # Same path, new content (e.g. predict.py run again into the same CSV).
+    csv_path.write_text("Frame,Visibility,X,Y\n0,1,5,5\n", encoding="utf-8")
+    stat = csv_path.stat()
+    os.utime(csv_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    run_pipeline(tiny_video, out, clip_id="c", config=config)
+    assert counting_stages["tracking"] == 2
+
+
 def test_stage_that_becomes_available_reruns_downstream(
     monkeypatch: pytest.MonkeyPatch, tiny_video: Path, tmp_path: Path
 ) -> None:

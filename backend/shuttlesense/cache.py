@@ -2,11 +2,12 @@
 
 A stage is skipped when its cache file exists and its key matches. Keys are chained: each
 one hashes the stage's config block, whether its packages and weights are installed, the
-video file, the schema version, the job inputs (court corners) and the previous stage's key,
-so changing an upstream stage invalidates everything after it. A stage that skipped itself
-(StageSkipped) is cached as skipped, so installing its weights later makes it, and every
-stage after it, run again. io and render are never cached (io is cheap and provides the
-frame reader; render depends on the overlay choice).
+size and modification time of every file the config block names (weights, a precomputed
+tracking CSV), the video file, the schema version, the job inputs (court corners) and the
+previous stage's key, so changing an upstream stage invalidates everything after it. A stage
+that skipped itself (StageSkipped) is cached as skipped, so installing its weights later makes
+it, and every stage after it, run again. io and render are never cached (io is cheap and
+provides the frame reader; render depends on the overlay choice).
 """
 
 from __future__ import annotations
@@ -43,16 +44,39 @@ def initial_key(video_path: Path, config: dict[str, Any]) -> str:
     return _sha1(payload)
 
 
+def file_stamps(stage_config: dict[str, Any], base_dir: Path) -> dict[str, list[int]]:
+    """(size, mtime) of each existing file a config value points at, keyed by config key.
+
+    Paths are relative to base_dir (absolute paths stay absolute), as the stages read them.
+    Replacing weights or re-running TrackNetV3 into the same CSV then invalidates the cache.
+    """
+    stamps = {}
+    for name, value in stage_config.items():
+        if not isinstance(value, str) or not value:
+            continue
+        path = base_dir / value
+        try:
+            if path.is_file():
+                stat = path.stat()
+                stamps[name] = [stat.st_size, stat.st_mtime_ns]
+        except OSError:
+            continue
+    return stamps
+
+
 def next_key(
     previous: str,
     stage: str,
     enabled: bool,
     stage_config: dict[str, Any],
     available: bool = True,
+    files: dict[str, list[int]] | None = None,
 ) -> str:
-    payload = {"prev": previous, "stage": stage, "on": enabled, "cfg": stage_config}
+    payload: dict[str, Any] = {"prev": previous, "stage": stage, "on": enabled, "cfg": stage_config}
     if not available:  # keeps keys of installed stages unchanged
         payload["missing"] = True
+    if files:  # likewise for stages that name no file
+        payload["files"] = files
     return _sha1(payload)
 
 

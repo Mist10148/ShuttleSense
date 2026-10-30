@@ -142,7 +142,8 @@ def run_pipeline(
     timings: dict[str, float] = {}
     for spec, enabled in plan:
         stage_cfg = config.get("stages", {}).get(spec.name, {})
-        key = cache.next_key(key, spec.name, enabled, stage_cfg, spec.name in installed)
+        files = cache.file_stamps(stage_cfg, BACKEND_DIR)
+        key = cache.next_key(key, spec.name, enabled, stage_cfg, spec.name in installed, files)
         if not enabled:
             continue
         if cache.is_skipped(out_dir, spec.name, key):
