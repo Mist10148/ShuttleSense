@@ -393,7 +393,9 @@ class LiveStatusBar extends StatelessWidget {
           Chip(
             avatar: const Icon(Icons.info_outline, size: 16),
             label: Text(
-              state.stages['tracking'] == false
+              state.stages['synthetic'] == true
+                  ? 'Demo server: synthetic rallies, not your camera'
+                  : state.stages['tracking'] == false
                   ? 'No shuttle tracking on this server'
                   : 'No pose model on this server',
             ),

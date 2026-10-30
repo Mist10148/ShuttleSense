@@ -150,7 +150,8 @@ class ReplayPerception:
     The record is scaled to the session's frame size and replayed in a loop.
     """
 
-    available = {"tracking": True, "pose": True}
+    # No model runs: the app says the data is synthetic instead of claiming tracking.
+    available = {"tracking": False, "pose": False, "synthetic": True}
 
     def __init__(self, record: ClipRecord, frame_size: tuple[int, int]) -> None:
         self.record = record

@@ -234,3 +234,53 @@ def test_bench_strokes_times_a_random_model_on_cpu(tmp_path: Path) -> None:
         {"model": "random", "hits": 10, "duration_s": 10.0, "devices": [timing]}
     )
     assert "| cpu |" in text and "< 30 s" in text
+
+
+def test_eval_line_calls_counts_certain_calls_and_near_line(tmp_path: Path) -> None:
+    eval_line_calls = load_script("eval_line_calls")
+    from shuttlesense.config import load_config
+    from shuttlesense.stream.analyzer import StreamAnalyzer
+    from shuttlesense.stream.synthetic import synthetic_record
+
+    # The synthetic clip: rally 0 lands IN, rally 1 OUT, rally 2 just inside (UNCERTAIN).
+    clip, _ = synthetic_record()
+    a = StreamAnalyzer(clip_id="c", fps=clip.fps, width=clip.width, height=clip.height,
+                       court=clip.court, config=load_config())  # fmt: skip
+    for f in clip.frames:
+        a.add_frame(f.shuttle, f.players)
+    pred = tmp_path / "record.json"
+    pred.write_text(a.finalize().model_dump_json(), encoding="utf-8")
+    header = ["start_s", "end_s", "winner", "in_out", "landing_x_m", "landing_y_m"]
+    rows = [
+        [0.0, 2.1, "near", "in", 2.0, 10.0],
+        [4.4, 6.8, "near", "in", 5.10, 3.0],
+        [9.1, 10.9, "", "in", 5.15, 10.5],
+        [20.0, 22.0, "", "out", "", ""],
+    ]
+    gt = write_csv(tmp_path / "rally01.csv", header, rows)
+    result = eval_line_calls.evaluate(
+        eval_line_calls.read_predicted(pred), eval_line_calls.read_labels(gt)
+    )
+    # Rally 1 was labelled IN on purpose: the automated OUT call is a false call near the line.
+    assert result["labelled"] == 4 and result["called"] == 3 and result["certain"] == 2
+    assert result["precision_in"] == 1.0 and result["recall_in"] == 0.5
+    assert result["precision_out"] == 0.0 and result["uncertain_share"] == 1 / 3
+    near = result["near_line"]
+    assert near["basis"] == "labelled landing" and near["certain_calls"] == 1
+    assert near["false_call_rate"] == 1.0
+    md = eval_line_calls.to_markdown({"rally01": result}, result,
+                                     type("A", (), {"tolerance": 1.0})())  # fmt: skip
+    assert "| rally01 | 4 | 3 | 2 |" in md
+    empty = eval_line_calls.summarize([], 20)
+    assert "no accuracy is reported" in eval_line_calls.to_markdown({}, empty, None)
+
+
+def test_shuttleset_lose_reason_gives_labels(tmp_path: Path) -> None:
+    eval_line_calls = load_script("eval_line_calls")
+    gt = write_csv(tmp_path / "set1.csv", ["rally", "ball_round", "frame_num", "lose_reason"],
+                   [[1, 1, 30, ""], [1, 2, 90, "出界"], [2, 1, 300, ""], [2, 2, 360, "掛網"],
+                    [3, 1, 600, "對手落地致勝"]])  # fmt: skip
+    rallies = eval_line_calls.read_shuttleset(gt, fps=30)
+    assert [(r["start_s"], r["end_s"], r["call"]) for r in rallies] == [
+        (1.0, 3.0, "out"), (10.0, 12.0, None), (20.0, 20.0, "in"),
+    ]  # fmt: skip

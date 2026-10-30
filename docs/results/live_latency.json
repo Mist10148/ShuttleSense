@@ -1,0 +1,28 @@
+{
+  "frames": 600,
+  "stages": {
+    "tracking": false,
+    "pose": false,
+    "synthetic": true
+  },
+  "round_trip_ms": {
+    "p50": 10.1,
+    "p95": 20.7,
+    "p99": 23.3
+  },
+  "server_ms": {
+    "p50": 7.0,
+    "p95": 17.5,
+    "p99": 20.1
+  },
+  "throughput_fps": 82.2,
+  "events": {
+    "frame": 600,
+    "rally": 9,
+    "hit": 17,
+    "stats": 20,
+    "line_call": 4,
+    "score": 4
+  },
+  "job_id": "d3d838e0d2da"
+}
