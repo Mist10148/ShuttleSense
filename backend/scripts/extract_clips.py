@@ -79,17 +79,22 @@ def stroke_windows(strokes: list[Stroke], pad: int, num_frames: int) -> tuple[li
     return windows, skipped
 
 
+def _int(text: str) -> int:
+    """ShuttleSet writes most numbers as floats ("11496.0")."""
+    return int(float(text))
+
+
 def read_strokes(match_dir: Path) -> list[Stroke]:
     strokes = []
     for set_no, path in enumerate(sorted(match_dir.glob("set*.csv")), start=1):
-        with path.open(newline="", encoding="utf-8") as f:
+        with path.open(newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 strokes.append(
                     Stroke(
                         set=set_no,
-                        rally=int(row["rally"]),
-                        stroke_no=int(row["ball_round"]),
-                        frame=int(row["frame_num"]),
+                        rally=_int(row["rally"]),
+                        stroke_no=_int(row["ball_round"]),
+                        frame=_int(row["frame_num"]),
                         player=row["player"],
                         type=row["type"],
                     )
@@ -147,12 +152,14 @@ def main() -> None:
     if not match_list.exists():
         raise SystemExit("data/shuttleset/match_list.csv missing: run download_shuttleset.py")
     with match_list.open(newline="", encoding="utf-8") as f:
-        matches = list(csv.DictReader(f))
+        matches = {row["match_id"]: row for row in csv.DictReader(f)}
     for number in args.matches:
-        if number > len(matches):
-            break
-        row = matches[number - 1]
-        match_id = row["match_id"]
+        # By id, not position: download_shuttleset.py leaves out matches it could not fetch.
+        match_id = f"m{number:02d}"
+        row = matches.get(match_id)
+        if row is None:
+            print(f"{match_id}: not in match_list.csv, skipped")
+            continue
         video = DATA_DIR / "videos" / row["video"]
         if not video.exists():
             print(f"{match_id}: video missing, skipped")

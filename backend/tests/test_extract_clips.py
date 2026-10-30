@@ -40,3 +40,17 @@ def test_skips_window_crossing_rally_end(ec) -> None:
     windows, skipped = ec.stroke_windows(strokes, pad=16, num_frames=1000)
     assert skipped == 2  # the smash window reaches into rally 2, the serve back into rally 1
     assert [(w.stroke.rally, w.stroke.stroke_no) for w in windows] == [(1, 1), (2, 2)]
+
+
+def test_read_strokes_parses_shuttleset_floats(ec, tmp_path) -> None:
+    # ShuttleSet writes ball_round and frame_num as "11496.0"; types are Chinese.
+    match = tmp_path / "m01"
+    match.mkdir()
+    sample = Path(__file__).parent / "fixtures" / "shuttleset_sample.csv"
+    (match / "set1.csv").write_bytes(b"\xef\xbb\xbf" + sample.read_bytes())  # with a BOM
+    strokes = ec.read_strokes(match)
+    assert len(strokes) == 19
+    first, last = strokes[0], strokes[-1]
+    assert (first.set, first.rally, first.stroke_no, first.frame) == (1, 1, 1, 1100)
+    assert first.type == "殺球"
+    assert (last.stroke_no, last.frame) == (4, 2000)  # plain ints parse too
