@@ -51,6 +51,18 @@ def test_reader_resizes_to_target_height(tmp_path: Path) -> None:
     assert (small.width, small.height) == (320, 180) and not small.resized
 
 
+def test_reader_makes_odd_sizes_even(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # libx264 rejects odd sizes, e.g. 853x480 (16:9 at 480p); OpenCV cannot write such a test
+    # clip, so the probe is faked.
+    from shuttlesense.io import video
+
+    odd = video.VideoInfo(fps=25.0, width=853, height=481, num_frames=3)
+    monkeypatch.setattr(video, "probe", lambda _path: odd)
+    reader = FrameReader(tmp_path / "odd.mp4", target_height=720, max_fps=30)
+    assert (reader.width, reader.height) == (852, 480) and reader.resized
+    assert reader._normalize(np.zeros((481, 853, 3), np.uint8)).shape == (480, 852, 3)
+
+
 def test_rejects_clip_over_limit(tiny_video: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="longer than"):
         check_duration(probe(tiny_video), 0.2)

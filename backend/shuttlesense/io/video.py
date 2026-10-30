@@ -94,7 +94,7 @@ def _count_frames(path: Path) -> int:
 
 
 class FrameReader:
-    """Normalized frames: height <= target_height (even width) and fps <= max_fps.
+    """Normalized frames: height <= target_height, even width and height, fps <= max_fps.
 
     Frames are only ever scaled down. When the source fps is above max_fps, every k-th frame
     is kept with k = round(src_fps / max_fps), and fps becomes src_fps / k.
@@ -117,7 +117,9 @@ class FrameReader:
             self.height = int(target_height)
             self.width = max(2, int(round(self.source.width * scale / 2)) * 2)
         else:
-            self.height, self.width = self.source.height, self.source.width
+            # H.264 with yuv420p needs even sizes: an 853x480 clip loses one column.
+            self.height = max(2, self.source.height // 2 * 2)
+            self.width = max(2, self.source.width // 2 * 2)
         self._len = math.ceil(src_frames / self.step)
 
     def __len__(self) -> int:
