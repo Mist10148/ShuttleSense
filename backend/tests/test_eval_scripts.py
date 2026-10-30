@@ -218,3 +218,19 @@ def test_eval_phone_scores_hits_strokes_counts_and_rallies(tmp_path: Path) -> No
     out = tmp_path / "results" / "phone.md"
     eval_phone.write_report(overall, eval_phone.to_markdown({"rally01": result}, overall), out)
     assert "| rally01 | 3 / 4 |" in out.read_text(encoding="utf-8")
+
+
+def test_bench_strokes_times_a_random_model_on_cpu(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    bench = load_script("bench_strokes")
+    record = bench.synthetic_record(duration_s=10, hits_per_min=60)
+    assert record.num_frames == 300 and len(record.hits) == 10
+    assert [f.frame for f in record.frames[:3]] == [0, 1, 2]
+    assert {h.player for h in record.hits} == {"near", "far"}
+    timing = bench.time_device(record, "cpu", runs=2)
+    assert timing["device"] == "cpu" and timing["median_s"] > 0 and timing["load_s"] is None
+    assert bench.available_devices(["cpu", "tpu"]) == ["cpu"]
+    text = bench.to_markdown(
+        {"model": "random", "hits": 10, "duration_s": 10.0, "devices": [timing]}
+    )
+    assert "| cpu |" in text and "< 30 s" in text
