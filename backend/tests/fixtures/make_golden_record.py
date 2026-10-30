@@ -15,6 +15,7 @@ import numpy as np
 
 from shuttlesense.analytics.export import build_summary
 from shuttlesense.court import compute_homography, image_to_court
+from shuttlesense.feedback import build_coaching
 from shuttlesense.referee import build_events, derive_from_rallies
 from shuttlesense.schema import (
     ClipRecord,
@@ -49,15 +50,19 @@ SKELETON = [
 ]  # fmt: skip
 
 # (frame, player, stroke, confidence, speed_kmh, feedback)
+# Rule names and tips match shuttlesense/feedback/rules.py; values are the measured quantity.
 HITS = [
-    (5, "near", "serve", 0.91, 62.0, [("serve_contact_below_waist", True, None)]),
+    (5, "near", "serve", 0.91, 62.0, [
+        ("contact_below_waist", True, None, 0.18),
+        ("stable_feet", False, "Keep both feet still until the shuttle is struck", 0.16),
+    ]),
     (25, "far", "clear", 0.78, 118.0, [
-        ("clear_contact_above_head", True, None),
-        ("clear_arm_extension", False, "Reach higher: straighten your arm at contact"),
+        ("contact_above_head", True, None, 0.21),
+        ("elbow_extension", False, "Straighten your hitting arm more at contact", 132.0),
     ]),
     (45, "near", "smash", 0.86, 241.0, [
-        ("smash_contact_above_head", True, None),
-        ("smash_elbow_angle", False, "Fully extend your elbow when you hit the smash"),
+        ("contact_above_head", True, None, 0.25),
+        ("elbow_extension", False, "Straighten your hitting arm more at contact", 128.0),
     ]),
 ]  # fmt: skip
 
@@ -124,7 +129,7 @@ def build() -> ClipRecord:
             confidence=conf,
             class_probs=_probs(stroke, conf),
             speed_kmh=speed,
-            feedback=[FeedbackItem(rule=r, passed=p, tip=t) for r, p, t in fb],
+            feedback=[FeedbackItem(rule=r, passed=p, tip=t, value=v) for r, p, t, v in fb],
             rally_index=0,
         )
         for i, (f, side, stroke, conf, speed, fb) in enumerate(HITS)
@@ -157,6 +162,8 @@ def build() -> ClipRecord:
     landing.confidence = record.line_calls[0].confidence
     record.rally_events = build_events(record)
     record.summary = build_summary(record)
+    # One clip is too short for the default min_count of 2; show what notes look like.
+    record.coaching = build_coaching(record, {"patterns": {"min_count": 1}})
     return record
 
 

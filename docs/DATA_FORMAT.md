@@ -158,11 +158,11 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
   "coaching": {                                                // v1.1, F21; null before the feedback stage
     "session_notes": [
-      {"id": "elbow_extension:smash", "rule": "elbow_extension", "stroke": "smash",
-       "text": "Bent elbow at contact on 3 of 5 smashes", "count": 3, "total": 5, "severity": 1.0,
+      {"id": "elbow_extension:near", "rule": "elbow_extension", "player": "near", "stroke": "smash",
+       "text": "Near player: Bent hitting arm at contact on 3 of 5 smashes", "count": 3, "total": 5, "severity": 1.0,
        "moments": [{"frame": 42, "time_s": 1.4, "hit_id": 0}]}
     ],
-    "top_fixes": ["elbow_extension:smash"]                    // note ids, most important first, at most 3
+    "top_fixes": ["elbow_extension:near"]                     // note ids, most important first, at most 3
   },
 
   "chat": {                                                    // v1.1, F22; null until the first question

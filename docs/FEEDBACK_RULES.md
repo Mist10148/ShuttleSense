@@ -1,6 +1,6 @@
 # Form feedback rules
 
-The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hitter's pose around each classified hit and adds one item per rule to `hits[].feedback`: the rule name, whether it passed, and a short tip when it did not.
+The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hitter's pose around each classified hit and adds one item per rule to `hits[].feedback`: the rule name, whether it passed, the measured value (schema 1.1) and a short tip when it did not.
 
 > **Heuristic guidance, not professional coaching.** The rules use 2D keypoints from one camera, so angles are approximate and depend on where the camera stands. Tips are suggestions to try, never injury or medical advice.
 
@@ -33,6 +33,22 @@ The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hit
 - Drop: the preparation is overhead like a clear, but contact is softer with a shorter follow-through. Hence `contact_above_shoulder` and `short_follow_through`.
 - Net shot and lift: a lunge onto the racket-side leg with a bent front knee, and the racket reaching forward or getting under the shuttle. Hence `lunge_knee_bend`, `racket_arm_forward` and `wrist_below_shoulder`.
 
+## Session notes (patterns)
+
+After the pipeline runs, `feedback/patterns.py` (F21) turns the per-hit results into a few session notes in `coaching.session_notes`, plus `coaching.top_fixes`. Notes are a pure function of the clip record, so the same record always gives the same notes. They are also rebuilt after a line-call override or score correction, because those change the out-shot counts.
+
+| Note | Counts | Fires when | Example text |
+| --- | --- | --- | --- |
+| `<rule>:<player>`, one per form rule above | Hits of that player the rule was checked on, and the ones that failed | failures ≥ `min_count` (2) **and** failures / checked ≥ `min_rate` (0.5) | "Near player: Bent hitting arm at contact on 3 of 5 smashes" |
+| `shots_out:<player>` | Rallies with a line call whose last shot that player hit, and the ones whose (confirmed or overridden) call is OUT | same thresholds | "Far player: last shot landed out in 3 of 4 rallies they finished" |
+
+- **Moments.** Each note lists up to `max_moments` (5) timeline moments (hit frames, or landing frames for out shots); the app turns them into tap-to-seek chips.
+- **Top fixes.** Notes are ranked by failures × `severity`, then by failure rate, then by id, and the first `top_fixes` (3) are the session summary. Service faults (`contact_below_waist`, `stable_feet`) and `shots_out` have severity 1.5 because they lose the point outright under BWF Laws 9 and 13; the others have 1.0.
+- **Thresholds** live under `stages.feedback.patterns` in `configs/pipeline.yaml`.
+- **Not measured yet.** Footwork timing cues such as a late split-step need a footwork signal (ankle motion around the opponent's hit) that the pipeline does not compute yet, so there is no such note. It is listed as future work rather than guessed.
+
+Sources: the per-rule sources above; Law 13 (faults) for shots landing outside the boundary lines.
+
 ## Adding a rule
 
 1. Write a check `HitPose -> (passed, value) | None` in `rules.py` that returns `None` when its joints are missing.
@@ -40,3 +56,4 @@ The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hit
 3. Put any threshold in `DEFAULTS` and in `configs/pipeline.yaml`.
 4. Add one passing and one failing synthetic pose to `tests/test_feedback.py`.
 5. Add a row to the table above.
+6. Add the fault phrase for session notes to `FAULTS` in `patterns.py` (and a `severity` entry if it is not 1.0).

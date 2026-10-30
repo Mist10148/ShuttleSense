@@ -62,6 +62,15 @@ stages:
     lunge_knee_deg: 140
     drop_follow_through: 0.6    # wrist travel after contact, in box heights
     serve_feet_motion: 0.1      # ankle travel before the serve, in box heights
+    patterns:                   # session notes (F21), docs/FEEDBACK_RULES.md
+      min_count: 2              # a pattern needs at least this many faulty strokes
+      min_rate: 0.5             # ... and this share of the strokes the rule checked
+      top_fixes: 3
+      max_moments: 5            # timeline moments listed per note
+      severity:                 # rank weight; service faults and out shots lose the point
+        contact_below_waist: 1.5
+        stable_feet: 1.5
+        shots_out: 1.5
 
   analytics:
     enabled: true

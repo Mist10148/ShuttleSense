@@ -101,7 +101,8 @@ EXAMPLE = {
     "coaching": {
         "session_notes": [
             {
-                "id": "elbow_extension:smash",
+                "id": "elbow_extension:near",
+                "player": "near",
                 "rule": "elbow_extension",
                 "stroke": "smash",
                 "text": "Bent elbow at contact on 1 of 1 smashes",
@@ -111,7 +112,7 @@ EXAMPLE = {
                 "moments": [{"frame": 42, "time_s": 1.4, "hit_id": 0}],
             }
         ],
-        "top_fixes": ["elbow_extension:smash"],
+        "top_fixes": ["elbow_extension:near"],
     },
     "chat": {
         "messages": [
@@ -128,7 +129,7 @@ def test_example_from_docs_round_trips() -> None:
     assert again.hits[0].stroke == "smash"
     assert again.frames[0].players.far is None
     assert again.mode == "live" and again.line_calls[0].effective_call == "in"
-    assert again.coaching.top_fixes == ["elbow_extension:smash"]
+    assert again.coaching.top_fixes == ["elbow_extension:near"]
 
 
 def test_migrate_1_0_record() -> None:

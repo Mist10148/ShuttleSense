@@ -25,6 +25,7 @@ from shuttlesense import (
 )
 from shuttlesense.analytics import write_exports
 from shuttlesense.config import BACKEND_DIR
+from shuttlesense.feedback import build_coaching
 from shuttlesense.schema import ClipRecord, ScorePair
 from shuttlesense.stage import Stage, StageContext, StageSkipped
 
@@ -198,6 +199,7 @@ def run_pipeline(
     start = ScorePair(**config.get("start_score", {}) or {})
     if referee.apply_user_changes(record, out_dir, start):  # made in the app since the last run
         record.summary = analytics.build_summary(record)
+    record.coaching = build_coaching(record, config.get("stages", {}).get("feedback"))
     write_exports(record, out_dir)
     (out_dir / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")
     return record

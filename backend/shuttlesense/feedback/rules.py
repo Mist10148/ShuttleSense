@@ -264,9 +264,10 @@ def evaluate(record: ClipRecord, hit: Hit, cfg: dict[str, Any]) -> list[Feedback
         result = rule.check(pose)
         if result is None:
             continue
-        passed, _value = result
+        passed, value = result
         items.append(FeedbackItem(rule=rule.name, passed=bool(passed),
-                                  tip=None if passed else rule.tip))  # fmt: skip
+                                  tip=None if passed else rule.tip,
+                                  value=round(float(value), 3)))  # fmt: skip
     return items
 
 

@@ -165,7 +165,8 @@ class RallyEvent(BaseModel):
 class SessionNote(BaseModel):
     id: str
     rule: str
-    stroke: StrokeClass | None = None
+    player: PlayerSide | None = None
+    stroke: StrokeClass | None = None  # set when the rule was checked on one stroke class
     text: str
     count: int  # strokes that showed the pattern
     total: int  # strokes the rule was checked on

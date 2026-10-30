@@ -971,6 +971,22 @@
           "title": "Moments",
           "type": "array"
         },
+        "player": {
+          "anyOf": [
+            {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Player"
+        },
         "rule": {
           "title": "Rule",
           "type": "string"

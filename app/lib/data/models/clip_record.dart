@@ -518,12 +518,16 @@ class SessionNote {
     required this.count,
     required this.total,
     required this.severity,
+    this.player,
     this.stroke,
     this.moments = const [],
   });
 
   final String id;
   final String rule;
+
+  /// near or far.
+  final String? player;
   final String? stroke;
   final String text;
   final int count;
@@ -534,6 +538,7 @@ class SessionNote {
   factory SessionNote.fromJson(Json j) => SessionNote(
     id: j['id'] as String,
     rule: j['rule'] as String,
+    player: j['player'] as String?,
     stroke: j['stroke'] as String?,
     text: j['text'] as String,
     count: asInt(j['count'])!,

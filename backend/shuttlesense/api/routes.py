@@ -40,6 +40,7 @@ from shuttlesense.api.models import (
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
+from shuttlesense.feedback import build_coaching
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.referee import (
     LineCallOverrideIn,
@@ -260,6 +261,10 @@ def get_job(job_id: str, jobs: JobsDep) -> Job:
     return _job_or_404(jobs, job_id)
 
 
+def _feedback_config(jobs: JobManager) -> dict:
+    return jobs.config.get("stages", {}).get("feedback", {})
+
+
 def _output_or_404(storage: Storage, jobs: JobManager, job_id: str, key: str) -> Path:
     _job_or_404(jobs, job_id)
     path = storage.output_path(job_id, key)
@@ -340,6 +345,7 @@ def correct_score(
         corrections = [*record.score.corrections, correction]
         apply_corrections(record, corrections, job.start_score)
         record.summary = build_summary(record)
+        record.coaching = build_coaching(record, _feedback_config(jobs))
         save_corrections(storage.job_dir(job_id), corrections)
         write_exports(record, storage.job_dir(job_id))
     return ScoreUpdate(score=record.score, rallies=record.rallies)
@@ -367,6 +373,7 @@ def override_line_call(
         save_overrides(job_dir, overrides)
         apply_user_changes(record, job_dir, job.start_score)
         record.summary = build_summary(record)
+        record.coaching = build_coaching(record, _feedback_config(jobs))
         write_exports(record, job_dir)
     return LineCallUpdate(line_calls=record.line_calls, score=record.score, rallies=record.rallies)
 

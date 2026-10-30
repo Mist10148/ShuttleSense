@@ -13143,10 +13143,16 @@
    "speed_kmh": 62.0,
    "feedback": [
     {
-     "rule": "serve_contact_below_waist",
+     "rule": "contact_below_waist",
      "passed": true,
      "tip": null,
-     "value": null
+     "value": 0.18
+    },
+    {
+     "rule": "stable_feet",
+     "passed": false,
+     "tip": "Keep both feet still until the shuttle is struck",
+     "value": 0.16
     }
    ],
    "rally_index": 0
@@ -13169,16 +13175,16 @@
    "speed_kmh": 118.0,
    "feedback": [
     {
-     "rule": "clear_contact_above_head",
+     "rule": "contact_above_head",
      "passed": true,
      "tip": null,
-     "value": null
+     "value": 0.21
     },
     {
-     "rule": "clear_arm_extension",
+     "rule": "elbow_extension",
      "passed": false,
-     "tip": "Reach higher: straighten your arm at contact",
-     "value": null
+     "tip": "Straighten your hitting arm more at contact",
+     "value": 132.0
     }
    ],
    "rally_index": 0
@@ -13201,16 +13207,16 @@
    "speed_kmh": 241.0,
    "feedback": [
     {
-     "rule": "smash_contact_above_head",
+     "rule": "contact_above_head",
      "passed": true,
      "tip": null,
-     "value": null
+     "value": 0.25
     },
     {
-     "rule": "smash_elbow_angle",
+     "rule": "elbow_extension",
      "passed": false,
-     "tip": "Fully extend your elbow when you hit the smash",
-     "value": null
+     "tip": "Straighten your hitting arm more at contact",
+     "value": 128.0
     }
    ],
    "rally_index": 0
@@ -13355,6 +13361,65 @@
    }
   }
  ],
- "coaching": null,
+ "coaching": {
+  "session_notes": [
+   {
+    "id": "elbow_extension:far",
+    "rule": "elbow_extension",
+    "player": "far",
+    "stroke": "clear",
+    "text": "Far player: Bent hitting arm at contact on 1 of 1 clears",
+    "count": 1,
+    "total": 1,
+    "severity": 1.0,
+    "moments": [
+     {
+      "frame": 25,
+      "time_s": 0.833,
+      "hit_id": 1
+     }
+    ]
+   },
+   {
+    "id": "elbow_extension:near",
+    "rule": "elbow_extension",
+    "player": "near",
+    "stroke": "smash",
+    "text": "Near player: Bent hitting arm at contact on 1 of 1 smashes",
+    "count": 1,
+    "total": 1,
+    "severity": 1.0,
+    "moments": [
+     {
+      "frame": 45,
+      "time_s": 1.5,
+      "hit_id": 2
+     }
+    ]
+   },
+   {
+    "id": "stable_feet:near",
+    "rule": "stable_feet",
+    "player": "near",
+    "stroke": "serve",
+    "text": "Near player: Feet moving during the serve on 1 of 1 serves",
+    "count": 1,
+    "total": 1,
+    "severity": 1.5,
+    "moments": [
+     {
+      "frame": 5,
+      "time_s": 0.167,
+      "hit_id": 0
+     }
+    ]
+   }
+  ],
+  "top_fixes": [
+   "stable_feet:near",
+   "elbow_extension:far",
+   "elbow_extension:near"
+  ]
+ },
  "chat": null
 }

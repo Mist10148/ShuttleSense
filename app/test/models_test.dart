@@ -111,8 +111,11 @@ void main() {
     // Full feedback list: the clear has one passed and one failed rule.
     expect(golden.hits[1].feedback, hasLength(2));
     expect(golden.hits[1].feedback.first.passed, isTrue);
-    expect(golden.hits[1].tip, startsWith('Reach higher'));
-    expect(golden.hits[0].tip, isNull);
+    expect(golden.hits[1].tip, startsWith('Straighten'));
+    expect(golden.hits[1].feedback.last.value, 132.0);
+    expect(golden.hits[0].tip, startsWith('Keep both feet'));
+    expect(golden.coaching!.topFixes, isNotEmpty);
+    expect(golden.lineCalls.single.isIn, isTrue);
     expect(golden.hits[2].classProbs['smash'], 0.86);
     // Rallies and the score at a playback position.
     expect(golden.rallies.single.winner, 'near');
