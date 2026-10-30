@@ -15,18 +15,28 @@
 
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| [T8.1](#t81) | Scope reversal in the docs | M1 | 2 h | — | ⬜ | — |
-| [T8.2](#t82) | Clip record v1.1 and migration | M1 | 4 h | T8.1 | ⬜ | — |
+| [T8.1](#t81) | Scope reversal in the docs | M1 | 2 h | — | ✅ | — |
+| [T8.2](#t82) | Clip record v1.1 and migration | M1 | 4 h | T8.1 | ✅ | — |
 | [T8.3](#t83) | Line calls with uncertainty band and override | M3 | 6 h | T6.2, T8.2 | ⬜ | — |
-| [T8.4](#t84) | Session coaching notes and top fixes | M3 | 5 h | T5.8, T8.2 | ⬜ | — |
-| [T8.5](#t85) | Incremental stage cores and parity test | M2 + M1 | 10 h | T8.2 | ⬜ | — |
+| [T8.4](#t84) | Session coaching notes and top fixes | M3 | 5 h | T5.8, T8.2 | ✅ | — |
+| [T8.5](#t85) | Incremental stage cores and parity test | M2 + M1 | 10 h | T8.2 | ✅ | — |
 | [T8.6](#t86) | Live WebSocket session, degrade, resume, save | M1 | 8 h | T8.5 | ⬜ | — |
-| [T8.7](#t87) | Fake live source and streaming tests in CI | M1 | 3 h | T8.6 | ⬜ | — |
+| [T8.7](#t87) | Fake live source and streaming tests in CI | M1 | 3 h | T8.6 | ✅ | — |
 | [T8.8](#t88) | Coach chat endpoint (Claude API) | M1 | 6 h | T8.4 | ⬜ | — |
 | [T8.9](#t89) | App mode picker and live screen | M6 | 10 h | T8.6 | ⬜ | — |
 | [T8.10](#t810) | App line-call banner, minimap landings, session summary | M6 | 6 h | T8.3, T8.4 | ⬜ | — |
 | [T8.11](#t811) | App coach chat screen | M4 | 5 h | T8.8 | ⬜ | — |
 | [T8.12](#t812) | Line-call and live latency evaluation | M4 + M2 | 5 h | T8.3, T8.6, T7.1 | ⬜ | — |
+
+### Status on Oct 31
+
+Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app `flutter test`). A task stays ⬜ until its acceptance check is met:
+
+- **T8.3:** calls, band and override work and are tested; the accuracy check waits for labelled landings (T8.12).
+- **T8.6:** runs end to end against the fake source in CI; still needs a session on a real camera against a server with weights.
+- **T8.8:** tested with a fake client; still needs one run with a real API key to check answers and citations.
+- **T8.9–T8.11:** widget, layout and accessibility tests pass; Windows and web release builds pass; device checks (Android phone, tablet, Windows webcam, Chrome) are open.
+- **T8.12:** scripts are in; only the fake-perception latency is measured.
 
 ---
 

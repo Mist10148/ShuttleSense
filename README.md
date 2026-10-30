@@ -109,6 +109,8 @@ flowchart LR
     O -- REST --> R
 ```
 
+Live mode uses the same stages frame by frame: the app streams camera frames over a WebSocket (`WS /live`), the backend runs TrackNetV3 and pose on each frame and the hit, stroke, referee and line-call stages on a sliding window, and sends events back. The coach chat sends a text digest of the clip record (never video) to the Claude API when the backend has a key ([docs/PRIVACY.md](docs/PRIVACY.md)).
+
 1. **Capture and upload.** Record a rally on a phone, pick it in the app and upload it to the backend. Optionally tap the 4 court corners on the first frame.
 2. **Perception.** TrackNetV3 locates the shuttle in every frame. RTMDet and RTMPose find both players and their skeletons. The court corners give a homography from the image to the court plane.
 3. **Shared record.** All output goes into one JSON clip record per video ([format](docs/DATA_FORMAT.md)). Every downstream module reads from it, so modules are developed and tested independently.
@@ -125,7 +127,7 @@ ShuttleSense/
 │   ├── lib/
 │   │   ├── core/               # config, router, theme, responsive breakpoints + adaptive shell
 │   │   ├── data/               # API client, JSON models, repositories
-│   │   ├── features/           # connect, upload, calibration, processing, results, history, settings
+│   │   ├── features/           # connect, mode, upload, live, calibration, processing, results, chat, history, settings
 │   │   └── shared/             # reusable widgets
 │   ├── test/
 │   └── android/ ios/ web/ windows/
@@ -137,11 +139,13 @@ ShuttleSense/
 │   │   ├── court/              # calibration, homography (F9)
 │   │   ├── hits/               # hit detection (F5)
 │   │   ├── strokes/            # stroke classifier and labels (F6)
-│   │   ├── feedback/           # rule-based form feedback (F8)
+│   │   ├── feedback/           # rule-based form feedback (F8) and session notes (F21)
 │   │   ├── analytics/          # positions, speed, counts, exports (F10–F13)
-│   │   ├── referee/            # rally state, in/out, scoring (F14–F16)
+│   │   ├── referee/            # rally state, line calls, scoring (F14–F16, F20)
+│   │   ├── stream/             # live sessions: per-frame perception, windowed analysis (F19)
+│   │   ├── coach/              # coach chat over a digest of the record (F22)
 │   │   ├── render/             # video overlays and export (F7)
-│   │   ├── api/                # FastAPI app, job queue, storage
+│   │   ├── api/                # FastAPI app, job queue, WS /live, storage
 │   │   ├── schema.py           # clip record (source of truth)
 │   │   ├── pipeline.py         # stage orchestration
 │   │   └── run.py              # CLI entry point
@@ -195,11 +199,12 @@ In the app, enter the backend address (for example `http://192.168.1.20:8000`) o
 ### In the app
 
 1. Connect to the backend (laptop on the same Wi-Fi, or the Colab tunnel URL with its token).
-2. Pick a rally video and upload it.
-3. Tap the 4 court corners (or skip; court features turn off).
-4. Choose overlays and start processing.
-5. Review the annotated video, minimap, stroke timeline and form tips.
-6. Share or download the MP4, JSON and CSV; delete the job from the server when done.
+2. Choose **Upload clip** or **Go live** (the app remembers it; switch any time from the app bar or Settings).
+3. **Upload:** pick a rally video, tap the 4 court corners (or skip; court features turn off), choose overlays and start processing.
+4. **Live:** put the camera on a tripod, tap **Calibrate court** and the 4 corners on a still (or start without court), then **Go live**. Shuttle trail, player boxes, rally state and timer, speed, hit callouts, score and IN / OUT calls update while you play. **Stop** saves the session to History.
+5. Review the annotated video, minimap, stroke timeline, line calls and form tips. Confirm or override UNCERTAIN calls; the score follows.
+6. Open the **Coach** tab for the top 3 things to fix (tap a time to watch it), and **Ask your coach** questions about the session (needs a Claude API key on the backend).
+7. Share or download the MP4, JSON and CSV; delete the job from the server when done.
 
 ### From the command line
 
@@ -273,8 +278,9 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
-| Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured yet |
-| Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps | ≤ 300 ms | Not measured yet |
+| Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured: no labelled landings yet (`scripts/eval_line_calls.py` is ready) |
+| Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps, models installed | ≤ 300 ms | Not measured: TrackNetV3 and pose weights are not installed on the team laptop yet |
+| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 20.7 ms round trip, 17.5 ms server side ([live_latency.md](docs/results/live_latency.md)) |
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 

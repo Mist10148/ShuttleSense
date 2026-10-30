@@ -169,6 +169,10 @@ The parts of each task that need no data, GPU, devices or team decisions are alr
 | App (T4.1–T4.13) | Connect validation + recent servers, persisted stage-aware options, upload warnings, processing back-off/ETA/retry, results layout (landscape, side panel), playback speed/frame step/shortcuts, timeline filters + tips sheet, history filenames + delete video, theme mode, offline banner, platform config, fake API + widget and accessibility tests, end-to-end flow on a device (`integration_test/`, T7.4) | Runs on Android, tablet, Windows and Chrome (T1.8, T4.x acceptance); icon artwork (T4.13) |
 | Evaluation and release (T7.1, T7.2, T7.4, T7.6, T7.9, T7.13, T7.14) | `scripts/label_clip.py`, `scripts/eval_phone.py`, `docs/results/` index and dataset counts, `docs/EVALUATION.md` outline, `release.yml` (draft release with APK, web and Windows builds on a `v*` tag), `docs/RELEASE.md`, license scan (direct and transitive) and media audit in TECH_STACK.md | Labelled team clips; the bundled media_kit/ffmpeg build licenses and the ML venv scan (T7.13); everything after the feature freeze |
 
+### Phase 8 snapshot (Oct 31)
+
+Live mode, line calls, session notes and coach chat are on `main` (see [Phase 8 status](phases/phase-8-live-coach.md)). Verified on Oct 31: backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass; app `flutter analyze`, `dart format --set-exit-if-changed` and `flutter test` (136 tests) pass; Windows and web release builds pass. Measured: live pipeline overhead without models (p95 20.7 ms, `docs/results/live_latency.md`). Not measured yet: live latency with TrackNetV3 and pose (no weights installed), line-call accuracy (no labelled landings), a session on a real camera.
+
 ### Verification on Oct 30
 
 - Backend: `ruff check .`, `ruff format --check .`, and `pytest -m "not gpu"` pass (194 tests, 1 GPU test deselected).
