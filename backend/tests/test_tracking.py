@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from shuttlesense.schema import ClipRecord, Frame
 from shuttlesense.stage import StageContext
@@ -80,3 +81,28 @@ def test_precomputed_csv_maps_source_frames_and_pixels(tmp_path: Path) -> None:
     record = tracking_run(record, ctx)
     assert [f.shuttle.x for f in record.frames] == [200.0, 201.3, 202.7, 204.0]
     assert record.frames[3].shuttle.y == 400.0
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.gpu
+def test_tracknet_follows_the_shuttle_on_rally01(tmp_path: Path) -> None:
+    """T2.2 smoke test: TrackNetV3 on the team's first test rally, on the GPU."""
+    torch = pytest.importorskip("torch")
+    from shuttlesense.config import BACKEND_DIR, load_config
+    from shuttlesense.pipeline import run_pipeline
+
+    video = REPO / "samples" / "rally01.mp4"
+    config = load_config()
+    weights = config.get("stages", {}).get("tracking", {}).get("tracknet_weights", "")
+    if not torch.cuda.is_available():
+        pytest.skip("no CUDA device")
+    if not video.exists() or not weights or not (BACKEND_DIR / weights).exists():
+        pytest.skip("samples/rally01.mp4 or the TrackNetV3 weights are missing")
+    for name in ("pose", "hits", "strokes", "feedback", "render"):
+        config.setdefault("stages", {}).setdefault(name, {})["enabled"] = False
+    record = run_pipeline(video, tmp_path, clip_id="rally01", config=config, device="cuda")
+    visible = sum(1 for f in record.frames if f.shuttle and f.shuttle.visible)
+    assert visible > 0.5 * len(record.frames)
+    assert (tmp_path / "tracking.csv").exists()

@@ -27,5 +27,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = [
+    "gpu: needs CUDA, the TrackNetV3 submodule and weights, and samples/rally01.mp4 (CI deselects it)",
+]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
