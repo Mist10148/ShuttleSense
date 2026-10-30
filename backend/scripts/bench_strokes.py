@@ -28,7 +28,6 @@ from shuttlesense.schema import ClipRecord, Hit
 from shuttlesense.stage import StageContext
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
-RANDOM_KEY = "<random init>"
 
 
 def synthetic_record(duration_s: float = 60.0, hits_per_min: float = 40.0) -> ClipRecord:
@@ -77,30 +76,30 @@ def time_device(
 
     load_s = None
     if weights:
-        classify._MODELS.pop((weights, device), None)
+        for key in [k for k in classify._MODELS if k[:2] == (weights, device)]:
+            del classify._MODELS[key]  # time a cold load
         start = time.perf_counter()
-        classify.load_classifier(weights, device)
+        loaded = classify.load_classifier(weights, device)
         load_s = time.perf_counter() - start
-        key = weights
     else:
         model, ckpt = random_model()
-        classify._MODELS[(RANDOM_KEY, device)] = (model.to(device), ckpt)
-        key = RANDOM_KEY
-    ctx = StageContext(
-        video_path=Path(), out_dir=Path(), device=device,
-        config={"stages": {"strokes": {"weights": key}}},
-    )  # fmt: skip
+        loaded = (model.to(device), ckpt)
+    ctx = StageContext(video_path=Path(), out_dir=Path(), device=device, config={})
     times = []
-    for _ in range(runs + 1):  # the first run warms up (CUDA kernels, allocator)
-        rec = record.model_copy(deep=True)
-        start = time.perf_counter()
-        classify.run(rec, ctx)
-        if device == "cuda":
-            import torch
+    real_load = classify.load_classifier
+    classify.load_classifier = lambda _path, _device: loaded  # time inference only
+    try:
+        for _ in range(runs + 1):  # the first run warms up (CUDA kernels, allocator)
+            rec = record.model_copy(deep=True)
+            start = time.perf_counter()
+            classify.run(rec, ctx)
+            if device == "cuda":
+                import torch
 
-            torch.cuda.synchronize()
-        times.append(time.perf_counter() - start)
-    classify._MODELS.pop((RANDOM_KEY, device), None)
+                torch.cuda.synchronize()
+            times.append(time.perf_counter() - start)
+    finally:
+        classify.load_classifier = real_load
     return {
         "device": device,
         "runs": runs,
