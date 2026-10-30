@@ -5,6 +5,8 @@
         android:maxSdkVersion="32" />
     <!-- Talk to the ShuttleSense backend on the LAN or through a tunnel -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Live mode (F19): camera frames are streamed to the ShuttleSense backend. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="ShuttleSense"
         android:usesCleartextTraffic="true"

@@ -181,10 +181,14 @@ app/lib/
 │   └── repositories/           # job/video repositories used by controllers
 ├── features/
 │   ├── connect/                # C1 server URL + token, health check
+│   ├── mode/                   # F18 Upload clip or Go live, remembered on the device
 │   ├── upload/                 # C2 pick file, upload with progress, overlay options
+│   ├── live/                   # C5 camera frames over WS /live, live results, resume
+│   ├── chat/                   # C6 coach chat with tap-to-seek citations
 │   ├── calibration/            # F9 tap 4 corners on first frame, zoom/pan
 │   ├── processing/             # C2 per-stage progress
-│   ├── results/                # C3 player, status bar, minimap, timeline, scoreboard
+│   ├── results/                # C3 player, status bar, minimap, timeline, scoreboard,
+│   │                           #    line-call banner, session summary (Coach tab)
 │   ├── history/                # list of jobs on the server, delete
 │   └── settings/               # server URL/token, theme, about
 └── shared/widgets/             # reusable widgets (section card, empty state, …)
@@ -197,10 +201,12 @@ State management is **Riverpod**; each feature has a `*_screen.dart` (widgets on
 | Route | Screen | Shell destination |
 | --- | --- | --- |
 | `/connect` | Server connection (shown first if no server saved) | — |
-| `/` | Home: new analysis (upload) | Analyze |
+| `/mode` | Upload clip or Go live (shown after connecting) | — |
+| `/` | Home: new analysis (upload), or the live screen when the remembered mode is live | Analyze |
 | `/videos/:videoId/calibrate` | Court calibration | Analyze |
 | `/jobs/:jobId` | Processing progress | Analyze |
-| `/jobs/:jobId/results` | Results | Analyze |
+| `/jobs/:jobId/results` | Results (a saved live session too) | Analyze |
+| `/jobs/:jobId/results/chat` | Coach chat; a citation chip goes back to the results and seeks | Analyze |
 | `/history` | Past jobs | History |
 | `/settings` | Server and app settings | Settings |
 
@@ -210,9 +216,11 @@ Breakpoints follow Material 3 window size classes and are defined once in `core/
 
 | Class | Width | Devices | Navigation | Results screen |
 | --- | --- | --- | --- | --- |
-| compact | < 600 dp | Phones (portrait) | Bottom `NavigationBar` | Video on top, status strip, then tabs: Timeline · Minimap · Score |
-| medium | 600–1023 dp | Tablets, phones in landscape, narrow windows | `NavigationRail` | Video (left) + side panel (minimap, scoreboard); timeline below video |
-| expanded | ≥ 1024 dp | Laptops, desktops, large tablets in landscape | Extended `NavigationRail` | Three zones from the PRD: video + status bar, right panel (minimap, scoreboard), full-width timeline |
+| compact | < 600 dp | Phones (portrait) | Bottom `NavigationBar` | Video and status strip (scrolls when a line-call banner is up), then tabs: Timeline · Minimap · Score · Coach |
+| medium | 600–1023 dp | Tablets, phones in landscape, narrow windows | `NavigationRail` | Video (left) + side panel (coach, minimap, scoreboard); timeline below video |
+| expanded | ≥ 1024 dp | Laptops, desktops, large tablets in landscape | Extended `NavigationRail` | Three zones from the PRD: video + status bar, right panel (coach, minimap, scoreboard), full-width timeline |
+
+The live screen uses the same `ResultsLayout` with the camera preview and an overlay painter (player boxes, shuttle trail) in the video slot, the rally timer, latency and "Reduced quality" chips above the status strip, and Stop in the app bar.
 
 Other cross-device rules:
 

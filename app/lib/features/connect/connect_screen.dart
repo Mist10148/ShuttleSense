@@ -111,7 +111,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           ),
         ),
       );
-      context.go(Routes.home);
+      context.go(Routes.mode);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {

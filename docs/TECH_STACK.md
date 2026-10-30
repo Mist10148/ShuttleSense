@@ -34,6 +34,8 @@ flowchart LR
 | Sharing | share_plus | ^13.3 | BSD-3 | Share sheet for MP4/JSON/CSV on Android and iOS |
 | Links / downloads | url_launcher | ^6.3 | BSD-3 | Opens download URLs in the browser on web |
 | Paths | path_provider | ^2.1 | BSD-3 | Temp/download folders for saved results on mobile and desktop |
+| Camera | camera (+ camera_windows) | ^0.12 / ^0.3 | BSD-3 | Live mode (F19): preview and still captures on Android, iOS and web; `camera_windows` adds webcams on Windows, which `camera` does not cover. Captures are JPEG stills, so the frame rate depends on the device (about 5 to 15 fps); the live screen reports latency and quality |
+| WebSocket | web_socket_channel | ^3.0 | BSD-3 | `WS /live` on every platform including web (D16) |
 | Lints | flutter_lints | ^6.0 | BSD-3 | Standard analyzer rules, enforced in CI |
 
 Platform notes:

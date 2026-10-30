@@ -13,6 +13,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ShuttleSense connects to your analysis server on the local network.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Live mode streams the camera to your ShuttleSense server to track the rally.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>ShuttleSense needs access to pick rally videos for analysis.</string>
 	<key>CFBundleDisplayName</key>

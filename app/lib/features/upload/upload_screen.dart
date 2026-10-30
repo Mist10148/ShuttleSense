@@ -10,6 +10,7 @@ import '../../data/api_client.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../mode/mode_screen.dart';
 import '../../shared/widgets/section_card.dart';
 import 'upload_controller.dart';
 
@@ -140,6 +141,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
     return PageScaffold(
       title: 'New analysis',
+      actions: const [SwitchModeButton()],
       children: [
         SectionCard(
           title: '1. Rally video',

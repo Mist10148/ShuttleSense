@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_mode.dart';
 import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/theme_mode.dart';
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../shared/disclaimers.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/section_card.dart';
 
@@ -79,12 +81,41 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
+        SectionCard(
+          title: 'Analysis mode',
+          child: SegmentedButton<AppMode>(
+            segments: const [
+              ButtonSegment(
+                value: AppMode.upload,
+                label: Text('Upload clip'),
+                icon: Icon(Icons.upload_file),
+              ),
+              ButtonSegment(
+                value: AppMode.live,
+                label: Text('Go live'),
+                icon: Icon(Icons.videocam_outlined),
+              ),
+            ],
+            selected: {ref.watch(appModeProvider)},
+            onSelectionChanged: (s) => ref.read(appModeProvider.notifier).set(s.first),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Privacy',
+          child: Text(
+            'Videos and live camera frames go only to your ShuttleSense server. '
+            '$kChatPrivacy Coach chat on this server: '
+            '${health.valueOrNull?.chatAvailable == true ? 'on' : 'off'}.',
+          ),
+        ),
+        const SizedBox(height: 16),
         const SectionCard(
           title: 'About',
           child: Text(
             'ShuttleSense analyzes badminton singles rallies: shuttle tracking, pose, stroke '
-            'classification and court analytics. Speed, in/out and score are estimates. '
-            'Form feedback is heuristic guidance, not professional coaching.',
+            'classification and court analytics. Speed, in/out and score are estimates; '
+            '$kLineCallNote $kCoachingDisclaimer',
           ),
         ),
       ],
