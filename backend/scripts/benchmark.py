@@ -1,11 +1,12 @@
 """Processing-time benchmark: run the pipeline N times and aggregate timings.json (T2.9).
 
 Usage: python scripts/benchmark.py --video X [--runs 3] [--device cuda] [--disable render]
-                [--out ../docs/results/benchmark.md]
+                [--corners x1,y1,...,x4,y4] [--referee] [--out ../docs/results/benchmark.md]
 
 Each run uses a fresh output directory, so the stage cache never hides work. Stages whose
 packages or weights are missing skip themselves (as in the app), so this runs on a CPU-only
-laptop too; the table marks them. Prints the median wall time per stage, the total and the
+laptop too; the table marks them. Court and referee only run with --corners (and --referee),
+as in the app. Prints the median wall time per stage, the total and the
 processed frames per second, and writes the table (.md) plus the raw numbers (.json).
 """
 
@@ -24,7 +25,12 @@ RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 
 
 def run_once(
-    video: Path, out_dir: Path, config: dict[str, Any], device: str
+    video: Path,
+    out_dir: Path,
+    config: dict[str, Any],
+    device: str,
+    corners: list[list[float]] | None = None,
+    referee: bool = False,
 ) -> tuple[dict[str, float], int, list[str]]:
     """One pipeline run into out_dir: (timings.json, frames processed, skipped stages)."""
     from shuttlesense.pipeline import run_pipeline
@@ -40,8 +46,9 @@ def run_once(
             skipped.append(name)
 
     record = run_pipeline(
-        video, out_dir, clip_id=video.stem, config=config, device=device, on_event=on_event
-    )
+        video, out_dir, clip_id=video.stem, config=config, device=device, on_event=on_event,
+        court_corners_px=corners, referee_enabled=referee,
+    )  # fmt: skip
     timings = json.loads((out_dir / "timings.json").read_text(encoding="utf-8"))
     return timings, record.num_frames, skipped
 
@@ -74,6 +81,8 @@ def benchmark(
     config: dict[str, Any] | None = None,
     device: str = "cpu",
     work_dir: Path | None = None,
+    corners: list[list[float]] | None = None,
+    referee: bool = False,
 ) -> dict[str, Any]:
     """Run the pipeline `runs` times (fresh out dir each) and return the aggregate."""
     from shuttlesense.io import probe
@@ -83,7 +92,8 @@ def benchmark(
     timings, skipped, num_frames = [], set(), 0
     with tempfile.TemporaryDirectory(dir=work_dir) as tmp:
         for i in range(runs):
-            t, num_frames, s = run_once(video, Path(tmp) / f"run{i}", config, device)
+            out = Path(tmp) / f"run{i}"
+            t, num_frames, s = run_once(video, out, config, device, corners, referee)
             timings.append(t)
             skipped.update(s)
     result = aggregate(timings, num_frames)
@@ -129,12 +139,17 @@ def write_report(result: dict[str, Any], out_md: Path) -> None:
 
 
 def main() -> None:
+    from shuttlesense.pipeline import STAGE_NAMES
+    from shuttlesense.run import parse_corners
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     parser.add_argument("--config", type=Path, default=None, help="default configs/pipeline.yaml")
     parser.add_argument("--disable", default="", help="comma-separated stages to turn off")
+    parser.add_argument("--corners", type=parse_corners, help="court corners x1,y1,...,x4,y4")
+    parser.add_argument("--referee", action="store_true", help="also run the referee stage")
     parser.add_argument("--out", type=Path, default=RESULTS_DIR / "benchmark.md")
     args = parser.parse_args()
     if not args.video.exists():
@@ -142,8 +157,13 @@ def main() -> None:
 
     config = load_config(args.config)
     for name in filter(None, args.disable.split(",")):
+        if name not in STAGE_NAMES:
+            raise SystemExit(f"unknown stage {name!r}; stages: {', '.join(STAGE_NAMES)}")
         config.setdefault("stages", {}).setdefault(name, {})["enabled"] = False
-    result = benchmark(args.video, runs=args.runs, config=config, device=detect_device(args.device))
+    result = benchmark(
+        args.video, runs=args.runs, config=config, device=detect_device(args.device),
+        corners=args.corners, referee=args.referee,
+    )  # fmt: skip
     print(to_markdown(result))
     write_report(result, args.out)
     print(f"wrote {args.out} and {args.out.with_suffix('.json')}")

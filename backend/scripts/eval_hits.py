@@ -2,6 +2,7 @@
 
 Usage: python scripts/eval_hits.py --record out/record.json --gt labels.csv
                 [--record ... --gt ...] [--tolerance 3] [--redetect] [--gt-step 1]
+                [--gt-offset 0]
                 [--grid --angles 45,60,75 --wrist 80,120,160 --gaps 6,8,10 --tag val]
                 [--out ../docs/results/hits.md] [--tuning-log ../docs/results/hits_tuning.csv]
 
@@ -11,12 +12,16 @@ hits.detect_hits from the record's shuttle track and wrists using configs/pipeli
 
 Ground-truth CSV (one per clip, UTF-8, header row), columns:
     frame | time_s | frame_num   hit frame in normalized frames, or seconds (x record fps),
-                                 or a ShuttleSet source frame (divided by --gt-step)
+                                 or a ShuttleSet source frame: frame_num counts from the
+                                 start of the full match video, so --gt-offset (the source
+                                 frame where the clip starts) is subtracted, then the result
+                                 is divided by --gt-step
     player                       near | far (anything else, e.g. ShuttleSet A/B, counts as
                                  unknown and is left out of player accuracy)
     stroke                       optional, ignored here
 Rows without a frame/time are skipped, so a T7.1 labels/<clip>.csv that also holds rally rows
-(start_s,end_s,...) can be passed as is.
+(start_s,end_s,...) can be passed as is. Labels outside the record's frames are dropped, so a
+whole-set ShuttleSet CSV can be scored against a 5-minute clip of it.
 
 Matching is greedy one-to-one within +-tolerance frames (shuttlesense.evaluation); precision,
 recall and F1 are pooled over all clips. --grid evaluates every threshold combination (run it
@@ -64,8 +69,10 @@ def load_record(path: Path) -> ClipRecord:
     return ClipRecord.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-def read_hit_labels(path: Path, fps: float, step: int = 1) -> list[Event]:
-    """(frame, player) per labelled hit, in frame order."""
+def read_hit_labels(path: Path, fps: float, step: int = 1, offset: int = 0) -> list[Event]:
+    """(frame, player) per labelled hit, in frame order.
+
+    ShuttleSet frame_num values have `offset` subtracted and are divided by `step`."""
     hits: list[Event] = []
     with path.open(newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
@@ -75,12 +82,18 @@ def read_hit_labels(path: Path, fps: float, step: int = 1) -> list[Event]:
             elif row.get("time_s"):
                 frame = round(float(row["time_s"]) * fps)
             elif row.get("frame_num"):
-                frame = round(int(float(row["frame_num"])) / step)
+                frame = round((int(float(row["frame_num"])) - offset) / step)
             else:
                 continue
             player = row.get("player", "").lower()
             hits.append((frame, player if player in SIDES else ""))
     return sorted(hits)
+
+
+def in_record(record: ClipRecord, events: list[Event]) -> list[Event]:
+    """Events whose frame lies within the record (0 <= frame < num_frames)."""
+    n = record.num_frames or len(record.frames)
+    return [e for e in events if 0 <= e[0] < n]
 
 
 def recorded_hits(record: ClipRecord) -> list[Event]:
@@ -209,6 +222,12 @@ def main() -> None:
     parser.add_argument("--gt", type=Path, action="append", required=True)
     parser.add_argument("--tolerance", type=int, default=3, help="frames")
     parser.add_argument("--gt-step", type=int, default=1, help="source frames per frame")
+    parser.add_argument(
+        "--gt-offset",
+        type=int,
+        action="append",
+        help="source frame where the clip starts in the match video; once, or once per --gt",
+    )
     parser.add_argument("--redetect", action="store_true", help="re-run detect_hits")
     parser.add_argument("--grid", action="store_true", help="grid-search the thresholds")
     parser.add_argument("--angles", type=_floats, default=[45, 60, 75])
@@ -221,9 +240,17 @@ def main() -> None:
     if len(args.record) != len(args.gt):
         raise SystemExit("give one --gt per --record")
 
+    offsets = args.gt_offset or [0]
+    if len(offsets) == 1:
+        offsets = offsets * len(args.gt)
+    if len(offsets) != len(args.gt):
+        raise SystemExit("give --gt-offset once, or once per --gt")
+    if args.grid and not (args.angles and args.wrist and args.gaps):
+        raise SystemExit("--angles, --wrist and --gaps each need at least one value")
+
     records = [load_record(p) for p in args.record]
-    clips = [(r, read_hit_labels(g, r.fps or 30.0, args.gt_step))
-             for r, g in zip(records, args.gt, strict=True)]  # fmt: skip
+    clips = [(r, in_record(r, read_hit_labels(g, r.fps or 30.0, args.gt_step, off)))
+             for r, g, off in zip(records, args.gt, offsets, strict=True)]  # fmt: skip
     base_cfg = dict(load_config().get("stages", {}).get("hits", {}))
 
     if args.grid:

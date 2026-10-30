@@ -46,6 +46,24 @@ def test_benchmark_on_cpu_with_skipped_stages(tiny_video: Path, tmp_path: Path) 
     assert json.loads(out.with_suffix(".json").read_text())["runs"] == 2
 
 
+def test_benchmark_times_court_and_referee_with_corners(tiny_video: Path, tmp_path: Path) -> None:
+    benchmark = load_script("benchmark")
+    config = {"stages": {"pose": {"enabled": False}}}
+    corners = [[20, 80], [140, 80], [120, 20], [40, 20]]
+    result = benchmark.benchmark(
+        tiny_video, runs=1, config=config, work_dir=tmp_path, corners=corners, referee=True
+    )
+    assert {"court", "referee"} <= set(result["stage_median_s"])
+
+
+def test_benchmark_rejects_unknown_stage(monkeypatch: pytest.MonkeyPatch, tiny_video: Path):
+    benchmark = load_script("benchmark")
+    argv = ["benchmark.py", "--video", str(tiny_video), "--disable", "posee"]
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit, match="unknown stage 'posee'"):
+        benchmark.main()
+
+
 def test_aggregate_takes_medians() -> None:
     benchmark = load_script("benchmark")
     runs = [{"io": 1.0, "render": 4.0}, {"io": 3.0, "render": 2.0}, {"io": 2.0}]
@@ -98,6 +116,10 @@ def test_eval_hits_on_golden_record(tmp_path: Path) -> None:
     ss_truth = eval_hits.read_hit_labels(ss, record.fps, step=2)
     assert ss_truth == [(5, ""), (25, "")]
     assert eval_hits.pooled_metrics([([(5, "near")], ss_truth)], 3)["player_accuracy"] is None
+    # A clip cut from the match at source frame 40: earlier labels fall outside the record.
+    clipped = eval_hits.read_hit_labels(ss, record.fps, step=2, offset=40)
+    assert clipped == [(-15, ""), (5, "")]
+    assert eval_hits.in_record(record, clipped) == [(5, "")]
 
 
 def test_eval_hits_grid_search_logs_every_combination(tmp_path: Path) -> None:
