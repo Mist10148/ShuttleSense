@@ -57,7 +57,7 @@ python scripts/check_env.py
 That is enough to run the API with the stub pipeline, the tests and the lint. For the real models also install the ML stack. Install the CUDA build of PyTorch first, using the exact command from the selector at <https://pytorch.org/get-started/locally/> (Stable, your OS, Pip, Python, latest CUDA), with the version from `requirements/ml.txt`:
 
 ```bash
-pip install torch==2.15.0 torchvision --index-url https://download.pytorch.org/whl/<cuda-tag>
+pip install torch==2.15.0 torchvision==0.30.0 --index-url https://download.pytorch.org/whl/<cuda-tag>
 pip install -r requirements/ml.txt
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```

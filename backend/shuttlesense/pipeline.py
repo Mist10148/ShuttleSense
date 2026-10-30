@@ -81,7 +81,10 @@ def available_stages(config: dict[str, Any] | None = None) -> list[str]:
         if precomputed and (BACKEND_DIR / precomputed).is_file():
             names.append(spec.name)
             continue
-        if not all(_installed(m) for m in spec.requires):
+        requires = spec.requires
+        if spec.name == "pose" and cfg.get("backend") == "keypoint_rcnn":
+            requires = ("torch", "torchvision")
+        if not all(_installed(m) for m in requires):
             continue
         paths = [cfg.get(key) for key in spec.weights]
         if not all(p and (BACKEND_DIR / p).exists() for p in paths):

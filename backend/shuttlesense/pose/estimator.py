@@ -34,9 +34,17 @@ def load_detector(backend: str, mode: str, device: str):
     key = (backend, mode, device)
     if key in _MODELS:
         return _MODELS[key]
-    if backend != "rtmlib":
-        # TODO(T1.5): torchvision Keypoint R-CNN fallback if the spike picks it.
+    if backend == "rtmlib":
+        detect = _rtmlib_detector(mode, device)
+    elif backend == "keypoint_rcnn":
+        detect = _keypoint_rcnn_detector(device)
+    else:
         raise StageSkipped(f"pose backend {backend!r} is not implemented")
+    _MODELS[key] = detect
+    return detect
+
+
+def _rtmlib_detector(mode: str, device: str):
     try:
         from rtmlib import Body  # requirements/ml.txt
     except ImportError as exc:
@@ -63,7 +71,50 @@ def load_detector(backend: str, mode: str, device: str):
             )
         return people
 
-    _MODELS[key] = detect
+    return detect
+
+
+def _keypoint_rcnn_detector(device: str):
+    """torchvision Keypoint R-CNN (COCO-17, same joint order as rtmlib). The weights are
+    downloaded to the torch hub cache on first use."""
+    try:
+        import torch
+        from torchvision.models.detection import (  # requirements/ml.txt
+            KeypointRCNN_ResNet50_FPN_Weights,
+            keypointrcnn_resnet50_fpn,
+        )
+    except ImportError as exc:
+        raise StageSkipped("torchvision is not installed") from exc
+
+    weights = KeypointRCNN_ResNet50_FPN_Weights.DEFAULT
+    model = keypointrcnn_resnet50_fpn(weights=weights).to(device).eval()
+
+    def detect(frame: np.ndarray) -> list[Player]:
+        rgb = np.ascontiguousarray(frame[:, :, ::-1])  # OpenCV frames are BGR
+        image = torch.from_numpy(rgb).to(device).permute(2, 0, 1).float() / 255.0
+        with torch.inference_mode():
+            out = model([image])[0]
+        boxes = out["boxes"].cpu().numpy()
+        scores = out["scores"].cpu().numpy()
+        keypoints = out["keypoints"].cpu().numpy()  # (N, 17, 3): x, y, visibility flag
+        # Joint scores are heatmap logits; the sigmoid maps them to 0-1 like rtmlib's.
+        joint_scores = torch.sigmoid(out["keypoints_scores"]).cpu().numpy()
+        people = []
+        for (x0, y0, x1, y1), score, kps, sc in zip(
+            boxes, scores, keypoints, joint_scores, strict=True
+        ):
+            people.append(
+                Player(
+                    bbox=(float(x0), float(y0), float(x1 - x0), float(y1 - y0)),
+                    keypoints=[
+                        (float(x), float(y), float(s))
+                        for (x, y, _v), s in zip(kps, sc, strict=True)
+                    ],
+                    score=float(score),
+                )
+            )
+        return people
+
     return detect
 
 

@@ -88,3 +88,67 @@ def test_bbox_from_keypoints() -> None:
     kps = np.array([[10, 10], [30, 50], [20, 90]], float)
     assert bbox_from_keypoints(kps, np.array([0.9, 0.9, 0.9]), pad=0) == (10, 10, 20, 80)
     assert bbox_from_keypoints(kps, np.array([0.9, 0.1, 0.1])) is None
+
+
+def test_keypoint_rcnn_backend_converts_detections(monkeypatch) -> None:
+    import sys
+    import types
+
+    import pytest
+
+    torch = pytest.importorskip("torch")
+    from shuttlesense.pose import estimator
+
+    seen = {}
+
+    class FakeModel:
+        def to(self, device):
+            seen["device"] = device
+            return self
+
+        def eval(self):
+            return self
+
+        def __call__(self, images):
+            seen["shape"] = tuple(images[0].shape)
+            seen["max"] = float(images[0].max())
+            kps = torch.zeros((1, 17, 3))
+            kps[0, :, 0] = torch.arange(17.0) + 10
+            kps[0, :, 1] = 40.0
+            return [
+                {
+                    "boxes": torch.tensor([[10.0, 20.0, 50.0, 100.0]]),
+                    "scores": torch.tensor([0.9]),
+                    "keypoints": kps,
+                    "keypoints_scores": torch.full((1, 17), 10.0),
+                }
+            ]
+
+    detection = types.ModuleType("torchvision.models.detection")
+    detection.KeypointRCNN_ResNet50_FPN_Weights = types.SimpleNamespace(DEFAULT="default")
+    detection.keypointrcnn_resnet50_fpn = lambda weights: FakeModel()
+    for name in ("torchvision", "torchvision.models"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "torchvision.models.detection", detection)
+    monkeypatch.setattr(estimator, "_MODELS", {})
+
+    detect = estimator.load_detector("keypoint_rcnn", "balanced", "cpu")
+    frame = np.zeros((120, 160, 3), np.uint8)
+    frame[..., 0] = 255  # pure blue in BGR
+    (person,) = detect(frame)
+    assert seen == {"device": "cpu", "shape": (3, 120, 160), "max": 1.0}
+    assert person.bbox == (10.0, 20.0, 40.0, 80.0)
+    assert person.score == pytest.approx(0.9)
+    assert len(person.keypoints) == 17
+    assert person.keypoints[3][:2] == (13.0, 40.0) and person.keypoints[3][2] > 0.99
+    assert estimator.load_detector("keypoint_rcnn", "balanced", "cpu") is detect  # cached
+
+
+def test_unknown_pose_backend_skips_the_stage() -> None:
+    import pytest
+
+    from shuttlesense.pose import estimator
+    from shuttlesense.stage import StageSkipped
+
+    with pytest.raises(StageSkipped):
+        estimator.load_detector("openpose", "balanced", "cpu")
