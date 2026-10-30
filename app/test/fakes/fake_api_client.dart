@@ -90,7 +90,7 @@ class FakeApiClient extends ApiClient {
            health ??
            const Health(
              version: '0.1.0',
-             schemaVersion: '1.0',
+             schemaVersion: '1.1',
              device: 'cpu',
              authRequired: false,
              stages: kAllStages,

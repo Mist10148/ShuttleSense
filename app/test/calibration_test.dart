@@ -103,7 +103,7 @@ void main() {
     const options = JobOptions(overlays: {'trail', 'strokes', 'score'}, referee: false);
     const health = Health(
       version: '1',
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       device: 'cpu',
       authRequired: false,
       stages: ['io', 'tracking', 'render'],

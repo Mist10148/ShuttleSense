@@ -18,10 +18,11 @@ class Health {
   final bool authRequired;
   final List<String> stages;
 
-  /// The clip record version this app understands (backend/shuttlesense/schema.py).
-  static const expectedSchema = '1.0';
+  /// The clip record version this app was built against (backend/shuttlesense/schema.py).
+  /// Minor versions only add optional fields, so any 1.x backend works.
+  static const expectedSchema = '1.1';
 
-  bool get schemaMatches => schemaVersion == expectedSchema;
+  bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 
   /// Whether the backend can produce [overlay] (its stage is installed).
   bool supportsOverlay(String overlay, Map<String, String> overlayStage) {

@@ -5,11 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
+import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 
 // Mirrors the example in docs/DATA_FORMAT.md / backend/tests/test_schema.py.
 final recordJson = <String, dynamic>{
-  'schema_version': '1.0',
+  'schema_version': '1.1',
   'clip_id': 'match03_rally12',
   'fps': 30.0,
   'width': 1280,
@@ -264,5 +265,78 @@ void main() {
       'start_score': {'near': 11, 'far': 9},
     });
     expect(job.options.startScore, (near: 11, far: 9));
+  });
+
+  test('parses schema 1.1 fields and accepts any 1.x backend', () {
+    final record = ClipRecord.fromJson({
+      'schema_version': '1.1',
+      'clip_id': 'c',
+      'mode': 'live',
+      'fps': 30,
+      'width': 1280,
+      'height': 720,
+      'num_frames': 90,
+      'frames': <dynamic>[],
+      'hits': <dynamic>[],
+      'line_calls': [
+        {
+          'id': 0,
+          'rally_index': 0,
+          'frame': 60,
+          'time_s': 2.0,
+          'call': 'out',
+          'landing_xy': [5.3, 6.0],
+          'margin_cm': -6.0,
+          'confidence': 0.3,
+          'uncertain': true,
+          'court': 'singles',
+          'override': {'call': 'in', 'at': '2026-10-31T10:00:00Z'},
+        },
+      ],
+      'coaching': {
+        'session_notes': [
+          {
+            'id': 'a',
+            'rule': 'elbow_extension',
+            'stroke': 'smash',
+            'text': 'Bent elbow at contact on 3 of 5 smashes',
+            'count': 3,
+            'total': 5,
+            'severity': 1.0,
+            'moments': [
+              {'frame': 30, 'time_s': 65.25, 'hit_id': 2},
+            ],
+          },
+        ],
+        'top_fixes': ['a', 'missing'],
+      },
+      'chat': {
+        'messages': [
+          {'role': 'user', 'text': 'Why?', 'at': '2026-10-31T10:00:00Z', 'citations': <dynamic>[]},
+        ],
+      },
+    });
+    expect(record.isLive, isTrue);
+    final call = record.lineCalls.single;
+    expect(call.effectiveCall, 'in');
+    expect(call.needsReview, isFalse);
+    expect(record.lineCallAt(59), isNull);
+    expect(record.lineCallFor(0), same(call));
+    expect(record.coaching!.topFixes.single.moments.single.label, '1:05.3');
+    expect(record.chat.single.fromUser, isTrue);
+    // A 1.0 record without the new fields still parses.
+    final golden = ClipRecord.fromJson(
+      jsonDecode(File('test/fixtures/golden_record.json').readAsStringSync())
+          as Map<String, dynamic>,
+    );
+    expect(golden.mode, 'upload');
+    final health = Health.fromJson({
+      'version': '0.1.0',
+      'schema_version': '1.0',
+      'device': 'cpu',
+      'auth_required': false,
+      'stages': <dynamic>[],
+    });
+    expect(health.schemaMatches, isTrue);
   });
 }

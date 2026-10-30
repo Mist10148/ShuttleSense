@@ -16,7 +16,7 @@ import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
 import 'helpers.dart';
 
-Health health({String schema = '1.0', bool auth = false, List<String> stages = kAllStages}) =>
+Health health({String schema = '1.1', bool auth = false, List<String> stages = kAllStages}) =>
     Health(
       version: '0.2.0',
       schemaVersion: schema,

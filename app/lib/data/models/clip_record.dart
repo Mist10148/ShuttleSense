@@ -18,6 +18,11 @@ class ClipRecord {
     this.courtCorners,
     this.score,
     this.summary,
+    this.mode = 'upload',
+    this.lineCalls = const [],
+    this.rallyEvents = const [],
+    this.coaching,
+    this.chat = const [],
   });
 
   final String schemaVersion;
@@ -32,6 +37,33 @@ class ClipRecord {
   final List<Rally> rallies;
   final Score? score;
   final Summary? summary;
+
+  /// upload or live (schema 1.1).
+  final String mode;
+  final List<LineCall> lineCalls;
+  final List<RallyEvent> rallyEvents;
+  final Coaching? coaching;
+  final List<ChatMessage> chat;
+
+  bool get isLive => mode == 'live';
+
+  /// The line call for [rallyIndex], if one was made.
+  LineCall? lineCallFor(int rallyIndex) {
+    for (final c in lineCalls) {
+      if (c.rallyIndex == rallyIndex) return c;
+    }
+    return null;
+  }
+
+  /// The latest line call at or before [frameIndex].
+  LineCall? lineCallAt(int frameIndex) {
+    LineCall? last;
+    for (final c in lineCalls) {
+      if (c.frame > frameIndex) break;
+      last = c;
+    }
+    return last;
+  }
 
   /// The frame shown at [position]. Players report positions in whole microseconds, a hair
   /// before a frame's start (1/30 s is 33333.3 µs), so a tiny tolerance keeps that frame
@@ -89,7 +121,12 @@ class ClipRecord {
     return hits.where((h) => h.frame >= start && h.frame <= frameIndex).length;
   }
 
-  ClipRecord copyWith({List<Rally>? rallies, Score? score}) => ClipRecord(
+  ClipRecord copyWith({
+    List<Rally>? rallies,
+    Score? score,
+    List<LineCall>? lineCalls,
+    List<ChatMessage>? chat,
+  }) => ClipRecord(
     schemaVersion: schemaVersion,
     clipId: clipId,
     fps: fps,
@@ -102,6 +139,11 @@ class ClipRecord {
     courtCorners: courtCorners,
     score: score ?? this.score,
     summary: summary,
+    mode: mode,
+    lineCalls: lineCalls ?? this.lineCalls,
+    rallyEvents: rallyEvents,
+    coaching: coaching,
+    chat: chat ?? this.chat,
   );
 
   factory ClipRecord.fromJson(Json j) {
@@ -121,6 +163,11 @@ class ClipRecord {
       rallies: asList(j['rallies']).map(Rally.fromJson).toList(),
       score: j['score'] == null ? null : Score.fromJson(j['score'] as Json),
       summary: j['summary'] == null ? null : Summary.fromJson(j['summary'] as Json),
+      mode: j['mode'] as String? ?? 'upload',
+      lineCalls: asList(j['line_calls']).map(LineCall.fromJson).toList(),
+      rallyEvents: asList(j['rally_events']).map(RallyEvent.fromJson).toList(),
+      coaching: j['coaching'] == null ? null : Coaching.fromJson(j['coaching'] as Json),
+      chat: asList((j['chat'] as Json?)?['messages']).map(ChatMessage.fromJson).toList(),
     );
   }
 }
@@ -220,11 +267,14 @@ class Hit {
 }
 
 class FeedbackItem {
-  const FeedbackItem({required this.rule, required this.passed, this.tip});
+  const FeedbackItem({required this.rule, required this.passed, this.tip, this.value});
 
   final String rule;
   final bool passed;
   final String? tip;
+
+  /// The measured quantity the rule checked (degrees, ratio, ...), when known.
+  final double? value;
 
   /// "elbow_extension" -> "Elbow extension".
   String get label {
@@ -236,6 +286,7 @@ class FeedbackItem {
     rule: j['rule'] as String,
     passed: j['passed'] as bool,
     tip: j['tip'] as String?,
+    value: asDouble(j['value']),
   );
 }
 
@@ -349,6 +400,180 @@ class ScoreUpdate {
   factory ScoreUpdate.fromJson(Json j) => ScoreUpdate(
     score: Score.fromJson(j['score'] as Json),
     rallies: asList(j['rallies']).map(Rally.fromJson).toList(),
+  );
+}
+
+/// A point on the timeline the app can seek to.
+class Moment {
+  const Moment({required this.frame, required this.timeS, this.hitId});
+
+  final int frame;
+  final double timeS;
+  final int? hitId;
+
+  Duration get position => Duration(microseconds: (timeS * Duration.microsecondsPerSecond).round());
+
+  /// "1:05.3" style label for chips.
+  String get label {
+    final s = timeS < 0 ? 0.0 : timeS;
+    final minutes = s ~/ 60;
+    final rest = (s - minutes * 60).toStringAsFixed(1).padLeft(4, '0');
+    return '$minutes:$rest';
+  }
+
+  factory Moment.fromJson(Json j) =>
+      Moment(frame: asInt(j['frame'])!, timeS: asDouble(j['time_s'])!, hitId: asInt(j['hit_id']));
+}
+
+/// Automated in/out call for one landing (schema 1.1). Never an official call.
+class LineCall {
+  const LineCall({
+    required this.id,
+    required this.rallyIndex,
+    required this.frame,
+    required this.timeS,
+    required this.call,
+    required this.landing,
+    required this.marginCm,
+    required this.confidence,
+    required this.uncertain,
+    this.court = 'singles',
+    this.overrideCall,
+  });
+
+  final int id;
+  final int rallyIndex;
+  final int frame;
+  final double timeS;
+
+  /// in or out, as called by the backend.
+  final String call;
+  final CourtPoint landing;
+
+  /// Signed distance to the nearest relevant line; positive inside the court.
+  final double marginCm;
+  final double confidence;
+  final bool uncertain;
+  final String court;
+
+  /// in or out when the user confirmed or overrode the call.
+  final String? overrideCall;
+
+  String get effectiveCall => overrideCall ?? call;
+  bool get isIn => effectiveCall == 'in';
+  bool get reviewed => overrideCall != null;
+
+  /// Still waiting for the user: uncertain and not yet confirmed or overridden.
+  bool get needsReview => uncertain && !reviewed;
+
+  Moment get moment => Moment(frame: frame, timeS: timeS);
+
+  factory LineCall.fromJson(Json j) => LineCall(
+    id: asInt(j['id'])!,
+    rallyIndex: asInt(j['rally_index'])!,
+    frame: asInt(j['frame'])!,
+    timeS: asDouble(j['time_s'])!,
+    call: j['call'] as String,
+    landing: asPoint(j['landing_xy'])!,
+    marginCm: asDouble(j['margin_cm'])!,
+    confidence: asDouble(j['confidence'])!,
+    uncertain: j['uncertain'] as bool,
+    court: j['court'] as String? ?? 'singles',
+    overrideCall: (j['override'] as Json?)?['call'] as String?,
+  );
+}
+
+class RallyEvent {
+  const RallyEvent({
+    required this.frame,
+    required this.timeS,
+    required this.type,
+    this.rallyIndex,
+    this.data = const {},
+  });
+
+  final int frame;
+  final double timeS;
+
+  /// rally_start, rally_end, hit, landing or score.
+  final String type;
+  final int? rallyIndex;
+  final Json data;
+
+  factory RallyEvent.fromJson(Json j) => RallyEvent(
+    frame: asInt(j['frame'])!,
+    timeS: asDouble(j['time_s'])!,
+    type: j['type'] as String,
+    rallyIndex: asInt(j['rally_index']),
+    data: (j['data'] as Json?) ?? const {},
+  );
+}
+
+/// A pattern seen across the session ("Late split-step on 4 of 6 net shots").
+class SessionNote {
+  const SessionNote({
+    required this.id,
+    required this.rule,
+    required this.text,
+    required this.count,
+    required this.total,
+    required this.severity,
+    this.stroke,
+    this.moments = const [],
+  });
+
+  final String id;
+  final String rule;
+  final String? stroke;
+  final String text;
+  final int count;
+  final int total;
+  final double severity;
+  final List<Moment> moments;
+
+  factory SessionNote.fromJson(Json j) => SessionNote(
+    id: j['id'] as String,
+    rule: j['rule'] as String,
+    stroke: j['stroke'] as String?,
+    text: j['text'] as String,
+    count: asInt(j['count'])!,
+    total: asInt(j['total'])!,
+    severity: asDouble(j['severity'])!,
+    moments: asList(j['moments']).map(Moment.fromJson).toList(),
+  );
+}
+
+class Coaching {
+  const Coaching({this.notes = const [], this.topFixIds = const []});
+
+  final List<SessionNote> notes;
+  final List<String> topFixIds;
+
+  /// The notes named in top_fixes, most important first.
+  List<SessionNote> get topFixes => [for (final id in topFixIds) ...notes.where((n) => n.id == id)];
+
+  factory Coaching.fromJson(Json j) => Coaching(
+    notes: asList(j['session_notes']).map(SessionNote.fromJson).toList(),
+    topFixIds: (j['top_fixes'] as List<dynamic>? ?? const []).cast<String>(),
+  );
+}
+
+class ChatMessage {
+  const ChatMessage({required this.role, required this.text, this.at, this.citations = const []});
+
+  /// user or assistant.
+  final String role;
+  final String text;
+  final DateTime? at;
+  final List<Moment> citations;
+
+  bool get fromUser => role == 'user';
+
+  factory ChatMessage.fromJson(Json j) => ChatMessage(
+    role: j['role'] as String,
+    text: j['text'] as String,
+    at: asDate(j['at']),
+    citations: asList(j['citations']).map(Moment.fromJson).toList(),
   );
 }
 
