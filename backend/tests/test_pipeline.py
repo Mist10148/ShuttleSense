@@ -93,6 +93,28 @@ def test_file_changed_in_place_invalidates_cache(
     assert counting_stages["tracking"] == 2
 
 
+def test_health_tracking_requires_submodule_or_precomputed_csv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from shuttlesense.tracking import tracknet
+
+    weights = tmp_path / "track.pt"
+    weights.write_bytes(b"weight fixture")
+    submodule = tmp_path / "TrackNetV3"
+    monkeypatch.setattr(tracknet, "TRACKNET_DIR", submodule)
+    monkeypatch.setattr(pipeline, "_installed", lambda _module: True)
+    config = {"stages": {"tracking": {"tracknet_weights": str(weights)}}}
+    assert "tracking" not in pipeline.available_stages(config)
+    submodule.mkdir()
+    (submodule / "model.py").write_text("# fixture")
+    assert "tracking" in pipeline.available_stages(config)
+    (submodule / "model.py").unlink()
+    csv_path = tmp_path / "tracking.csv"
+    csv_path.write_text("Frame,Visibility,X,Y\n")
+    config["stages"]["tracking"]["precomputed_csv"] = str(csv_path)
+    assert "tracking" in pipeline.available_stages(config)
+
+
 def test_stage_that_becomes_available_reruns_downstream(
     monkeypatch: pytest.MonkeyPatch, tiny_video: Path, tmp_path: Path
 ) -> None:

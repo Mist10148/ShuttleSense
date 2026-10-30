@@ -81,6 +81,11 @@ def available_stages(config: dict[str, Any] | None = None) -> list[str]:
         if precomputed and (BACKEND_DIR / precomputed).is_file():
             names.append(spec.name)
             continue
+        if spec.name == "tracking":
+            from shuttlesense.tracking.tracknet import TRACKNET_DIR
+
+            if not (TRACKNET_DIR / "model.py").is_file():
+                continue
         requires = spec.requires
         if spec.name == "pose" and cfg.get("backend") == "keypoint_rcnn":
             requires = ("torch", "torchvision")

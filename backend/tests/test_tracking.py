@@ -7,7 +7,7 @@ import pytest
 
 from shuttlesense.schema import ClipRecord, Frame
 from shuttlesense.stage import StageContext
-from shuttlesense.tracking import heatmap_to_xy, rectify, remove_outliers, scale_to_video
+from shuttlesense.tracking import heatmap_to_xy, rectify, remove_outliers, scale_to_video, tracknet
 from shuttlesense.tracking import run as tracking_run
 from shuttlesense.tracking.postprocess import read_tracking_csv, write_tracking_csv
 
@@ -81,6 +81,97 @@ def test_precomputed_csv_maps_source_frames_and_pixels(tmp_path: Path) -> None:
     record = tracking_run(record, ctx)
     assert [f.shuttle.x for f in record.frames] == [200.0, 201.3, 202.7, 204.0]
     assert record.frames[3].shuttle.y == 400.0
+
+
+def test_tracknet_input_channels_and_inpaint_mask() -> None:
+    frames = [np.zeros((48, 64, 3), dtype=np.uint8) for _ in range(3)]
+    median = np.zeros_like(frames[0])
+    assert tracknet._track_input(frames, "", None).shape == (9, 288, 512)
+    assert tracknet._track_input(frames, "concat", median).shape == (12, 288, 512)
+    assert tracknet._track_input(frames, "subtract", median).shape == (3, 288, 512)
+    assert tracknet._track_input(frames, "subtract_concat", median).shape == (12, 288, 512)
+    xy = np.array([[10, 20], [0, 0], [0, 0], [20, 30]], float)
+    assert tracknet._inpaint_mask(xy, np.array([1, 0, 0, 1]), 100).tolist() == [0, 1, 1, 0]
+
+
+def test_tracknet_predict_maps_padded_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    torch = pytest.importorskip("torch")
+
+    class Reader:
+        width, height = 1024, 576
+
+        def __len__(self):
+            return 5
+
+        def batch(self, start, size):
+            return [np.zeros((48, 64, 3), dtype=np.uint8) for _ in range(min(size, 5 - start))]
+
+    class Model:
+        def __call__(self, batch):
+            out = torch.zeros((batch.shape[0], 3, 288, 512))
+            out[:, :, 70:73, 120:123] = 0.9
+            return out
+
+    monkeypatch.setattr(tracknet, "_load_model", lambda *_: (Model(), 3, ""))
+    progress = []
+    ctx = StageContext(
+        video_path=tmp_path / "v.mp4",
+        out_dir=tmp_path,
+        config={"stages": {"tracking": {"batch_size": 2, "use_inpaintnet": False}}},
+        reader=Reader(),
+        progress=progress.append,
+    )
+    xy, visible, source = tracknet.predict(ctx, tmp_path / "unused.pt")
+    assert visible.tolist() == [1] * 5
+    assert source == ["net"] * 5
+    assert xy.tolist() == [[242.0, 142.0]] * 5
+    assert progress[-1] == 0.9
+
+
+def test_tracknet_inpaints_internal_gap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+
+    class Reader:
+        width, height = 1024, 576
+
+        def __len__(self):
+            return 4
+
+        def batch(self, start, size):
+            return [np.zeros((48, 64, 3), dtype=np.uint8) for _ in range(min(size, 4 - start))]
+
+    class TrackModel:
+        def __call__(self, batch):
+            out = torch.zeros((batch.shape[0], 4, 288, 512))
+            out[:, 0, 70:73, 120:123] = 0.9
+            out[:, 3, 80:83, 130:133] = 0.9
+            return out
+
+    class InpaintModel:
+        def __call__(self, coordinates, mask):
+            assert mask[0, :, 0].tolist() == [0, 1, 1, 0]
+            return torch.full_like(coordinates, 0.5)
+
+    def load(_path, _device, kind):
+        return (TrackModel(), 4, "") if kind == "tracknet" else (InpaintModel(), 4, "")
+
+    monkeypatch.setattr(tracknet, "_load_model", load)
+    weight = tmp_path / "inpaint.pt"
+    weight.write_bytes(b"fixture")
+    ctx = StageContext(
+        video_path=tmp_path / "v.mp4",
+        out_dir=tmp_path,
+        config={
+            "stages": {"tracking": {"use_inpaintnet": True, "inpaintnet_weights": str(weight)}}
+        },
+        reader=Reader(),
+    )
+    xy, visible, source = tracknet.predict(ctx, tmp_path / "track.pt")
+    assert visible.tolist() == [1, 1, 1, 1]
+    assert source == ["net", "inpaint", "inpaint", "net"]
+    assert xy[1:3].tolist() == [[512.0, 288.0], [512.0, 288.0]]
 
 
 REPO = Path(__file__).resolve().parents[2]
