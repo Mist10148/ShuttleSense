@@ -631,3 +631,22 @@ def test_failed_rerender_keeps_overlays_of_the_last_run(tmp_path: Path, tiny_vid
         failed = wait_for(client, job["id"])
         assert failed["status"] == "failed" and failed["overlays"] == ["trail"]
         assert failed["finished_at"] is not None
+
+
+def test_storage_sweeps_leftovers_of_interrupted_deletes(tmp_path: Path) -> None:
+    from shuttlesense.api.storage import Storage
+
+    root = tmp_path / "s"
+    storage = Storage(root)
+    kept_video = storage.video_dir("a" * 12)
+    gone_video = storage.video_dir("b" * 12)
+    kept_job = storage.job_dir("c" * 12)
+    gone_job = storage.job_dir("d" * 12)
+    for d in (kept_video, gone_video, kept_job, gone_job):
+        d.mkdir(parents=True)
+        (d / "annotated.mp4").write_bytes(b"x")  # a file the delete could not remove
+    (kept_video / "meta.json").write_text("{}")
+    (kept_job / "job.json").write_text("{}")
+    Storage(root)  # server restart
+    assert kept_video.exists() and kept_job.exists()
+    assert not gone_video.exists() and not gone_job.exists()

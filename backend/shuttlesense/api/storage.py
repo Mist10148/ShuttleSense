@@ -45,6 +45,20 @@ class Storage:
         self.jobs_dir = root / "jobs"
         self.videos_dir.mkdir(parents=True, exist_ok=True)
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
+        self.sweep()
+
+    def sweep(self) -> None:
+        """Finish deletes that a locked file stopped (Windows: a file still being streamed).
+
+        A deleted upload or job loses its meta.json or job.json first, so a folder without
+        one is a leftover. Only called at startup: mid-upload folders have no meta.json yet.
+        """
+        for parent, marker in ((self.videos_dir, "meta.json"), (self.jobs_dir, "job.json")):
+            for d in parent.iterdir():
+                if d.is_dir() and is_id(d.name) and not (d / marker).exists():
+                    shutil.rmtree(d, ignore_errors=True)
+                    if d.exists():
+                        log.warning("could not remove %s; retried at the next start", d)
 
     # Videos -----------------------------------------------------------------
 
@@ -122,6 +136,15 @@ class Storage:
         return jobs
 
     def delete_job(self, job_id: str) -> None:
+        """Remove a job's folder. job.json goes first, so a file that is still open (Windows)
+        leaves a folder that no longer loads as a job and is removed at the next start."""
         if not is_id(job_id):
             return
-        shutil.rmtree(self.job_dir(job_id), ignore_errors=True)
+        d = self.job_dir(job_id)
+        try:
+            (d / "job.json").unlink(missing_ok=True)
+        except OSError:
+            log.warning("could not remove %s", d / "job.json")
+        shutil.rmtree(d, ignore_errors=True)
+        if d.exists():
+            log.info("job %s has files in use; they are removed at the next start", job_id)
