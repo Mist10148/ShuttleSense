@@ -408,6 +408,8 @@ const kStrokeLabels = <String, String>{
 int frameIndexAt(Duration position, double fps) =>
     (position.inMicroseconds * fps / Duration.microsecondsPerSecond + 1e-3).floor();
 
-/// Start of frame [index] for [fps], rounded up so [frameIndexAt] maps it back to [index].
-Duration frameStart(int index, double fps) =>
-    Duration(microseconds: (index * Duration.microsecondsPerSecond / fps).ceil());
+/// Middle of frame [index] for [fps]. Seeking there instead of to the frame start keeps a
+/// player that truncates positions (media_kit on the web seeks in whole milliseconds) inside
+/// the frame, so [frameIndexAt] maps the reported position back to [index].
+Duration frameMid(int index, double fps) =>
+    Duration(microseconds: ((index + 0.5) * Duration.microsecondsPerSecond / fps).round());

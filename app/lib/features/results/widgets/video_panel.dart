@@ -82,12 +82,13 @@ class MediaKitTarget implements PlaybackTarget {
   Future<void> setRate(double rate) => player.setRate(rate);
 }
 
-/// Step one video frame forward (+1) or back (-1), pausing first. Works on frame indices, so
-/// repeated steps never drift onto the previous frame through microsecond rounding.
+/// Step one video frame forward (+1) or back (-1), pausing first. Works on frame indices and
+/// seeks to the middle of the frame, so repeated steps never drift onto the previous frame
+/// through position rounding.
 Future<void> stepFrame(PlaybackTarget target, double fps, int direction) async {
   if (target.playing) await target.playOrPause();
   final next = frameIndexAt(target.position, fps) + direction;
-  await target.seek(next <= 0 ? Duration.zero : frameStart(next, fps));
+  await target.seek(next <= 0 ? Duration.zero : frameMid(next, fps));
 }
 
 /// Speed and frame-step buttons under the video (T4.6).

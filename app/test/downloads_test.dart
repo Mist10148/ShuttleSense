@@ -54,6 +54,12 @@ class FakeTarget implements PlaybackTarget {
   Future<void> setRate(double rate) async => rates.add(rate);
 }
 
+/// media_kit on the web: `currentTime = position.inMilliseconds / 1000`.
+class _MillisecondTarget extends FakeTarget {
+  @override
+  Future<void> seek(Duration p) async => position = Duration(milliseconds: p.inMilliseconds);
+}
+
 void main() {
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('ss_dl'));
@@ -122,10 +128,10 @@ void main() {
     final target = FakeTarget();
     await stepFrame(target, 25, 1);
     expect(target.playing, isFalse);
-    expect(target.position, const Duration(milliseconds: 1040));
+    expect(target.position, const Duration(milliseconds: 1060));
     await stepFrame(target, 25, -1);
     await stepFrame(target, 25, -1);
-    expect(target.position, const Duration(milliseconds: 960));
+    expect(target.position, const Duration(milliseconds: 980));
     target.position = Duration.zero;
     await stepFrame(target, 25, -1);
     expect(target.position, Duration.zero);
@@ -140,6 +146,20 @@ void main() {
     for (var i = 89; i >= 0; i--) {
       await stepFrame(target, 30, -1);
       expect(frameIndexAt(target.position, 30), i);
+    }
+  });
+
+  test('frame steps survive a player that seeks in whole milliseconds (web)', () async {
+    for (final fps in [25.0, 30.0, 60.0]) {
+      final target = _MillisecondTarget()..position = Duration.zero;
+      for (var i = 1; i <= 120; i++) {
+        await stepFrame(target, fps, 1);
+        expect(frameIndexAt(target.position, fps), i, reason: '$fps fps, frame $i');
+      }
+      for (var i = 119; i >= 0; i--) {
+        await stepFrame(target, fps, -1);
+        expect(frameIndexAt(target.position, fps), i, reason: '$fps fps, frame $i');
+      }
     }
   });
 
@@ -162,7 +182,7 @@ void main() {
     expect(target.playing, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     expect(target.playing, isFalse);
-    expect(target.position, const Duration(milliseconds: 1040));
+    expect(target.position, const Duration(milliseconds: 1060)); // middle of frame 26
   });
 
   testWidgets('play button shows the state; Space on a focused button presses it', (tester) async {
