@@ -85,7 +85,7 @@ def to_markdown(result: dict, args: argparse.Namespace, command: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--fake", action="store_true", help="in-process API, fake perception")
     parser.add_argument("--url", default="ws://127.0.0.1:8000/live")
@@ -95,25 +95,25 @@ def main() -> None:
     parser.add_argument("--corners")
     parser.add_argument("--realtime", action="store_true")
     parser.add_argument("--out", type=Path, default=RESULTS_DIR / "live_latency.md")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     from shuttlesense import live_replay
 
-    argv = ["--frames", str(args.frames), "--json", str(args.out.with_suffix(".json"))]
+    replay = ["--frames", str(args.frames), "--json", str(args.out.with_suffix(".json"))]
     if args.fake:
-        argv += ["--in-process", "--fake"]
+        replay += ["--in-process", "--fake"]
     else:
-        argv += ["--url", args.url] + (["--token", args.token] if args.token else [])
+        replay += ["--url", args.url] + (["--token", args.token] if args.token else [])
     if args.video:
-        argv += ["--video", str(args.video)]
+        replay += ["--video", str(args.video)]
     if args.corners:
-        argv += ["--corners", args.corners]
+        replay += ["--corners", args.corners]
     if args.realtime:
-        argv.append("--realtime")
+        replay.append("--realtime")
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    live_replay.main(argv)
+    live_replay.main(replay)
     result = json.loads(args.out.with_suffix(".json").read_text(encoding="utf-8"))
-    command = "python scripts/bench_live.py " + " ".join(sys.argv[1:])
+    command = "python scripts/bench_live.py " + " ".join(sys.argv[1:] if argv is None else argv)
     markdown = to_markdown(result, args, command)
     args.out.write_text(markdown, encoding="utf-8")
     print(markdown)

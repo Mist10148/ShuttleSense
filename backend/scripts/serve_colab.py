@@ -31,6 +31,15 @@ def ensure_cloudflared() -> Path:
     return path
 
 
+TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+
+
+def tunnel_url(line: str) -> str | None:
+    """The public URL in one line of cloudflared's log, if the line announces it."""
+    match = TUNNEL_URL.search(line)
+    return match.group(0) if match else None
+
+
 def _drain(stream) -> None:
     for _line in stream:
         pass
@@ -55,9 +64,9 @@ def main() -> None:
     )
     try:
         for line in tunnel.stderr:
-            match = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
-            if match:
-                print(f"\nShuttleSense API: {match.group(0)}\nToken: {args.token}\n", flush=True)
+            url = tunnel_url(line)
+            if url:
+                print(f"\nShuttleSense API: {url}\nToken: {args.token}\n", flush=True)
                 break
         # Keep reading cloudflared's log: a full, unread pipe would stall the tunnel.
         threading.Thread(target=_drain, args=(tunnel.stderr,), daemon=True).start()
