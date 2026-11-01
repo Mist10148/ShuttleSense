@@ -20,6 +20,9 @@ from typing import Any
 
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord
 
+# Bump when OWNED changes so caches written with fewer fields miss instead of loading them.
+CACHE_FORMAT = 2
+
 # stage -> (top-level record fields, per-frame fields) it writes; see ARCHITECTURE.md.
 OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "tracking": ((), ("shuttle",)),
@@ -29,7 +32,7 @@ OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "strokes": (("hits",), ()),
     "feedback": (("hits",), ()),
     "analytics": (("hits", "summary"), ("court_positions", "shuttle_speed_kmh")),
-    "referee": (("hits", "rallies", "score"), ("rally_state",)),
+    "referee": (("hits", "rallies", "score", "line_calls", "rally_events"), ("rally_state",)),
 }
 
 
@@ -59,6 +62,7 @@ def initial_key(video_path: Path, config: dict[str, Any]) -> str:
         "size": stat.st_size if stat else 0,
         "mtime": stat.st_mtime_ns if stat else 0,
         "schema": SCHEMA_VERSION,
+        "format": CACHE_FORMAT,
         "corners": config.get("court_corners_px"),
     }
     return _sha1(payload)

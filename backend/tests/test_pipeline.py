@@ -73,6 +73,22 @@ def test_pose_key_includes_court_block() -> None:
     assert cache.key_config("tracking", singles) == cache.key_config("tracking", doubles)
 
 
+def test_referee_cache_keeps_line_calls_and_events(tmp_path: Path) -> None:
+    """A re-render that hits the referee cache must not drop line calls (and their overrides)."""
+    from shuttlesense import cache
+    from shuttlesense.schema import ClipRecord
+
+    golden = Path(__file__).parent / "fixtures" / "golden_record.json"
+    record = ClipRecord.model_validate_json(golden.read_text(encoding="utf-8"))
+    assert record.line_calls and record.rally_events
+    cache.save(tmp_path, "referee", "k", record)
+    empty = record.model_copy(update={"line_calls": [], "rally_events": [], "rallies": []})
+    restored = cache.load(tmp_path, "referee", "k", empty)
+    assert restored is not None
+    assert restored.line_calls == record.line_calls
+    assert restored.rally_events == record.rally_events
+
+
 def test_file_changed_in_place_invalidates_cache(
     counting_stages, tiny_video: Path, tmp_path: Path
 ) -> None:
