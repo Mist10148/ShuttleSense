@@ -191,7 +191,11 @@ void main() {
     const mb = 1024 * 1024;
 
     /// Picks a [size]-byte "rally.mp4" with calibration off, so a finished upload starts the job.
-    Future<(FakeApiClient, List<String>)> pickVideo(WidgetTester tester, {int? size = mb}) async {
+    Future<(FakeApiClient, List<String>)> pickVideo(
+      WidgetTester tester, {
+      int? size = mb,
+      double? durationS = 42,
+    }) async {
       FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', size)]);
       final api = FakeApiClient()..uploadGate = Completer<void>();
       final visited = await pumpScreen(
@@ -200,6 +204,7 @@ void main() {
         api: api,
         size: tablet,
         prefs: {'options.calibrate': false},
+        overrides: [durationProbeProvider.overrideWithValue((_) async => durationS)],
       );
       await tester.tap(find.text('Choose video'));
       await tester.pumpAndSettle();
@@ -254,6 +259,39 @@ void main() {
       await startUpload(tester);
       await tester.pumpWidget(const SizedBox());
       expect(api.uploadCancel!.isCancelled, isTrue);
+    });
+
+    testWidgets('the picked clip shows its length and size', (tester) async {
+      await pickVideo(tester, size: 10 * mb, durationS: 65);
+      expect(find.text('1:05 · 10.0 MB'), findsOneWidget);
+    });
+
+    testWidgets('a clip over 5 minutes is flagged and confirmed before sending', (tester) async {
+      final (api, visited) = await pickVideo(tester, durationS: 400);
+      expect(find.textContaining('longer than the 5-minute server limit'), findsOneWidget);
+      await startUpload(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Long video'), findsOneWidget);
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(api.calls.where((c) => c.startsWith('uploadVideo')), isEmpty);
+      await startUpload(tester);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Upload anyway'));
+      await tester.pump();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      api.uploadGate!.complete();
+      await tester.pumpAndSettle();
+      expect(visited, ['/jobs/job2']);
+    });
+
+    testWidgets('upload state lives in the controller', (tester) async {
+      final (api, _) = await pickVideo(tester, size: 10 * mb);
+      await startUpload(tester);
+      final container = ProviderScope.containerOf(tester.element(find.byType(UploadScreen)));
+      expect(container.read(uploadProvider).progress, 0.5);
+      expect(container.read(uploadProvider).file?.name, 'rally.mp4');
+      expect(api.uploadCancel!.isCancelled, isFalse);
     });
 
     testWidgets('a file of unknown size is not accepted', (tester) async {

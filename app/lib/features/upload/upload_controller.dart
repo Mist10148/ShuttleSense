@@ -1,7 +1,15 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 
 import '../../core/config/server_config.dart';
+import '../../data/api_client.dart';
 import '../../data/models/job.dart';
+import '../../data/repositories/analysis_repository.dart';
 
 /// Above this the app warns before uploading (the server's default limit is 1024 MB).
 const kLargeUploadBytes = 1024 * 1024 * 1024;
@@ -69,6 +77,145 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
 final pendingJobOptionsProvider = NotifierProvider<JobOptionsNotifier, JobOptions>(
   JobOptionsNotifier.new,
 );
+
+/// Length of a local clip in seconds, or null when it cannot be read here (web, content
+/// URIs, unknown codecs). Only used to warn before uploading; the server checks it anyway.
+typedef DurationProbe = Future<double?> Function(PlatformFile file);
+
+Future<double?> probeDuration(PlatformFile file) async {
+  final path = file.path;
+  if (kIsWeb || path == null) return null;
+  Player? player;
+  try {
+    player = Player();
+    await player.open(Media(Uri.file(path).toString()), play: false);
+    final d = await player.stream.duration
+        .firstWhere((d) => d > Duration.zero)
+        .timeout(const Duration(seconds: 3));
+    return d.inMilliseconds / 1000;
+  } on Object {
+    return null;
+  } finally {
+    if (player != null) unawaited(player.dispose());
+  }
+}
+
+final durationProbeProvider = Provider<DurationProbe>((ref) => probeDuration);
+
+/// The picked file and the upload in flight (T4.2). The screen only renders this.
+@immutable
+class UploadState {
+  const UploadState({
+    this.file,
+    this.size = 0,
+    this.durationS,
+    this.sent = 0,
+    this.progress,
+    this.error,
+  });
+
+  final PlatformFile? file;
+  final int size;
+
+  /// Length of the picked clip when the device could read it.
+  final double? durationS;
+  final int sent;
+
+  /// 0..1 while uploading, else null.
+  final double? progress;
+  final String? error;
+
+  bool get uploading => progress != null;
+  bool get tooLong => durationS != null && durationS! > kMaxDurationS;
+  bool get large => size > kLargeUploadBytes;
+
+  UploadState copyWith({int? sent, double? progress, String? error}) => UploadState(
+    file: file,
+    size: size,
+    durationS: durationS,
+    sent: sent ?? this.sent,
+    progress: progress,
+    error: error,
+  );
+}
+
+class UploadNotifier extends Notifier<UploadState> {
+  CancelToken? _cancel;
+  var _disposed = false;
+
+  @override
+  UploadState build() {
+    ref.onDispose(() {
+      _disposed = true;
+      _cancel?.cancel();
+    });
+    return const UploadState();
+  }
+
+  void _set(UploadState next) {
+    if (!_disposed) state = next;
+  }
+
+  /// Accept a picked file, or explain why it cannot be uploaded.
+  Future<void> choose(PlatformFile file, {required bool web}) async {
+    final size = await file.length();
+    final problem = uploadSizeProblem(size, web: web);
+    if (problem != null) {
+      _set(UploadState(error: problem));
+      return;
+    }
+    _set(UploadState(file: file, size: size!));
+    final duration = await ref.read(durationProbeProvider)(file);
+    if (!_disposed && identical(state.file, file) && duration != null) {
+      _set(UploadState(file: file, size: size, durationS: duration));
+    }
+  }
+
+  /// Upload the picked file, then start the job unless calibration comes first. Null when
+  /// the upload was cancelled or failed (the file is kept for a retry, [UploadState.error]
+  /// says why).
+  Future<({String videoId, Job? job})?> upload() async {
+    final file = state.file;
+    if (file == null || state.uploading) return null;
+    final api = ref.read(apiClientProvider);
+    final options = ref
+        .read(pendingJobOptionsProvider)
+        .submittable(ref.read(healthProvider).valueOrNull);
+    final cancel = _cancel = CancelToken();
+    _set(state.copyWith(progress: 0, sent: 0));
+    try {
+      final video = await api.uploadVideo(
+        stream: file.readAsByteStream(),
+        length: state.size,
+        filename: file.name,
+        cancelToken: cancel,
+        onProgress: (sent, total) {
+          if (total > 0 && !cancel.isCancelled) {
+            _set(state.copyWith(sent: sent, progress: sent / total));
+          }
+        },
+      );
+      if (cancel.isCancelled) return null;
+      final job = options.calibrate
+          ? null
+          : await api.createJob(videoId: video.id, options: options);
+      _set(const UploadState());
+      return (videoId: video.id, job: job);
+    } on ApiException catch (e) {
+      // A cancel the user asked for is not an error.
+      _set(state.copyWith(error: cancel.isCancelled ? null : e.message));
+      return null;
+    } finally {
+      if (identical(_cancel, cancel)) _cancel = null;
+    }
+  }
+
+  /// Stop the upload in flight; [upload] then clears the progress and keeps the file for a
+  /// retry. Safe to call while the screen is being disposed (no state change here).
+  void cancel() => _cancel?.cancel();
+}
+
+final uploadProvider = NotifierProvider<UploadNotifier, UploadState>(UploadNotifier.new);
 
 /// Size label: "350.2 MB" or "1.20 GB".
 String formatBytes(int bytes) {

@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
-import '../../data/api_client.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
@@ -23,17 +21,18 @@ class UploadScreen extends ConsumerStatefulWidget {
 }
 
 class _UploadScreenState extends ConsumerState<UploadScreen> {
-  PlatformFile? _file;
-  int _size = 0;
-  int _sent = 0;
-  double? _progress;
-  CancelToken? _cancel;
-  String? _error;
+  late final UploadNotifier _upload = ref.read(uploadProvider.notifier);
 
   bool get _isPhone =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+
+  @override
+  void initState() {
+    super.initState();
+    _upload; // read now: ref cannot be used in dispose
+  }
 
   Future<void> _pick({bool gallery = false}) async {
     final files = await FilePicker.pickFiles(
@@ -41,84 +40,37 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       allowedExtensions: gallery ? null : const ['mp4', 'mov', 'avi'],
     );
     if (files.isEmpty) return;
-    final size = await files.first.length();
-    if (!mounted) return;
-    final problem = uploadSizeProblem(size, web: kIsWeb);
-    setState(() {
-      _file = problem == null ? files.first : null;
-      _size = problem == null ? size! : 0;
-      _error = problem;
-    });
+    await _upload.choose(files.first, web: kIsWeb);
   }
 
   @override
   void dispose() {
-    // Leaving the screen (Back, Change server) stops the upload; otherwise it would finish
-    // with nobody left to start the job, leaving an orphan video on the server. Switching
-    // to another tab keeps this screen mounted, so the upload carries on.
-    _cancel?.cancel();
+    // Leaving the screen (Back, Change server, switching to Live) stops the upload;
+    // otherwise it would finish with nobody left to start the job, leaving an orphan video
+    // on the server. Switching to another tab keeps this screen mounted, so it carries on.
+    _upload.cancel();
     super.dispose();
   }
 
-  Future<void> _upload() async {
-    final file = _file;
-    if (file == null) return;
-    if (_size > kLargeUploadBytes && !await _confirmLarge()) return;
-    final api = ref.read(apiClientProvider);
-    final options = ref
-        .read(pendingJobOptionsProvider)
-        .submittable(ref.read(healthProvider).valueOrNull);
-    final cancel = CancelToken();
-    setState(() {
-      _progress = 0;
-      _sent = 0;
-      _error = null;
-      _cancel = cancel;
-    });
-    try {
-      final video = await api.uploadVideo(
-        stream: file.readAsByteStream(),
-        length: _size,
-        filename: file.name,
-        cancelToken: cancel,
-        onProgress: (sent, total) {
-          if (mounted && total > 0) {
-            setState(() {
-              _sent = sent;
-              _progress = sent / total;
-            });
-          }
-        },
-      );
-      if (!mounted) return;
-      if (options.calibrate) {
-        context.go(Routes.calibrate(video.id));
-      } else {
-        final job = await api.createJob(videoId: video.id, options: options);
-        if (mounted) context.go(Routes.job(job.id));
-      }
-    } on ApiException catch (e) {
-      // The picked file is kept so the user can retry without choosing it again. A cancel
-      // the user asked for is not an error.
-      if (mounted) setState(() => _error = cancel.isCancelled ? null : e.message);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _progress = null;
-          _cancel = null;
-        });
-      }
-    }
+  Future<void> _start() async {
+    final state = ref.read(uploadProvider);
+    if (state.file == null) return;
+    if ((state.large || state.tooLong) && !await _confirmLarge(state)) return;
+    final done = await _upload.upload();
+    if (done == null || !mounted) return;
+    final job = done.job;
+    context.go(job == null ? Routes.calibrate(done.videoId) : Routes.job(job.id));
   }
 
-  Future<bool> _confirmLarge() async =>
+  Future<bool> _confirmLarge(UploadState state) async =>
       await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Large video'),
+          title: Text(state.tooLong ? 'Long video' : 'Large video'),
           content: Text(
-            'This file is ${formatBytes(_size)}. The server accepts up to 1 GB by default and '
-            'clips up to ${kMaxDurationS ~/ 60} minutes. Trim it to the rally for a faster upload.',
+            '${state.tooLong ? 'This clip is ${_minutes(state.durationS!)} long' : 'This file is ${formatBytes(state.size)}'}. '
+            'The server accepts clips up to ${kMaxDurationS ~/ 60} minutes and 1 GB by default, '
+            'and refuses longer ones after the upload. Trim it to the rally first.',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -136,8 +88,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final options = ref.watch(pendingJobOptionsProvider);
     final notifier = ref.read(pendingJobOptionsProvider.notifier);
     final health = ref.watch(healthProvider).valueOrNull;
-    final uploading = _progress != null;
+    final upload = ref.watch(uploadProvider);
+    final file = upload.file;
+    final uploading = upload.uploading;
     final theme = Theme.of(context);
+    final warnings = [
+      if (upload.durationS != null) _minutes(upload.durationS!),
+      formatBytes(upload.size),
+      if (upload.tooLong) 'longer than the ${kMaxDurationS ~/ 60}-minute server limit',
+      if (upload.large) 'larger than the 1 GB server limit',
+    ];
 
     return PageScaffold(
       title: 'New analysis',
@@ -154,15 +114,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
-              if (_file != null)
+              if (file != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.movie_outlined),
-                  title: Text(_file!.name, overflow: TextOverflow.ellipsis),
+                  title: Text(file.name, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                    formatBytes(_size) +
-                        (_size > kLargeUploadBytes ? ' · larger than the 1 GB server limit' : ''),
-                    style: _size > kLargeUploadBytes
+                    warnings.join(' · '),
+                    style: upload.large || upload.tooLong
                         ? TextStyle(color: theme.colorScheme.error)
                         : null,
                   ),
@@ -180,7 +139,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   OutlinedButton.icon(
                     onPressed: uploading ? null : _pick,
                     icon: const Icon(Icons.video_library_outlined),
-                    label: Text(_file == null ? 'Choose video' : 'Choose another'),
+                    label: Text(file == null ? 'Choose video' : 'Choose another'),
                   ),
                 ],
               ),
@@ -233,29 +192,35 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         if (uploading) ...[
           Semantics(
             label: 'Upload progress',
-            value: '${(_progress! * 100).round()}%',
-            child: LinearProgressIndicator(value: _progress),
+            value: '${(upload.progress! * 100).round()}%',
+            child: LinearProgressIndicator(value: upload.progress),
           ),
           const SizedBox(height: 8),
           Text(
-            'Uploading ${formatBytes(_sent)} of ${formatBytes(_size)} '
-            '(${(_progress! * 100).round()}%)',
+            'Uploading ${formatBytes(upload.sent)} of ${formatBytes(upload.size)} '
+            '(${(upload.progress! * 100).round()}%)',
             textAlign: TextAlign.center,
           ),
-          TextButton(onPressed: () => _cancel?.cancel(), child: const Text('Cancel')),
+          TextButton(onPressed: _upload.cancel, child: const Text('Cancel')),
         ] else
           FilledButton.icon(
-            onPressed: _file == null ? null : _upload,
+            onPressed: file == null ? null : _start,
             icon: const Icon(Icons.cloud_upload_outlined),
             label: Text(options.calibrate ? 'Upload and calibrate' : 'Upload and analyze'),
           ),
-        if (_error != null) ...[
+        if (upload.error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+          Text(upload.error!, style: TextStyle(color: theme.colorScheme.error)),
         ],
       ],
     );
   }
+}
+
+/// "4:05" for 245 seconds.
+String _minutes(double seconds) {
+  final s = seconds.round();
+  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 }
 
 class _OverlayChip extends StatelessWidget {
