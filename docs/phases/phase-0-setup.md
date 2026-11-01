@@ -127,9 +127,9 @@
 - [ ] Create one issue per task card (title `[Tx.y] <title>`, body = card, labels, milestone); close T0.1–T0.5.
 - [ ] Grant the board scope once: `gh auth refresh -s project`, then create a Projects board "ShuttleSense build" with columns **Todo / In progress / In review / Done** and add all issues (`gh project item-add`).
 - [ ] When teammates share their GitHub usernames, replace `owner:Mx` labels with real assignees.
-- [ ] Put issue numbers into the phase task tables.
+- [x] Put issue numbers into the phase task tables.
 
-**Outputs.** Labels, 8 milestones, one issue per task, board.
+**Outputs.** Labels, 9 milestones (phases 0–8), one issue per task, board. Phases 0–7 are done (issues #1–#96); the Phase 8 milestone, `phase-8` label and T8.x issues are still to create.
 
 **Acceptance criteria.** `gh issue list --state all --limit 200` count equals the number of task cards; every issue has a phase label, owner label and milestone.
 
@@ -230,7 +230,7 @@
 - [ ] Agree on a daily 10-minute async stand-up in the team chat (yesterday / today / blocked) and a 30-minute sync on Mon, Wed, Fri.
 - [ ] Phase gate review at the end of each phase (demo script in each phase file).
 - [ ] Review rule: PRs reviewed within 24 h; the lead reviews anything touching `schema.py`, `api/` or `app/lib/data/`.
-- [ ] Record the agreements in CONTRIBUTING.md under a new "Team rhythm" section.
+- [x] Record the agreements in CONTRIBUTING.md under a new "Team rhythm" section.
 
 **Acceptance criteria.** Section merged; first stand-up posted on Nov 2.
 

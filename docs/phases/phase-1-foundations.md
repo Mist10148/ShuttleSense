@@ -40,9 +40,9 @@
 
 **Steps**
 - [ ] 30-minute review meeting: each stage owner confirms the fields their stage fills (table in [ARCHITECTURE.md §2](../ARCHITECTURE.md#stage-ownership)) and the fields they read.
-- [ ] Decide open details and record them in DATA_FORMAT.md: keypoint score threshold for "missing" joints, whether `frames[]` holds every frame or only processed ones after fps normalization (proposal: every normalized frame), court corner order (already defined).
+- [x] Decide open details and record them in DATA_FORMAT.md: keypoint score threshold for "missing" joints, whether `frames[]` holds every frame or only processed ones after fps normalization (proposal: every normalized frame), court corner order (already defined).
 - [ ] Apply agreed changes to `schema.py` and to the Dart mirror `clip_record.dart` in one PR.
-- [ ] Add `tests/test_schema.py::test_json_schema_snapshot` that dumps `ClipRecord.model_json_schema()` and compares it to `backend/tests/fixtures/clip_record.schema.json`, so accidental schema changes fail CI.
+- [x] Add `tests/test_schema.py::test_json_schema_snapshot` that dumps `ClipRecord.model_json_schema()` and compares it to `backend/tests/fixtures/clip_record.schema.json`, so accidental schema changes fail CI.
 - [ ] Merge, then tag: `git tag schema-v1.0 && git push origin schema-v1.0`.
 
 **Outputs.** Frozen `schema.py`, schema snapshot file, tag `schema-v1.0`.
@@ -64,9 +64,9 @@
 
 **Steps**
 - [ ] Walk through [API.md](../API.md) with M6 endpoint by endpoint against `ApiClient` in `app/lib/data/api_client.dart`; list mismatches.
-- [ ] Decide on `GET /health.stages` semantics (only stages whose dependencies and weights are installed) and implement it in `routes.py::health` using a new `pipeline.available_stages()` that tries the lazy imports and checks weight files.
-- [ ] Export the OpenAPI document: `python -c "import json; from shuttlesense.api.main import app; print(json.dumps(app.openapi(), indent=2))" > docs/openapi.json`.
-- [ ] Add `tests/test_api.py::test_openapi_snapshot` comparing `app.openapi()` with `docs/openapi.json`.
+- [x] Decide on `GET /health.stages` semantics (only stages whose dependencies and weights are installed) and implement it in `routes.py::health` using a new `pipeline.available_stages()` that tries the lazy imports and checks weight files.
+- [x] Export the OpenAPI document: `python -c "import json; from shuttlesense.api.main import app; print(json.dumps(app.openapi(), indent=2))" > docs/openapi.json`.
+- [x] Add `tests/test_api.py::test_openapi_snapshot` comparing `app.openapi()` with `docs/openapi.json`.
 - [ ] Merge and tag `api-v1.0`.
 
 **Outputs.** `docs/openapi.json`, snapshot test, `available_stages()`, tag `api-v1.0`.
@@ -103,9 +103,9 @@
 **Steps**
 - [ ] Download TrackNetV3's released checkpoints (`TrackNet_best.pt`, `InpaintNet_best.pt`) from the upstream README links.
 - [ ] Upload them to the team Hugging Face repo under `tracknet/`; compute SHA-256 for each.
-- [ ] In `backend/scripts/download_weights.py`, add a `CHECKSUMS = {path: sha256}` dict and verify after each download (delete and fail on mismatch).
-- [ ] Add `--force` to re-download.
-- [ ] Document the expected layout in SETUP.md §5 (already listed) and the source/licence of the weights in TECH_STACK.md.
+- [x] In `backend/scripts/download_weights.py`, add a `CHECKSUMS = {path: sha256}` dict and verify after each download (delete and fail on mismatch).
+- [x] Add `--force` to re-download.
+- [x] Document the expected layout in SETUP.md §5 (already listed) and the source/licence of the weights in TECH_STACK.md.
 
 **Tests.** `tests/test_download_weights.py::test_checksum_mismatch_raises` using a temp file and a monkeypatched `hf_hub_download`.
 
@@ -123,7 +123,7 @@
 **Inputs.** `samples/rally01.mp4`, `rally02.mp4`; laptop RTX 4050; Colab T4.
 
 **Steps**
-- [ ] Create `backend/notebooks/pose_spike.ipynb` (kept in repo; outputs cleared before commit).
+- [x] Create `backend/notebooks/pose_spike.ipynb` (kept in repo; outputs cleared before commit).
 - [ ] rtmlib: `from rtmlib import Body; body = Body(mode="balanced", backend="onnxruntime", device="cuda")`; run on every frame of both clips; collect boxes, keypoints, scores and time per frame.
 - [ ] torchvision: `keypointrcnn_resnet50_fpn(weights="DEFAULT")` in eval mode on CUDA, same clips, same metrics.
 - [ ] For each: fps on RTX 4050 and T4; % of frames where both players are detected; visual check of 30 random frames (far player is the hard case); behaviour with motion blur during smashes.

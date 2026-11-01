@@ -44,10 +44,10 @@
 **Inputs.** `data/shuttleset/` annotations (per-rally CSVs with frame/time of each stroke and its type), match videos in Drive `videos/`.
 
 **Steps**
-- [ ] Implement `backend/scripts/extract_clips.py` (stub exists): for each match in `--matches`, for each annotated stroke, cut `[hit_frame - pad, hit_frame + pad]` (`--pad-frames 16` default, so 33 frames) from the match video with OpenCV, resized to 720p.
-- [ ] Name clips `data/clips/<match_id>/<set>_<rally>_<stroke>.mp4` and write `data/clips/<match_id>/index.csv` with `clip, match_id, set, rally, stroke_no, hit_frame_in_clip, player (A/B), shuttleset_type, fps`.
-- [ ] Skip strokes whose window crosses a rally boundary or the video end; log the count.
-- [ ] Resume support: skip clips that already exist.
+- [x] Implement `backend/scripts/extract_clips.py` (stub exists): for each match in `--matches`, for each annotated stroke, cut `[hit_frame - pad, hit_frame + pad]` (`--pad-frames 16` default, so 33 frames) from the match video with OpenCV, resized to 720p.
+- [x] Name clips `data/clips/<match_id>/<set>_<rally>_<stroke>.mp4` and write `data/clips/<match_id>/index.csv` with `clip, match_id, set, rally, stroke_no, hit_frame_in_clip, player (A/B), shuttleset_type, fps`.
+- [x] Skip strokes whose window crosses a rally boundary or the video end; log the count.
+- [x] Resume support: skip clips that already exist.
 - [ ] Start with 5 matches (needed for the Week 1 baseline), then the rest.
 - [ ] Upload to Drive `clips/`.
 
@@ -111,11 +111,11 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Goal.** Turn every clip into a fixed-size feature window the CNN can read.
 
 **Steps**
-- [ ] Put the shared feature code in `backend/shuttlesense/strokes/features.py` so training and inference use the *same* function: `build_window(record_or_arrays, hit_frame, player, T, use_trajectory) -> np.ndarray[T, F]`.
-- [ ] Per frame: hitter's 17 keypoints (x, y) normalized to the hitter's bbox (centre-subtract, divide by bbox height) → 34 values; keypoint scores optional (+17).
-- [ ] Shuttle: (x, y) normalized to frame size, visible, dx, dy → 5 values. Missing frames → zeros + visible=0.
-- [ ] Hitter = the ShuttleSet player who hit the stroke (map A/B to near/far using the position in the hit frame).
-- [ ] `extract_features.py`: run tracking + pose on each clip (batch on GPU), build windows (`T=32` from `configs/stroke_cnn.yaml`), save `data/features/<match_id>.npz` with `X [N,T,F]`, `y [N]` (class index in `STROKE_CLASSES` order), `meta` (clip names).
+- [x] Put the shared feature code in `backend/shuttlesense/strokes/features.py` so training and inference use the *same* function: `build_window(record_or_arrays, hit_frame, player, T, use_trajectory) -> np.ndarray[T, F]`.
+- [x] Per frame: hitter's 17 keypoints (x, y) normalized to the hitter's bbox (centre-subtract, divide by bbox height) → 34 values; keypoint scores optional (+17).
+- [x] Shuttle: (x, y) normalized to frame size, visible, dx, dy → 5 values. Missing frames → zeros + visible=0.
+- [x] Hitter = the ShuttleSet player who hit the stroke (map A/B to near/far using the position in the hit frame).
+- [x] `extract_features.py`: run tracking + pose on each clip (batch on GPU), build windows (`T=32` from `configs/stroke_cnn.yaml`), save `data/features/<match_id>.npz` with `X [N,T,F]`, `y [N]` (class index in `STROKE_CLASSES` order), `meta` (clip names).
 - [ ] Run on Colab across team accounts if needed; upload `.npz` files to Drive `features/`.
 
 **Tests.** `tests/test_features.py::test_window_shape`, `::test_pose_only_drops_shuttle_columns`, `::test_missing_frames_are_zero_with_visible_flag`, `::test_normalization_is_bbox_relative`.
@@ -130,11 +130,11 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M5 · **Estimate:** 8 h · **Priority:** P1 · **Area:** ml · **Refs:** F5, FR-5 · **Depends on:** T2.3, T2.5 · **Blocks:** T3.7, T3.10, T5.7, T6.1
 
 **Steps**
-- [ ] In `hits/detector.py::run`: take visible shuttle positions; candidates = `direction_changes(xy, min_angle_deg)` (exists) plus vertical-velocity sign flips from going down to going up near a player.
-- [ ] For each candidate frame f, distance from shuttle to each player's wrists (keypoints 9, 10, score ≥ 0.3); accept if the minimum ≤ `max_wrist_distance_px` (scale by `height/720`). The hitter is the player with the closest wrist.
-- [ ] Suppress duplicates: keep one hit per `min_frames_between_hits`, choosing the closest-wrist candidate; consecutive hits must alternate players (singles), otherwise keep the better one.
-- [ ] Fill `record.hits = [Hit(id, frame, time_s=frame/fps, player)]`.
-- [ ] Expose `detect_hits(xy, visible, wrists_near, wrists_far, cfg) -> list[(frame, player)]` as a pure function for tests and evaluation.
+- [x] In `hits/detector.py::run`: take visible shuttle positions; candidates = `direction_changes(xy, min_angle_deg)` (exists) plus vertical-velocity sign flips from going down to going up near a player.
+- [x] For each candidate frame f, distance from shuttle to each player's wrists (keypoints 9, 10, score ≥ 0.3); accept if the minimum ≤ `max_wrist_distance_px` (scale by `height/720`). The hitter is the player with the closest wrist.
+- [x] Suppress duplicates: keep one hit per `min_frames_between_hits`, choosing the closest-wrist candidate; consecutive hits must alternate players (singles), otherwise keep the better one.
+- [x] Fill `record.hits = [Hit(id, frame, time_s=frame/fps, player)]`.
+- [x] Expose `detect_hits(xy, visible, wrists_near, wrists_far, cfg) -> list[(frame, player)]` as a pure function for tests and evaluation.
 
 **Tests** (`tests/test_hits.py`): `test_detects_hit_at_direction_change_near_wrist`, `test_ignores_direction_change_far_from_players`, `test_min_gap_suppresses_duplicates`, `test_hits_alternate_players`.
 
@@ -148,7 +148,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M3 · **Estimate:** 5 h · **Priority:** P1 · **Area:** ml · **Refs:** F5, Success metrics (hit F1 ≥ 0.75) · **Depends on:** T3.6, T3.4 · **Blocks:** T7.3
 
 **Steps**
-- [ ] `scripts/eval_hits.py`: run perception + `detect_hits` on full rallies of the **test** matches; match predictions to ShuttleSet stroke frames within ±3 frames (greedy one-to-one); report precision, recall, F1, and player-assignment accuracy.
+- [x] `scripts/eval_hits.py`: run perception + `detect_hits` on full rallies of the **test** matches; match predictions to ShuttleSet stroke frames within ±3 frames (greedy one-to-one); report precision, recall, F1, and player-assignment accuracy.
 - [ ] Grid-search `min_angle_deg`, `max_wrist_distance_px`, `min_frames_between_hits` on the **val** matches only; write the best values to `configs/pipeline.yaml`.
 - [ ] Log every run to `docs/results/hits_tuning.csv`.
 
@@ -164,10 +164,10 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M5 · **Estimate:** 10 h · **Priority:** P1 · **Area:** ml · **Refs:** F6, FR-6 · **Depends on:** T3.5 · **Blocks:** T3.9
 
 **Steps**
-- [ ] `strokes/dataset.py`: `StrokeDataset(features_dir, match_ids, use_trajectory)` loading `.npz` into memory, returning `(X[F,T] float32, y)`; optional augmentation (small time shift ±2 frames, horizontal flip with left/right joint swap, Gaussian noise).
-- [ ] Use `strokes/model.py::build_model(in_features)` (exists); tune depth from config.
-- [ ] Implement `scripts/train_stroke_classifier.py` (stub exists): seeds (`random`, `numpy`, `torch`), AdamW, cross-entropy with inverse-frequency class weights, cosine LR, early stopping on val macro-F1, save best checkpoint with `{state_dict, in_features, classes, config}`.
-- [ ] Log per-epoch metrics to `outputs/stroke_cnn_metrics.json` and stdout.
+- [x] `strokes/dataset.py`: `StrokeDataset(features_dir, match_ids, use_trajectory)` loading `.npz` into memory, returning `(X[F,T] float32, y)`; optional augmentation (small time shift ±2 frames, horizontal flip with left/right joint swap, Gaussian noise).
+- [x] Use `strokes/model.py::build_model(in_features)` (exists); tune depth from config.
+- [x] Implement `scripts/train_stroke_classifier.py` (stub exists): seeds (`random`, `numpy`, `torch`), AdamW, cross-entropy with inverse-frequency class weights, cosine LR, early stopping on val macro-F1, save best checkpoint with `{state_dict, in_features, classes, config}`.
+- [x] Log per-epoch metrics to `outputs/stroke_cnn_metrics.json` and stdout.
 - [ ] **Week 1 baseline:** train on 5 matches, evaluate on 1, post the number on the issue.
 
 **Tests.** `tests/test_strokes.py::test_model_forward_shape` (`@pytest.mark.skipif` no torch), `::test_dataset_reads_npz` (tiny synthetic npz), `::test_flip_swaps_left_right_joints`.
@@ -197,9 +197,9 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M5 · **Estimate:** 5 h · **Priority:** P1 · **Area:** ml · **Refs:** F6, FR-6 · **Depends on:** T3.9, T2.8 · **Blocks:** T3.11, T4.7, T5.6, T5.8
 
 **Steps**
-- [ ] In `strokes/classify.py::run`: load the checkpoint once (cache per device), build windows with `features.build_window` for each `record.hits` entry, batch inference, softmax.
-- [ ] Fill `stroke` (argmax), `confidence`, `class_probs`.
-- [ ] If the checkpoint is missing, raise `StageSkipped("stroke model not installed")` so the job still finishes.
+- [x] In `strokes/classify.py::run`: load the checkpoint once (cache per device), build windows with `features.build_window` for each `record.hits` entry, batch inference, softmax.
+- [x] Fill `stroke` (argmax), `confidence`, `class_probs`.
+- [x] If the checkpoint is missing, raise `StageSkipped("stroke model not installed")` so the job still finishes.
 
 **Tests.** `test_strokes.py::test_classify_fills_fields_with_dummy_model` (monkeypatch the loader with a model returning fixed logits).
 
@@ -213,9 +213,9 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M2 · **Estimate:** 4 h · **Priority:** P1 · **Area:** backend · **Refs:** F5, F6 · **Depends on:** T3.10, T2.6 · **Blocks:** —
 
 **Steps**
-- [ ] Add `hits` layer: "HIT" badge near the hitter's wrist for `marker_duration_s` after each hit, with a short expanding ring.
-- [ ] Add `strokes` layer: label "Smash 81%" above the hitter's box until the next hit.
-- [ ] Respect the player colours from `render/style.py`.
+- [x] Add `hits` layer: "HIT" badge near the hitter's wrist for `marker_duration_s` after each hit, with a short expanding ring.
+- [x] Add `strokes` layer: label "Smash 81%" above the hitter's box until the next hit.
+- [x] Respect the player colours from `render/style.py`.
 
 **Tests.** `test_render.py::test_hit_marker_visible_only_within_duration`.
 
@@ -242,7 +242,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M4 · **Estimate:** 3 h · **Priority:** P2 · **Area:** data · **Refs:** Data · **Depends on:** T3.3, T3.4 · **Blocks:** T3.8
 
 **Steps**
-- [ ] Script `scripts/dataset_stats.py`: counts per class, per split, per player; excluded strokes; clip extraction failures.
+- [x] Script `scripts/dataset_stats.py`: counts per class, per split, per player; excluded strokes; clip extraction failures.
 - [ ] Write `docs/results/dataset.md` with the tables; flag classes with < 500 training samples for M5 (weighting/augmentation).
 
 **Acceptance criteria.** Report merged before full training starts.

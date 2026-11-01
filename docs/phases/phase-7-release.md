@@ -91,10 +91,15 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 | 4 | Processing progress; cancel; failed job shows error |
 | 5 | Results: video plays/seeks/fullscreen; timeline seeks; minimap moves; status strip updates |
 | 6 | Form tips visible; low-confidence badge |
-| 7 | Scoreboard and correction (if P3 shipped) |
+| 7 | Scoreboard and correction (committed scope since D17) |
 | 8 | Download/share MP4, JSON, CSV |
 | 9 | History: open and delete |
 | 10 | Rotate device; light and dark theme; 200% text |
+| 11 | Mode screen: Upload and Live; Live greyed out on a 1.0 backend |
+| 12 | Live: camera permission, calibrate on a still, go live, overlay and latency, Stop saves to History, New session; drop Wi-Fi mid-session and see it resume |
+| 13 | Line calls: UNCERTAIN banner, confirm / override (live and on a saved job), score follows |
+| 14 | Session summary: top fixes and moment chips seek the video |
+| 15 | Coach chat with a key (answer, citations, question limit) and without one (disabled with a reason) |
 
 **Acceptance criteria.** Checklist completed; every failure has an issue labelled `bug` + `phase-7`.
 
@@ -221,7 +226,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 
 **Steps**
 - [x] List every Python and Dart dependency with its license (`pip-licenses`, `flutter pub deps` + pub.dev); confirm none is AGPL/GPL-incompatible with MIT; add a "Third-party licenses" table to TECH_STACK.md.
-- [ ] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
+- [x] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
 - [ ] Confirm the backend deletes uploads on `DELETE` and that the demo server's storage is wiped after the demo.
 
 **Acceptance criteria.** Audit table merged; no media in the repo.

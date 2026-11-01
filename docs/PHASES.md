@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone.
+The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task in phases 0–7 is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone; Phase 8 issues are still to be created.
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -172,6 +172,54 @@ The parts of each task that need no data, GPU, devices or team decisions are alr
 ### Phase 8 snapshot (Oct 31)
 
 Live mode, line calls, session notes and coach chat are on `main` (see [Phase 8 status](phases/phase-8-live-coach.md)). Verified on Oct 31: backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass; app `flutter analyze`, `dart format --set-exit-if-changed` and `flutter test` (136 tests) pass; Windows and web release builds pass. Measured: live pipeline overhead without models (p95 20.7 ms, `docs/results/live_latency.md`). Not measured yet: live latency with TrackNetV3 and pose (no weights installed), line-call accuracy (no labelled landings), a session on a real camera.
+
+### Fix pass (Nov 1)
+
+A review of the Phase 8 code found and fixed these, each with tests:
+
+- **Live sessions (backend):** a failed send, stage error or bad control message could leave a session attached with the GPU lock held, so every later live session and upload job got `busy` until a restart. Other fixes: coordinates doubled at the lowest quality level; a camera faster than `live.max_fps` was not thinned, so times and speeds were off; the frame queue was unbounded; live rallies closed sooner than offline ones.
+- **API:** a re-render erased the coach chat. A score correction left `rally_events` stale. Whitespace-only chat messages were accepted. Parallel questions could pass the limit.
+- **Referee:** a call just inside the uncertainty band could round to 0.5 and decide a rally.
+- **Scripts:** `live_replay` could hang. `eval_line_calls` used the rally lines for serve-only rallies. `label_clip` dropped other tools' columns.
+- **App, live mode:**
+  - Try again leaked the camera and the server session.
+  - A resume during the server's ping window was given up too early.
+  - The frame list could drift from server frame numbers.
+  - The app announced 15 fps whatever the camera managed.
+  - The saved screen was a dead end with the camera still on.
+- **App, other screens:**
+  - Coach chat swallowed some errors, and leaving the screen mid-answer broke it.
+  - An older uncertain call lost its banner.
+  - A 1.0 backend still offered Live.
+  - A failed live render could not be opened.
+
+Also added: `scripts/label_landings.py` (T8.12), the pose spike notebook scaffold (T1.5), freeing the CUDA cache after TrackNet (T2.2), minimap screen-reader positions and contrast checks (T4.11), the video "not available" test (T4.6), and tests for the replay, benchmark and Colab tools. The app version now matches the backend (0.1.0).
+
+Verified on Nov 1: backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (263 tests, 1 GPU test deselected). App `flutter analyze`, `dart format` and `flutter test` (152 tests) pass. Release builds were not re-run.
+
+### Left for M1 (needs GitHub admin, hardware, data or the team)
+
+- **GitHub:**
+  - Phase 8 milestone, `phase-8` label and T8.x issues.
+  - Close the issues of ✅ tasks (#11, #22, #23, #31, #38, #60, #63, #79, #96).
+  - Projects board (`gh auth refresh -s project`).
+  - Squash-only merges and auto-delete branches.
+- **Tags:** `schema-v1.0` and `api-v1.0`, after the T1.1 / T1.2 reviews.
+- **Weights and data:**
+  - HF repo and Drive folder (T0.9), with links in SETUP.md.
+  - Upload the TrackNetV3 weights and fill `CHECKSUMS` (T1.4).
+- **ML stack and benchmarks:**
+  - Install CUDA torch, onnxruntime-gpu and rtmlib, and record the versions (T1.6).
+  - Run the Colab tunnel (T1.7).
+  - GPU benchmarks: `scripts/benchmark.py` (T2.9) and `scripts/bench_live.py` with models (T8.12).
+- **Real-world checks:**
+  - A live session on a real camera (T8.6).
+  - One coach chat with a real API key (T8.8).
+  - Device checks for T5.1, T5.12 and T7.4.
+- **Release:**
+  - Licenses of the bundled media_kit libmpv/FFmpeg, and the ML venv scan (T7.13).
+  - After the freeze: T7.6 release builds and T7.7 tag `v1.0.0` (bump all three versions).
+- **Team decisions:** M4 approves the T3.3 label mapping and the T4.13 icon art. M5 runs the pose spike notebook.
 
 ### Verification on Oct 30
 

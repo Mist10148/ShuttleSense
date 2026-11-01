@@ -41,11 +41,11 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** Existing `app/lib/features/connect/connect_screen.dart`, `ServerConfig.normalizeUrl`, `ApiClient.health()`.
 
 **Steps**
-- [ ] Validate the URL (`Uri.tryParse`, host present) before calling the server; show field-level errors.
-- [ ] After a successful health check, show the server's device (CPU/CUDA), version and schema version for 1 s before navigating, and warn if `schema_version` ≠ the app's expected `"1.0"` (constant in `data/models/clip_record.dart`).
-- [ ] Remember the last 3 servers (`shared_preferences` list) and show them as chips for one-tap reconnect.
-- [ ] Help link "How do I find my laptop's address?" opening a bottom sheet with the steps from SETUP.md §8.
-- [ ] Web build: if the page is `https://` and the URL is `http://`, show "Browsers block http servers from https pages; use the tunnel URL".
+- [x] Validate the URL (`Uri.tryParse`, host present) before calling the server; show field-level errors.
+- [x] After a successful health check, show the server's device (CPU/CUDA), version and schema version for 1 s before navigating, and warn if `schema_version` ≠ the app's expected `"1.0"` (constant in `data/models/clip_record.dart`).
+- [x] Remember the last 3 servers (`shared_preferences` list) and show them as chips for one-tap reconnect.
+- [x] Help link "How do I find my laptop's address?" opening a bottom sheet with the steps from SETUP.md §8.
+- [x] Web build: if the page is `https://` and the URL is `http://`, show "Browsers block http servers from https pages; use the tunnel URL".
 
 **Tests.** `test/connect_upload_test.dart`: invalid URL shows error; success navigates home (fake `ApiClient` via provider override, see T4.12); schema mismatch warning.
 
@@ -61,10 +61,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** `features/upload/upload_screen.dart`; `FilePicker.pickFiles` (file_picker 13 API), `ApiClient.uploadVideo`.
 
 **Steps**
-- [ ] On Android/iOS also offer "Choose from gallery" (`FileType.video`), on desktop/web "Choose file".
+- [x] On Android/iOS also offer "Choose from gallery" (`FileType.video`), on desktop/web "Choose file".
 - [ ] Before upload show name, size and (after upload) duration/resolution/fps from `VideoInfo`; warn if > 5 minutes or > 1 GB before sending.
-- [ ] Upload progress bar with MB sent / total and cancel (`CancelToken`); keep the screen awake during upload on mobile (optional: `wakelock_plus`, add to TECH_STACK if used).
-- [ ] On failure keep the picked file so the user can retry without re-picking.
+- [x] Upload progress bar with MB sent / total and cancel (`CancelToken`); keep the screen awake during upload on mobile (optional: `wakelock_plus`, add to TECH_STACK if used).
+- [x] On failure keep the picked file so the user can retry without re-picking.
 - [ ] Move upload state into `features/upload/upload_controller.dart` (Riverpod `Notifier`) so the widget only renders state.
 
 **Tests.** `test/connect_upload_test.dart`: progress updates from a fake upload stream; cancel resets state; error message shown.
@@ -79,10 +79,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M6 · **Estimate:** 3 h · **Priority:** C · **Area:** app · **Refs:** C2 · **Depends on:** T4.2 · **Blocks:** T4.4
 
 **Steps**
-- [ ] Disable overlay chips whose stage is not available (`Health.stages`, from T1.2) with a tooltip "Not installed on this server".
-- [ ] Persist the last overlay choice in `shared_preferences`.
-- [ ] Court-dependent overlays (`court`, `minimap`, `speed`, `score`) are greyed out when "Calibrate court" is off.
-- [ ] "Upload and analyze" calls `createJob` and navigates to `Routes.job(id)`.
+- [x] Disable overlay chips whose stage is not available (`Health.stages`, from T1.2) with a tooltip "Not installed on this server".
+- [x] Persist the last overlay choice in `shared_preferences`.
+- [x] Court-dependent overlays (`court`, `minimap`, `speed`, `score`) are greyed out when "Calibrate court" is off.
+- [x] "Upload and analyze" calls `createJob` and navigates to `Routes.job(id)`.
 
 **Tests.** `test/connect_upload_test.dart` (court overlays disabled without calibration) and `test/calibration_test.dart` (skip sends no court overlays).
 
@@ -98,10 +98,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** `features/processing/processing_screen.dart`, `jobProvider` (polling stream).
 
 **Steps**
-- [ ] Back-off on network errors in `jobProvider`: retry after 2, 4, 8 … up to 30 s before surfacing the error (API.md polling guidance).
-- [ ] Show elapsed time and an ETA from progress rate.
-- [ ] Cancel asks for confirmation, then `DELETE /jobs/{id}`.
-- [ ] On `failed`, show the error and a "Try again" button that re-submits the same options.
+- [x] Back-off on network errors in `jobProvider`: retry after 2, 4, 8 … up to 30 s before surfacing the error (API.md polling guidance).
+- [x] Show elapsed time and an ETA from progress rate.
+- [x] Cancel asks for confirmation, then `DELETE /jobs/{id}`.
+- [x] On `failed`, show the error and a "Try again" button that re-submits the same options.
 - [ ] Optional: local notification when done if the app is backgrounded (mobile) — only if time allows.
 
 **Tests.** `test/processing_test.dart`: renders stage list; navigates to results on `done`; shows retry on `failed`.
@@ -118,10 +118,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** `features/results/widgets/results_layout.dart` (`ResultsLayout`), golden record from T1.10.
 
 **Steps**
-- [ ] Phone landscape: when height < 500 dp, show video fullscreen-style with a slide-up panel for the timeline.
-- [ ] Expanded: make the right panel width responsive (min 300, max 400 dp).
-- [ ] Add a summary card (total hits, peak speed, stroke distribution chart with `fl_chart`) to the side panel / Score tab.
-- [ ] Keep the video aspect ratio from `record.width/height`; letterbox, never stretch.
+- [x] Phone landscape: when height < 500 dp, show video fullscreen-style with a slide-up panel for the timeline.
+- [x] Expanded: make the right panel width responsive (min 300, max 400 dp).
+- [x] Add a summary card (total hits, peak speed, stroke distribution chart with `fl_chart`) to the side panel / Score tab.
+- [x] Keep the video aspect ratio from `record.width/height`; letterbox, never stretch.
 
 **Tests.** Extend `test/responsive_test.dart`: phone landscape (780×360), tablet landscape (1100×800); assert no overflow and the right zones exist.
 
@@ -137,10 +137,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** `features/results/widgets/video_panel.dart` (`openPlayer`, `VideoPanel`), `ApiClient.videoUrl` (adds `?token=` for web).
 
 **Steps**
-- [ ] Use media_kit's `MaterialVideoControls` (mobile) / `MaterialDesktopVideoControls` (desktop/web) and fullscreen.
-- [ ] Playback speed control (0.25×, 0.5×, 1×) for reviewing strokes.
-- [ ] Frame step buttons (±1 frame = 1/fps s).
-- [ ] When `outputs.video` is false, keep the "not available" panel but still allow the timeline/minimap.
+- [x] Use media_kit's `MaterialVideoControls` (mobile) / `MaterialDesktopVideoControls` (desktop/web) and fullscreen.
+- [x] Playback speed control (0.25×, 0.5×, 1×) for reviewing strokes.
+- [x] Frame step buttons (±1 frame = 1/fps s).
+- [x] When `outputs.video` is false, keep the "not available" panel but still allow the timeline/minimap.
 - [ ] Verify auth: header on native, `?token=` on web.
 
 **Tests.** Player is native; cover with manual checks plus a widget test of the "not available" state.
@@ -157,11 +157,11 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Inputs.** `features/results/widgets/stroke_timeline.dart`, `ClipRecord.hitAt`, `Hit.position`.
 
 **Steps**
-- [ ] Auto-scroll the list to keep the current hit visible (`Scrollable.ensureVisible` or `ScrollController.animateTo`).
-- [ ] Seek to 0.5 s before the hit so the stroke is seen in context.
-- [ ] Filter chips by player (Near/Far) and by stroke class.
-- [ ] Tap-and-hold a row → detail bottom sheet (all class probabilities, speed, tips).
-- [ ] Mark low-confidence (< 0.5) labels with a "?" badge (NFR Transparency).
+- [x] Auto-scroll the list to keep the current hit visible (`Scrollable.ensureVisible` or `ScrollController.animateTo`).
+- [x] Seek to 0.5 s before the hit so the stroke is seen in context.
+- [x] Filter chips by player (Near/Far) and by stroke class.
+- [x] Tap-and-hold a row → detail bottom sheet (all class probabilities, speed, tips).
+- [x] Mark low-confidence (< 0.5) labels with a "?" badge (NFR Transparency).
 
 **Tests.** `test/timeline_test.dart`: tapping a row calls `onSeek` with the right position; filters reduce rows; low-confidence badge appears.
 
@@ -175,10 +175,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M6 · **Estimate:** 3 h · **Priority:** C · **Area:** app · **Refs:** C2, NFR Privacy · **Depends on:** T4.4 · **Blocks:** —
 
 **Steps**
-- [ ] Show the original video filename (add `filename` to the Job response or fetch `GET /videos/{id}`; coordinate with M1 if the API changes — contract change policy).
-- [ ] Swipe-to-delete on mobile, delete icon on desktop, both with confirmation.
-- [ ] "Delete video too" option (`DELETE /videos/{id}`).
-- [ ] Pull-to-refresh and empty state (exists).
+- [x] Show the original video filename (add `filename` to the Job response or fetch `GET /videos/{id}`; coordinate with M1 if the API changes — contract change policy).
+- [x] Swipe-to-delete on mobile, delete icon on desktop, both with confirmation.
+- [x] "Delete video too" option (`DELETE /videos/{id}`).
+- [x] Pull-to-refresh and empty state (exists).
 
 **Tests.** `test/history_test.dart`: list renders; delete calls the API and refreshes.
 
@@ -192,9 +192,9 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M6 · **Estimate:** 4 h · **Priority:** C · **Area:** app · **Refs:** NFR Usability · **Depends on:** T4.1–T4.8 · **Blocks:** T4.11
 
 **Steps**
-- [ ] Global offline banner when the last API call failed with a connection error (implemented as `OfflineBanner` in `shared/widgets/offline_banner.dart`, driven by `healthProvider`, which re-checks the server every 30 s, or every 10 s while unreachable).
-- [ ] Every screen has loading, empty and error states using `MessageView`.
-- [ ] Settings: theme mode (system/light/dark) persisted; wire into `MaterialApp.themeMode`.
+- [x] Global offline banner when the last API call failed with a connection error (implemented as `OfflineBanner` in `shared/widgets/offline_banner.dart`, driven by `healthProvider`, which re-checks the server every 30 s, or every 10 s while unreachable).
+- [x] Every screen has loading, empty and error states using `MessageView`.
+- [x] Settings: theme mode (system/light/dark) persisted; wire into `MaterialApp.themeMode`.
 - [ ] Review every screen in light and dark mode on phone and laptop.
 
 **Acceptance criteria.** Screenshots of each screen in both themes attached to the PR.
@@ -207,11 +207,11 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M6 · **Estimate:** 3 h · **Priority:** C · **Area:** app · **Refs:** NFR Platforms · **Depends on:** — · **Blocks:** T7.6
 
 **Steps**
-- [ ] Android: `applicationId com.shuttlesense.app`, version from `pubspec.yaml`; release signing config reading `android/key.properties` (gitignored); keep cleartext enabled (LAN use) and document why.
-- [ ] Android: add `READ_MEDIA_VIDEO` (API 33+) if the gallery picker needs it.
-- [ ] iOS: bundle id, display name, `NSPhotoLibraryUsageDescription` (exists), minimum iOS version.
-- [ ] Windows: app name, version info in `Runner.rc`, window min size 400×600 in `main.cpp`.
-- [ ] Web: `manifest.json` name, theme colour `#2E7D4F`, description.
+- [x] Android: `applicationId com.shuttlesense.app`, version from `pubspec.yaml`; release signing config reading `android/key.properties` (gitignored); keep cleartext enabled (LAN use) and document why.
+- [x] Android: add `READ_MEDIA_VIDEO` (API 33+) if the gallery picker needs it.
+- [x] iOS: bundle id, display name, `NSPhotoLibraryUsageDescription` (exists), minimum iOS version.
+- [x] Windows: app name, version info in `Runner.rc`, window min size 400×600 in `main.cpp`.
+- [x] Web: `manifest.json` name, theme colour `#2E7D4F`, description.
 
 **Acceptance criteria.** `flutter build apk --release`, `flutter build windows --release`, `flutter build web --release` succeed locally.
 
@@ -224,9 +224,9 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 
 **Steps**
 - [ ] Text scale 200% on phone: no clipped text or overflow on any screen.
-- [ ] Semantics labels for icon-only buttons and the minimap ("Near player at 2.6 m, 1.9 m").
-- [ ] Contrast check of player colours on the court background in both themes (≥ 3:1 for graphics).
-- [ ] Keyboard: Tab order and Enter/Space on desktop/web; Space toggles play/pause on results.
+- [x] Semantics labels for icon-only buttons and the minimap ("Near player at 2.6 m, 1.9 m").
+- [x] Contrast check of player colours on the court background in both themes (≥ 3:1 for graphics).
+- [x] Keyboard: Tab order and Enter/Space on desktop/web; Space toggles play/pause on results.
 
 **Tests.** `test/accessibility_test.dart` using `meetsGuideline(textContrastGuideline)` and `androidTapTargetGuideline` on main screens.
 

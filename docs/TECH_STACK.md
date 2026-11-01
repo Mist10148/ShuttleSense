@@ -40,7 +40,7 @@ flowchart LR
 
 Platform notes:
 
-- **Android:** min SDK from Flutter defaults; needs `INTERNET` permission (added) and `android:usesCleartextTraffic="true"` so it can reach `http://` LAN servers (added in the debug/profile manifests and documented for release).
+- **Android:** min SDK from Flutter defaults; needs `INTERNET` permission (added) and `android:usesCleartextTraffic="true"` so it can reach `http://` LAN servers (set in the main manifest, so release builds can reach a LAN server too).
 - **iOS/iPadOS:** built on a Mac only; `NSAppTransportSecurity > NSAllowsLocalNetworking` and `NSLocalNetworkUsageDescription` are set so the app can reach the laptop on Wi-Fi. Photo library usage string is set for `file_picker`.
 - **Web:** served by `flutter build web`; the backend's CORS setting must allow the web origin. Browsers block `http://` calls from an `https://` page, so host the web build over `http://` on the LAN or use the tunnel's `https://` URL.
 - **Windows:** `flutter build windows`; media_kit ships its own libmpv. Needs Visual Studio 2022 with "Desktop development with C++" to build.

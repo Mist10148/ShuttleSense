@@ -33,11 +33,11 @@
 **Inputs.** `record.hits`, `frames[].shuttle`, config `stages.referee` (`stationary_frames_end`, `lost_frames_end`).
 
 **Steps**
-- [ ] In `referee/rally.py`, add a pure state machine `segment_rallies(visible, xy, hits, cfg) -> list[(start, end)]`:
+- [x] In `referee/rally.py`, add a pure state machine `segment_rallies(visible, xy, hits, cfg) -> list[(start, end)]`:
   - start: the first hit after ≥ `lost_frames_end` frames of no play (serve), or the first hit of the clip;
   - end: shuttle invisible for `lost_frames_end` frames, or shuttle y-position stationary (< 3 px movement) for `stationary_frames_end` frames after the last hit.
-- [ ] Fill `rallies[]` (index, start_frame, end_frame, stroke_count), `hits[].rally_index`, and `frames[].rally_state` (`in_play` inside a rally, `between_rallies` outside).
-- [ ] Handle clips that start mid-rally (first rally has no serve) and end mid-rally (last rally open: `end_frame = num_frames - 1`, winner null).
+- [x] Fill `rallies[]` (index, start_frame, end_frame, stroke_count), `hits[].rally_index`, and `frames[].rally_state` (`in_play` inside a rally, `between_rallies` outside).
+- [x] Handle clips that start mid-rally (first rally has no serve) and end mid-rally (last rally open: `end_frame = num_frames - 1`, winner null).
 
 **Tests** (`tests/test_referee.py`): `test_two_rallies_separated_by_pause`, `test_rally_ends_when_shuttle_stationary`, `test_clip_starting_mid_rally`.
 
@@ -52,10 +52,10 @@
 
 **Steps**
 - [ ] Landing frame = first frame after the last hit where the shuttle's vertical image velocity drops to ~0 and it stays (from T6.1's end rule), or the last visible frame.
-- [ ] Project the shuttle position at the landing frame with `image_to_court`; the shuttle is on the floor there, so the projection is valid.
-- [ ] In/out for singles: inside `0 ≤ x ≤ 5.18`, `0 ≤ y ≤ 13.40` (long service line for singles = baseline).
-- [ ] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app. (T8.3 replaces the fixed margin with an uncertainty band from homography and tracking error and adds `line_calls[]`.)
-- [ ] Fill `rallies[].landing`.
+- [x] Project the shuttle position at the landing frame with `image_to_court`; the shuttle is on the floor there, so the projection is valid.
+- [x] In/out for singles: inside `0 ≤ x ≤ 5.18`, `0 ≤ y ≤ 13.40` (long service line for singles = baseline).
+- [x] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app. (T8.3 replaces the fixed margin with an uncertainty band from homography and tracking error and adds `line_calls[]`.)
+- [x] Fill `rallies[].landing`.
 
 **Tests.** `test_referee.py::test_inside_court_is_in`, `::test_close_to_line_is_uncertain`, `::test_landing_frame_is_after_last_hit`.
 
@@ -71,10 +71,10 @@
 **Inputs.** `referee/scoring.py::game_winner` (21 points, win by 2, cap 30).
 
 **Steps**
-- [ ] Winner rule: landing **in** on a player's side → the other player wins the rally; landing **out** → the player who hit last loses. Hitter of the last shot from `hits`; side from landing `y` (< 6.70 m near half).
-- [ ] Add `apply_rallies(rallies, start_score=(0, 0)) -> list[ScorePair]` that computes `score_after` for each rally and stops at `game_winner`.
-- [ ] Optional starting score from the job request (`POST /jobs` field `start_score`, API change) for clips that start mid-game.
-- [ ] Fill `rallies[].winner`, `score_after`, and `record.score`.
+- [x] Winner rule: landing **in** on a player's side → the other player wins the rally; landing **out** → the player who hit last loses. Hitter of the last shot from `hits`; side from landing `y` (< 6.70 m near half).
+- [x] Add `apply_rallies(rallies, start_score=(0, 0)) -> list[ScorePair]` that computes `score_after` for each rally and stops at `game_winner`.
+- [x] Optional starting score from the job request (`POST /jobs` field `start_score`, API change) for clips that start mid-game.
+- [x] Fill `rallies[].winner`, `score_after`, and `record.score`.
 
 **Tests.** Existing `test_bwf_game_winner`; add `test_out_shot_loses_rally`, `test_in_shot_wins_rally`, `test_score_sequence`, `test_deuce_to_30`.
 
@@ -109,11 +109,11 @@
 **Inputs.** `features/results/widgets/scoreboard.dart`, `StatusStrip`, `ApiClient.correctScore`.
 
 **Steps**
-- [ ] Parse `rallies` in `ClipRecord` (winner, landing, score_after).
-- [ ] Scoreboard shows the score at the current playback position (last rally ended before the current frame).
-- [ ] Rally list with winner chips; tapping a chip flips the winner via `correctScore`, then refreshes the record.
-- [ ] Uncertain in/out calls show a "?" and ask the user to confirm.
-- [ ] Status strip shows IN PLAY / BETWEEN RALLIES from `frames[].rally_state`.
+- [x] Parse `rallies` in `ClipRecord` (winner, landing, score_after).
+- [x] Scoreboard shows the score at the current playback position (last rally ended before the current frame).
+- [x] Rally list with winner chips; tapping a chip flips the winner via `correctScore`, then refreshes the record.
+- [x] Uncertain in/out calls show a "?" and ask the user to confirm.
+- [x] Status strip shows IN PLAY / BETWEEN RALLIES from `frames[].rally_state`.
 
 **Tests.** `test/scoreboard_test.dart`: score follows playback; correction calls the API.
 
@@ -127,8 +127,8 @@
 **Owner:** M2 · **Estimate:** 3 h · **Priority:** P3 · **Area:** backend · **Refs:** F14, F16 · **Depends on:** T6.3 · **Blocks:** —
 
 **Steps**
-- [ ] `score` layer: scoreboard box (Near : Far) updating after each rally, like the reference demo.
-- [ ] Rally state text in the status bar; landing marker (in = green, out = red, uncertain = yellow) for 1 s after landing.
+- [x] `score` layer: scoreboard box (Near : Far) updating after each rally, like the reference demo.
+- [x] Rally state text in the status bar; landing marker (in = green, out = red, uncertain = yellow) for 1 s after landing.
 
 **Tests.** `test_render.py::test_score_layer_updates_after_rally`.
 
@@ -143,7 +143,7 @@
 
 **Steps**
 - [ ] Use T7.1 labels (rally start/end times) for team footage.
-- [ ] `scripts/eval_rallies.py`: a rally is correct if start and end are within ±1 s of the label; report accuracy and the score sequence vs ground truth.
+- [x] `scripts/eval_rallies.py`: a rally is correct if start and end are within ±1 s of the label; report accuracy and the score sequence vs ground truth.
 
 **Tests.** `tests/test_eval.py::test_rally_boundary_matching`.
 
