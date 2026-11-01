@@ -197,6 +197,41 @@ Also added: `scripts/label_landings.py` (T8.12), the pose spike notebook scaffol
 
 Verified on Nov 1: backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (263 tests, 1 GPU test deselected). App `flutter analyze`, `dart format` and `flutter test` (152 tests) pass. Release builds were not re-run.
 
+### Fix pass (Nov 2)
+
+A second review found and fixed these, each with a test unless noted:
+
+- **Backend:**
+  - A re-render that hit the referee cache restored empty `line_calls` and `rally_events`. That silently dropped line-call overrides and the `shots_out` notes. The cache now stores them, and a format number makes old caches miss.
+  - A dropped live session was detached twice. After drop, resume and drop again, the first timer saved it before its TTL.
+  - A text frame that was not JSON ended the live session. It now gets `bad_message`.
+  - `POST /jobs` racing `DELETE /videos` left an orphan job. It now returns `404`.
+  - A re-render during a coach answer could lose that answer. It now returns `409` while an answer is in flight.
+  - Court positions ignored `stages.pose.min_keypoint_score`.
+  - Live sessions ignored `stages.court.court_size_m`.
+  - `label_clip` spun forever on an unreadable first frame.
+- **App:**
+  - After a resume, live mode sent the frames "missed" while reconnecting back to back. (No test: the pacing stopwatch runs on real time.)
+  - Camera stills were never deleted.
+  - Live could still be picked on a 1.0 backend from the app bar and Settings.
+  - The peak speed lacked "(est.)".
+  - A chat citation tapped while results loaded was lost. (No test: the results screen needs media_kit.)
+- **Finished steps:**
+  - T4.2: the upload state is in `UploadNotifier`, and clips over 5 minutes are flagged before sending.
+  - T5.5: a heatmap toggle on the minimap.
+  - T5.6: speeds are labelled "estimated" in the exports docs.
+  - T6.2: the landing rule is recorded.
+  - A "Game already under way" start score for upload and live. The backend accepted `start_score` before, but the app never sent it.
+- **Docs:**
+  - DATA_FORMAT.md: complete `rally_events` payloads, and the landing frame equals the rally's `end_frame`.
+  - The job-folder file list in ARCHITECTURE.md.
+  - The new `404` and `409` cases and `bad_message` in API.md.
+
+Verified on Nov 2:
+- Backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (270 tests, 1 GPU test deselected).
+- App `flutter analyze`, `dart format` and `flutter test` pass (162 tests).
+- Release builds were not re-run.
+
 ### Left for M1 (needs GitHub admin, hardware, data or the team)
 
 - **GitHub:**

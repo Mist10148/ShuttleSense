@@ -115,7 +115,7 @@
 **Steps**
 - [x] Short fading trail of the last 15 shuttle positions.
 - [x] Draw the hitter's position at each hit as a small marker for the current rally.
-- [ ] Optional heatmap toggle (player positions over the whole clip).
+- [x] Optional heatmap toggle (player positions over the whole clip).
 - [x] Repaint efficiently: only when the frame index changes (`shouldRepaint` compares frame numbers).
 
 **Tests.** In `test/scoreboard_test.dart`: painter `shouldRepaint` logic; widget renders with a golden record frame.
@@ -136,7 +136,7 @@
 - [x] Compute per-frame speed for frames where the shuttle position is valid; fill `frames[i].shuttle_speed_kmh`.
 - [x] Per-hit speed: max smoothed speed in the 5 frames after each hit → `hits[].speed_kmh`.
 - [x] Clip implausible values (> 450 km/h) to null and log.
-- [ ] Every display (video, app, exports) labels speed as "estimated".
+- [x] Every display (video, app, exports) labels speed as "estimated". (Video and app say "est."; DATA_FORMAT.md marks every export speed as an estimate, column names unchanged.)
 
 **Tests.** Existing `test_speed_constant_motion`; add `test_speed_constant_motion_and_none_across_gaps`, `test_hit_speed_is_post_hit_peak`, `test_glitch_frame_does_not_leak_into_neighbours`.
 

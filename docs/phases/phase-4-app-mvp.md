@@ -62,10 +62,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 
 **Steps**
 - [x] On Android/iOS also offer "Choose from gallery" (`FileType.video`), on desktop/web "Choose file".
-- [ ] Before upload show name, size and (after upload) duration/resolution/fps from `VideoInfo`; warn if > 5 minutes or > 1 GB before sending.
+- [x] Before upload show name, size and (after upload) duration/resolution/fps from `VideoInfo`; warn if > 5 minutes or > 1 GB before sending. (Duration is read on the device with a throwaway media_kit player; skipped on web, where the server still refuses long clips.)
 - [x] Upload progress bar with MB sent / total and cancel (`CancelToken`); keep the screen awake during upload on mobile (optional: `wakelock_plus`, add to TECH_STACK if used).
 - [x] On failure keep the picked file so the user can retry without re-picking.
-- [ ] Move upload state into `features/upload/upload_controller.dart` (Riverpod `Notifier`) so the widget only renders state.
+- [x] Move upload state into `features/upload/upload_controller.dart` (Riverpod `Notifier`) so the widget only renders state.
 
 **Tests.** `test/connect_upload_test.dart`: progress updates from a fake upload stream; cancel resets state; error message shown.
 

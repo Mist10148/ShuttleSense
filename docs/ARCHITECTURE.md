@@ -130,7 +130,7 @@ A cancelled job is deleted with its files, so `cancelled` is never stored or ret
 
 - One worker thread processes one job at a time (one GPU). Extra jobs wait in a FIFO queue; `GET /jobs/{id}` reports `queue_position`. A live session holds the same GPU lock: it cannot start while a job runs (`busy`), and queued jobs wait until it ends.
 - Job state lives in memory and is mirrored to `storage/jobs/<job_id>/job.json` so a restarted server can list finished jobs.
-- Files: `storage/videos/<video_id>/source.<ext>` + `meta.json` for uploads, `storage/jobs/<job_id>/` for `job.json`, `record.json`, `annotated.mp4`, `summary.json`, `hits.csv`, `rallies.csv`, `tracking.csv`, `timings.json`, `corrections.json` (score corrections), `cache/`.
+- Files: `storage/videos/<video_id>/source.<ext>` + `meta.json` for uploads, `storage/jobs/<job_id>/` for `job.json`, `record.json`, `annotated.mp4`, `summary.json`, `hits.csv`, `rallies.csv`, `tracking.csv`, `timings.json`, `corrections.json` (score corrections), `line_call_overrides.json` (confirmed or overridden calls), `previous.json` (the last run's overlays and stage states while a re-render runs), `cache/` (per-stage fields: the referee entry holds hits, rallies, score, line calls and rally events).
 - `DELETE /jobs/{id}` and `DELETE /videos/{id}` remove the files (privacy requirement). `job.json` / `meta.json` go first; a file Windows keeps locked (e.g. a video still streaming) is removed at the next server start.
 
 ### Live sessions

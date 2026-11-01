@@ -80,7 +80,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
       "court_positions": {                                     // F10; null without calibration
         "near": [2.6, 1.9], "far": [2.4, 11.8], "shuttle": null
       },
-      "shuttle_speed_kmh": null,                               // F11
+      "shuttle_speed_kmh": null,                               // F11, estimated
       "rally_state": null                                      // F14: "in_play" | "between_rallies"
     }
   ],
@@ -137,7 +137,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
     {
       "id": 0,
       "rally_index": 0,
-      "frame": 400, "time_s": 13.333,                         // landing frame, tap-to-seek
+      "frame": 410, "time_s": 13.667,                         // landing frame = the rally's end_frame, tap-to-seek
       "call": "in",                                           // "in" | "out": automated, never official
       "landing_xy": [4.9, 12.1],                               // court meters
       "margin_cm": 28.0,                                       // signed distance to the nearest relevant line, + inside
@@ -150,9 +150,11 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
   "rally_events": [                                            // v1.1: what live mode streamed, in order
     {"frame": 12,  "time_s": 0.4,    "type": "rally_start", "rally_index": 0, "data": {}},
-    {"frame": 42,  "time_s": 1.4,    "type": "hit",         "rally_index": 0, "data": {"hit_id": 0}},
-    {"frame": 400, "time_s": 13.333, "type": "landing",     "rally_index": 0, "data": {"line_call_id": 0}},
-    {"frame": 410, "time_s": 13.667, "type": "rally_end",   "rally_index": 0, "data": {}},
+    {"frame": 42,  "time_s": 1.4,    "type": "hit",         "rally_index": 0,
+     "data": {"hit_id": 0, "player": "near", "stroke": "smash"}},
+    {"frame": 410, "time_s": 13.667, "type": "landing",     "rally_index": 0,
+     "data": {"line_call_id": 0, "call": "in"}},                  // call after any override
+    {"frame": 410, "time_s": 13.667, "type": "rally_end",   "rally_index": 0, "data": {"winner": "near"}},
     {"frame": 410, "time_s": 13.667, "type": "score",       "rally_index": 0, "data": {"near": 11, "far": 9}}
   ],
 
@@ -204,6 +206,8 @@ Mapping from ShuttleSet's 18 annotated types plus "unknown" (task T3.3; `strokes
 | `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (UTF-8 with BOM) | analytics (F13) |
 | `annotated.mp4` | H.264, yuv420p, same fps and size as the normalized clip | render (F7) |
 | `tracking.csv` | `frame,visible,x,y,source` (TrackNetV3 format plus `source`: `net`, `interp` or empty) for debugging and evaluation | tracking (F2) |
+
+Every speed (`*speed_kmh` in the record, `summary.json` and both CSVs) is an **estimate** from one camera: the shuttle is projected onto the court plane, so a high shot reads slower than it is. The app and the rendered video label them "est."; the column names stay as they are so existing readers keep working.
 
 ## Training data layout (stroke classifier)
 

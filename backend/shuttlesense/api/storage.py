@@ -1,7 +1,8 @@
 """On-disk layout for uploads and job outputs (docs/ARCHITECTURE.md §3).
 
 storage/videos/<video_id>/source.<ext> + meta.json
-storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.csv, rallies.csv
+storage/jobs/<job_id>/job.json, record.json, annotated.mp4, summary.json, hits.csv, rallies.csv,
+    tracking.csv, timings.json, corrections.json, line_call_overrides.json, previous.json, cache/
 """
 
 from __future__ import annotations

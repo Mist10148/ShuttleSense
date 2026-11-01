@@ -51,7 +51,7 @@
 **Owner:** M3 · **Estimate:** 6 h · **Priority:** P3 · **Area:** backend · **Refs:** F15, FR-15 · **Depends on:** T6.1, T5.2 · **Blocks:** T6.3
 
 **Steps**
-- [ ] Landing frame = first frame after the last hit where the shuttle's vertical image velocity drops to ~0 and it stays (from T6.1's end rule), or the last visible frame.
+- [x] Landing frame = first frame after the last hit where the shuttle's vertical image velocity drops to ~0 and it stays (from T6.1's end rule), or the last visible frame. (Done as the first resting frame of T6.1's end rule, `referee/rally.py::_rest_after`. A lost shuttle gives no landing on purpose: it may have left the frame, so the user decides that rally.)
 - [x] Project the shuttle position at the landing frame with `image_to_court`; the shuttle is on the floor there, so the projection is valid.
 - [x] In/out for singles: inside `0 ≤ x ≤ 5.18`, `0 ≤ y ≤ 13.40` (long service line for singles = baseline).
 - [x] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app. (T8.3 replaces the fixed margin with an uncertainty band from homography and tracking error and adds `line_calls[]`.)

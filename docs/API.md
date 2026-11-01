@@ -107,7 +107,7 @@ Start processing.
 | `referee` | no | Run the referee layer (rally state, line calls, score); default `false` |
 | `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative or already a finished game (e.g. 21–15) |
 
-Response `202`: a Job object (below).
+Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 
 ### `GET /jobs`
 
@@ -161,7 +161,7 @@ Export files (F13). Served with `Content-Disposition: attachment`. CSV files are
 
 ### `POST /jobs/{job_id}/render`
 
-Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns `202` and the Job object with the new `overlays`; the job goes back to `queued`/`running`, the cached stages report `done` immediately and only `io` and `render` actually run. `409` while the job is queued or running, or when it never produced outputs (a `failed` job whose earlier run finished can be re-rendered again); `400` for unknown overlays.
+Re-render the annotated video with a different overlay set, reusing cached stage outputs. Body `{"overlays": [...]}`. Returns `202` and the Job object with the new `overlays`; the job goes back to `queued`/`running`, the cached stages report `done` immediately and only `io` and `render` actually run. `409` while the job is queued or running, while a coach answer for it is still being written (the run would rewrite `record.json` under it), or when it never produced outputs (a `failed` job whose earlier run finished can be re-rendered again); `400` for unknown overlays.
 
 ### `PATCH /jobs/{job_id}/score`
 
@@ -171,7 +171,7 @@ Correct the winner of a rally (F16). Body:
 {"rally_index": 3, "winner": "far"}
 ```
 
-Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`) or if the referee stage did not run.
+Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`), or if the referee stage did not run or found no rallies.
 
 ### `PATCH /jobs/{job_id}/line-calls/{call_id}`
 
@@ -209,7 +209,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: a camera faster than `live.max_fps` is thinned to it by capture time, and frames beyond `live.max_queue_frames` waiting are discarded |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400). `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket and keeps the session for a resume |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400). `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
 
