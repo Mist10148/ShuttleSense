@@ -182,7 +182,7 @@ class LiveState {
   );
 }
 
-/// Frames per second the app tries to send; the camera may deliver fewer.
+/// Frames per second the app sends at most; a slower camera sets a lower rate.
 const kLiveTargetFps = 15.0;
 
 /// Resume attempts after the connection drops, with these waits in between. They span about
@@ -195,6 +195,14 @@ const kReconnectDelays = [
   Duration(seconds: 8),
   Duration(seconds: 15),
 ];
+
+/// The rate to announce after [captures] stills took [elapsed]: at most [kLiveTargetFps],
+/// rounded down to 0.1 fps so the app never sends faster than it said.
+double liveFps(Duration elapsed, int captures) {
+  final seconds = elapsed.inMicroseconds / 1e6 / captures;
+  final measured = seconds <= 0 ? kLiveTargetFps : 1 / seconds;
+  return (measured.clamp(1.0, kLiveTargetFps) * 10).floorToDouble() / 10;
+}
 
 /// How long to wait for `started`: the server loads TrackNet and the pose model first.
 const kStartTimeout = Duration(seconds: 90);
@@ -230,6 +238,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   /// Bumped by [_teardown]; loops and reconnects of an older session stop when it changes.
   int _generation = 0;
+
+  /// The rate frames are sent at: what the camera managed when the session started.
+  double _fps = kLiveTargetFps;
 
   FrameSource? get source => _source;
 
@@ -318,14 +329,21 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _set(state.copyWith(phase: LivePhase.connecting, corners: corners ?? const []));
     final CapturedFrame first;
     try {
+      // Time a few captures: still captures are slower than video on most devices, and the
+      // server times everything (the recording, speeds, the rally clock) by the rate sent.
+      final clock = Stopwatch()..start();
       first = await source.capture();
-    } on Exception catch (e) {
+      for (var i = 0; i < 2; i++) {
+        await source.capture();
+      }
+      _fps = liveFps(clock.elapsed, 3);
+    } on Object catch (e) {
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
     }
     final connected = await _connect({
       'type': 'start',
-      'fps': kLiveTargetFps,
+      'fps': _fps,
       'width': first.width,
       'height': first.height,
       'corners': corners == null || corners.length != 4
@@ -415,7 +433,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   Future<void> _stream(int generation) async {
-    final interval = Duration(microseconds: (1e6 / kLiveTargetFps).round());
+    final interval = Duration(microseconds: (1e6 / _fps).round());
     final clock = Stopwatch()..start();
     final first = _nextFrame; // after a resume the count goes on, the clock starts again
     bool current() => _streaming && !_disposed && generation == _generation;
@@ -515,19 +533,22 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final court = e['court'] as Json?;
     final speed = asDouble(e['speed_kmh']);
     final frame = asInt(e['frame'])!;
-    // A frame event can repeat after a resume; keep one entry per frame index.
-    if (frame >= state.frames.length) {
-      state.frames.add(
-        FrameInfo(
-          frame: frame,
-          nearPos: asPoint(court?['near']),
-          farPos: asPoint(court?['far']),
-          shuttlePos: asPoint(court?['shuttle']),
-          shuttleSpeedKmh: speed,
-          rallyState: e['rally_state'] as String?,
-        ),
-      );
+    // The list index is the server's frame number, which hits, rallies and line calls refer
+    // to: frames whose events were lost in a drop are padded with empty entries, and a frame
+    // event repeated after a resume replaces its entry.
+    final info = FrameInfo(
+      frame: frame,
+      nearPos: asPoint(court?['near']),
+      farPos: asPoint(court?['far']),
+      shuttlePos: asPoint(court?['shuttle']),
+      shuttleSpeedKmh: speed,
+      rallyState: e['rally_state'] as String?,
+    );
+    final frames = state.frames;
+    while (frames.length < frame) {
+      frames.add(FrameInfo(frame: frames.length));
     }
+    frame < frames.length ? frames[frame] = info : frames.add(info);
     final shuttle = e['shuttle'] as Json?;
     var trail = state.trail;
     if (shuttle != null && shuttle['visible'] == 1) {
@@ -556,6 +577,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         speedKmh: speed,
         peakSpeedKmh: speed != null && (peak == null || speed > peak) ? speed : peak,
         rallyState: e['rally_state'] as String?,
+        // Every frame repeats the open rally's start, so a lost `rally` event cannot leave
+        // the rally clock blank or stale.
+        rallyStartFrame: asInt(e['rally_start_frame']),
+        clearRallyStart: e.containsKey('rally_start_frame') && e['rally_start_frame'] == null,
         strokesInRally: asInt(e['strokes_in_rally']),
         latencyMs: asDouble(e['latency_ms']),
       ),

@@ -32,6 +32,16 @@ Uint8List framePacket(int index, double captureMs, Uint8List jpeg) {
     ..setAll(12, jpeg);
 }
 
+/// The server event in [text], or nothing when it is not a JSON object.
+List<Json> decodeEvent(String text) {
+  try {
+    final value = jsonDecode(text);
+    return value is Json ? [value] : const [];
+  } on FormatException {
+    return const [];
+  }
+}
+
 class ChannelLiveSocket implements LiveSocket {
   ChannelLiveSocket(Uri uri) : _channel = WebSocketChannel.connect(uri);
 
@@ -40,10 +50,12 @@ class ChannelLiveSocket implements LiveSocket {
   @override
   Future<void> get ready => _channel.ready;
 
+  /// A message that is not a JSON object is dropped rather than raised as a stream error,
+  /// which would look like a dropped connection.
   @override
   late final Stream<Json> events = _channel.stream
       .where((m) => m is String)
-      .map((m) => jsonDecode(m as String) as Json)
+      .expand<Json>((m) => decodeEvent(m as String))
       .asBroadcastStream();
 
   @override

@@ -270,6 +270,44 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  test('a message that is not a JSON object is dropped, not raised', () {
+    expect(decodeEvent('{"type": "frame"}'), [
+      {'type': 'frame'},
+    ]);
+    expect(decodeEvent('1'), isEmpty);
+    expect(decodeEvent('not json'), isEmpty);
+  });
+
+  testWidgets('frames lost in a drop keep the list indexed by server frame number', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    socket.emit(frameEvent(0));
+    socket.emit(frameEvent(4)); // 1-3 were lost
+    socket.emit(frameEvent(4)); // repeated after a resume
+    await events(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final state = container.read(liveControllerProvider);
+    expect([for (final f in state.frames) f.frame], [0, 1, 2, 3, 4]);
+    expect(state.frameIndex, 4);
+    expect(state.frames[4].shuttlePos, isNotNull);
+    // The rally clock comes from the frame events themselves.
+    expect(state.rallyStartFrame, 0);
+    socket.emit({...frameEvent(5, state: 'between_rallies'), 'rally_start_frame': null});
+    await events(tester);
+    expect(container.read(liveControllerProvider).rallyStartFrame, isNull);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  test('the start message announces the rate the camera manages', () {
+    expect(liveFps(const Duration(milliseconds: 360), 3), 8.3); // 120 ms per still
+    expect(liveFps(const Duration(milliseconds: 30), 3), kLiveTargetFps); // capped
+    expect(liveFps(Duration.zero, 3), kLiveTargetFps);
+    expect(liveFps(const Duration(seconds: 9), 3), 1.0); // a very slow camera
+  });
+
   testWidgets('the Analyze tab follows the remembered mode', (tester) async {
     await pumpScreen(
       tester,

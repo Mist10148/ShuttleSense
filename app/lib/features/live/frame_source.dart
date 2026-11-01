@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// One camera frame as a JPEG, with its size in pixels.
@@ -40,6 +41,7 @@ abstract class FrameSource {
 class CameraFrameSource implements FrameSource {
   CameraController? _controller;
   ({int width, int height})? _size;
+  DeviceOrientation? _sizeOrientation;
   String _label = 'Camera';
 
   @override
@@ -70,6 +72,13 @@ class CameraFrameSource implements FrameSource {
       await controller.dispose();
       throw _unavailable(e);
     }
+    // Phones default to auto flash, which would fire on every still in a dim hall and slow
+    // each capture down. Webcams and browsers have no flash control.
+    try {
+      await controller.setFlashMode(FlashMode.off);
+    } on Object {
+      // not supported here
+    }
     _controller = controller;
   }
 
@@ -89,7 +98,14 @@ class CameraFrameSource implements FrameSource {
     if (controller == null) throw StateError('camera not started');
     final file = await controller.takePicture();
     final jpeg = await file.readAsBytes();
-    final size = _size ??= await _decodeSize(jpeg);
+    // Decoding every still for its size is costly; measure again only when the device
+    // turned, which swaps width and height.
+    final orientation = controller.value.deviceOrientation;
+    if (_size == null || orientation != _sizeOrientation) {
+      _size = await _decodeSize(jpeg);
+      _sizeOrientation = orientation;
+    }
+    final size = _size!;
     return (jpeg: jpeg, width: size.width, height: size.height);
   }
 
