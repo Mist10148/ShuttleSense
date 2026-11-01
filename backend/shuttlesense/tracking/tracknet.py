@@ -226,6 +226,10 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
                         ctx.progress(
                             min(0.99, 0.9 + 0.09 * (start + len(inputs) * inpaint_len) / n)
                         )
+    # Hand the GPU memory back before the pose stage runs (6 GB on the team laptop).
+    model = inpaint = None
+    if str(ctx.device).startswith("cuda"):
+        torch.cuda.empty_cache()
     return xy, visible, source
 
 
