@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
+import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/connect/connect_screen.dart';
 import 'package:shuttlesense_app/features/upload/upload_controller.dart';
 import 'package:shuttlesense_app/features/upload/upload_screen.dart';
+import 'package:shuttlesense_app/shared/widgets/start_score_field.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
@@ -299,6 +301,50 @@ void main() {
       expect(find.textContaining('Could not read the size'), findsOneWidget);
       expect(find.text('rally.mp4'), findsNothing);
       expect(api.calls.where((c) => c.startsWith('uploadVideo')), isEmpty);
+    });
+
+    testWidgets('a clip from a game under way sends its start score', (tester) async {
+      FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', mb)]);
+      final api = FakeApiClient();
+      JobOptions? sent;
+      api.onCreateJob = (o) => sent = o;
+      await pumpScreen(
+        tester,
+        const UploadScreen(),
+        api: api,
+        size: tablet,
+        prefs: {'options.calibrate': false},
+        overrides: [durationProbeProvider.overrideWithValue((_) async => null)],
+      );
+      // Without calibration and the referee there is no score to start from.
+      expect(find.text('Game already under way'), findsNothing);
+      await tester.tap(find.text('Choose video'));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(tester.element(find.byType(UploadScreen)));
+      final options = container.read(pendingJobOptionsProvider);
+      final notifier = container.read(pendingJobOptionsProvider.notifier);
+      await notifier.set(options.copyWith(calibrate: true, referee: true));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Game already under way'));
+      await tester.tap(find.text('Game already under way'));
+      await tester.pumpAndSettle();
+      expect(container.read(pendingJobOptionsProvider).startScore, (near: 0, far: 0));
+      // Calibration is on, so the job is created on the calibration screen; check what it
+      // will send.
+      final submitted = container.read(pendingJobOptionsProvider).submittable(null);
+      expect(submitted.startScore, (near: 0, far: 0));
+      expect(sent, isNull);
+      // Turning the referee off drops the score from the request.
+      await notifier.set(container.read(pendingJobOptionsProvider).copyWith(referee: false));
+      expect(container.read(pendingJobOptionsProvider).submittable(null).startScore, isNull);
+    });
+
+    test('a finished game is not a start score', () {
+      expect(startScoreProblem((near: 20, far: 18)), isNull);
+      expect(startScoreProblem((near: 21, far: 19)), 'That game is already over');
+      expect(startScoreProblem((near: 21, far: 20)), isNull); // deuce: win by 2
+      expect(startScoreProblem((near: 29, far: 29)), isNull);
+      expect(gameWinner(30, 29), 'near');
     });
 
     test('browser uploads have a lower cap', () {

@@ -67,6 +67,9 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
     await prefs.setBool(_refereeKey, next.referee);
   }
 
+  /// For a clip that begins mid-game; not remembered, it belongs to one clip.
+  void setStartScore(({int near, int far})? score) => state = state.withStartScore(score);
+
   Future<void> toggleOverlay(String name, bool on) {
     final overlays = {...state.overlays};
     on ? overlays.add(name) : overlays.remove(name);
@@ -165,6 +168,7 @@ class UploadNotifier extends Notifier<UploadState> {
       return;
     }
     _set(UploadState(file: file, size: size!));
+    ref.read(pendingJobOptionsProvider.notifier).setStartScore(null); // a new clip
     final duration = await ref.read(durationProbeProvider)(file);
     if (!_disposed && identical(state.file, file) && duration != null) {
       _set(UploadState(file: file, size: size, durationS: duration));

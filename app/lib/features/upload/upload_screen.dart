@@ -10,6 +10,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../mode/mode_screen.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/start_score_field.dart';
 import 'upload_controller.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
@@ -168,6 +169,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     ? (v) => notifier.set(options.copyWith(referee: v))
                     : null,
               ),
+              if (options.calibrate && options.referee)
+                StartScoreField(
+                  key: ObjectKey(file), // a new clip starts from 0-0 again
+                  value: options.startScore,
+                  onChanged: notifier.setStartScore,
+                ),
               const SizedBox(height: 8),
               Text('Overlays', style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),

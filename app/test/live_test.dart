@@ -132,6 +132,7 @@ void main() {
     final corners = sockets.single.sent.first['corners'] as List;
     expect(corners, hasLength(4));
     expect((corners.first as List).first, closeTo(1280 * 0.2, 2));
+    expect(sockets.single.sent.first['start_score'], isNull);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
@@ -370,6 +371,30 @@ void main() {
     await tester.tap(find.text('Go live'));
     await tester.pumpAndSettle();
     expect(find.text('live screen'), findsOneWidget);
+  });
+
+  testWidgets('a game under way starts the live scoreboard from its score', (tester) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await tester.tap(find.text('Game already under way'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0').first); // near player's points
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('7').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calibrate court'));
+    await tester.pumpAndSettle();
+    final canvas = tester.getRect(find.byType(Image).first);
+    for (final (fx, fy) in [(0.2, 0.9), (0.8, 0.9), (0.7, 0.3), (0.3, 0.3)]) {
+      await tester.tapAt(Offset(canvas.left + canvas.width * fx, canvas.top + canvas.height * fy));
+      await tester.pump();
+    }
+    await tester.tap(find.text('Go live'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(sockets.single.sent.first['start_score'], {'near': 7, 'far': 0});
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('a 1.0 server cannot be switched to live', (tester) async {

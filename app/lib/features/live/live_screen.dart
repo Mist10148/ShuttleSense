@@ -6,6 +6,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/start_score_field.dart';
 import '../calibration/calibration_screen.dart';
 import '../mode/mode_screen.dart';
 import '../results/widgets/court_minimap.dart';
@@ -142,6 +143,12 @@ class _ReadyView extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        // Scoring needs the calibrated court, so the score is used by "Go live" after it.
+        StartScoreField(
+          value: ref.watch(liveStartScoreProvider),
+          onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
+        ),
         const SizedBox(height: 16),
         Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
       ],
@@ -235,7 +242,13 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
             children: [
               OutlinedButton(onPressed: controller.cancelCalibration, child: const Text('Back')),
               FilledButton.icon(
-                onPressed: convex ? () => controller.start(corners: List.of(_corners)) : null,
+                onPressed: convex
+                    ? () {
+                        final score = ref.read(liveStartScoreProvider.notifier);
+                        controller.start(corners: List.of(_corners), startScore: score.state);
+                        score.state = null; // belongs to this session only
+                      }
+                    : null,
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Go live'),
               ),

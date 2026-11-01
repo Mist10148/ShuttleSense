@@ -700,3 +700,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 final liveControllerProvider = AutoDisposeNotifierProvider<LiveController, LiveState>(
   LiveController.new,
 );
+
+/// Score at the start of a live session that joins a game under way (P3 referee). Kept
+/// apart from the session so it survives calibrating the court; cleared once used.
+final liveStartScoreProvider = StateProvider<({int near, int far})?>((ref) => null);

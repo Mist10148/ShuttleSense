@@ -172,10 +172,14 @@ class JobOptions {
     startScore: startScore,
   );
 
-  /// What to send to the server: no referee without calibration, and only the overlays that
-  /// can be drawn (greyed-out chips keep their remembered choice but are not requested).
+  JobOptions withStartScore(({int near, int far})? score) =>
+      JobOptions(overlays: overlays, referee: referee, calibrate: calibrate, startScore: score);
+
+  /// What to send to the server: no referee without calibration, no start score without the
+  /// referee, and only the overlays that can be drawn (greyed-out chips keep their remembered
+  /// choice but are not requested).
   JobOptions submittable(Health? health) {
-    final base = calibrate ? this : copyWith(referee: false);
+    final base = calibrate && referee ? this : copyWith(referee: false).withStartScore(null);
     return base.copyWith(
       overlays: {
         for (final o in base.overlays)
