@@ -274,8 +274,18 @@ class ApiClient {
         .cast<List<int>>()
         .transform(utf8.decoder)
         .transform(const LineSplitter());
-    await for (final line in lines) {
-      if (line.startsWith('data: ')) yield jsonDecode(line.substring(6)) as Json;
+    // Failures mid-answer become ApiException too, so the chat screen shows every one.
+    try {
+      await for (final line in lines) {
+        if (!line.startsWith('data: ')) continue;
+        final event = jsonDecode(line.substring(6));
+        if (event is! Json) throw const FormatException('event is not an object');
+        yield event;
+      }
+    } on DioException catch (e) {
+      throw ApiException('The answer was interrupted: ${e.message ?? 'connection lost'}');
+    } on FormatException {
+      throw ApiException('The server sent an answer the app could not read');
     }
   }
 

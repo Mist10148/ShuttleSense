@@ -109,6 +109,21 @@ void main() {
       expect(bannerCall(record, 60 + 30 * 4), isNull); // a certain call fades away
       final waiting = goldenRecord().copyWith(lineCalls: [call()]);
       expect(bannerCall(waiting, 60 + 30 * 10)?.needsReview, isTrue);
+      // A newer certain call does not hide an older one still waiting for review.
+      const later = LineCall(
+        id: 1,
+        rallyIndex: 1,
+        frame: 200,
+        timeS: 6.667,
+        call: 'in',
+        landing: (x: 2.0, y: 10.0),
+        marginCm: 150,
+        confidence: 1,
+        uncertain: false,
+      );
+      final both = goldenRecord().copyWith(lineCalls: [call(), later]);
+      expect(bannerCall(both, 210)?.id, 1); // the new call is shown while recent
+      expect(bannerCall(both, 200 + 30 * 5)?.id, 0); // then the one to review comes back
     });
   });
 
@@ -234,6 +249,31 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.send);
       await tester.pumpAndSettle();
       expect(find.text('coach chat is off'), findsOneWidget);
+    });
+
+    testWidgets('an answer that stops before it is done says so', (tester) async {
+      final api = FakeApiClient(health: health())
+        ..chatEvents = [
+          {'type': 'delta', 'text': 'Your elbow '},
+        ];
+      await pumpScreen(tester, const ChatScreen(jobId: 'job1'), api: api);
+      await tester.tap(find.text('What should I fix first?'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('cut off'), findsOneWidget);
+      expect(find.text('Your elbow '), findsNothing);
+      expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
+    });
+
+    testWidgets('an unexpected failure mid-answer is shown, not swallowed', (tester) async {
+      final api = FakeApiClient(health: health())
+        ..chatEvents = [
+          {'type': 'done', 'message': 'not a message'},
+        ];
+      await pumpScreen(tester, const ChatScreen(jobId: 'job1'), api: api);
+      await tester.tap(find.text('What should I fix first?'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('The coach could not answer'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('chat is disabled with an explanation without a key', (tester) async {

@@ -28,6 +28,14 @@ class ChatState {
 class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
   @override
   ChatState build(String jobId) {
+    // Opened straight at /results/chat the record may still be loading: take its history
+    // when it arrives (and after it is refreshed), unless a question is in flight.
+    ref.listen(recordProvider(jobId), (_, next) {
+      final chat = next.valueOrNull?.chat;
+      if (chat != null && !state.busy && chat.length >= state.messages.length) {
+        state = ChatState(messages: chat, error: state.error);
+      }
+    });
     final record = ref.read(recordProvider(jobId)).valueOrNull;
     return ChatState(messages: record?.chat ?? const []);
   }
@@ -35,8 +43,16 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
   Future<void> send(String text) async {
     final question = text.trim();
     if (question.isEmpty || state.busy) return;
+    // Keep the controller while the answer streams, even if the user leaves the screen, so
+    // the answer is still saved here and the record is refreshed.
+    final keep = ref.keepAlive();
     final asked = ChatMessage(role: 'user', text: question, at: DateTime.now().toUtc());
     state = ChatState(messages: [...state.messages, asked], streaming: '', busy: true);
+    void fail(String message) => state = ChatState(
+      messages: state.messages.where((m) => m != asked).toList(),
+      error: message,
+    );
+    var finished = false;
     try {
       await for (final event in ref.read(apiClientProvider).chat(arg, question)) {
         switch (event['type']) {
@@ -49,22 +65,23 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
           case 'done':
             final answer = ChatMessage.fromJson(event['message'] as Map<String, dynamic>);
             state = ChatState(messages: [...state.messages, answer]);
+            finished = true;
           case 'error':
-            state = ChatState(
-              messages: state.messages.where((m) => m != asked).toList(),
-              error: event['detail'] as String? ?? 'The coach could not answer',
-            );
+            fail(event['detail'] as String? ?? 'The coach could not answer');
+            finished = true;
         }
       }
+      // The server saves a question only with its answer: without `done` nothing was kept.
+      if (!finished) fail('The answer was cut off. Try asking again.');
       // The record on the server now holds the chat; refresh it for next time.
       ref.invalidate(recordProvider(arg));
     } on ApiException catch (e) {
-      state = ChatState(
-        messages: state.messages.where((m) => m != asked).toList(),
-        error: e.message,
-      );
+      fail(e.message);
+    } on Object catch (e) {
+      fail('The coach could not answer: $e');
     } finally {
       if (state.busy) state = ChatState(messages: state.messages, error: state.error);
+      keep.close();
     }
   }
 }

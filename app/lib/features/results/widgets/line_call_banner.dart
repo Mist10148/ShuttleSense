@@ -5,14 +5,20 @@ import '../../../data/models/clip_record.dart';
 /// How long after a landing its banner stays up.
 const kLineCallBannerSeconds = 3.0;
 
-/// The line call to show at [frameIndex]: the latest one in the last few seconds, or any
-/// earlier one still waiting for the user's review.
+/// The line call to show at [frameIndex]: the latest one in the last few seconds, otherwise
+/// the earliest one still waiting for the user's review (a newer call must not hide it).
 LineCall? bannerCall(ClipRecord record, int frameIndex) {
   final fps = record.fps == 0 ? 30.0 : record.fps;
   final latest = record.lineCallAt(frameIndex);
   if (latest == null) return null;
-  final recent = (frameIndex - latest.frame) / fps <= kLineCallBannerSeconds;
-  return recent || latest.needsReview ? latest : null;
+  if ((frameIndex - latest.frame) / fps <= kLineCallBannerSeconds) return latest;
+  LineCall? waiting;
+  for (final c in record.lineCalls) {
+    if (c.frame <= frameIndex && c.needsReview && (waiting == null || c.frame < waiting.frame)) {
+      waiting = c;
+    }
+  }
+  return waiting;
 }
 
 /// F20: big IN / OUT banner for an automated call, with its margin and confidence.
