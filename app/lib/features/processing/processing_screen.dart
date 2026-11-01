@@ -8,6 +8,7 @@ import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../results/results_screen.dart' show hasResults;
 
 const kStageLabels = {
   'io': 'Load video',
@@ -150,11 +151,20 @@ class ProcessingScreen extends ConsumerWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton.icon(
-                  onPressed: () => _retry(context, ref, job),
-                  icon: const Icon(Icons.replay),
-                  label: const Text('Try again'),
-                ),
+                // A live session cannot be processed again as an upload (its overrides and
+                // corrections belong to the live rallies), but its record is there.
+                if (hasResults(job))
+                  FilledButton.icon(
+                    onPressed: () => context.go(Routes.results(jobId)),
+                    icon: const Icon(Icons.insights),
+                    label: const Text('View results'),
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed: () => _retry(context, ref, job),
+                    icon: const Icon(Icons.replay),
+                    label: const Text('Try again'),
+                  ),
                 OutlinedButton(
                   onPressed: () => context.go(Routes.home),
                   child: const Text('Back to upload'),

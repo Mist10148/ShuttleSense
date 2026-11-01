@@ -270,8 +270,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _events = null;
     _socket = null;
     _source = null;
-    await events?.cancel();
-    await socket?.close();
+    // Cancelling stops delivery at once, but its future and the close (which waits for the
+    // server's close handshake) may take long or never finish: do not block on either.
+    if (events != null) unawaited(events.cancel());
+    if (socket != null) unawaited(socket.close());
     await source?.dispose();
   }
 
@@ -670,6 +672,11 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     try {
       // Saving runs the final analysis pass, which takes longer on long sessions.
       final jobId = await saved.future.timeout(const Duration(seconds: 90));
+      // The camera is not needed on the saved screen (and stays open under the results
+      // page otherwise); New session opens it again.
+      final source = _source;
+      _source = null;
+      await source?.dispose();
       _set(state.copyWith(phase: LivePhase.saved, savedJobId: jobId));
     } on Object {
       _set(
@@ -681,8 +688,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         ),
       );
     }
-    await socket.close();
     if (_socket == socket) _socket = null;
+    unawaited(socket.close());
   }
 }
 

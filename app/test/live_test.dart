@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/app_mode.dart';
+import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/features/live/frame_source.dart';
 import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
@@ -306,6 +307,52 @@ void main() {
     expect(liveFps(const Duration(milliseconds: 30), 3), kLiveTargetFps); // capped
     expect(liveFps(Duration.zero, 3), kLiveTargetFps);
     expect(liveFps(const Duration(seconds: 9), 3), 1.0); // a very slow camera
+  });
+
+  testWidgets('a saved session releases the camera and can start a new one', (tester) async {
+    final cameras = <FakeFrameSource>[];
+    await pumpScreen(
+      tester,
+      const LiveScreen(),
+      prefs: {'ui.mode': 'live'},
+      overrides: [
+        frameSourceFactoryProvider.overrideWithValue(() {
+          final c = FakeFrameSource();
+          cameras.add(c);
+          return c;
+        }),
+        liveSocketFactoryProvider.overrideWithValue(
+          (uri) => FakeLiveSocket(uri, onHello: (_) => startedEvent()),
+        ),
+      ],
+    );
+    await startWithoutCourt(tester);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Open results'), findsOneWidget);
+    expect(cameras.single.disposed, isTrue);
+    expect(find.text('New session'), findsOneWidget);
+    await tester.tap(find.text('New session'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(cameras, hasLength(2));
+    expect(find.text('Start without court'), findsOneWidget);
+  });
+
+  test('live mode needs a 1.1 backend', () {
+    Health health(String schema) => Health(
+      version: '0.1.0',
+      schemaVersion: schema,
+      device: 'cpu',
+      authRequired: false,
+      stages: const [],
+    );
+    expect(health('1.0').supportsLive, isFalse);
+    expect(health('1.1').supportsLive, isTrue);
+    expect(health('1.4').supportsLive, isTrue);
+    expect(health('2.0').supportsLive, isTrue);
   });
 
   testWidgets('the Analyze tab follows the remembered mode', (tester) async {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_mode.dart';
 import '../../core/router/app_router.dart';
+import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 
 /// F18: first screen after connecting. The last choice is highlighted and remembered.
@@ -13,6 +14,8 @@ class ModeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(appModeProvider);
+    final health = ref.watch(healthProvider).valueOrNull;
+    final liveOff = health != null && !health.supportsLive;
     Future<void> pick(AppMode mode) async {
       await ref.read(appModeProvider.notifier).set(mode);
       if (context.mounted) context.go(Routes.home);
@@ -34,11 +37,13 @@ class ModeScreen extends ConsumerWidget {
         ModeCard(
           icon: Icons.videocam_outlined,
           title: 'Go live',
-          description:
-              'Point a camera at the court and see the shuttle, score and line calls while '
-              'you play. The session is saved to History when you stop.',
-          selected: current == AppMode.live,
-          onTap: () => pick(AppMode.live),
+          description: liveOff
+              ? 'This server is too old for live mode (clip record ${health.schemaVersion}). '
+                    'Update the backend to use it.'
+              : 'Point a camera at the court and see the shuttle, score and line calls while '
+                    'you play. The session is saved to History when you stop.',
+          selected: current == AppMode.live && !liveOff,
+          onTap: liveOff ? null : () => pick(AppMode.live),
         ),
       ],
     );
@@ -59,13 +64,16 @@ class ModeCard extends StatelessWidget {
   final String title;
   final String description;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// Null when the choice is not available; the card is shown greyed out.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
       button: true,
+      enabled: onTap != null,
       selected: selected,
       child: Card(
         clipBehavior: Clip.antiAlias,
@@ -82,7 +90,7 @@ class ModeCard extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(icon, size: 40, color: scheme.primary),
+                Icon(icon, size: 40, color: onTap == null ? scheme.outline : scheme.primary),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(

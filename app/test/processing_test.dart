@@ -75,6 +75,22 @@ void main() {
     expect(visited, ['/jobs/job2']);
   });
 
+  testWidgets('a live session whose video failed to render opens its results', (tester) async {
+    final json = jobJson(status: 'failed', error: 'render failed: disk full');
+    final failed = Job.fromJson({
+      ...json,
+      'mode': 'live',
+      'outputs': {...json['outputs'] as Map<String, dynamic>, 'record': true},
+    });
+    final api = FakeApiClient(jobs: [failed]);
+    final visited = await pumpScreen(tester, const ProcessingScreen(jobId: 'job1'), api: api);
+    expect(find.text('Try again'), findsNothing);
+    await tester.tap(find.text('View results'));
+    await tester.pumpAndSettle();
+    expect(visited, ['/jobs/job1/results']);
+    expect(api.calls.where((c) => c.startsWith('createJob')), isEmpty);
+  });
+
   testWidgets('a finished job opens the results', (tester) async {
     final done = Job.fromJson(jobJson());
     final visited = await pumpScreen(

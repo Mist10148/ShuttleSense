@@ -58,7 +58,10 @@ class LiveScreen extends ConsumerWidget {
           LivePhase.error => _ErrorView(state: state, onRetry: controller.openCamera),
           LivePhase.ready => _ReadyView(state: state),
           LivePhase.calibrating => _CalibrateView(state: state),
-          LivePhase.saved => _SavedView(jobId: state.savedJobId),
+          LivePhase.saved => _SavedView(
+            jobId: state.savedJobId,
+            onNewSession: controller.openCamera,
+          ),
           _ => _LiveView(state: state),
         },
       ),
@@ -245,9 +248,10 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
 }
 
 class _SavedView extends StatelessWidget {
-  const _SavedView({required this.jobId});
+  const _SavedView({required this.jobId, required this.onNewSession});
 
   final String? jobId;
+  final VoidCallback onNewSession;
 
   @override
   Widget build(BuildContext context) {
@@ -266,12 +270,24 @@ class _SavedView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            if (jobId != null)
-              FilledButton.icon(
-                onPressed: () => context.go(Routes.job(jobId!)),
-                icon: const Icon(Icons.insights),
-                label: const Text('Open results'),
-              ),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (jobId != null)
+                  FilledButton.icon(
+                    onPressed: () => context.go(Routes.job(jobId!)),
+                    icon: const Icon(Icons.insights),
+                    label: const Text('Open results'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: onNewSession,
+                  icon: const Icon(Icons.videocam_outlined),
+                  label: const Text('New session'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

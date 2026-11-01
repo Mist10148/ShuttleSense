@@ -387,4 +387,8 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 }
 
 /// Lets other screens decide whether results exist for a job.
-bool hasResults(Job job) => job.status == JobStatus.done && job.outputs.record;
+/// A finished job, or a saved live session whose video failed to render: its record (line
+/// calls, score, notes) is complete, only the annotated video is missing.
+bool hasResults(Job job) =>
+    job.outputs.record &&
+    (job.status == JobStatus.done || (job.isLive && job.status == JobStatus.failed));

@@ -30,6 +30,14 @@ class Health {
 
   bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 
+  /// WS /live arrived with clip record 1.1; a 1.0 backend has no live sessions.
+  bool get supportsLive {
+    final parts = schemaVersion.split('.');
+    final major = int.tryParse(parts.first) ?? 0;
+    final minor = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return major > 1 || (major == 1 && minor >= 1);
+  }
+
   /// Whether the backend can produce [overlay] (its stage is installed).
   bool supportsOverlay(String overlay, Map<String, String> overlayStage) {
     final stage = overlayStage[overlay];
