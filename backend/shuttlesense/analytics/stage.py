@@ -7,7 +7,11 @@ import logging
 import numpy as np
 
 from shuttlesense.analytics.export import build_summary
-from shuttlesense.analytics.positions import apply_positions, project_positions
+from shuttlesense.analytics.positions import (
+    MIN_KEYPOINT_SCORE,
+    apply_positions,
+    project_positions,
+)
 from shuttlesense.analytics.speed import hit_speed, speeds_kmh
 from shuttlesense.schema import ClipRecord
 from shuttlesense.stage import StageContext
@@ -36,7 +40,10 @@ def strokes_so_far(record: ClipRecord, frame: int) -> int:
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill court_positions, per-frame and per-hit speeds, rally stroke counts and summary."""
     cfg = ctx.stage_config("analytics")
-    positions = project_positions(record, smooth=cfg.get("position_smoothing", 5))
+    min_score = ctx.stage_config("pose").get("min_keypoint_score", MIN_KEYPOINT_SCORE)
+    positions = project_positions(
+        record, smooth=cfg.get("position_smoothing", 5), min_keypoint_score=min_score
+    )
     apply_positions(record, positions)
 
     if record.court is not None:

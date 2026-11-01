@@ -47,6 +47,7 @@ def project_positions(
     smooth: int = 5,
     player_margin_m: float = 2.0,
     shuttle_margin_m: float = 1.0,
+    min_keypoint_score: float = MIN_KEYPOINT_SCORE,
 ) -> dict[str, np.ndarray]:
     """(N, 2) court positions per key ("near", "far", "shuttle"); NaN where unknown."""
     from shuttlesense.court import image_to_court
@@ -61,7 +62,7 @@ def project_positions(
         for side in ("near", "far"):
             p = getattr(f.players, side)
             if p is not None:
-                out[side][i] = player_point(p)
+                out[side][i] = player_point(p, min_keypoint_score)
         s = f.shuttle
         if s is not None and s.visible and s.x is not None and s.y is not None:
             out["shuttle"][i] = s.x, s.y

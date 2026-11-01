@@ -27,6 +27,25 @@ def test_falls_back_to_bbox_bottom() -> None:
     assert player_point(Player(bbox=(80, 300, 80, 240))) == (120.0, 540.0)
 
 
+def test_stage_reads_the_pose_keypoint_threshold() -> None:
+    record = load_golden()
+    for f in record.frames:
+        if f.players.near is not None and len(f.players.near.keypoints) == 17:
+            kps = list(f.players.near.keypoints)
+            kps[15], kps[16] = (kps[15][0], kps[15][1], 0.4), (kps[16][0], kps[16][1], 0.4)
+            f.players.near.keypoints = kps
+    default = project_positions(record)["near"]
+    strict = project_positions(record, min_keypoint_score=0.5)["near"]
+    assert not np.allclose(default, strict, equal_nan=True)  # 0.4 ankles: used, then not
+
+    def near_positions(config: dict) -> list:
+        out = analytics_run(record.model_copy(deep=True), StageContext(None, None, config=config))
+        return [f.court_positions.near for f in out.frames if f.court_positions]
+
+    strict_cfg = {"stages": {"pose": {"min_keypoint_score": 0.5}}}
+    assert near_positions({}) != near_positions(strict_cfg)
+
+
 def test_positions_null_without_court() -> None:
     record = load_golden()
     record.court = None

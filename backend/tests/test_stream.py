@@ -121,6 +121,17 @@ def _session(fps: float, tmp_path=None) -> LiveSession:
     )  # fmt: skip
 
 
+def test_live_court_uses_the_configured_court_size() -> None:
+    record, _ = synthetic_record()
+    doubles = {**CONFIG, "stages": {**CONFIG["stages"], "court": {"court_size_m": [6.1, 13.4]}}}
+    session = LiveSession(
+        session_id="s", request=StartRequest(fps=30, width=640, height=360), config=doubles,
+        perception=ReplayPerception(record, (640, 360)), court_corners=CORNERS, recording=None,
+    )  # fmt: skip
+    court = session.analyzer.record.court
+    assert court is not None and tuple(court.court_size_m) == (6.1, 13.4)
+
+
 def test_a_faster_camera_is_thinned_to_max_fps() -> None:
     from shuttlesense.stream.fake_source import blank_frames, encode
 

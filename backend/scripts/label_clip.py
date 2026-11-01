@@ -164,7 +164,10 @@ def run_window(video: Path, out: Path) -> None:  # pragma: no cover - needs a di
         cap.set(cv2.CAP_PROP_POS_FRAMES, index)
         ok, frame = cap.read()
         if not ok:
-            index, playing = max(index - 1, 0), False
+            if index == 0:  # nothing readable to step back to: stop instead of spinning
+                cap.release()
+                raise SystemExit(f"cannot read frames from {video}")
+            index, playing = index - 1, False
             continue
         t = index / fps
         status = (

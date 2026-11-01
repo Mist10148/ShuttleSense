@@ -87,6 +87,7 @@ class StreamAnalyzer:
         lost = int(stages.get("referee", {}).get("lost_frames_end", 30))
         self.rally_settle = lost + self.hit_lag
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
+        self.min_keypoint_score = float(stages.get("pose", {}).get("min_keypoint_score", 0.3))
         self._recent_shuttle: deque[tuple[float, float]] = deque(maxlen=self.speed_smoothing + 2)
         self.anchor = 0  # first frame of the window
         self._since_tick = 0
@@ -130,8 +131,9 @@ class StreamAnalyzer:
                 else None
             )
 
-        near = frame.players.near and to_court(player_point(frame.players.near))
-        far = frame.players.far and to_court(player_point(frame.players.far))
+        min_score = self.min_keypoint_score
+        near = frame.players.near and to_court(player_point(frame.players.near, min_score))
+        far = frame.players.far and to_court(player_point(frame.players.far, min_score))
         s = frame.shuttle
         shuttle = to_court((s.x, s.y)) if s is not None and s.visible else None
         self._recent_shuttle.append(shuttle if shuttle is not None else (np.nan, np.nan))

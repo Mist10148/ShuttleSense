@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import ClipRecord, Court, Players, ScorePair, Shuttle
+from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Court, Players, ScorePair, Shuttle
 from shuttlesense.stream.analyzer import Event, StreamAnalyzer
 from shuttlesense.stream.perception import Perception
 
@@ -104,8 +104,12 @@ class LiveSession:
         if court_corners:
             from shuttlesense.court import compute_homography
 
-            court = Court(corners_px=tuple(court_corners),
-                          homography=compute_homography(court_corners).tolist())  # fmt: skip
+            # Same court size as the offline court stage, so live and upload agree.
+            size = tuple(
+                (config.get("stages", {}).get("court") or {}).get("court_size_m", COURT_SIZE_M)
+            )
+            court = Court(corners_px=tuple(court_corners), court_size_m=size,
+                          homography=compute_homography(court_corners, size).tolist())  # fmt: skip
         stages = dict(config.get("stages", {}))
         referee_cfg = dict(stages.get("referee", {}))
         referee_cfg["line_call"] = {**(referee_cfg.get("line_call") or {}), "court": request.court}
