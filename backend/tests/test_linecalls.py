@@ -54,6 +54,9 @@ def test_call_inside_the_band_is_uncertain() -> None:
     # Past the band the call is certain; confidence reaches 1 at twice the band.
     _, _, confidence, uncertain = call_landing((5.03, 10.0), SINGLES, 0.1)
     assert not uncertain and confidence == pytest.approx(0.75)
+    # Just inside the band, confidence must not round up to 0.5 (which awards the rally).
+    _, _, confidence, uncertain = call_landing((5.18 - 0.09999, 10.0), SINGLES, 0.1)
+    assert uncertain and confidence < 0.5
 
 
 def test_doubles_lines_are_wider() -> None:

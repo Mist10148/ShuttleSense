@@ -216,17 +216,25 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
         raise ValueError("fps, width or height out of range")
     corners = msg.get("corners")
     if corners is not None:
-        from shuttlesense.court import validate_corners
+        from shuttlesense.court import check_court_area, validate_corners
 
         validate_corners(corners)
+        check_court_area(corners, (width, height))
         corners = [(float(x), float(y)) for x, y in corners]
-    score = msg.get("start_score")
+    score = ScorePair(**msg["start_score"]) if msg.get("start_score") else None
+    if score is not None:  # same checks as POST /jobs
+        from shuttlesense.referee import game_winner
+
+        if min(score.near, score.far) < 0:
+            raise ValueError("start_score cannot be negative")
+        if game_winner(score.near, score.far) is not None:
+            raise ValueError("start_score is already a finished game")
     court = msg.get("court", "singles")
     if court not in ("singles", "doubles"):
         raise ValueError("court must be singles or doubles")
     return StartRequest(
         fps=fps, width=width, height=height, corners=corners, court=court, name=msg.get("name"),
-        start_score=ScorePair(**score) if score else None,
+        start_score=score,
     )  # fmt: skip
 
 

@@ -160,6 +160,9 @@ def test_stop_without_frames_saves_nothing(tmp_path: Path) -> None:
         ({"type": "hello"}, "bad_request"),
         ({**START, "fps": 0}, "bad_request"),
         ({**START, "corners": [[0, 0], [1, 1], [0, 1], [1, 0]]}, "bad_request"),
+        ({**START, "corners": [[300, 200], [310, 200], [308, 190], [302, 190]]}, "bad_request"),
+        ({**START, "start_score": {"near": -1, "far": 0}}, "bad_request"),
+        ({**START, "start_score": {"near": 21, "far": 3}}, "bad_request"),
         ({"type": "resume", "session_id": "nope"}, "not_found"),
     ],
 )

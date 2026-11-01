@@ -110,7 +110,11 @@ def call_landing(
     if not np.isfinite(band_m):
         return call, margin, 0.0, True
     confidence = 1.0 if band_m <= 0 else min(1.0, 0.5 * abs(margin) / band_m)
-    return call, margin, round(confidence, 3), abs(margin) < band_m
+    uncertain = abs(margin) < band_m
+    rounded = round(confidence, 3)
+    if uncertain and rounded >= 0.5:  # just inside the band must not round up to certain
+        rounded = 0.499
+    return call, margin, rounded, uncertain
 
 
 def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Bounds, bool]:
