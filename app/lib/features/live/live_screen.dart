@@ -313,7 +313,7 @@ class _LiveView extends ConsumerWidget {
                 color: Colors.black54,
                 child: Center(
                   child: Text(switch (state.phase) {
-                    LivePhase.connecting => 'Connecting…',
+                    LivePhase.connecting => 'Connecting… the server may be loading its models',
                     LivePhase.reconnecting => 'Connection lost, reconnecting…',
                     LivePhase.stopping => 'Saving the session…',
                     _ => '',

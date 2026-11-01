@@ -13,6 +13,9 @@ class FakeFrameSource implements FrameSource {
 
   /// Thrown by start() (permission denied, no camera).
   final CameraUnavailable? error;
+
+  /// Set to make the next captures fail (the camera was unplugged or taken).
+  Object? captureError;
   int captures = 0;
   bool disposed = false;
 
@@ -26,6 +29,7 @@ class FakeFrameSource implements FrameSource {
 
   @override
   Future<CapturedFrame> capture() async {
+    if (captureError != null) throw captureError!;
     captures++;
     return (jpeg: Uint8List.fromList([0xFF, 0xD8, captures % 256]), width: 1280, height: 720);
   }

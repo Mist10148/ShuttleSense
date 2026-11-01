@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/api_client.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/json.dart';
 import '../../data/repositories/analysis_repository.dart';
@@ -186,8 +185,30 @@ class LiveState {
 /// Frames per second the app tries to send; the camera may deliver fewer.
 const kLiveTargetFps = 15.0;
 
-/// Resume attempts after the connection drops, with these waits in between.
-const kReconnectDelays = [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4)];
+/// Resume attempts after the connection drops, with these waits in between. They span about
+/// half a minute because after an abrupt drop the server only notices at its next ping and
+/// refuses the resume (`not_found`) until then.
+const kReconnectDelays = [
+  Duration(seconds: 1),
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+  Duration(seconds: 15),
+];
+
+/// How long to wait for `started`: the server loads TrackNet and the pose model first.
+const kStartTimeout = Duration(seconds: 90);
+
+/// The server turned the start or resume down; [code] is its error code.
+class _Refused implements Exception {
+  _Refused(this.code, this.message);
+
+  final String? code;
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 /// A state whose growing lists can be added to (the const defaults cannot).
 LiveState _fresh() => LiveState(
@@ -207,16 +228,16 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Completer<String?>? _saved;
   Completer<Json>? _started;
 
+  /// Bumped by [_teardown]; loops and reconnects of an older session stop when it changes.
+  int _generation = 0;
+
   FrameSource? get source => _source;
 
   @override
   LiveState build() {
     ref.onDispose(() {
       _disposed = true;
-      _streaming = false;
-      _events?.cancel();
-      _socket?.close();
-      _source?.dispose();
+      unawaited(_teardown());
     });
     Future.microtask(openCamera);
     return _fresh();
@@ -226,23 +247,42 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (!_disposed) state = next;
   }
 
+  /// Ends whatever the previous attempt left running: the stream loop, a pending reconnect,
+  /// the socket and the camera.
+  Future<void> _teardown() async {
+    _generation++;
+    _streaming = false;
+    _nextFrame = 0;
+    _started = null;
+    _saved = null;
+    final events = _events, socket = _socket, source = _source;
+    _events = null;
+    _socket = null;
+    _source = null;
+    await events?.cancel();
+    await socket?.close();
+    await source?.dispose();
+  }
+
   Future<void> openCamera() async {
+    await _teardown();
+    final generation = _generation;
     _set(_fresh());
     final source = ref.read(frameSourceFactoryProvider)();
     try {
       await source.start();
-    } on CameraUnavailable catch (e) {
+    } on Object catch (e) {
       await source.dispose();
       _set(
         state.copyWith(
           phase: LivePhase.error,
-          error: e.message,
-          permissionDenied: e.permissionDenied,
+          error: e is CameraUnavailable ? e.message : 'Could not open the camera: $e',
+          permissionDenied: e is CameraUnavailable && e.permissionDenied,
         ),
       );
       return;
     }
-    if (_disposed) {
+    if (_disposed || generation != _generation) {
       await source.dispose();
       return;
     }
@@ -283,7 +323,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
     }
-    final started = await _connect({
+    final connected = await _connect({
       'type': 'start',
       'fps': kLiveTargetFps,
       'width': first.width,
@@ -296,73 +336,91 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       'start_score': startScore == null ? null : {'near': startScore.near, 'far': startScore.far},
       'court': 'singles',
     });
-    if (started == null) return;
+    if (connected.started == null) return;
     _beginStreaming();
   }
 
-  /// Open the socket, send [hello] and wait for `started`; null (and the error shown) if not.
-  Future<Json?> _connect(Json hello) async {
+  /// Open the socket, send [hello] and wait for `started`.
+  ///
+  /// Returns the `started` event, or the reason it failed. With [quiet] (a resume attempt)
+  /// the failure is left for the caller to show, so the screen does not flash an error
+  /// between attempts.
+  Future<({Json? started, _Refused? refused})> _connect(Json hello, {bool quiet = false}) async {
     final api = ref.read(apiClientProvider);
+    final generation = _generation;
     final socket = ref.read(liveSocketFactoryProvider)(api.liveUri());
+    void fail(String message) {
+      if (!quiet) _set(state.copyWith(phase: LivePhase.error, error: message));
+    }
+
     try {
       await socket.ready;
     } on Object {
       await socket.close();
-      _set(
-        state.copyWith(
-          phase: LivePhase.error,
-          error: 'Cannot reach the live server at ${api.config.baseUrl}',
-        ),
-      );
-      return null;
+      final message = 'Cannot reach the live server at ${api.config.baseUrl}';
+      fail(message);
+      return (started: null, refused: _Refused(null, message));
     }
-    // The old subscription may belong to a dropped socket; do not wait on its cleanup.
+    if (generation != _generation) {
+      await socket.close();
+      return (started: null, refused: _Refused(null, 'cancelled'));
+    }
+    // The old socket may still be open (a decode error, not a drop); close it so the server
+    // sees the old connection end. Do not wait on its cleanup.
+    final old = _socket;
     unawaited(_events?.cancel());
+    if (old != null) unawaited(old.close());
     _socket = socket;
-    _started = Completer<Json>();
+    final started = _started = Completer<Json>();
     _events = socket.events.listen(_onEvent, onDone: _onClosed, onError: (_) => _onClosed());
     socket.sendJson(hello);
     try {
-      final started = await _started!.future.timeout(const Duration(seconds: 15));
-      final size = (width: asInt(started['width'])!, height: asInt(started['height'])!);
+      final event = await started.future.timeout(kStartTimeout);
+      final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
       _set(
         state.copyWith(
           phase: LivePhase.live,
-          sessionId: started['session_id'] as String,
+          sessionId: event['session_id'] as String,
           size: size,
-          courtCorners: (started['corners'] as List?)?.map((p) => asPoint(p)!).toList(),
-          fps: asDouble(started['fps']),
-          stages: (started['stages'] as Map? ?? const {}).map(
+          courtCorners: (event['corners'] as List?)?.map((p) => asPoint(p)!).toList(),
+          fps: asDouble(event['fps']),
+          stages: (event['stages'] as Map? ?? const {}).map(
             (k, v) => MapEntry(k as String, v as bool),
           ),
         ),
       );
-      return started;
-    } on Exception catch (e) {
-      if (state.phase != LivePhase.error) {
-        _set(
-          state.copyWith(
-            phase: LivePhase.error,
-            error: e is TimeoutException ? 'The live server did not answer' : '$e',
-          ),
-        );
-      }
+      return (started: event, refused: null);
+    } on Object catch (e) {
+      final refused = e is _Refused
+          ? e
+          : _Refused(
+              null,
+              e is TimeoutException
+                  ? 'The live server did not answer'
+                  : 'Unexpected answer from the live server: $e',
+            );
+      if (_socket == socket) _socket = null;
       await socket.close();
-      return null;
+      fail(refused.message);
+      return (started: null, refused: refused);
+    } finally {
+      if (identical(_started, started)) _started = null;
     }
   }
 
   void _beginStreaming() {
     if (_streaming) return;
     _streaming = true;
-    unawaited(_stream());
+    unawaited(_stream(_generation));
   }
 
-  Future<void> _stream() async {
+  Future<void> _stream(int generation) async {
     final interval = Duration(microseconds: (1e6 / kLiveTargetFps).round());
     final clock = Stopwatch()..start();
-    while (_streaming && !_disposed) {
-      final due = interval * _nextFrame;
+    final first = _nextFrame; // after a resume the count goes on, the clock starts again
+    bool current() => _streaming && !_disposed && generation == _generation;
+    while (current()) {
+      final due = interval * (_nextFrame - first);
       if (clock.elapsed < due) await Future<void>.delayed(due - clock.elapsed);
       final source = _source, socket = _socket;
       if (source == null || socket == null || state.phase != LivePhase.live) {
@@ -371,16 +429,28 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       try {
         final frame = await source.capture();
-        if (!_streaming || state.phase != LivePhase.live) continue;
+        if (!current() || state.phase != LivePhase.live) continue;
         socket.sendFrame(
           _nextFrame++,
           DateTime.now().millisecondsSinceEpoch.toDouble(),
           frame.jpeg,
         );
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
-      } on Exception catch (e) {
+      } on Object catch (e) {
+        if (!current()) return;
         _streaming = false;
-        _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
+        // Save what arrived so far, then let go of the socket so the server frees the GPU.
+        socket.sendJson({'type': 'stop'});
+        unawaited(_events?.cancel());
+        _events = null;
+        _socket = null;
+        unawaited(socket.close());
+        _set(
+          state.copyWith(
+            phase: LivePhase.error,
+            error: 'Camera stopped: $e. The session so far is saved to History.',
+          ),
+        );
       }
     }
   }
@@ -497,45 +567,63 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final message = switch (code) {
       'busy' => 'The server is busy with a job or another live session. Try again when it is done.',
       'unauthorized' => 'Wrong or missing access token',
-      'not_found' when state.phase == LivePhase.reconnecting =>
-        'The session was lost. It was saved to History if any frames arrived.',
       _ => e['detail'] as String? ?? 'Live error',
     };
-    // Frame-level problems are not fatal; the rest end the session.
-    if (code == 'bad_frame' || code == 'bad_message' || code == 'not_found' && _started == null) {
+    final starting = _started;
+    if (starting != null && !starting.isCompleted) {
+      // An answer to start / resume: _connect decides what to show.
+      starting.completeError(_Refused(code, message));
       return;
     }
+    // Mid-session: frame-level problems, an override of an unknown call (not_found) and a
+    // server-side failure (internal: the server closes the socket and keeps the session, so
+    // the app resumes) do not end the session.
+    if (const {'bad_frame', 'bad_message', 'not_found', 'internal'}.contains(code)) return;
     _streaming = false;
-    if (_started?.isCompleted == false) _started!.completeError(ApiException(message));
     _set(state.copyWith(phase: LivePhase.error, error: message));
   }
 
-  /// The socket closed: resume if it dropped mid-session.
+  /// The socket closed: resume if it dropped mid-session, fail fast if it was saving.
   void _onClosed() {
-    if (_disposed || state.phase != LivePhase.live) return;
-    unawaited(_reconnect());
+    if (_disposed) return;
+    if (state.phase == LivePhase.stopping) {
+      final saved = _saved;
+      if (saved != null && !saved.isCompleted) {
+        saved.completeError(StateError('the connection closed before the save was confirmed'));
+      }
+      return;
+    }
+    if (state.phase != LivePhase.live) return;
+    unawaited(_reconnect(_generation));
   }
 
-  Future<void> _reconnect() async {
+  Future<void> _reconnect(int generation) async {
     _set(state.copyWith(phase: LivePhase.reconnecting));
+    String? lastError;
     for (final wait in kReconnectDelays) {
       await Future<void>.delayed(wait);
-      if (_disposed || state.phase != LivePhase.reconnecting) return;
-      final started = await _connect({'type': 'resume', 'session_id': state.sessionId});
-      if (started != null) return;
-      if (state.phase == LivePhase.error &&
-          state.error?.startsWith('The session was lost') == true) {
+      if (_disposed || generation != _generation || state.phase != LivePhase.reconnecting) {
         return;
       }
-      _set(state.copyWith(phase: LivePhase.reconnecting));
+      final result = await _connect({'type': 'resume', 'session_id': state.sessionId}, quiet: true);
+      if (result.started != null) return;
+      final code = result.refused?.code;
+      // not_found: the server has not noticed the drop yet (or the session is gone); keep
+      // trying until the attempts run out. Other refusals will not change on a retry.
+      if (code != null && code != 'not_found') {
+        lastError = result.refused!.message;
+        break;
+      }
     }
+    if (_disposed || generation != _generation) return;
     _streaming = false;
     _set(
       state.copyWith(
         phase: LivePhase.error,
         error:
-            'Lost the connection to the server. The session is saved to History if it '
-            'cannot be resumed within a minute.',
+            lastError ??
+            'Lost the connection to the server. The session is saved to History once the '
+                'server lets go of it (about a minute).',
       ),
     );
   }
@@ -552,16 +640,24 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (socket == null) return;
     _streaming = false;
     _set(state.copyWith(phase: LivePhase.stopping));
-    _saved = Completer<String?>();
+    final saved = _saved = Completer<String?>();
     socket.sendJson({'type': 'stop'});
     try {
-      final jobId = await _saved!.future.timeout(const Duration(seconds: 30));
+      // Saving runs the final analysis pass, which takes longer on long sessions.
+      final jobId = await saved.future.timeout(const Duration(seconds: 90));
       _set(state.copyWith(phase: LivePhase.saved, savedJobId: jobId));
-    } on TimeoutException {
-      _set(state.copyWith(phase: LivePhase.error, error: 'The server did not confirm the save'));
+    } on Object {
+      _set(
+        state.copyWith(
+          phase: LivePhase.error,
+          error:
+              'The server did not confirm the save. If frames arrived, the session should '
+              'still appear in History.',
+        ),
+      );
     }
     await socket.close();
-    _socket = null;
+    if (_socket == socket) _socket = null;
   }
 }
 

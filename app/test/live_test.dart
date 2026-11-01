@@ -179,6 +179,97 @@ void main() {
     expect(find.text('Open results'), findsOneWidget);
   });
 
+  testWidgets('after the camera stops, Try again releases the old camera and socket', (
+    tester,
+  ) async {
+    final cameras = <FakeFrameSource>[];
+    final sockets = <FakeLiveSocket>[];
+    await pumpScreen(
+      tester,
+      const LiveScreen(),
+      prefs: {'ui.mode': 'live'},
+      overrides: [
+        frameSourceFactoryProvider.overrideWithValue(() {
+          final c = FakeFrameSource();
+          cameras.add(c);
+          return c;
+        }),
+        liveSocketFactoryProvider.overrideWithValue((uri) {
+          final s = FakeLiveSocket(uri, onHello: (_) => startedEvent());
+          sockets.add(s);
+          return s;
+        }),
+      ],
+    );
+    await startWithoutCourt(tester);
+    await tester.pump(const Duration(milliseconds: 200));
+    cameras.single.captureError = Exception('camera unplugged');
+    await tester.pump(const Duration(milliseconds: 200));
+    await events(tester);
+    expect(find.textContaining('Camera stopped'), findsOneWidget);
+    // The session so far is saved and the connection let go, so the GPU is free again.
+    expect(sockets.single.sent.last['type'], 'stop');
+    expect(sockets.single.closed, isTrue);
+
+    await tester.tap(find.text('Try again'));
+    await events(tester);
+    expect(cameras.first.disposed, isTrue);
+    expect(cameras, hasLength(2));
+    await startWithoutCourt(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    // The new session sends straight away, numbering its frames from 0.
+    expect(sockets, hasLength(2));
+    expect(sockets.last.frames, isNotEmpty);
+    expect(ByteData.sublistView(sockets.last.frames.first, 0, 4).getUint32(0, Endian.little), 0);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('an override the server cannot find does not end the session', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    sockets.single.emit({'type': 'error', 'code': 'not_found', 'detail': 'no such line call'});
+    sockets.single.emit({'type': 'error', 'code': 'internal', 'detail': 'resume to continue'});
+    await events(tester);
+    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a resume refused while the server still holds the session is retried', (
+    tester,
+  ) async {
+    var resumes = 0;
+    final sockets = await pumpLive(
+      tester,
+      onHello: (hello) {
+        if (hello['type'] != 'resume') return startedEvent();
+        resumes++;
+        return resumes == 1
+            ? {'type': 'error', 'code': 'not_found', 'detail': 'no session to resume'}
+            : startedEvent(resumed: true);
+      },
+    );
+    await startWithoutCourt(tester);
+    await sockets.single.drop();
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await events(tester);
+    // The first attempt was refused; the screen keeps saying it is reconnecting.
+    expect(find.textContaining('reconnecting'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+    await events(tester);
+    expect(resumes, 2);
+    expect(find.textContaining('reconnecting'), findsNothing);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('the Analyze tab follows the remembered mode', (tester) async {
     await pumpScreen(
       tester,
