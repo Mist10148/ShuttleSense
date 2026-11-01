@@ -19,7 +19,8 @@ class VideoPanel extends StatelessWidget {
     this.aspectRatio,
   });
 
-  final VideoController controller;
+  /// Only needed when [available]: there is no player to make for a missing video.
+  final VideoController? controller;
 
   /// Null while the job is still loading, so "not available" is not claimed too early.
   final bool? available;
@@ -34,10 +35,11 @@ class VideoPanel extends StatelessWidget {
         child: ColoredBox(
           color: Colors.black,
           child: switch (available) {
-            true => Semantics(
+            true when controller != null => Semantics(
               label: 'Annotated rally video',
-              child: Video(controller: controller),
+              child: Video(controller: controller!),
             ),
+            true => const Center(child: CircularProgressIndicator()),
             false => const MessageView(
               icon: Icons.videocam_off_outlined,
               message: 'Annotated video not available',

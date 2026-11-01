@@ -35,7 +35,7 @@ abstract final class AppTheme {
 
   static const playerColorsLight = PlayerColors(
     near: Color(0xFF1565C0),
-    far: Color(0xFFE65100),
+    far: Color(0xFFD84315), // 3:1 against the light court surface (T4.11)
     shuttle: Color(0xFFC6A700),
   );
 

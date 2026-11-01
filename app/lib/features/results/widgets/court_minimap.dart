@@ -28,7 +28,7 @@ class CourtMinimap extends StatelessWidget {
       title: 'Court',
       child: calibrated
           ? Semantics(
-              label: 'Top-down court with player and shuttle positions',
+              label: minimapLabel(record, frameIndex),
               child: AspectRatio(
                 aspectRatio: kCourtWidthM / kCourtLengthM,
                 child: CustomPaint(
@@ -48,6 +48,19 @@ class CourtMinimap extends StatelessWidget {
             ),
     );
   }
+}
+
+/// What the minimap shows at [frameIndex], for screen readers (T4.11): each player's and the
+/// shuttle's position in court meters (x across from the left sideline, y from the near
+/// baseline).
+String minimapLabel(ClipRecord record, int frameIndex) {
+  final f = record.frame(frameIndex);
+  if (f == null) return 'Top-down court, no positions for this moment';
+  String at(String who, CourtPoint? p) => p == null
+      ? '$who not seen'
+      : '$who at ${p.x.toStringAsFixed(1)} m across, ${p.y.toStringAsFixed(1)} m up the court';
+  return 'Top-down court. ${at('Near player', f.nearPos)}. ${at('Far player', f.farPos)}. '
+      '${at('Shuttle', f.shuttlePos)}.';
 }
 
 class CourtPainter extends CustomPainter {
@@ -177,6 +190,18 @@ class CourtPainter extends CustomPainter {
         toCanvas(trail[i]),
         4 - 2.5 * age,
         Paint()..color = players.shuttle.withValues(alpha: 1 - 0.85 * age),
+      );
+    }
+    if (trail.isNotEmpty) {
+      // The light theme's yellow is faint on the court; a ring in the line colour keeps the
+      // newest position visible (3:1, T4.11).
+      canvas.drawCircle(
+        toCanvas(trail.last),
+        5,
+        Paint()
+          ..color = lines
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
       );
     }
 
