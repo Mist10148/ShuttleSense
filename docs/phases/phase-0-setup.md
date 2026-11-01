@@ -122,14 +122,14 @@
 **Inputs.** The task cards in `docs/phases/*.md`.
 
 **Steps**
-- [ ] Create labels: `phase-0` … `phase-7`, `P1`, `P2`, `P3`, `client`, `backend`, `app`, `data`, `ml`, `docs`, `infra`, `owner:M1` … `owner:M6`.
-- [ ] Create one milestone per phase with the due dates from [the overview](../PHASES.md#timeline).
-- [ ] Create one issue per task card (title `[Tx.y] <title>`, body = card, labels, milestone); close T0.1–T0.5.
+- [x] Create labels: `phase-0` … `phase-8`, `P1`, `P2`, `P3`, `client`, `backend`, `app`, `data`, `ml`, `docs`, `infra`, `owner:M1` … `owner:M6`.
+- [x] Create one milestone per phase with the due dates from [the overview](../PHASES.md#timeline).
+- [x] Create one issue per task card (title `[Tx.y] <title>`, body = card, labels, milestone); close T0.1–T0.5.
 - [ ] Grant the board scope once: `gh auth refresh -s project`, then create a Projects board "ShuttleSense build" with columns **Todo / In progress / In review / Done** and add all issues (`gh project item-add`).
 - [ ] When teammates share their GitHub usernames, replace `owner:Mx` labels with real assignees.
 - [x] Put issue numbers into the phase task tables.
 
-**Outputs.** Labels, 9 milestones (phases 0–8), one issue per task, board. Phases 0–7 are done (issues #1–#96); the Phase 8 milestone, `phase-8` label and T8.x issues are still to create.
+**Outputs.** Labels, 9 milestones (phases 0–8), one issue per task, board. Phases 0–7 are issues #1–#96 and Phase 8 is #97–#108 (created Nov 2); the board is still to do.
 
 **Acceptance criteria.** `gh issue list --state all --limit 200` count equals the number of task cards; every issue has a phase label, owner label and milestone.
 

@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task in phases 0–7 is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone; Phase 8 issues are still to be created.
+The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#108).
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -235,10 +235,9 @@ Verified on Nov 2:
 ### Left for M1 (needs GitHub admin, hardware, data or the team)
 
 - **GitHub:**
-  - Phase 8 milestone, `phase-8` label and T8.x issues.
-  - Close the issues of ✅ tasks (#11, #22, #23, #31, #38, #60, #63, #79, #96).
-  - Projects board (`gh auth refresh -s project`).
-  - Squash-only merges and auto-delete branches.
+  - Projects board (`gh auth refresh -s project` is interactive).
+  - Branch protection for `main` (T0.7), once direct pushes to `main` stop.
+  - Done on Nov 2: the Phase 8 milestone, `phase-8` label and issues #97–#108 (✅ ones closed); the issues of ✅ tasks closed; squash-only merges and auto-delete branches.
 - **Tags:** `schema-v1.0` and `api-v1.0`, after the T1.1 / T1.2 reviews.
 - **Weights and data:**
   - HF repo and Drive folder (T0.9), with links in SETUP.md.
