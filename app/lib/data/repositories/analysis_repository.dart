@@ -88,3 +88,9 @@ final healthProvider = FutureProvider.autoDispose<Health>((ref) async {
     rethrow;
   }
 });
+
+/// False only when the server is known to predate live mode (clip record 1.0); while its
+/// health is unknown the choice stays open and the live screen reports what it finds.
+final liveAvailableProvider = Provider.autoDispose<bool>(
+  (ref) => ref.watch(healthProvider).valueOrNull?.supportsLive ?? true,
+);

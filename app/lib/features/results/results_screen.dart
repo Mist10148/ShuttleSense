@@ -226,6 +226,16 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     super.initState();
     _openIfAvailable();
     _position = _player.stream.position.listen((p) => _frameIndex.value = _record.frameAt(p));
+    // A citation tapped while the record was still loading: ref.listen in build only sees
+    // later requests, so play this one once the body is on screen.
+    final pending = ref.read(seekRequestProvider(widget.jobId));
+    if (pending != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _seekMoment(pending);
+        ref.read(seekRequestProvider(widget.jobId).notifier).state = null;
+      });
+    }
   }
 
   /// Only ask for the video once the job says it exists (no request for a missing file).

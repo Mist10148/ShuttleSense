@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/repositories/analysis_repository.dart';
 import '../../features/calibration/calibration_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/connect/connect_screen.dart';
@@ -57,7 +58,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: Routes.home,
                 // The Analyze tab follows the remembered mode (F18).
                 builder: (context, state) => Consumer(
-                  builder: (context, ref, _) => ref.watch(appModeProvider) == AppMode.live
+                  builder: (context, ref, _) =>
+                      ref.watch(appModeProvider) == AppMode.live && ref.watch(liveAvailableProvider)
                       ? const LiveScreen()
                       : const UploadScreen(),
                 ),

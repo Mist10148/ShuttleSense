@@ -31,7 +31,7 @@ class StatusStrip extends StatelessWidget {
         children: [
           _Pill(icon: Icons.flag_outlined, label: state),
           _Pill(icon: Icons.speed, label: 'Speed ${kmh(speedKmh)} (est.)'),
-          _Pill(icon: Icons.trending_up, label: 'Peak ${kmh(peakSpeedKmh)}'),
+          _Pill(icon: Icons.trending_up, label: 'Peak ${kmh(peakSpeedKmh)} (est.)'),
           _Pill(icon: Icons.sports_tennis, label: 'Strokes $strokeCount'),
         ],
       ),

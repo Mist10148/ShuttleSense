@@ -123,8 +123,12 @@ class SwitchModeButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final live = ref.watch(appModeProvider) == AppMode.live;
+    final available = ref.watch(liveAvailableProvider);
     return TextButton.icon(
-      onPressed: () => ref.read(appModeProvider.notifier).set(live ? AppMode.upload : AppMode.live),
+      // A server without live mode keeps the user on upload.
+      onPressed: live || available
+          ? () => ref.read(appModeProvider.notifier).set(live ? AppMode.upload : AppMode.live)
+          : null,
       icon: Icon(live ? Icons.upload_file : Icons.videocam_outlined),
       label: Text(live ? 'Upload clip' : 'Go live'),
     );

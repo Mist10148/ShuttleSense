@@ -19,6 +19,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(serverConfigProvider);
     final health = ref.watch(healthProvider);
+    final liveAvailable = ref.watch(liveAvailableProvider);
     return PageScaffold(
       title: 'Settings',
       children: [
@@ -84,16 +85,18 @@ class SettingsScreen extends ConsumerWidget {
         SectionCard(
           title: 'Analysis mode',
           child: SegmentedButton<AppMode>(
-            segments: const [
-              ButtonSegment(
+            segments: [
+              const ButtonSegment(
                 value: AppMode.upload,
                 label: Text('Upload clip'),
                 icon: Icon(Icons.upload_file),
               ),
               ButtonSegment(
                 value: AppMode.live,
-                label: Text('Go live'),
-                icon: Icon(Icons.videocam_outlined),
+                label: const Text('Go live'),
+                icon: const Icon(Icons.videocam_outlined),
+                enabled: liveAvailable,
+                tooltip: liveAvailable ? null : 'This server is too old for live mode',
               ),
             ],
             selected: {ref.watch(appModeProvider)},

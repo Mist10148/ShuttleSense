@@ -10,7 +10,9 @@ import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
 import 'package:shuttlesense_app/features/live/live_socket.dart';
 import 'package:shuttlesense_app/features/mode/mode_screen.dart';
+import 'package:shuttlesense_app/features/results/widgets/status_strip.dart';
 
+import 'fakes/fake_api_client.dart';
 import 'fakes/fake_live.dart';
 import 'helpers.dart';
 
@@ -368,6 +370,35 @@ void main() {
     await tester.tap(find.text('Go live'));
     await tester.pumpAndSettle();
     expect(find.text('live screen'), findsOneWidget);
+  });
+
+  testWidgets('a 1.0 server cannot be switched to live', (tester) async {
+    await pumpScreen(
+      tester,
+      const Scaffold(body: SwitchModeButton()),
+      api: FakeApiClient(
+        health: const Health(
+          version: '0.1.0',
+          schemaVersion: '1.0',
+          device: 'cpu',
+          authRequired: false,
+          stages: [],
+        ),
+      ),
+      prefs: {'ui.mode': 'upload'},
+    );
+    final button = tester.widget<TextButton>(find.byType(TextButton));
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('every speed in the status strip says it is estimated', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: StatusStrip(speedKmh: 182, peakSpeedKmh: 241, strokeCount: 3)),
+      ),
+    );
+    expect(find.textContaining('182 km/h (est.)'), findsOneWidget);
+    expect(find.textContaining('241 km/h (est.)'), findsOneWidget);
   });
 
   test('live state builds a clip record for the shared widgets', () {
