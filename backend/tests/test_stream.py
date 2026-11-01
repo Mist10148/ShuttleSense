@@ -99,6 +99,44 @@ def test_replay_perception_scales_to_the_session() -> None:
     assert players.near.bbox[3] == pytest.approx(record.frames[10].players.near.bbox[3] / 2)
 
 
+def _session(fps: float, tmp_path=None) -> LiveSession:
+    record, _ = synthetic_record()
+    return LiveSession(
+        session_id="s", request=StartRequest(fps=fps, width=640, height=360), config=CONFIG,
+        perception=ReplayPerception(record, (640, 360)), court_corners=None,
+        recording=tmp_path / "rec.mp4" if tmp_path else None,
+    )  # fmt: skip
+
+
+def test_a_faster_camera_is_thinned_to_max_fps() -> None:
+    from shuttlesense.stream.fake_source import blank_frames, encode
+
+    session = _session(60)
+    assert session.fps == 30
+    for i, frame in enumerate(blank_frames(60)):
+        ts = i * 1000 / 60
+        session.process(encode(frame, i, ts)[12:], i, ts, 0.0)
+    assert session.analyzer.record.num_frames == 30 and session.stats.dropped == 30
+    # A camera at or under the cap keeps every frame, even with jittery timestamps.
+    slow = _session(25)
+    for i in range(10):
+        assert slow.admit(i * 40 + (5 if i % 2 else -5))
+
+
+def test_skipped_frames_do_not_run_the_windowed_stages(monkeypatch) -> None:
+    from shuttlesense.stream.fake_source import blank_frames, encode
+
+    session = _session(30)
+    ticks = []
+    monkeypatch.setattr(session.analyzer, "_tick", lambda now, final: ticks.append(now) or [])
+    frames = [encode(f, i, i * 33.3)[12:] for i, f in enumerate(blank_frames(12))]
+    for i in range(9):
+        session.skip(frames[i], i, i * 33.3)
+    assert ticks == []
+    session.process(frames[9], 9, 9 * 33.3, 0.0)
+    assert ticks == [9]
+
+
 def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
     from shuttlesense.pose.tracking import PlayerTracker
     from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player

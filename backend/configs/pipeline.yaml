@@ -104,5 +104,6 @@ live:
   check_every: 30              # processed frames between quality checks
   max_drop_rate: 0.2           # skipping more than this share of frames lowers quality
   scales: [1.0, 0.75, 0.5]     # perception input scale per quality level (0, 1, 2)
-  max_fps: 30
+  max_fps: 30                  # a faster camera is thinned to this by capture time
   target_height: 720
+  max_queue_frames: 60         # frames waiting past this are dropped (bounded memory)

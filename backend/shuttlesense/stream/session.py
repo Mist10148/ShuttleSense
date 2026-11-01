@@ -31,6 +31,7 @@ LIVE_DEFAULTS: dict[str, Any] = {
     "scales": [1.0, 0.75, 0.5],  # perception input scale per quality level
     "max_fps": 30,
     "target_height": 720,
+    "max_queue_frames": 60,  # frames waiting beyond this are dropped unrecorded
 }
 
 
@@ -61,6 +62,7 @@ class LiveStats:
     received: int = 0
     processed: int = 0
     skipped: int = 0
+    dropped: int = 0  # thinned to max_fps or over max_queue_frames: not recorded
     latencies_ms: deque[float] = field(default_factory=lambda: deque(maxlen=300))
 
     def summary(self) -> dict[str, float]:
@@ -69,6 +71,7 @@ class LiveStats:
             "received": self.received,
             "processed": self.processed,
             "skipped": self.skipped,
+            "dropped": self.dropped,
             "p50_ms": round(_percentile(lat, 50), 1),
             "p95_ms": round(_percentile(lat, 95), 1),
         }
@@ -121,6 +124,7 @@ class LiveSession:
         self._last_players = Players()
         self._since_check: list[float] = []
         self._skipped_since_check = 0
+        self._next_ts: float | None = None
         self.started_at = time.time()
 
     # Frames -------------------------------------------------------------------
@@ -148,8 +152,30 @@ class LiveSession:
             )
         self._writer.write(frame)
 
+    def admit(self, ts: float) -> bool:
+        """Thin a camera faster than max_fps down to it, by capture time (ms).
+
+        The recording and every time in the record assume `self.fps`, so frames beyond that
+        rate are dropped before they reach the timeline.
+        """
+        if self.request.fps <= self.fps:
+            return True
+        period = 1000.0 / self.fps
+        if self._next_ts is not None and ts < self._next_ts - period / 4:
+            self.stats.dropped += 1
+            return False
+        nxt = (self._next_ts if self._next_ts is not None else ts) + period
+        self._next_ts = nxt if nxt > ts - period else ts + period  # resync after a gap
+        return True
+
+    def drop(self) -> None:
+        """A frame the route had no room to queue."""
+        self.stats.dropped += 1
+
     def skip(self, jpeg: bytes, client_frame: int, ts: float) -> list[Event]:
         """A frame there is no time for: record it, keep the timeline, no perception."""
+        if not self.admit(ts):
+            return []
         self.stats.received += 1
         self.stats.skipped += 1
         self._skipped_since_check += 1
@@ -157,7 +183,8 @@ class LiveSession:
         if frame is None:
             return []
         self._record_frame(frame)
-        events = self.analyzer.add_frame(Shuttle(), self._last_players)
+        # No windowed stages on skipped frames: they are the ones there is no time for.
+        events = self.analyzer.add_frame(Shuttle(), self._last_players, tick=False)
         for e in events:
             if e["type"] == "frame":
                 e.update(client_frame=client_frame, ts=ts, skipped=True)
@@ -165,6 +192,8 @@ class LiveSession:
 
     def process(self, jpeg: bytes, client_frame: int, ts: float, received: float) -> list[Event]:
         """Full perception on one frame. `received` is time.monotonic() at arrival."""
+        if not self.admit(ts):
+            return []
         self.stats.received += 1
         frame = self._decode(jpeg)
         if frame is None:

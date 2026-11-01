@@ -148,8 +148,8 @@ def test_stop_without_frames_saves_nothing(tmp_path: Path) -> None:
             ws.send_json({"type": "stop"})
             assert ws.receive_json() == {
                 "type": "saved", "job_id": None, "video_id": None,
-                "stats": {"received": 0, "processed": 0, "skipped": 0, "p50_ms": 0.0,
-                          "p95_ms": 0.0},
+                "stats": {"received": 0, "processed": 0, "skipped": 0, "dropped": 0,
+                          "p50_ms": 0.0, "p95_ms": 0.0},
             }  # fmt: skip
         assert client.get("/jobs").json() == []
 

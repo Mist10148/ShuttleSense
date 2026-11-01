@@ -84,6 +84,7 @@ class StreamAnalyzer:
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
         self._recent_shuttle: deque[tuple[float, float]] = deque(maxlen=self.speed_smoothing + 2)
         self.anchor = 0  # first frame of the window
+        self._since_tick = 0
         self.state = "between_rallies"
         self.open_rally_start: int | None = None
         self.overrides: list[Any] = []  # LineCallOverrideIn
@@ -91,7 +92,8 @@ class StreamAnalyzer:
 
     # Per frame ----------------------------------------------------------------
 
-    def add_frame(self, shuttle: Shuttle, players: Players) -> list[Event]:
+    def add_frame(self, shuttle: Shuttle, players: Players, *, tick: bool = True) -> list[Event]:
+        """Add the next frame; with tick=False the windowed stages wait for a later frame."""
         i = len(self.record.frames)
         frame = Frame(frame=i, shuttle=shuttle, players=players)
         frame.court_positions, frame.shuttle_speed_kmh = self._project(frame)
@@ -99,7 +101,9 @@ class StreamAnalyzer:
         self.record.frames.append(frame)
         self.record.num_frames = i + 1
         events = [self._frame_event(frame)]
-        if (i + 1) % self.tick_every == 0:
+        self._since_tick += 1
+        if tick and self._since_tick >= self.tick_every:
+            self._since_tick = 0
             events += self._tick(i, final=False)
         return events
 

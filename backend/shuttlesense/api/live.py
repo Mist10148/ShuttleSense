@@ -295,14 +295,21 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
     """
     session = entry.session
     queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+    max_waiting = int(session.live["max_queue_frames"])
+    waiting = 0  # frames in the queue; past max_waiting new ones are dropped
 
     async def receive() -> None:
+        nonlocal waiting
         try:
             while True:
                 msg = await ws.receive()
                 if msg["type"] == "websocket.disconnect":
                     break
                 if msg.get("bytes") is not None:
+                    if waiting >= max_waiting:
+                        session.drop()
+                        continue
+                    waiting += 1
                     await queue.put(("frame", (msg["bytes"], time.monotonic())))
                 elif msg.get("text") is not None:
                     import json
@@ -342,6 +349,7 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                     pending = nxt  # handled next, before any frame that came after it
                     break
                 frames.append(nxt[1])
+            waiting -= len(frames)
             events = await asyncio.to_thread(_frames, session, frames)
             await _send(ws, events)
     except _ClientGone:

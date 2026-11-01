@@ -206,7 +206,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
 | `line_call` | `line_call`: a clip-record line call (again after an override) |
 | `score` | `score` and every `rallies[]` entry |
-| `stats` | `received`, `processed`, `skipped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames |
+| `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: a camera faster than `live.max_fps` is thinned to it by capture time, and frames beyond `live.max_queue_frames` waiting are discarded |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
 | `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400). `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket and keeps the session for a resume |
