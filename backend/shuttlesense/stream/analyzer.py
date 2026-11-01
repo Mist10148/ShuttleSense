@@ -8,7 +8,8 @@ record and sent as events:
 - a hit once `hit_lag` frames have passed (hit suppression, the stroke window, feedback and
   hit speed all look that far ahead),
 - a rally, its line call and the score once the referee closes the rally (the shuttle lay
-  still for stationary_frames_end frames or was lost for lost_frames_end).
+  still for stationary_frames_end frames or was lost for lost_frames_end) and no hit came
+  within lost_frames_end of that (offline would treat such a rest as noise).
 
 So the provisional overlay is immediate while hits lag by about half a second and line calls
 by the rest rule. Running the same functions on the whole clip gives the same hits, rallies
@@ -81,6 +82,10 @@ class StreamAnalyzer:
         ahead = int(stages.get("strokes", {}).get("window_frames", 32)) // 2
         self.hit_lag = max(self.min_gap, ahead, 6, int(analytics_cfg.get("hit_speed_frames", 5)))
         self.hit_lag += 1
+        # Offline ignores a rest followed by a hit within lost_frames_end (detector noise), so
+        # a rally is final only once that long has passed and any such hit would be detected.
+        lost = int(stages.get("referee", {}).get("lost_frames_end", 30))
+        self.rally_settle = lost + self.hit_lag
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
         self._recent_shuttle: deque[tuple[float, float]] = deque(maxlen=self.speed_smoothing + 2)
         self.anchor = 0  # first frame of the window
@@ -193,15 +198,32 @@ class StreamAnalyzer:
         last = len(window.frames) - 1
         open_start = None
         for r in window.rallies:
-            closed = r.end_frame < last
+            start = self._rally_start(window, r, anchor)
+            closed = r.end_frame < last and (final or last - r.end_frame >= self.rally_settle)
             if closed:
-                events += self._commit_rally(window, r, anchor)
+                events += self._commit_rally(window, r, anchor, start)
             elif final:
-                events += self._commit_rally(window, r, anchor, open_rally=True)
+                events += self._commit_rally(window, r, anchor, start, open_rally=True)
             else:
-                open_start = r.start_frame + anchor
+                open_start = start
+                break  # a later "rally" in the window is still part of this one
         events += self._set_state(open_start)
         return events
+
+    def _rally_start(self, window: ClipRecord, r: Rally, anchor: int) -> int:
+        """Global start frame of a window rally.
+
+        A long rally the window slid into keeps the start already announced. Otherwise the
+        referee starts a rally at window frame 0 when the shuttle is visible before its first
+        hit (a clip that starts mid-rally); in a later window that is the shuttle still
+        resting from the previous rally, so the rally starts at its serve.
+        """
+        if self.open_rally_start is not None and self.open_rally_start < anchor:
+            return self.open_rally_start
+        if r.start_frame != 0 or anchor == 0:
+            return r.start_frame + anchor
+        first = [h.frame for h in window.hits if r.start_frame <= h.frame <= r.end_frame]
+        return (min(first) if first else 0) + anchor
 
     def _commit_hits(self, window: ClipRecord, anchor: int, limit: int) -> list[Event]:
         events = []
@@ -220,9 +242,9 @@ class StreamAnalyzer:
         return events
 
     def _commit_rally(
-        self, window: ClipRecord, r: Rally, anchor: int, *, open_rally: bool = False
+        self, window: ClipRecord, r: Rally, anchor: int, start: int, *, open_rally: bool = False
     ) -> list[Event]:
-        start, end = r.start_frame + anchor, r.end_frame + anchor
+        end = r.end_frame + anchor
         index = len(self.record.rallies)
         rally = Rally(index=index, start_frame=start, end_frame=end, landing=r.landing,
                       winner=None if open_rally else r.winner)  # fmt: skip
@@ -250,7 +272,12 @@ class StreamAnalyzer:
         return events
 
     def _set_state(self, open_start: int | None) -> list[Event]:
-        if open_start is None or open_start == self.open_rally_start:
+        if open_start is None:
+            # The open rally vanished from the window (its hits were not confirmed).
+            self.open_rally_start = None
+            self.state = "between_rallies"
+            return []
+        if open_start == self.open_rally_start:
             return []
         self.open_rally_start = open_start
         self.state = "in_play"

@@ -46,6 +46,16 @@ def test_offline_live_parity() -> None:
     assert live.mode == "live" and live.rally_events and live.summary.total_hits == 10
 
 
+def test_a_long_rally_keeps_its_start_when_the_window_slides() -> None:
+    record, _ = synthetic_record()
+    off = _offline(record)
+    # A window shorter than a rally plus its settle time: the window slides into each rally.
+    _, live, events = _live(record, max_window_frames=100)
+    assert [r.start_frame for r in live.rallies] == [r.start_frame for r in off.rallies]
+    in_play = [e for e in events if e["type"] == "rally" and e["state"] == "in_play"]
+    assert len(in_play) == len(off.rallies)
+
+
 def test_events_arrive_in_order_and_lag_is_bounded() -> None:
     record, truth = synthetic_record()
     a, _, events = _live(record)
@@ -58,6 +68,9 @@ def test_events_arrive_in_order_and_lag_is_bounded() -> None:
             seen = e["frame"]
         if e["type"] == "hit":
             assert a.hit_lag <= seen - e["hit"]["frame"] < a.hit_lag + a.tick_every
+        if e["type"] == "rally" and e["state"] == "between_rallies" and seen < len(frames) - 1:
+            # Final only once a hit that would merge it with the next rally is ruled out.
+            assert seen - e["rally"]["end_frame"] >= a.rally_settle
     kinds = [e["type"] for e in events if e["type"] != "frame"]
     assert kinds.count("line_call") == 3 and kinds.count("score") == 3
     in_play = [e for e in events if e["type"] == "rally" and e["state"] == "in_play"]
