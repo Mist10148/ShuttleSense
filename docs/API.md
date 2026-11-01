@@ -209,7 +209,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `stats` | `received`, `processed`, `skipped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400). `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
 

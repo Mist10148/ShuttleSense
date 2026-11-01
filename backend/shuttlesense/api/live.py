@@ -113,13 +113,14 @@ class LiveManager:
         )  # fmt: skip
 
     def resume(self, session_id: str) -> _Entry:
-        entry = self.entries.get(session_id)
-        if entry is None or entry.attached:
-            raise SessionGone(session_id)
-        if entry.expiry is not None:
-            entry.expiry.cancel()
-            entry.expiry = None
-        entry.attached = True
+        with self.lock:
+            entry = self.entries.get(session_id)
+            if entry is None or entry.attached:
+                raise SessionGone(session_id)
+            if entry.expiry is not None:
+                entry.expiry.cancel()
+                entry.expiry = None
+            entry.attached = True
         return entry
 
     def detach(self, entry: _Entry) -> None:
@@ -128,8 +129,13 @@ class LiveManager:
 
         async def expire() -> None:
             await asyncio.sleep(self.ttl_s)
-            if not entry.attached and entry.session.id in self.entries:
-                await asyncio.to_thread(self.finish, entry)
+            # Claim the entry before leaving the event loop, so a resume arriving while the
+            # session is being saved gets not_found instead of a half-saved session.
+            with self.lock:
+                if entry.attached or self.entries.get(entry.session.id) is not entry:
+                    return
+                del self.entries[entry.session.id]
+            await asyncio.to_thread(self._save_and_release, entry)
 
         entry.expiry = asyncio.get_running_loop().create_task(expire())
 
@@ -138,6 +144,9 @@ class LiveManager:
         with self.lock:
             if self.entries.pop(entry.session.id, None) is None:
                 return None
+        return self._save_and_release(entry)
+
+    def _save_and_release(self, entry: _Entry) -> Job | None:
         try:
             return self._save(entry)
         finally:
@@ -149,7 +158,7 @@ class LiveManager:
         from shuttlesense.render import OVERLAYS
 
         session = entry.session
-        if session.stats.received == 0:
+        if not session.analyzer.record.frames:  # nothing arrived, or nothing decoded
             session.close()
             self.storage.delete_video(entry.video_id)
             return None
@@ -257,17 +266,33 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
         return
     except (TimeoutError, WebSocketDisconnect):
         return
+    except Exception:  # e.g. a model failed to load; the GPU was released by create()
+        log.exception("starting a live session failed")
+        await _error(ws, "internal", "the live session could not start", 1011)
+        return
     session = entry.session
-    await ws.send_json({
-        "type": "started", "session_id": session.id, "resumed": first["type"] == "resume",
-        "fps": session.fps, "width": session.width, "height": session.height,
-        "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
-        "corners": session.corners, "budget_ms": session.live["budget_ms"],
-    })  # fmt: skip
+    try:
+        await ws.send_json({
+            "type": "started", "session_id": session.id, "resumed": first["type"] == "resume",
+            "fps": session.fps, "width": session.width, "height": session.height,
+            "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
+            "corners": session.corners, "budget_ms": session.live["budget_ms"],
+        })  # fmt: skip
+    except Exception:  # the client left before the session started
+        if first["type"] == "resume":
+            manager.detach(entry)
+        else:
+            await asyncio.to_thread(manager.finish, entry)
+        return
     await _serve(ws, manager, entry)
 
 
 async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
+    """Run the session until `stop` (save it) or until the socket ends (keep it for a resume).
+
+    Whatever goes wrong, the session is either saved or detached, so the GPU lock is never
+    left held by a session nobody can reach.
+    """
     session = entry.session
     queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
 
@@ -282,18 +307,27 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                 elif msg.get("text") is not None:
                     import json
 
-                    await queue.put(("control", json.loads(msg["text"])))
+                    payload = json.loads(msg["text"])
+                    if isinstance(payload, dict):
+                        await queue.put(("control", payload))
+                    else:
+                        await queue.put(("bad", payload))
         except (WebSocketDisconnect, RuntimeError, ValueError):
             pass
         await queue.put(("closed", None))
 
     receiver = asyncio.create_task(receive())
     stopped = False
+    pending: tuple[str, Any] | None = None
     try:
         while True:
-            kind, payload = await queue.get()
+            kind, payload = pending or await queue.get()
+            pending = None
             if kind == "closed":
                 break
+            if kind == "bad":
+                await _send(ws, [_bad_message(payload)])
+                continue
             if kind == "control":
                 if payload.get("type") == "stop":
                     stopped = True
@@ -305,15 +339,27 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
             while not queue.empty():
                 nxt = queue.get_nowait()
                 if nxt[0] != "frame":
-                    queue.put_nowait(nxt)  # keep controls for the next loop
+                    pending = nxt  # handled next, before any frame that came after it
                     break
                 frames.append(nxt[1])
             events = await asyncio.to_thread(_frames, session, frames)
             await _send(ws, events)
+    except _ClientGone:
+        pass
+    except Exception:
+        log.exception("live session %s failed", session.id)
+        await _error(ws, "internal", "the live session hit an error; resume to continue")
     finally:
         receiver.cancel()
+        if not stopped:
+            manager.detach(entry)
     if stopped:
-        job = await asyncio.to_thread(manager.finish, entry)
+        try:
+            job = await asyncio.to_thread(manager.finish, entry)
+        except Exception:
+            log.exception("saving live session %s failed", session.id)
+            await _error(ws, "internal", "the live session could not be saved", 1011)
+            return
         with contextlib.suppress(Exception):
             await ws.send_json({
                 "type": "saved", "job_id": job.id if job else None,
@@ -348,9 +394,20 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             return session.correct(int(msg["rally_index"]), msg["winner"])
     except (KeyError, TypeError, ValueError):
         return [{"type": "error", "code": "not_found", "detail": "no such line call or rally"}]
-    return [{"type": "error", "code": "bad_message", "detail": f"unknown message: {msg}"}]
+    return [_bad_message(msg)]
+
+
+def _bad_message(msg: Any) -> dict:
+    return {"type": "error", "code": "bad_message", "detail": f"unknown message: {msg}"}
+
+
+class _ClientGone(Exception):
+    """Sending to the socket failed: the client went away."""
 
 
 async def _send(ws: WebSocket, events: list[dict]) -> None:
-    for event in events:
-        await ws.send_json(event)
+    try:
+        for event in events:
+            await ws.send_json(event)
+    except Exception as exc:
+        raise _ClientGone from exc

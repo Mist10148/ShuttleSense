@@ -182,6 +182,40 @@ def test_token_is_required_when_set(tmp_path: Path) -> None:
             assert ws.receive_json()["type"] == "saved"
 
 
+def test_non_object_control_message_is_rejected_not_fatal(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        ws.send_text("1")
+        assert ws.receive_json()["code"] == "bad_message"
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "saved"
+
+
+def test_a_failing_frame_frees_the_gpu_after_the_ttl(tmp_path: Path, monkeypatch) -> None:
+    from shuttlesense.stream.session import LiveSession
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("perception crashed")
+
+    with make_client(tmp_path, live_session_ttl_s=0.2) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            ws.receive_json()
+            _send_frames(ws, 3)
+            monkeypatch.setattr(LiveSession, "process", boom)
+            ws.send_bytes(encode(next(blank_frames(1)), 3, time.time() * 1000))
+            assert ws.receive_json()["code"] == "internal"
+        monkeypatch.undo()
+        # The session was detached, not leaked: it is saved after the ttl and the GPU freed.
+        for _ in range(100):
+            if client.get("/jobs").json():
+                break
+            time.sleep(0.05)
+        assert client.app.state.jobs.gpu.acquire(blocking=False)
+        client.app.state.jobs.gpu.release()
+
+
 def test_live_waits_for_a_running_job(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         client.app.state.jobs.gpu.acquire()
