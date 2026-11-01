@@ -437,13 +437,17 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Future<void> _stream(int generation) async {
     final interval = Duration(microseconds: (1e6 / _fps).round());
     final clock = Stopwatch()..start();
-    final first = _nextFrame; // after a resume the count goes on, the clock starts again
+    var first = _nextFrame; // after a resume the count goes on, the clock starts again
     bool current() => _streaming && !_disposed && generation == _generation;
     while (current()) {
       final due = interval * (_nextFrame - first);
       if (clock.elapsed < due) await Future<void>.delayed(due - clock.elapsed);
       final source = _source, socket = _socket;
       if (source == null || socket == null || state.phase != LivePhase.live) {
+        // Paused (reconnecting): restart the pace from here, or a resume would send every
+        // frame "missed" while away back to back.
+        clock.reset();
+        first = _nextFrame;
         await Future<void>.delayed(interval);
         continue;
       }

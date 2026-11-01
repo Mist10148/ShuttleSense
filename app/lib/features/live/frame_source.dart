@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:io' show File;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +101,8 @@ class CameraFrameSource implements FrameSource {
     if (controller == null) throw StateError('camera not started');
     final file = await controller.takePicture();
     final jpeg = await file.readAsBytes();
+    // takePicture writes each still to a temp file; a long session would leave thousands.
+    if (!kIsWeb) unawaited(File(file.path).delete().then((_) {}, onError: (_) {}));
     // Decoding every still for its size is costly; measure again only when the device
     // turned, which swaps width and height.
     final orientation = controller.value.deviceOrientation;
