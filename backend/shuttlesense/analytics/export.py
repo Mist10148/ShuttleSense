@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 from collections import Counter
@@ -82,6 +83,22 @@ def rally_stats(record: ClipRecord) -> list[dict]:
 
 def _fmt(value: float | None, digits: int) -> str:
     return "" if value is None else f"{value:.{digits}f}"
+
+
+def keep_chat(record: ClipRecord, out_dir: Path) -> None:
+    """Carry the coach chat over from the record.json a re-render is about to replace.
+
+    The chat only lives in record.json (unlike overrides and corrections, which have their
+    own files), so without this a re-render would erase it and reset the question limit.
+    """
+    from shuttlesense.schema import load_record
+
+    path = out_dir / "record.json"
+    if record.chat is not None or not path.exists():
+        return
+    # An unreadable old record has no chat worth keeping.
+    with contextlib.suppress(OSError, ValueError):
+        record.chat = load_record(path.read_text(encoding="utf-8")).chat
 
 
 def write_exports(record: ClipRecord, out_dir: Path) -> None:

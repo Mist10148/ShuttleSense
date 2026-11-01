@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from shuttlesense.analytics import write_exports
+from shuttlesense.analytics import keep_chat, write_exports
 from shuttlesense.io import FrameReader
 from shuttlesense.pipeline import STAGE_NAMES, StageEvent
 from shuttlesense.schema import ClipRecord, Court, ScorePair, load_record
@@ -147,5 +147,6 @@ def fake_pipeline(
                 progress=lambda p: on_event("render", "running", p),
             )
         on_event(name, "done", 1.0)
+    keep_chat(record, out_dir)
     write_exports(record, out_dir)
     return record

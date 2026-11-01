@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from shuttlesense.schema import Call, LineCall, Mode, PlayerSide, Rally, Score, ScorePair
 
@@ -32,6 +32,13 @@ class ChatRequest(BaseModel):
     """POST /jobs/{id}/chat."""
 
     message: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("message")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("message is empty")
+        return value
 
 
 class VideoInfoOut(BaseModel):

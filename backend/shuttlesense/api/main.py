@@ -77,6 +77,7 @@ def create_app(
             import anthropic
 
             app.state.chat_client = anthropic.AsyncAnthropic(api_key=settings.chat_key)
+        app.state.chat_answering = {}  # job id -> monotonic start of the answer streaming
         app.state.live = LiveManager(
             app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s
         )

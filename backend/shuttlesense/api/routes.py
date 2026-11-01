@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated
@@ -49,6 +50,7 @@ from shuttlesense.referee import (
     LineCallOverrideIn,
     apply_corrections,
     apply_user_changes,
+    build_events,
     game_winner,
     load_overrides,
     save_corrections,
@@ -94,6 +96,8 @@ JobsDep = Annotated[JobManager, Depends(get_jobs)]
 
 public = APIRouter()
 router = APIRouter(dependencies=[Depends(require_token)])
+
+CHAT_ANSWER_TIMEOUT_S = 300.0  # longest a streamed coach answer may hold its job's chat
 
 
 # Health -----------------------------------------------------------------------
@@ -356,6 +360,7 @@ def correct_score(
         )
         corrections = [*record.score.corrections, correction]
         apply_corrections(record, corrections, job.start_score)
+        record.rally_events = build_events(record)  # rally_end winners and score events
         record.summary = build_summary(record)
         record.coaching = build_coaching(record, _feedback_config(jobs))
         save_corrections(storage.job_dir(job_id), corrections)
@@ -414,6 +419,13 @@ async def chat(
     history = record.chat.messages if record.chat else []
     if sum(m.role == "user" for m in history) >= settings.chat_max_messages:
         raise HTTPException(status_code=429, detail="question limit for this session reached")
+    # One question at a time per job, so parallel requests cannot get past the limit above
+    # (the history only grows once an answer is saved).
+    # The mark expires on its own in case the stream is never started.
+    answering: dict[str, float] = request.app.state.chat_answering
+    if time.monotonic() - answering.get(job_id, -CHAT_ANSWER_TIMEOUT_S) < CHAT_ANSWER_TIMEOUT_S:
+        raise HTTPException(status_code=409, detail="a question is already being answered")
+    answering[job_id] = time.monotonic()
     question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
     digest = build_digest(record, settings.chat_max_digest_chars)
     chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)
@@ -428,6 +440,8 @@ async def chat(
         except ChatError as exc:
             error = {"type": "error", "status": exc.status, "detail": exc.detail}
             yield f"data: {json.dumps(error)}\n\n"
+        finally:
+            answering.pop(job_id, None)
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})  # fmt: skip

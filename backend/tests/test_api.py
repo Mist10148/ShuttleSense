@@ -313,6 +313,11 @@ def test_score_correction_recomputes_following_rallies(
         assert summary["score"]["far"] == 2
         rallies_csv = client.get(f"/jobs/{job_id}/rallies.csv").content.decode("utf-8-sig")
         assert rallies_csv.splitlines()[1].endswith(",0,1")
+        # The rally timeline follows the correction too.
+        ends = [e for e in record["rally_events"] if e["type"] == "rally_end"]
+        assert ends[0]["data"]["winner"] == "far"
+        scores = [e["data"] for e in record["rally_events"] if e["type"] == "score"]
+        assert scores[0] == {"near": 0, "far": 1}
 
 
 def test_line_call_override_rescores(tmp_path: Path, tiny_video: Path) -> None:

@@ -162,10 +162,34 @@ def test_message_limit_and_validation(tmp_path: Path, tiny_video: Path) -> None:
     with _client(tmp_path, FakeClient(), chat_max_messages=1) as client:
         job_id = _done_job(client, tiny_video)
         assert client.post(f"/jobs/{job_id}/chat", json={"message": ""}).status_code == 422
+        assert client.post(f"/jobs/{job_id}/chat", json={"message": "  \n"}).status_code == 422
         assert client.post(f"/jobs/{job_id}/chat", json={"message": "x" * 1001}).status_code == 422
         assert client.post(f"/jobs/{job_id}/chat", json={"message": "one"}).status_code == 200
         res = client.post(f"/jobs/{job_id}/chat", json={"message": "two"})
         assert res.status_code == 429
+
+
+def test_one_question_at_a_time_per_job(tmp_path: Path, tiny_video: Path) -> None:
+    with _client(tmp_path, FakeClient()) as client:
+        job_id = _done_job(client, tiny_video)
+        client.app.state.chat_answering[job_id] = time.monotonic()  # an answer is streaming
+        assert client.post(f"/jobs/{job_id}/chat", json={"message": "q"}).status_code == 409
+        client.app.state.chat_answering[job_id] = time.monotonic() - 301  # a stale mark
+        assert client.post(f"/jobs/{job_id}/chat", json={"message": "q"}).status_code == 200
+        assert job_id not in client.app.state.chat_answering
+
+
+def test_chat_survives_a_rerender(tmp_path: Path, tiny_video: Path) -> None:
+    with _client(tmp_path, FakeClient()) as client:
+        job_id = _done_job(client, tiny_video)
+        client.post(f"/jobs/{job_id}/chat", json={"message": "Why did my smash land short?"})
+        assert client.post(f"/jobs/{job_id}/render", json={"overlays": []}).status_code == 202
+        for _ in range(200):
+            if client.get(f"/jobs/{job_id}").json()["status"] == "done":
+                break
+            time.sleep(0.05)
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert [m["role"] for m in record["chat"]["messages"]] == ["user", "assistant"]
 
 
 @pytest.mark.parametrize(
