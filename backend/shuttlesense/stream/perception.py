@@ -20,24 +20,25 @@ from shuttlesense.schema import ClipRecord, Player, Players, Shuttle
 
 
 class Perception(Protocol):
+    """Shuttle and players for one frame, in the session's full frame pixels.
+
+    The session may pass a downscaled frame when it degrades; the result is still in
+    full-size coordinates, so trackers and court mapping never see two scales.
+    """
+
     available: dict[str, bool]
 
     def __call__(self, frame: np.ndarray, index: int) -> tuple[Shuttle, Players]: ...
 
 
-def scale_players(players: Players, s: float) -> Players:
-    """Players with every pixel coordinate multiplied by s."""
-    out = Players()
-    for side in ("near", "far"):
-        p = getattr(players, side)
-        if p is not None:
-            x, y, w, h = p.bbox
-            setattr(out, side, Player(
-                bbox=(x * s, y * s, w * s, h * s),
-                keypoints=[(kx * s, ky * s, ks) for kx, ky, ks in p.keypoints],
-                score=p.score,
-            ))  # fmt: skip
-    return out
+def _scale_person(p: Player, s: float) -> Player:
+    """A player with every pixel coordinate multiplied by s."""
+    x, y, w, h = p.bbox
+    return Player(
+        bbox=(x * s, y * s, w * s, h * s),
+        keypoints=[(kx * s, ky * s, ks) for kx, ky, ks in p.keypoints],
+        score=p.score,
+    )
 
 
 class ModelPerception:
@@ -134,9 +135,12 @@ class ModelPerception:
         from shuttlesense.pose.tracking import filter_players
 
         people = [p for p in self.detect(frame) if p.score >= self.min_person_score]
+        s = self.size[0] / frame.shape[1]
+        if abs(s - 1.0) > 1e-6:  # degraded: back to full-size pixels before court checks
+            people = [_scale_person(p, s) for p in people]
         people = filter_players(
             people,
-            frame_height=frame.shape[0],
+            frame_height=self.size[1],
             homography=self.homography,
             court_size=self.court_size,
         )

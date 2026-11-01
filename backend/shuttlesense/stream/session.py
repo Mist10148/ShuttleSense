@@ -18,7 +18,7 @@ import numpy as np
 
 from shuttlesense.schema import ClipRecord, Court, Players, ScorePair, Shuttle
 from shuttlesense.stream.analyzer import Event, StreamAnalyzer
-from shuttlesense.stream.perception import Perception, scale_players
+from shuttlesense.stream.perception import Perception
 
 # Defaults for the `live` section of configs/pipeline.yaml.
 LIVE_DEFAULTS: dict[str, Any] = {
@@ -185,15 +185,13 @@ class LiveSession:
         return events + self._check_quality()
 
     def _perceive(self, frame: np.ndarray, index: int, scale: float) -> tuple[Shuttle, Players]:
+        """Perception on a frame downscaled by `scale`; results come back in full-size pixels."""
         if scale >= 1.0:
             return self.perception(frame, index)
         import cv2
 
         small = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        shuttle, players = self.perception(small, index)
-        if shuttle.visible:
-            shuttle = Shuttle(x=shuttle.x / scale, y=shuttle.y / scale, visible=1)
-        return shuttle, scale_players(players, 1 / scale)
+        return self.perception(small, index)
 
     def _check_quality(self) -> list[Event]:
         """Every check_every processed frames, step quality down or up and say so."""

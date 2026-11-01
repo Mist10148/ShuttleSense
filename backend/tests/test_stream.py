@@ -99,6 +99,23 @@ def test_replay_perception_scales_to_the_session() -> None:
     assert players.near.bbox[3] == pytest.approx(record.frames[10].players.near.bbox[3] / 2)
 
 
+def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
+    from shuttlesense.pose.tracking import PlayerTracker
+    from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player
+    from shuttlesense.stream.perception import ModelPerception
+
+    person = Player(bbox=(100, 100, 20, 60), keypoints=[(110, 110, 0.9)] * NUM_KEYPOINTS,
+                    score=0.9)  # fmt: skip
+    p = ModelPerception.__new__(ModelPerception)  # no models: set only what _players uses
+    p.size, p.model, p.detect = (640, 360), None, lambda frame: [person]
+    p.min_person_score, p.homography, p.court_size = 0.4, None, COURT_SIZE_M
+    p.tracker = PlayerTracker()
+    _, players = p(np.zeros((180, 320, 3), np.uint8), 0)  # half-size frame
+    seen = players.near or players.far
+    assert seen.bbox == pytest.approx((200, 200, 40, 120))
+    assert seen.keypoints[0][:2] == pytest.approx((220, 220))
+
+
 def test_normalized_size_matches_io() -> None:
     assert normalized_size(1920, 1080, 720) == (1280, 720)
     assert normalized_size(641, 361, 720) == (640, 360)
@@ -139,6 +156,13 @@ def test_session_degrades_when_over_budget(tmp_path) -> None:
     assert session.level == 2  # two checks over budget
     frame_events = [e for e in events if e["type"] == "frame"]
     assert all("latency_ms" in e for e in frame_events)
+    # Frames processed at half size still carry full-size coordinates.
+    replay = ReplayPerception(record, (640, 360))
+    for f in session.analyzer.record.frames[-5:]:
+        expected, players = replay(None, f.frame)
+        got = (f.shuttle.visible, f.shuttle.x, f.shuttle.y)
+        assert got == (expected.visible, expected.x, expected.y)
+        assert f.players.near.bbox == pytest.approx(players.near.bbox)
     session.skip(encode(next(blank_frames(1)), 25, 0.0)[12:], 25, 0.0)
     record = session.finish()
     assert record.num_frames == 26 and session.stats.skipped == 1
