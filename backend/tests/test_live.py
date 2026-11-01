@@ -195,6 +195,40 @@ def test_non_object_control_message_is_rejected_not_fatal(tmp_path: Path) -> Non
         assert ws.receive_json()["type"] == "saved"
 
 
+def test_malformed_json_is_rejected_not_fatal(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        ws.send_text("{bad")
+        assert ws.receive_json()["code"] == "bad_message"
+        assert [e["frame"] for e in _send_frames(ws, 2) if e["type"] == "frame"] == [0, 1]
+        ws.send_json({"type": "stop"})
+        while ws.receive_json()["type"] != "saved":
+            pass
+
+
+def test_second_drop_restarts_the_ttl(tmp_path: Path) -> None:
+    """Each drop arms one timer: the first drop's timer must not save a resumed session."""
+    with make_client(tmp_path, live_session_ttl_s=1.0) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            session_id = ws.receive_json()["session_id"]
+            _send_frames(ws, 3)
+        dropped = time.monotonic()
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({"type": "resume", "session_id": session_id})
+            assert ws.receive_json()["resumed"]
+            time.sleep(0.6)
+        # Past the first drop's ttl, inside the second one's.
+        time.sleep(max(0.0, 1.2 - (time.monotonic() - dropped)))
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({"type": "resume", "session_id": session_id})
+            assert ws.receive_json()["type"] == "started"
+            ws.send_json({"type": "stop"})
+            while ws.receive_json()["type"] != "saved":
+                pass
+
+
 def test_a_failing_frame_frees_the_gpu_after_the_ttl(tmp_path: Path, monkeypatch) -> None:
     from shuttlesense.stream.session import LiveSession
 

@@ -126,6 +126,8 @@ class LiveManager:
     def detach(self, entry: _Entry) -> None:
         """The socket dropped without `stop`: keep the session for ttl_s, then save it."""
         entry.attached = False
+        if entry.expiry is not None:  # one timer per session; an orphan would save it early
+            entry.expiry.cancel()
 
         async def expire() -> None:
             await asyncio.sleep(self.ttl_s)
@@ -322,7 +324,11 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                 elif msg.get("text") is not None:
                     import json
 
-                    payload = json.loads(msg["text"])
+                    try:
+                        payload = json.loads(msg["text"])
+                    except ValueError:  # not JSON: report it and keep the session
+                        await queue.put(("bad", msg["text"]))
+                        continue
                     if isinstance(payload, dict):
                         await queue.put(("control", payload))
                     else:
@@ -383,8 +389,6 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                 "stats": session.stats.summary(),
             })  # fmt: skip
             await ws.close()
-    else:
-        manager.detach(entry)
 
 
 def _frames(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dict]:
