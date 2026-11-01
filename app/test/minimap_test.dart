@@ -39,6 +39,42 @@ void main() {
     expect(minimapLabel(record, 5), contains('no positions'));
   });
 
+  test('the heatmap counts where each player stood', () {
+    final record = recordWith(const [
+      FrameInfo(frame: 0, nearPos: (x: 2.6, y: 1.9), farPos: (x: 2.4, y: 11.4)),
+      FrameInfo(frame: 1, nearPos: (x: 2.7, y: 1.8)),
+      FrameInfo(frame: 2, nearPos: (x: 0.2, y: 4.0)),
+      FrameInfo(frame: 3, nearPos: (x: 40, y: 1)), // a glitch far off the court is dropped
+    ]);
+    final heat = HeatGrid.fromRecord(record);
+    expect(heat.near.fold<int>(0, (a, b) => a + b), 3);
+    expect((heat.nearMax, heat.farMax), (2, 1));
+    expect(
+      heat.describe(),
+      'Heatmap: near player mostly at 2.8 m across, 1.8 m up the court; '
+      'far player mostly at 2.3 m across, 11.3 m up the court.',
+    );
+  });
+
+  testWidgets('the heatmap toggle adds where players stood to the label', (tester) async {
+    final handle = tester.ensureSemantics();
+    final record = recordWith(const [FrameInfo(frame: 0, nearPos: (x: 2.6, y: 1.9))]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: SingleChildScrollView(child: CourtMinimap(record: record, frameIndex: 0)),
+        ),
+      ),
+    );
+    expect(find.bySemanticsLabel(RegExp('Heatmap: ')), findsNothing);
+    await tester.tap(find.text('Heatmap'));
+    await tester.pump();
+    expect(find.bySemanticsLabel(RegExp('near player mostly at 2.8 m across')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    handle.dispose();
+  });
+
   testWidgets('the minimap label follows the frame', (tester) async {
     final handle = tester.ensureSemantics();
     final record = recordWith(const [

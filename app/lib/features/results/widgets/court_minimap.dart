@@ -13,22 +13,54 @@ const double kShortServiceFromNetM = 1.98;
 /// Shuttle positions kept in the fading trail.
 const int kTrailLength = 15;
 
+/// Side of a heatmap cell in meters.
+const double kHeatCellM = 0.5;
+
 /// F10: top-down court with both players, the shuttle trail, the current rally's hits and
 /// the landing of every line call so far (F20: green in, red out, amber still uncertain).
-class CourtMinimap extends StatelessWidget {
+/// The Heatmap toggle (T5.5) shades where each player stood over the whole clip.
+class CourtMinimap extends StatefulWidget {
   const CourtMinimap({super.key, required this.record, required this.frameIndex});
 
   final ClipRecord record;
   final int frameIndex;
 
   @override
+  State<CourtMinimap> createState() => _CourtMinimapState();
+}
+
+class _CourtMinimapState extends State<CourtMinimap> {
+  var _heatmap = false;
+  HeatGrid? _heat;
+  ClipRecord? _heatOf;
+
+  /// Built once per record (a live record is a new object on every update).
+  HeatGrid _heatGrid() {
+    if (!identical(_heatOf, widget.record)) {
+      _heat = HeatGrid.fromRecord(widget.record);
+      _heatOf = widget.record;
+    }
+    return _heat!;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final record = widget.record, frameIndex = widget.frameIndex;
     final calibrated = record.courtCorners != null;
+    final heat = calibrated && _heatmap ? _heatGrid() : null;
     return SectionCard(
       title: 'Court',
+      trailing: calibrated
+          ? FilterChip(
+              label: const Text('Heatmap'),
+              tooltip: 'Shade where each player stood over the whole clip',
+              selected: _heatmap,
+              onSelected: (on) => setState(() => _heatmap = on),
+            )
+          : null,
       child: calibrated
           ? Semantics(
-              label: minimapLabel(record, frameIndex),
+              label: [minimapLabel(record, frameIndex), ?heat?.describe()].join(' '),
               child: AspectRatio(
                 aspectRatio: kCourtWidthM / kCourtLengthM,
                 child: CustomPaint(
@@ -38,6 +70,7 @@ class CourtMinimap extends StatelessWidget {
                     lines: Theme.of(context).colorScheme.outline,
                     surface: Theme.of(context).colorScheme.surfaceContainerHighest,
                     players: PlayerColors.of(context),
+                    heat: heat,
                   ),
                 ),
               ),
@@ -63,6 +96,55 @@ String minimapLabel(ClipRecord record, int frameIndex) {
       '${at('Shuttle', f.shuttlePos)}.';
 }
 
+/// How often each player stood in each [kHeatCellM] cell of the court (and up to 1 m
+/// beyond the lines), over every frame of the clip.
+class HeatGrid {
+  HeatGrid._(this.near, this.far, this.nearMax, this.farMax);
+
+  static const double margin = 1.0;
+  static final int cols = ((kCourtWidthM + 2 * margin) / kHeatCellM).ceil();
+  static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
+
+  factory HeatGrid.fromRecord(ClipRecord record) {
+    final near = List.filled(cols * rows, 0), far = List.filled(cols * rows, 0);
+    void add(List<int> grid, CourtPoint? p) {
+      if (p == null) return;
+      final c = ((p.x + margin) / kHeatCellM).floor();
+      final r = ((p.y + margin) / kHeatCellM).floor();
+      if (c >= 0 && c < cols && r >= 0 && r < rows) grid[r * cols + c]++;
+    }
+
+    for (final f in record.frames) {
+      add(near, f.nearPos);
+      add(far, f.farPos);
+    }
+    int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
+    return HeatGrid._(near, far, max(near), max(far));
+  }
+
+  /// Frame counts per cell, row-major from the near-left corner (court y grows away).
+  final List<int> near, far;
+  final int nearMax, farMax;
+
+  /// Near-left corner of a cell in court meters.
+  static CourtPoint cellOrigin(int index) =>
+      (x: (index % cols) * kHeatCellM - margin, y: (index ~/ cols) * kHeatCellM - margin);
+
+  /// Where each player stood most, for screen readers.
+  String describe() {
+    String where(String who, List<int> grid, int max) {
+      if (max == 0) return '$who not seen';
+      final o = cellOrigin(grid.indexOf(max));
+      final x = (o.x + kHeatCellM / 2).toStringAsFixed(1);
+      final y = (o.y + kHeatCellM / 2).toStringAsFixed(1);
+      return '$who mostly at $x m across, $y m up the court';
+    }
+
+    return 'Heatmap: ${where('near player', near, nearMax)}; '
+        '${where('far player', far, farMax)}.';
+  }
+}
+
 class CourtPainter extends CustomPainter {
   CourtPainter({
     required this.frameIndex,
@@ -73,6 +155,7 @@ class CourtPainter extends CustomPainter {
     required this.lines,
     required this.surface,
     required this.players,
+    this.heat,
   });
 
   /// Collects the current frame, the trail and the hitters' positions in this rally.
@@ -82,6 +165,7 @@ class CourtPainter extends CustomPainter {
     required Color lines,
     required Color surface,
     required PlayerColors players,
+    HeatGrid? heat,
   }) {
     final trail = <CourtPoint>[
       for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
@@ -109,6 +193,7 @@ class CourtPainter extends CustomPainter {
       lines: lines,
       surface: surface,
       players: players,
+      heat: heat,
     );
   }
 
@@ -123,6 +208,9 @@ class CourtPainter extends CustomPainter {
   final Color surface;
   final PlayerColors players;
 
+  /// Shaded under everything else when the heatmap is on.
+  final HeatGrid? heat;
+
   @override
   void paint(Canvas canvas, Size size) {
     final sx = size.width / kCourtWidthM;
@@ -131,6 +219,23 @@ class CourtPainter extends CustomPainter {
     Offset toCanvas(CourtPoint p) => Offset(p.x * sx, size.height - p.y * sy);
 
     canvas.drawRect(Offset.zero & size, Paint()..color = surface);
+    final h = heat;
+    if (h != null) {
+      for (final (grid, max, color) in [
+        (h.near, h.nearMax, players.near),
+        (h.far, h.farMax, players.far),
+      ]) {
+        if (max == 0) continue;
+        for (var i = 0; i < grid.length; i++) {
+          if (grid[i] == 0) continue;
+          final o = HeatGrid.cellOrigin(i);
+          canvas.drawRect(
+            toCanvas((x: o.x, y: o.y + kHeatCellM)) & Size(kHeatCellM * sx, kHeatCellM * sy),
+            Paint()..color = color.withValues(alpha: 0.1 + 0.5 * grid[i] / max),
+          );
+        }
+      }
+    }
     final line = Paint()
       ..color = lines
       ..style = PaintingStyle.stroke
@@ -223,6 +328,7 @@ class CourtPainter extends CustomPainter {
       old.lines != lines ||
       old.surface != surface ||
       old.players != players ||
+      old.heat != heat ||
       old.trail.length != trail.length ||
       old.hitMarks.length != hitMarks.length ||
       !listEquals(old.landings, landings);
