@@ -275,6 +275,19 @@ def test_eval_line_calls_counts_certain_calls_and_near_line(tmp_path: Path) -> N
     assert "no accuracy is reported" in eval_line_calls.to_markdown({}, empty, None)
 
 
+def test_near_line_keeps_calls_without_a_labelled_landing() -> None:
+    summarize = load_script("eval_line_calls").summarize
+    rows = [
+        {"label": "in", "call": "in", "uncertain": False, "margin_cm_pred": 10.0,
+         "margin_cm_true": None},
+        {"label": "in", "call": "out", "uncertain": False, "margin_cm_pred": -5.0,
+         "margin_cm_true": 3.0},
+    ]  # fmt: skip
+    near = summarize(rows, 20)["near_line"]
+    assert near["certain_calls"] == 2 and near["false_call_rate"] == 0.5
+    assert near["basis"] == "labelled landing (1) and predicted margin (1)"
+
+
 def test_shuttleset_lose_reason_gives_labels(tmp_path: Path) -> None:
     eval_line_calls = load_script("eval_line_calls")
     gt = write_csv(tmp_path / "set1.csv", ["rally", "ball_round", "frame_num", "lose_reason"],

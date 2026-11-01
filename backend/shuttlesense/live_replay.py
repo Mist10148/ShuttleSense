@@ -59,15 +59,22 @@ def run(
     started = conn.receive_json()
     if started["type"] != "started":
         raise RuntimeError(f"server refused the session: {started}")
+    # The server caps the rate (live.max_fps); send only the frames it keeps, stamped with
+    # their video time, so every sent frame gets its frame event back.
+    step = fps / float(started["fps"])
     latencies, server_ms, counts = [], [], {}
-    t0 = time.perf_counter()
+    t0, wall0 = time.perf_counter(), time.time() * 1000
+    kept = -1
     for i, frame in enumerate(frames):
+        if int(i / step) == kept:
+            continue
+        kept = int(i / step)
         if realtime:
             delay = t0 + i / fps - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
         sent = time.perf_counter()
-        conn.send_bytes(encode(frame, i, time.time() * 1000))
+        conn.send_bytes(encode(frame, i, wall0 + i * 1000 / fps))
         while True:
             event = conn.receive_json()
             counts[event["type"]] = counts.get(event["type"], 0) + 1
@@ -76,6 +83,10 @@ def run(
                 if "latency_ms" in event:
                     server_ms.append(event["latency_ms"])
                 break
+            if event["type"] == "error":
+                if event.get("code") == "bad_frame":
+                    break  # no frame event follows a frame the server could not decode
+                raise RuntimeError(f"server error: {event}")
     elapsed = time.perf_counter() - t0
     conn.send_json({"type": "stop"})
     while (event := conn.receive_json())["type"] != "saved":
@@ -97,7 +108,8 @@ def _pcts(values: list[float]) -> dict[str, float]:
     return {f"p{q}": round(float(np.percentile(values, q)), 1) for q in (50, 95, 99)}
 
 
-def _frames(args: argparse.Namespace) -> tuple[Iterator[np.ndarray], int, int]:
+def _frames(args: argparse.Namespace) -> tuple[Iterator[np.ndarray], int, int, float]:
+    """(frames, width, height, fps); --fps overrides the video's own rate."""
     from shuttlesense.stream.fake_source import blank_frames, video_frames
 
     if args.video:
@@ -108,9 +120,19 @@ def _frames(args: argparse.Namespace) -> tuple[Iterator[np.ndarray], int, int]:
             int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
             int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         )
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
         cap.release()
-        return video_frames(args.video, args.frames), width, height
-    return blank_frames(args.frames or 300, 1280, 720), 1280, 720
+        return video_frames(args.video, args.frames), width, height, args.fps or fps or 30.0
+    return blank_frames(args.frames or 300, 1280, 720), 1280, 720, args.fps or 30.0
+
+
+def _wait_rendered(client: Any, job_id: str | None, timeout_s: float = 120.0) -> None:
+    """Let the saved session finish rendering before its storage folder is removed."""
+    deadline = time.monotonic() + timeout_s
+    while job_id and time.monotonic() < deadline:
+        if client.get(f"/jobs/{job_id}").json().get("status") in ("done", "failed"):
+            return
+        time.sleep(0.1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -119,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--token")
     parser.add_argument("--video", type=Path, help="video to replay (default: synthetic frames)")
     parser.add_argument("--frames", type=int, help="stop after this many frames")
-    parser.add_argument("--fps", type=float, default=30.0)
+    parser.add_argument("--fps", type=float, help="frame rate (default: the video's, else 30)")
     parser.add_argument("--corners", help="x1,y1,...,x4,y4 in video pixels")
     parser.add_argument("--realtime", action="store_true", help="pace frames at --fps")
     parser.add_argument("--in-process", action="store_true", help="start the API in-process")
@@ -127,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", type=Path, help="also write the results here")
     args = parser.parse_args(argv)
 
-    frames, width, height = _frames(args)
+    frames, width, height, fps = _frames(args)
     corners = None
     if args.corners:
         v = [float(x) for x in args.corners.split(",")]
@@ -140,19 +162,18 @@ def main(argv: list[str] | None = None) -> int:
         from shuttlesense.api.main import create_app
         from shuttlesense.api.settings import Settings
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             settings = Settings(storage_dir=Path(tmp), fake_pipeline=args.fake)
-            with (
-                TestClient(create_app(settings)) as client,
-                client.websocket_connect("/live") as ws,
-            ):
-                result = run(ws, frames, fps=args.fps, width=width, height=height,
-                             corners=corners, realtime=args.realtime)  # fmt: skip
+            with TestClient(create_app(settings)) as client:
+                with client.websocket_connect("/live") as ws:
+                    result = run(ws, frames, fps=fps, width=width, height=height,
+                                 corners=corners, realtime=args.realtime)  # fmt: skip
+                _wait_rendered(client, result["job_id"])
     else:
         url = args.url + (f"?token={args.token}" if args.token else "")
         conn = _WebsocketsConn(url)
         try:
-            result = run(conn, frames, fps=args.fps, width=width, height=height,
+            result = run(conn, frames, fps=fps, width=width, height=height,
                          corners=corners, realtime=args.realtime)  # fmt: skip
         finally:
             conn.close()

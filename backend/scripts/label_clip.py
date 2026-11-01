@@ -22,7 +22,8 @@ Keys
 
 The output is the label file read by eval_phone.py, eval_hits.py and eval_rallies.py (UTF-8,
 header row): hit rows fill time_s, player, stroke; rally rows fill start_s, end_s, winner,
-in_out. An existing file is loaded first, so labelling can resume.
+in_out. An existing file is loaded first, so labelling can resume; columns this tool does not
+edit (such as landing_x_m / landing_y_m from label_landings.py) are kept as they are.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ class ClipLabels:
     rallies: list[dict] = field(default_factory=list)
     player: str = "near"
     rally_start: float | None = None
+    extra: list[str] = field(default_factory=list)  # other tools' columns, kept on save
     _order: list[str] = field(default_factory=list)  # "hit" / "rally", for undo
 
     def handle_key(self, key: str, time_s: float) -> str | None:
@@ -91,11 +93,13 @@ class ClipLabels:
         """CSV rows: hits, then rallies, each in time order."""
         out = []
         for h in sorted(self.hits, key=lambda h: h["time_s"]):
-            out.append(
-                {"time_s": f"{h['time_s']:.3f}", "player": h["player"], "stroke": h["stroke"]}
-            )
+            out.append({
+                **{c: h.get(c, "") for c in self.extra},
+                "time_s": f"{h['time_s']:.3f}", "player": h["player"], "stroke": h["stroke"],
+            })  # fmt: skip
         for r in sorted(self.rallies, key=lambda r: r["start_s"]):
             out.append({
+                **{c: r.get(c, "") for c in self.extra},
                 "start_s": f"{r['start_s']:.3f}",
                 "end_s": f"{r['end_s']:.3f}",
                 "winner": r["winner"],
@@ -106,7 +110,7 @@ class ClipLabels:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=COLUMNS, restval="")
+            writer = csv.DictWriter(f, fieldnames=[*COLUMNS, *self.extra], restval="")
             writer.writeheader()
             writer.writerows(self.rows())
 
@@ -116,9 +120,13 @@ class ClipLabels:
         if not path.exists():
             return labels
         with path.open(newline="", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
+            reader = csv.DictReader(f)
+            labels.extra = [c for c in reader.fieldnames or [] if c not in COLUMNS]
+            for row in reader:
+                kept = {c: row.get(c) or "" for c in labels.extra}
                 if row.get("time_s"):
                     labels.hits.append({
+                        **kept,
                         "time_s": float(row["time_s"]),
                         "player": row.get("player", ""),
                         "stroke": row.get("stroke", ""),
@@ -126,6 +134,7 @@ class ClipLabels:
                     labels._order.append("hit")
                 elif row.get("start_s") and row.get("end_s"):
                     labels.rallies.append({
+                        **kept,
                         "start_s": float(row["start_s"]),
                         "end_s": float(row["end_s"]),
                         "winner": row.get("winner", ""),

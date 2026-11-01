@@ -21,8 +21,10 @@ with both a label and a call:
 - precision and recall for IN and for OUT count only certain calls (UNCERTAIN ones are the
   ones the app asks the user to confirm), and coverage says how many were certain;
 - the near-line false-call rate is the share of certain calls on landings within
-  --near-line-cm of a line that are wrong. It uses the labelled landing position when the
-  label has one, otherwise the predicted margin, and the report says which.
+  --near-line-cm of a line that are wrong. Each call uses the labelled landing position when
+  its label has one, otherwise the predicted margin, and the report says which (or both).
+  A labelled landing is measured against the same lines as the call: the service court
+  for a rally that is only a serve, the rally lines otherwise.
 Nothing here measures accuracy unless labels exist: with no labelled landings the report
 says so instead of printing numbers.
 """
@@ -38,7 +40,7 @@ from typing import Any
 
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.court.lines import play_bounds
-from shuttlesense.referee.linecalls import signed_margin
+from shuttlesense.referee.linecalls import bounds_for, signed_margin
 from shuttlesense.schema import load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
@@ -96,20 +98,23 @@ def read_shuttleset(path: Path, fps: float) -> list[dict[str, Any]]:
 
 
 def read_predicted(path: Path) -> list[dict[str, Any]]:
-    """Predicted rallies with their line call: {start_s, end_s, call, uncertain, margin_cm}."""
+    """Predicted rallies with their line call: {start_s, end_s, call, uncertain, margin_cm,
+    court, bounds}; bounds are the lines the call was made against."""
     record = load_record(path.read_text(encoding="utf-8"))
     fps = record.fps or 30.0
     calls = {c.rally_index: c for c in record.line_calls}
     out = []
     for r in record.rallies:
         c = calls.get(r.index)
+        court = "singles" if c is None else c.court
         out.append({
             "start_s": r.start_frame / fps,
             "end_s": r.end_frame / fps,
             "call": None if c is None else c.call,  # the automated call, before any override
             "uncertain": None if c is None else c.uncertain,
             "margin_cm": None if c is None else c.margin_cm,
-            "court": "singles" if c is None else c.court,
+            "court": court,
+            "bounds": bounds_for(record, r, court)[0],
         })  # fmt: skip
     return out
 
@@ -132,8 +137,8 @@ def evaluate(
         p = predicted[pairs[j]] if j in pairs else None
         true_margin = None
         if t["landing"] is not None:
-            court = p["court"] if p else "singles"
-            true_margin = signed_margin(t["landing"], play_bounds(court)) * 100
+            bounds = p.get("bounds") or play_bounds(p["court"]) if p else play_bounds("singles")
+            true_margin = signed_margin(t["landing"], bounds) * 100
         rows.append({
             "end_s": round(t["end_s"], 3),
             "label": t["call"],
@@ -159,11 +164,20 @@ def summarize(rows: list[dict[str, Any]], near_line_cm: float) -> dict[str, Any]
         tp = sum(r["call"] == cls and r["label"] == cls for r in certain)
         out[f"precision_{cls}"] = _ratio(tp, sum(r["call"] == cls for r in certain))
         out[f"recall_{cls}"] = _ratio(tp, sum(r["label"] == cls for r in certain))
-    labelled_xy = any(r["margin_cm_true"] is not None for r in certain)
-    key = "margin_cm_true" if labelled_xy else "margin_cm_pred"
-    near = [r for r in certain if r[key] is not None and abs(r[key]) <= near_line_cm]
+
+    def margin(r: dict[str, Any]) -> float | None:
+        true = r["margin_cm_true"]
+        return true if true is not None else r["margin_cm_pred"]
+
+    near = [r for r in certain if margin(r) is not None and abs(margin(r)) <= near_line_cm]
+    labelled = sum(r["margin_cm_true"] is not None for r in near)
+    basis = (
+        "labelled landing" if near and labelled == len(near)
+        else "predicted margin" if not labelled
+        else f"labelled landing ({labelled}) and predicted margin ({len(near) - labelled})"
+    )  # fmt: skip
     out["near_line"] = {
-        "basis": "labelled landing" if labelled_xy else "predicted margin",
+        "basis": basis,
         "within_cm": near_line_cm,
         "certain_calls": len(near),
         "false_call_rate": _ratio(sum(r["call"] != r["label"] for r in near), len(near)),
@@ -224,7 +238,10 @@ def main() -> None:
     clips = {}
     for pred, gt in zip(args.pred, args.gt, strict=True):
         truth = read_shuttleset(gt, args.fps) if args.gt_format == "shuttleset" else read_labels(gt)
-        clips[gt.stem] = evaluate(read_predicted(pred), truth, args.tolerance, args.near_line_cm)
+        name, n = gt.stem, 2
+        while name in clips:  # two label files with the same name in different folders
+            name, n = f"{gt.stem} ({n})", n + 1
+        clips[name] = evaluate(read_predicted(pred), truth, args.tolerance, args.near_line_cm)
     rows = [r for c in clips.values() for r in c["rows"]]
     overall = summarize(rows, args.near_line_cm)
     markdown = to_markdown(clips, overall, args)

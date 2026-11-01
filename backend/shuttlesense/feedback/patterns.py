@@ -114,7 +114,7 @@ def out_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
     notes = []
     for side in ("near", "far"):
         bad, total = out.get(side, []), len(ended.get(side, []))
-        if len(bad) < cfg["min_count"] or len(bad) / total < cfg["min_rate"]:
+        if not bad or len(bad) < cfg["min_count"] or len(bad) / total < cfg["min_rate"]:
             continue
         notes.append(
             SessionNote(
