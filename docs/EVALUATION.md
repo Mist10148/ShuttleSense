@@ -13,7 +13,7 @@ Written evaluation of ShuttleSense (T7.9). Each section names the report in [doc
 | Does it hold on phone video? | Stroke accuracy; count error per rally; rally boundaries | ≥ 55%; ≤ 1; ≥ 80% | Team clips | `results/phone.md`, `results/rallies.md` |
 | Is it fast enough? | Wall time for a 1-min 720p clip | < 5 min | Team clip, Colab T4 / RTX 4050 | `results/benchmark.md`, `results/stroke_latency.md` |
 | Does the app work everywhere? | T7.4 checklist | All pass | Android phone and tablet, Windows, Chrome | T7.4 PR |
-| Are line calls right? | Precision / recall for IN and OUT on certain calls; uncertain share; false-call rate on certain calls within 20 cm of a line | Report as measured | Labelled landings: team clips (T7.1 `in_out`, `landing_x_m`, `landing_y_m`) and ShuttleSet `lose_reason` | `results/line_calls.md` |
+| Are line calls right? | Precision / recall for IN and OUT on certain calls; uncertain share; false-call rate on certain calls within 20 cm of a line | Report as measured | Labelled landings: team clips (T7.1 `in_out`; `landing_x_m`, `landing_y_m` marked with `scripts/label_landings.py`) and ShuttleSet `lose_reason` | `results/line_calls.md` |
 | Is live fast enough? | Frame sent → frame event back, p50 / p95 | p95 ≤ 300 ms with models on the RTX 4050 | Team clip replayed with `live_replay` | `results/live_latency.md` |
 | Do live and offline agree? | Same hits, rallies, line calls and score | Exact | Synthetic rallies (`stream/synthetic.py`) | `tests/test_stream.py::test_offline_live_parity` |
 
