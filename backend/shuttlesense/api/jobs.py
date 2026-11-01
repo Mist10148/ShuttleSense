@@ -34,6 +34,10 @@ class JobBusy(Exception):
     """The job is queued or running, so it cannot be changed yet."""
 
 
+class VideoGone(Exception):
+    """The job's video was deleted while the job was being created."""
+
+
 class JobManager:
     """Keeps jobs in memory (mirrored to job.json) and runs them one at a time."""
 
@@ -98,6 +102,10 @@ class JobManager:
     def submit(self, job: Job) -> Job:
         job.stages = [StageState(name=n) for n in STAGE_NAMES]
         with self._lock:
+            # DELETE /videos hides the video before collecting its jobs under this lock, so
+            # either this job is collected and deleted, or the video is already hidden here.
+            if self.storage.load_video_meta(job.video_id) is None:
+                raise VideoGone(job.video_id)
             self._jobs[job.id] = job
             self.storage.save_job(job)
             self._enqueued[job.id] = next(self._ticket)

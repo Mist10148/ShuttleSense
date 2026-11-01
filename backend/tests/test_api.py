@@ -455,18 +455,36 @@ def test_unreadable_job_file_is_skipped(tmp_path: Path) -> None:
 
 def test_queue_position_follows_enqueue_order(tmp_path: Path) -> None:
     from shuttlesense.api.jobs import JobManager
-    from shuttlesense.api.models import Job
+    from shuttlesense.api.models import Job, VideoInfoOut
     from shuttlesense.api.storage import Storage
 
-    manager = JobManager(Storage(tmp_path / "s"), config={}, device="cpu")
-    older = manager.submit(Job(id="a" * 12, video_id="v" * 12, overlays=[]))
-    newer = manager.submit(Job(id="b" * 12, video_id="v" * 12, overlays=[]))
+    storage = Storage(tmp_path / "s")
+    storage.video_dir("f" * 12).mkdir(parents=True)
+    storage.save_video_meta(
+        VideoInfoOut(id="f" * 12, filename="c.mp4", size_bytes=1, fps=30, width=2, height=2,
+                     num_frames=1, duration_s=0.1)
+    )  # fmt: skip
+    manager = JobManager(storage, config={}, device="cpu")
+    older = manager.submit(Job(id="a" * 12, video_id="f" * 12, overlays=[]))
+    newer = manager.submit(Job(id="b" * 12, video_id="f" * 12, overlays=[]))
     assert (older.queue_position, manager.get(newer.id).queue_position) == (0, 1)
     with manager._lock:
         manager._jobs[older.id].status = "done"
     manager.rerender(older.id, [])  # back of the queue, although it was created first
     assert manager.get(newer.id).queue_position == 0
     assert manager.get(older.id).queue_position == 1
+
+
+def test_job_for_a_video_deleted_meanwhile_is_refused(tmp_path: Path) -> None:
+    """POST /jobs checked the video, then DELETE /videos hid it before the job was queued."""
+    from shuttlesense.api.jobs import JobManager, VideoGone
+    from shuttlesense.api.models import Job
+    from shuttlesense.api.storage import Storage
+
+    manager = JobManager(Storage(tmp_path / "s"), config={}, device="cpu")
+    with pytest.raises(VideoGone):
+        manager.submit(Job(id="a" * 12, video_id="f" * 12, overlays=[]))
+    assert manager.list() == []
 
 
 def test_ids_that_are_not_ours_are_not_found(client: TestClient, tiny_video: Path) -> None:

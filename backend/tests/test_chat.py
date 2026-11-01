@@ -179,6 +179,16 @@ def test_one_question_at_a_time_per_job(tmp_path: Path, tiny_video: Path) -> Non
         assert job_id not in client.app.state.chat_answering
 
 
+def test_no_rerender_while_an_answer_is_being_written(tmp_path: Path, tiny_video: Path) -> None:
+    with _client(tmp_path, FakeClient()) as client:
+        job_id = _done_job(client, tiny_video)
+        client.app.state.chat_answering[job_id] = time.monotonic()
+        res = client.post(f"/jobs/{job_id}/render", json={"overlays": []})
+        assert res.status_code == 409 and "coach answer" in res.json()["detail"]
+        client.app.state.chat_answering.pop(job_id)
+        assert client.post(f"/jobs/{job_id}/render", json={"overlays": []}).status_code == 202
+
+
 def test_chat_survives_a_rerender(tmp_path: Path, tiny_video: Path) -> None:
     with _client(tmp_path, FakeClient()) as client:
         job_id = _done_job(client, tiny_video)

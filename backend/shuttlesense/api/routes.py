@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from shuttlesense import __version__
 from shuttlesense.analytics import build_summary, write_exports
-from shuttlesense.api.jobs import JobBusy, JobManager
+from shuttlesense.api.jobs import JobBusy, JobManager, VideoGone
 from shuttlesense.api.models import (
     ChatRequest,
     Health,
@@ -264,7 +264,10 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         referee=body.referee,
         start_score=body.start_score,
     )
-    return jobs.submit(job)
+    try:
+        return jobs.submit(job)
+    except VideoGone as exc:
+        raise HTTPException(status_code=404, detail="video not found") from exc
 
 
 @router.get("/jobs", response_model=list[Job])
@@ -323,11 +326,14 @@ def get_rallies_csv(job_id: str, storage: StorageDep, jobs: JobsDep) -> FileResp
 
 
 @router.post("/jobs/{job_id}/render", response_model=Job, status_code=202)
-def rerender(job_id: str, body: RenderRequest, jobs: JobsDep) -> Job:
+def rerender(job_id: str, body: RenderRequest, request: Request, jobs: JobsDep) -> Job:
     job = _job_or_404(jobs, job_id)
     overlays = _check_overlays(body.overlays)
     if job.status != "done" and not (job.status == "failed" and jobs.has_outputs(job_id)):
         raise HTTPException(status_code=409, detail="only finished jobs can be re-rendered")
+    # The run would rewrite record.json under an answer that is about to be saved to it.
+    if _chat_in_flight(request, job_id):
+        raise HTTPException(status_code=409, detail="a coach answer is still being written")
     try:
         updated = jobs.rerender(job_id, overlays)
     except JobBusy as exc:
@@ -422,9 +428,9 @@ async def chat(
     # One question at a time per job, so parallel requests cannot get past the limit above
     # (the history only grows once an answer is saved).
     # The mark expires on its own in case the stream is never started.
-    answering: dict[str, float] = request.app.state.chat_answering
-    if time.monotonic() - answering.get(job_id, -CHAT_ANSWER_TIMEOUT_S) < CHAT_ANSWER_TIMEOUT_S:
+    if _chat_in_flight(request, job_id):
         raise HTTPException(status_code=409, detail="a question is already being answered")
+    answering: dict[str, float] = request.app.state.chat_answering
     answering[job_id] = time.monotonic()
     question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
     digest = build_digest(record, settings.chat_max_digest_chars)
@@ -445,6 +451,11 @@ async def chat(
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})  # fmt: skip
+
+
+def _chat_in_flight(request: Request, job_id: str) -> bool:
+    answering: dict[str, float] = request.app.state.chat_answering
+    return time.monotonic() - answering.get(job_id, -CHAT_ANSWER_TIMEOUT_S) < CHAT_ANSWER_TIMEOUT_S
 
 
 def _save_chat(
