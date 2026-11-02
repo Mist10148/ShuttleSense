@@ -98,6 +98,15 @@
       },
       "Job": {
         "properties": {
+          "best_of": {
+            "default": 1,
+            "enum": [
+              1,
+              3
+            ],
+            "title": "Best Of",
+            "type": "integer"
+          },
           "court_corners_px": {
             "anyOf": [
               {
@@ -160,6 +169,21 @@
               }
             ],
             "title": "Finished At"
+          },
+          "first_server": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server"
           },
           "id": {
             "title": "Id",
@@ -260,6 +284,15 @@
       },
       "JobCreate": {
         "properties": {
+          "best_of": {
+            "default": 1,
+            "enum": [
+              1,
+              3
+            ],
+            "title": "Best Of",
+            "type": "integer"
+          },
           "court_corners_px": {
             "anyOf": [
               {
@@ -285,6 +318,21 @@
               }
             ],
             "title": "Court Corners Px"
+          },
+          "first_server": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server"
           },
           "overlays": {
             "anyOf": [
@@ -548,6 +596,11 @@
             "title": "End Frame",
             "type": "integer"
           },
+          "game": {
+            "default": 1,
+            "title": "Game",
+            "type": "integer"
+          },
           "index": {
             "title": "Index",
             "type": "integer"
@@ -622,7 +675,18 @@
         "type": "object"
       },
       "Score": {
+        "description": "The current game's score (the last game's once the match is over) and match state.",
         "properties": {
+          "best_of": {
+            "default": 1,
+            "title": "Best Of",
+            "type": "integer"
+          },
+          "change_ends": {
+            "default": false,
+            "title": "Change Ends",
+            "type": "boolean"
+          },
           "corrections": {
             "items": {
               "$ref": "#/components/schemas/ScoreCorrection"
@@ -635,10 +699,112 @@
             "title": "Far",
             "type": "integer"
           },
+          "first_server": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server"
+          },
+          "game": {
+            "default": 1,
+            "title": "Game",
+            "type": "integer"
+          },
+          "game_point": {
+            "items": {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            "title": "Game Point",
+            "type": "array"
+          },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/ScorePair"
+            },
+            "title": "Games",
+            "type": "array"
+          },
+          "games_won": {
+            "$ref": "#/components/schemas/ScorePair"
+          },
+          "interval": {
+            "default": false,
+            "title": "Interval",
+            "type": "boolean"
+          },
+          "match_point": {
+            "items": {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            "title": "Match Point",
+            "type": "array"
+          },
+          "match_winner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Winner"
+          },
           "near": {
             "default": 0,
             "title": "Near",
             "type": "integer"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server"
+          },
+          "service_court": {
+            "anyOf": [
+              {
+                "enum": [
+                  "right",
+                  "left"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Court"
           }
         },
         "title": "Score",

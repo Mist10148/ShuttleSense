@@ -237,6 +237,7 @@ class JobManager:
         config = dict(self.config)
         if job.start_score is not None:
             config["start_score"] = job.start_score.model_dump()
+        config["match"] = {"best_of": job.best_of, "first_server": job.first_server}
         config["mode"] = job.mode
         return config
 

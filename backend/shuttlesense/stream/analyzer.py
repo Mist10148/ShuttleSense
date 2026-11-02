@@ -35,7 +35,6 @@ from shuttlesense.schema import (
     Players,
     PlayerSide,
     Rally,
-    Score,
     ScoreCorrection,
     ScorePair,
     Shuttle,
@@ -62,6 +61,8 @@ class StreamAnalyzer:
         config: dict[str, Any],
         device: str = "cpu",
         start_score: ScorePair | None = None,
+        best_of: int = 1,
+        first_server: PlayerSide | None = None,
         classify: Classifier | None = None,
         tick_every: int = 5,
         max_window_frames: int = 900,
@@ -71,10 +72,13 @@ class StreamAnalyzer:
         self.classify = classify
         self.tick_every = max(1, tick_every)
         self.max_window = max_window_frames
+        from shuttlesense.referee import apply_rallies
+
         self.start = start_score or ScorePair()
         self.record = ClipRecord(
             clip_id=clip_id, mode="live", fps=fps, width=width, height=height, num_frames=0,
-            court=court, score=Score(near=self.start.near, far=self.start.far),
+            court=court,
+            score=apply_rallies([], self.start, best_of=best_of, first_server=first_server),
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})

@@ -629,6 +629,21 @@ def test_fake_pipeline_uses_start_score(tmp_path: Path, tiny_video: Path) -> Non
         assert record["score"]["near"] >= 10 and record["score"]["far"] >= 12
 
 
+def test_job_match_settings_reach_the_record(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS, "best_of": 3,
+                "first_server": "far"}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert job["best_of"] == 3 and job["first_server"] == "far"
+        assert wait_for(client, job["id"])["status"] == "done"
+        score = client.get(f"/jobs/{job['id']}/record").json()["score"]
+        assert score["best_of"] == 3 and score["first_server"] == "far"
+        assert score["server"] in ("near", "far") and score["service_court"] in ("right", "left")
+        body["best_of"] = 2
+        assert client.post("/jobs", json=body).status_code == 422
+
+
 def test_failed_rerender_can_be_retried_and_restart_restores_it(
     tmp_path: Path, tiny_video: Path
 ) -> None:

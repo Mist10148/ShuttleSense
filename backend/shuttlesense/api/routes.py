@@ -263,6 +263,8 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         overlays=_check_overlays(body.overlays),
         referee=body.referee,
         start_score=body.start_score,
+        best_of=body.best_of,
+        first_server=body.first_server,
     )
     try:
         return jobs.submit(job)

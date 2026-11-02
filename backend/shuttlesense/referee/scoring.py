@@ -1,15 +1,16 @@
-"""BWF rally scoring rules (F16): 21 points, win by 2, capped at 30."""
+"""BWF rally scoring rules (F16): 21 points, win by 2, capped at 30; match play in match.py."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from pydantic import TypeAdapter
 
 from shuttlesense.atomic import atomic_write_text
-from shuttlesense.schema import ClipRecord, PlayerSide, Rally, ScoreCorrection, ScorePair
+from shuttlesense.schema import ClipRecord, PlayerSide, Rally, Score, ScoreCorrection, ScorePair
 
 # Score corrections live next to record.json, so a re-render (which rebuilds the record from
 # the stage cache) can apply them again.
@@ -35,25 +36,30 @@ def validate_start_score(score: ScorePair) -> None:
         raise ValueError("start_score cannot go above 29 in a game that is still on")
 
 
-def apply_rallies(rallies: Sequence[Rally], start: ScorePair | None = None) -> ScorePair:
-    """Set each rally's score_after from its winner and return the final score.
+def apply_rallies(
+    rallies: Sequence[Rally],
+    start: ScorePair | None = None,
+    *,
+    best_of: int = 1,
+    first_server: PlayerSide | None = None,
+) -> Score:
+    """Set each rally's game and score_after from the winners and return the match score.
 
-    Rallies without a winner (open or uncertain) keep the score. Once the game is won,
-    later rallies get score_after = None and do not count.
+    Rallies without a winner (open or uncertain) keep the score. Once the match is won
+    (the game, with best_of=1), later rallies get score_after = None and do not count.
     """
-    score = ScorePair(near=start.near, far=start.far) if start else ScorePair()
-    over = game_winner(score.near, score.far) is not None
-    for rally in rallies:
-        if over:
-            rally.score_after = None
-            continue
-        if rally.winner == "near":
-            score = ScorePair(near=score.near + 1, far=score.far)
-        elif rally.winner == "far":
-            score = ScorePair(near=score.near, far=score.far + 1)
-        rally.score_after = ScorePair(near=score.near, far=score.far)
-        over = game_winner(score.near, score.far) is not None
-    return score
+    from shuttlesense.referee.match import play
+
+    result = play([r.winner for r in rallies], start, best_of=best_of, first_server=first_server)
+    for rally, step in zip(rallies, result.steps, strict=True):
+        rally.game, rally.score_after = step.game, step.score_after
+    return result.score
+
+
+def match_config(config: dict[str, Any]) -> dict[str, Any]:
+    """best_of and first_server from a job's config (`match`, set like start_score)."""
+    match = config.get("match") or {}
+    return {"best_of": int(match.get("best_of", 1)), "first_server": match.get("first_server")}
 
 
 def load_corrections(out_dir: Path) -> list[ScoreCorrection]:
@@ -81,9 +87,10 @@ def apply_corrections(
     for c in corrections:
         if c.rally_index in by_index:
             by_index[c.rally_index].winner = c.winner_after
-    record.score.corrections = list(corrections)
-    final = apply_rallies(record.rallies, start)
-    record.score.near, record.score.far = final.near, final.far
+    final = apply_rallies(record.rallies, start, best_of=record.score.best_of,
+                          first_server=record.score.first_server)  # fmt: skip
+    final.corrections = list(corrections)
+    record.score = final
 
 
 def apply_user_changes(record: ClipRecord, out_dir: Path, start: ScorePair | None = None) -> bool:

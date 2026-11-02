@@ -182,6 +182,7 @@ class LiveManager:
         job = Job(
             id=job_id, video_id=entry.video_id, status="running", current_stage="render",
             started_at=utcnow(), progress=0.9, mode="live", referee=True, start_score=start,
+            best_of=session.request.best_of, first_server=session.request.first_server,
             court_corners_px=list(session.corners) if session.corners else None,
             overlays=list(OVERLAYS),
         )  # fmt: skip
@@ -240,9 +241,15 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     court = msg.get("court", "singles")
     if court not in ("singles", "doubles"):
         raise ValueError("court must be singles or doubles")
+    best_of = msg.get("best_of", 1)
+    if best_of not in (1, 3):
+        raise ValueError("best_of must be 1 or 3")
+    first_server = msg.get("first_server")
+    if first_server not in (None, "near", "far"):
+        raise ValueError("first_server must be near or far")
     return StartRequest(
         fps=fps, width=width, height=height, corners=corners, court=court, name=msg.get("name"),
-        start_score=score,
+        start_score=score, best_of=best_of, first_server=first_server,
     )  # fmt: skip
 
 

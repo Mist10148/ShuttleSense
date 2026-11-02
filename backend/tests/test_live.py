@@ -164,6 +164,8 @@ def test_stop_without_frames_saves_nothing(tmp_path: Path) -> None:
         ({**START, "start_score": {"near": -1, "far": 0}}, "bad_request"),
         ({**START, "start_score": {"near": 21, "far": 3}}, "bad_request"),
         ({**START, "start_score": {"near": 31, "far": 31}}, "bad_request"),
+        ({**START, "best_of": 5}, "bad_request"),
+        ({**START, "first_server": "left"}, "bad_request"),
         ({"type": "resume", "session_id": "nope"}, "not_found"),
     ],
 )

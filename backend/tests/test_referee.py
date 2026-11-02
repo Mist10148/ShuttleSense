@@ -91,18 +91,19 @@ def test_score_sequence() -> None:
     assert [(r.score_after.near, r.score_after.far) for r in rallies] == [
         (1, 0), (2, 0), (2, 0), (2, 1), (3, 1), (3, 2), (3, 3), (4, 3), (4, 4), (4, 5),
     ]  # fmt: skip
-    assert final == ScorePair(near=4, far=5)
-    assert apply_rallies(_rallies(["far"]), ScorePair(near=10, far=12)) == ScorePair(
-        near=10, far=13
-    )
+    assert (final.near, final.far) == (4, 5)
+    final = apply_rallies(_rallies(["far"]), ScorePair(near=10, far=12))
+    assert (final.near, final.far) == (10, 13)
 
 
 def test_deuce_to_30() -> None:
     rallies = _rallies(["near", "far"] * 9 + ["far"])
     final = apply_rallies(rallies, ScorePair(near=20, far=20))
-    assert final == ScorePair(near=29, far=30) and game_winner(29, 30) == "far"
+    assert (final.near, final.far) == (29, 30) and game_winner(29, 30) == "far"
+    assert final.match_winner == "far"
     rallies = _rallies(["near", "near", "far"])
-    assert apply_rallies(rallies, ScorePair(near=20, far=19)) == ScorePair(near=21, far=19)
+    final = apply_rallies(rallies, ScorePair(near=20, far=19))
+    assert (final.near, final.far) == (21, 19)
     assert rallies[1].score_after is None and rallies[2].score_after is None
 
 

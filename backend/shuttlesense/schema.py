@@ -20,6 +20,7 @@ Mode = Literal["upload", "live"]
 Call = Literal["in", "out"]
 CourtType = Literal["singles", "doubles"]
 RallyEventType = Literal["rally_start", "rally_end", "hit", "landing", "score"]
+ServiceCourt = Literal["right", "left"]
 
 STROKE_CLASSES: tuple[StrokeClass, ...] = ("smash", "clear", "drop", "net_shot", "lift", "serve")
 NUM_KEYPOINTS = 17  # COCO layout
@@ -107,7 +108,8 @@ class Rally(BaseModel):
     stroke_count: int = 0
     landing: Landing | None = None
     winner: PlayerSide | None = None
-    score_after: ScorePair | None = None
+    score_after: ScorePair | None = None  # score of its game after it (None: match over)
+    game: int = 1  # 1-based game of the match this rally was played in
 
 
 class ScoreCorrection(BaseModel):
@@ -118,7 +120,21 @@ class ScoreCorrection(BaseModel):
 
 
 class Score(ScorePair):
+    """The current game's score (the last game's once the match is over) and match state."""
+
     corrections: list[ScoreCorrection] = Field(default_factory=list)
+    best_of: int = 1  # games in the match: 1 or 3
+    first_server: PlayerSide | None = None  # set by the user; one camera cannot tell
+    game: int = 1
+    games: list[ScorePair] = Field(default_factory=list)  # finished games, in order
+    games_won: ScorePair = Field(default_factory=ScorePair)
+    server: PlayerSide | None = None  # who serves the next rally (None: not known yet)
+    service_court: ServiceCourt | None = None  # right on the server's even score
+    game_point: list[PlayerSide] = Field(default_factory=list)  # one point from the game
+    match_point: list[PlayerSide] = Field(default_factory=list)
+    match_winner: PlayerSide | None = None
+    interval: bool = False  # the last rally took the leader to 11: 60 s interval
+    change_ends: bool = False  # after a game, and at 11 in the deciding game
 
 
 class Moment(BaseModel):

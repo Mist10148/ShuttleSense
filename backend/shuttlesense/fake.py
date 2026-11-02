@@ -127,8 +127,11 @@ def fake_pipeline(
             h.rally_index = None
     elif record.score is not None:  # same start score and corrections as the real pipeline
         from shuttlesense.referee import apply_corrections, apply_user_changes, build_events
+        from shuttlesense.referee.scoring import match_config
 
         start = ScorePair(**(config or {}).get("start_score", {}) or {})
+        match = match_config(config or {})
+        record.score.best_of, record.score.first_server = match["best_of"], match["first_server"]
         if not apply_user_changes(record, out_dir, start):
             apply_corrections(record, [], start)  # still re-score from the start score
             record.rally_events = build_events(record)

@@ -155,7 +155,7 @@ def build() -> ClipRecord:
                 score_after=ScorePair(near=1, far=0),
             )
         ],
-        score=Score(near=1, far=0),
+        score=Score(near=1, far=0, server="near", service_court="left"),
     )
     record.line_calls = derive_from_rallies(record)
     landing = record.rallies[0].landing

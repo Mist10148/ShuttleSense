@@ -61,6 +61,8 @@ class JobCreate(BaseModel):
     overlays: list[str] | None = None
     referee: bool = False
     start_score: ScorePair | None = None  # for clips that start mid-game
+    best_of: Literal[1, 3] = 1  # games in the match
+    first_server: PlayerSide | None = None  # who serves the first rally, if known
 
 
 class RenderRequest(BaseModel):
@@ -125,4 +127,6 @@ class Job(BaseModel):
     overlays: list[str] = Field(default_factory=list)
     referee: bool = False
     start_score: ScorePair | None = None
+    best_of: Literal[1, 3] = 1
+    first_server: PlayerSide | None = None
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)

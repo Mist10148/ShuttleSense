@@ -45,6 +45,8 @@ class StartRequest:
     start_score: ScorePair | None = None
     court: str = "singles"
     name: str | None = None
+    best_of: int = 1
+    first_server: str | None = None
 
 
 def normalized_size(width: int, height: int, target_height: int) -> tuple[int, int]:
@@ -119,6 +121,7 @@ class LiveSession:
         self.analyzer = StreamAnalyzer(
             clip_id=session_id, fps=self.fps, width=self.width, height=self.height, court=court,
             config=self.config, device=device, start_score=request.start_score,
+            best_of=request.best_of, first_server=request.first_server,
             classify=classify, tick_every=int(live["tick_every"]),
             max_window_frames=int(live["max_window_frames"]),
         )  # fmt: skip
