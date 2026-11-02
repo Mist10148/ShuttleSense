@@ -629,6 +629,23 @@ def test_fake_pipeline_uses_start_score(tmp_path: Path, tiny_video: Path) -> Non
         assert record["score"]["near"] >= 10 and record["score"]["far"] >= 12
 
 
+def test_award_and_undo_over_rest(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        before = client.get(f"/jobs/{job_id}/record").json()["score"]
+        res = client.post(f"/jobs/{job_id}/score/award", json={"winner": "far"})
+        assert res.status_code == 200 and res.json()["score"]["far"] == before["far"] + 1
+        rally = client.get(f"/jobs/{job_id}/record").json()["rallies"][0]
+        res = client.patch(f"/jobs/{job_id}/score", json={"rally_index": 0, "winner": None})
+        assert res.status_code == 200 and res.json()["rallies"][0]["winner"] is None
+        assert (
+            client.post(f"/jobs/{job_id}/score/undo").json()["rallies"][0]["winner"]
+            == (rally["winner"])
+        )
+        assert client.post(f"/jobs/{job_id}/score/undo").json()["score"] == before
+        assert client.post(f"/jobs/{job_id}/score/undo").status_code == 404
+
+
 def test_job_match_settings_reach_the_record(tmp_path: Path, tiny_video: Path) -> None:
     with make_client(tmp_path, fake_pipeline=True) as client:
         vid = upload(client, tiny_video).json()["id"]

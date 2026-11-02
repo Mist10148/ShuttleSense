@@ -113,10 +113,18 @@ class Rally(BaseModel):
 
 
 class ScoreCorrection(BaseModel):
+    """A user's score change: a rally's winner set or cleared, or a point awarded.
+
+    An award is a point for a rally the referee layer missed; it counts after the detected
+    rallies before rally_index (the number of rallies when it was given).
+    """
+
     rally_index: int
     winner_before: PlayerSide | None
-    winner_after: PlayerSide
+    winner_after: PlayerSide | None  # None: the rally is undecided again
     at: datetime
+    kind: Literal["winner", "award"] = "winner"
+    frame: int | None = None  # where an award was given
 
 
 class Score(ScorePair):

@@ -42,17 +42,31 @@ def apply_rallies(
     *,
     best_of: int = 1,
     first_server: PlayerSide | None = None,
+    awards: Sequence[ScoreCorrection] = (),
 ) -> Score:
     """Set each rally's game and score_after from the winners and return the match score.
 
     Rallies without a winner (open or uncertain) keep the score. Once the match is won
     (the game, with best_of=1), later rallies get score_after = None and do not count.
+    Awarded points count before the rally whose index they carry.
     """
     from shuttlesense.referee.match import play
 
-    result = play([r.winner for r in rallies], start, best_of=best_of, first_server=first_server)
-    for rally, step in zip(rallies, result.steps, strict=True):
-        rally.game, rally.score_after = step.game, step.score_after
+    winners: list[PlayerSide | None] = []
+    slots: list[Rally | None] = []  # the rally behind each winner, None for an award
+    pending = sorted(awards, key=lambda a: a.rally_index)  # stable: given order within a slot
+    for rally in rallies:
+        while pending and pending[0].rally_index <= rally.index:
+            winners.append(pending.pop(0).winner_after)
+            slots.append(None)
+        winners.append(rally.winner)
+        slots.append(rally)
+    winners += [a.winner_after for a in pending]
+    slots += [None] * len(pending)
+    result = play(winners, start, best_of=best_of, first_server=first_server)
+    for rally, step in zip(slots, result.steps, strict=True):
+        if rally is not None:
+            rally.game, rally.score_after = step.game, step.score_after
     return result.score
 
 
@@ -85,12 +99,29 @@ def apply_corrections(
         return
     by_index = {r.index: r for r in record.rallies}
     for c in corrections:
-        if c.rally_index in by_index:
+        if c.kind == "winner" and c.rally_index in by_index:
             by_index[c.rally_index].winner = c.winner_after
+    awards = [c for c in corrections if c.kind == "award" and c.winner_after is not None]
     final = apply_rallies(record.rallies, start, best_of=record.score.best_of,
-                          first_server=record.score.first_server)  # fmt: skip
+                          first_server=record.score.first_server, awards=awards)  # fmt: skip
     final.corrections = list(corrections)
     record.score = final
+
+
+def undo_last_correction(record: ClipRecord, start: ScorePair | None = None) -> bool:
+    """Take back the newest correction or award and re-score; False when there is none.
+
+    A rally's winner goes back to what it was before that correction.
+    """
+    if record.score is None or not record.score.corrections:
+        return False
+    *rest, last = record.score.corrections
+    if last.kind == "winner":
+        rally = next((r for r in record.rallies if r.index == last.rally_index), None)
+        if rally is not None:
+            rally.winner = last.winner_before
+    apply_corrections(record, rest, start)
+    return True
 
 
 def apply_user_changes(record: ClipRecord, out_dir: Path, start: ScorePair | None = None) -> bool:

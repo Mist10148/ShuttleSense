@@ -329,7 +329,8 @@ class StreamAnalyzer:
         self._rescore()
         return [{"type": "line_call", "line_call": _dump(target)}, self._score_event()]
 
-    def correct(self, rally_index: int, winner: PlayerSide) -> list[Event]:
+    def correct(self, rally_index: int, winner: PlayerSide | None) -> list[Event]:
+        """Set a rally's winner, or clear it (None) so the rally does not count."""
         rally = next((r for r in self.record.rallies if r.index == rally_index), None)
         if rally is None:
             raise KeyError(rally_index)
@@ -337,6 +338,25 @@ class StreamAnalyzer:
             rally_index=rally_index, winner_before=rally.winner, winner_after=winner,
             at=datetime.now(UTC),
         ))  # fmt: skip
+        self._rescore()
+        return [self._score_event()]
+
+    def award(self, winner: PlayerSide) -> list[Event]:
+        """A point for a rally the referee layer missed, counted after the rallies so far."""
+        self.corrections.append(ScoreCorrection(
+            rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
+            at=datetime.now(UTC), kind="award", frame=max(0, len(self.record.frames) - 1),
+        ))  # fmt: skip
+        self._rescore()
+        return [self._score_event()]
+
+    def undo(self) -> list[Event]:
+        """Take back the newest score correction or award."""
+        from shuttlesense.referee import undo_last_correction
+
+        if not undo_last_correction(self.record, self.start):
+            raise KeyError("nothing to undo")
+        self.corrections = list(self.record.score.corrections)
         self._rescore()
         return [self._score_event()]
 

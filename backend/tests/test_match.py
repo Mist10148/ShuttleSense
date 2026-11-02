@@ -78,6 +78,21 @@ def test_start_score_past_11_has_no_interval() -> None:
     assert not play(["near"], ScorePair(near=11, far=3)).score.interval
 
 
+def test_awards_count_before_the_rally_they_precede() -> None:
+    from datetime import UTC, datetime
+
+    from shuttlesense.referee import apply_rallies
+    from shuttlesense.schema import Rally, ScoreCorrection
+
+    rallies = [Rally(index=i, start_frame=i * 10, end_frame=i * 10 + 5, winner="near")
+               for i in range(2)]  # fmt: skip
+    award = ScoreCorrection(rally_index=1, winner_before=None, winner_after="far",
+                            at=datetime.now(UTC), kind="award")  # fmt: skip
+    score = apply_rallies(rallies, awards=[award])
+    assert [r.score_after for r in rallies] == [ScorePair(near=1), ScorePair(near=2, far=1)]
+    assert (score.near, score.far, score.server) == (2, 1, "near")
+
+
 def test_best_of_must_be_1_or_3() -> None:
     with pytest.raises(ValueError):
         play([], best_of=2)

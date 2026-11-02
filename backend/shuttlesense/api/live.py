@@ -2,8 +2,9 @@
 
 Client -> server: a JSON `start` (or `resume`), then binary frames (12-byte header: uint32
 frame index and float64 capture time in ms, little-endian, then one JPEG), JSON
-`override`, `correct` and `stop`. Server -> client: JSON events (`started`, `frame`, `hit`,
-`rally`, `line_call`, `score`, `stats`, `degraded`, `saved`, `error`).
+`override`, `correct`, `award`, `undo` and `stop`. Server -> client: JSON events (`started`,
+`frame`, `hit`, `rally`, `line_call`, `score`, `coaching`, `stats`, `degraded`, `saved`,
+`error`).
 """
 
 from __future__ import annotations
@@ -435,10 +436,15 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     try:
         if msg.get("type") == "override" and msg.get("call") in ("in", "out"):
             return session.override(int(msg["line_call_id"]), msg["call"])
-        if msg.get("type") == "correct" and msg.get("winner") in ("near", "far"):
-            return session.correct(int(msg["rally_index"]), msg["winner"])
+        if msg.get("type") == "correct" and msg.get("winner") in ("near", "far", None):
+            return session.correct(int(msg["rally_index"]), msg.get("winner"))
+        if msg.get("type") == "award" and msg.get("winner") in ("near", "far"):
+            return session.award(msg["winner"])
+        if msg.get("type") == "undo":
+            return session.undo()
     except (KeyError, TypeError, ValueError):
-        return [{"type": "error", "code": "not_found", "detail": "no such line call or rally"}]
+        detail = "nothing to undo" if msg.get("type") == "undo" else "no such line call or rally"
+        return [{"type": "error", "code": "not_found", "detail": detail}]
     return [_bad_message(msg)]
 
 

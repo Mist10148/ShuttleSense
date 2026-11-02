@@ -1017,10 +1017,32 @@
       "type": "object"
     },
     "ScoreCorrection": {
+      "description": "A user's score change: a rally's winner set or cleared, or a point awarded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given).",
       "properties": {
         "at": {
           "format": "date-time",
           "title": "At",
+          "type": "string"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "kind": {
+          "default": "winner",
+          "enum": [
+            "winner",
+            "award"
+          ],
+          "title": "Kind",
           "type": "string"
         },
         "rally_index": {
@@ -1028,12 +1050,19 @@
           "type": "integer"
         },
         "winner_after": {
-          "enum": [
-            "near",
-            "far"
+          "anyOf": [
+            {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Winner After",
-          "type": "string"
+          "title": "Winner After"
         },
         "winner_before": {
           "anyOf": [

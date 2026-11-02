@@ -36,6 +36,7 @@ from shuttlesense.api.models import (
     LineCallOverrideBody,
     LineCallUpdate,
     RenderRequest,
+    ScoreAwardIn,
     ScoreCorrectionIn,
     ScoreUpdate,
     VideoInfoOut,
@@ -54,6 +55,7 @@ from shuttlesense.referee import (
     load_overrides,
     save_corrections,
     save_overrides,
+    undo_last_correction,
     validate_start_score,
 )
 from shuttlesense.render import OVERLAYS
@@ -61,6 +63,7 @@ from shuttlesense.schema import (
     SCHEMA_VERSION,
     Chat,
     ChatMessage,
+    ClipRecord,
     ScoreCorrection,
     load_record,
     migrate,
@@ -368,11 +371,52 @@ def correct_score(
         )
         corrections = [*record.score.corrections, correction]
         apply_corrections(record, corrections, job.start_score)
-        record.rally_events = build_events(record)  # rally_end winners and score events
-        record.summary = build_summary(record)
-        record.coaching = build_coaching(record, _feedback_config(jobs))
-        save_corrections(storage.job_dir(job_id), corrections)
-        write_exports(record, storage.job_dir(job_id))
+        _save_score(record, storage, jobs, job_id)
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+def _score_record(storage: Storage, jobs: JobManager, job_id: str) -> tuple[Job, Path]:
+    job = _job_or_404(jobs, job_id)
+    if job.status != "done":  # a re-render is about to rewrite record.json
+        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    return job, _output_or_404(storage, jobs, job_id, "record")
+
+
+def _save_score(record: ClipRecord, storage: Storage, jobs: JobManager, job_id: str) -> None:
+    """After a score change: events, summary and notes follow; corrections are kept."""
+    record.rally_events = build_events(record)  # rally_end winners and score events
+    record.summary = build_summary(record)
+    record.coaching = build_coaching(record, _feedback_config(jobs))
+    save_corrections(storage.job_dir(job_id), record.score.corrections)
+    write_exports(record, storage.job_dir(job_id))
+
+
+@router.post("/jobs/{job_id}/score/award", response_model=ScoreUpdate)
+def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
+    """Add a point for a rally the referee layer missed; it counts from `frame` on."""
+    job, path = _score_record(storage, jobs, job_id)
+    with jobs.job_lock(job_id):
+        record = load_record(path.read_text(encoding="utf-8"))
+        if record.score is None:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        frame = body.frame if body.frame is not None else max(0, record.num_frames - 1)
+        before = sum(1 for r in record.rallies if r.end_frame <= frame)
+        award = ScoreCorrection(rally_index=before, winner_before=None, winner_after=body.winner,
+                                at=utcnow(), kind="award", frame=frame)  # fmt: skip
+        apply_corrections(record, [*record.score.corrections, award], job.start_score)
+        _save_score(record, storage, jobs, job_id)
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+@router.post("/jobs/{job_id}/score/undo", response_model=ScoreUpdate)
+def undo_score(job_id: str, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
+    """Take back the newest score correction or award."""
+    job, path = _score_record(storage, jobs, job_id)
+    with jobs.job_lock(job_id):
+        record = load_record(path.read_text(encoding="utf-8"))
+        if not undo_last_correction(record, job.start_score):
+            raise HTTPException(status_code=404, detail="no score change to undo")
+        _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
 

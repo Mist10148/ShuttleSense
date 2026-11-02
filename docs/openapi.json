@@ -810,11 +810,61 @@
         "title": "Score",
         "type": "object"
       },
+      "ScoreAwardIn": {
+        "description": "A point for a rally the referee layer missed.",
+        "properties": {
+          "frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "winner": {
+            "enum": [
+              "near",
+              "far"
+            ],
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "winner"
+        ],
+        "title": "ScoreAwardIn",
+        "type": "object"
+      },
       "ScoreCorrection": {
+        "description": "A user's score change: a rally's winner set or cleared, or a point awarded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given).",
         "properties": {
           "at": {
             "format": "date-time",
             "title": "At",
+            "type": "string"
+          },
+          "frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "kind": {
+            "default": "winner",
+            "enum": [
+              "winner",
+              "award"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "rally_index": {
@@ -822,12 +872,19 @@
             "type": "integer"
           },
           "winner_after": {
-            "enum": [
-              "near",
-              "far"
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Winner After",
-            "type": "string"
+            "title": "Winner After"
           },
           "winner_before": {
             "anyOf": [
@@ -861,12 +918,19 @@
             "type": "integer"
           },
           "winner": {
-            "enum": [
-              "near",
-              "far"
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Winner",
-            "type": "string"
+            "title": "Winner"
           }
         },
         "required": [
@@ -1727,6 +1791,132 @@
           }
         },
         "summary": "Correct Score"
+      }
+    },
+    "/jobs/{job_id}/score/award": {
+      "post": {
+        "description": "Add a point for a rally the referee layer missed; it counts from `frame` on.",
+        "operationId": "award_point_jobs__job_id__score_award_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreAwardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Award Point"
+      }
+    },
+    "/jobs/{job_id}/score/undo": {
+      "post": {
+        "description": "Take back the newest score correction or award.",
+        "operationId": "undo_score_jobs__job_id__score_undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Score"
       }
     },
     "/jobs/{job_id}/summary.json": {

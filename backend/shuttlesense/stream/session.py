@@ -275,8 +275,14 @@ class LiveSession:
     def override(self, line_call_id: int, call: str) -> list[Event]:
         return self.analyzer.override(line_call_id, call)
 
-    def correct(self, rally_index: int, winner: str) -> list[Event]:
+    def correct(self, rally_index: int, winner: str | None) -> list[Event]:
         return self.analyzer.correct(rally_index, winner)
+
+    def award(self, winner: str) -> list[Event]:
+        return self.analyzer.award(winner)
+
+    def undo(self) -> list[Event]:
+        return self.analyzer.undo()
 
     # End ------------------------------------------------------------------------
 

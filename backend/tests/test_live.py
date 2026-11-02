@@ -97,6 +97,32 @@ def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
         assert ws.receive_json()["code"] == "not_found"
 
 
+def test_live_award_clear_and_undo(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "first_server": "near"})
+        ws.receive_json()
+        ws.send_json({"type": "undo"})
+        assert ws.receive_json() == {"type": "error", "code": "not_found",
+                                     "detail": "nothing to undo"}  # fmt: skip
+        ws.send_json({"type": "award", "winner": "far"})
+        score = ws.receive_json()["score"]
+        assert (score["near"], score["far"]) == (0, 1) and score["server"] == "far"
+        assert score["corrections"][0]["kind"] == "award"
+        events = _send_frames(ws, 230)
+        rally = next(e for e in events if e["type"] == "rally" and "rally" in e)["rally"]
+        ws.send_json({"type": "correct", "rally_index": rally["index"], "winner": None})
+        cleared = ws.receive_json()
+        assert cleared["rallies"][rally["index"]]["winner"] is None
+        ws.send_json({"type": "undo"})
+        undone = ws.receive_json()
+        assert undone["rallies"][rally["index"]]["winner"] == rally["winner"]
+        ws.send_json({"type": "stop"})
+        while (e := ws.receive_json())["type"] != "saved":
+            pass
+        record = client.get(f"/jobs/{e['job_id']}/record").json()
+        assert [c["kind"] for c in record["score"]["corrections"]] == ["award"]
+
+
 def test_resume_after_a_dropped_connection(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         with client.websocket_connect("/live") as ws:

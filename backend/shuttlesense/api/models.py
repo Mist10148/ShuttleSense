@@ -71,7 +71,14 @@ class RenderRequest(BaseModel):
 
 class ScoreCorrectionIn(BaseModel):
     rally_index: int
+    winner: PlayerSide | None  # None: the rally is undecided again
+
+
+class ScoreAwardIn(BaseModel):
+    """A point for a rally the referee layer missed."""
+
     winner: PlayerSide
+    frame: int | None = None  # where it happened; None: after the last rally
 
 
 class ScoreUpdate(BaseModel):
