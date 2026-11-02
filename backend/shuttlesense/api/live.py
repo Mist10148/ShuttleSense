@@ -137,7 +137,10 @@ class LiveManager:
                 if entry.attached or self.entries.get(entry.session.id) is not entry:
                     return
                 del self.entries[entry.session.id]
-            await asyncio.to_thread(self._save_and_release, entry)
+            try:
+                await asyncio.to_thread(self._save_and_release, entry)
+            except Exception:  # the GPU is released; only this session's save is lost
+                log.exception("saving expired live session %s failed", entry.session.id)
 
         entry.expiry = asyncio.get_running_loop().create_task(expire())
 
@@ -209,7 +212,13 @@ class LiveManager:
         for entry in list(self.entries.values()):
             if entry.expiry is not None:
                 entry.expiry.cancel()
-            await asyncio.to_thread(self.finish, entry)
+            # An attached session may still be processing a frame on a worker thread; the
+            # session lock makes finish() wait for it.
+            entry.attached = False
+            try:
+                await asyncio.to_thread(self.finish, entry)
+            except Exception:
+                log.exception("saving live session %s at shutdown failed", entry.session.id)
 
 
 def _start_request(msg: dict[str, Any]) -> StartRequest:
@@ -225,12 +234,9 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
         corners = [(float(x), float(y)) for x, y in corners]
     score = ScorePair(**msg["start_score"]) if msg.get("start_score") else None
     if score is not None:  # same checks as POST /jobs
-        from shuttlesense.referee import game_winner
+        from shuttlesense.referee import validate_start_score
 
-        if min(score.near, score.far) < 0:
-            raise ValueError("start_score cannot be negative")
-        if game_winner(score.near, score.far) is not None:
-            raise ValueError("start_score is already a finished game")
+        validate_start_score(score)
     court = msg.get("court", "singles")
     if court not in ("singles", "doubles"):
         raise ValueError("court must be singles or doubles")
@@ -259,6 +265,8 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
     manager: LiveManager = ws.app.state.live
     try:
         first = await asyncio.wait_for(ws.receive_json(), START_TIMEOUT_S)
+        if not isinstance(first, dict):
+            raise ValueError("first message must be a JSON object")
         if first.get("type") == "resume":
             entry = manager.resume(str(first.get("session_id")))
         elif first.get("type") == "start":
@@ -370,7 +378,7 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
         pass
     except Exception:
         log.exception("live session %s failed", session.id)
-        await _error(ws, "internal", "the live session hit an error; resume to continue")
+        await _error(ws, "internal", "the live session hit an error; resume to continue", 1011)
     finally:
         receiver.cancel()
         if not stopped:
@@ -392,6 +400,11 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
 
 
 def _frames(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dict]:
+    with session.lock:
+        return _frames_locked(session, frames)
+
+
+def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dict]:
     events: list[dict] = []
     for i, (data, received) in enumerate(frames):
         if len(data) <= HEADER.size:
@@ -407,6 +420,11 @@ def _frames(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dic
 
 
 def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
+    with session.lock:
+        return _control_locked(session, msg)
+
+
+def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     try:
         if msg.get("type") == "override" and msg.get("call") in ("in", "out"):
             return session.override(int(msg["line_call_id"]), msg["call"])

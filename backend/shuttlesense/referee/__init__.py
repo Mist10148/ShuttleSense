@@ -24,6 +24,7 @@ from shuttlesense.referee.scoring import (
     game_winner,
     load_corrections,
     save_corrections,
+    validate_start_score,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "save_corrections",
     "save_overrides",
     "segment_rallies",
+    "validate_start_score",
 ]

@@ -163,6 +163,7 @@ def test_stop_without_frames_saves_nothing(tmp_path: Path) -> None:
         ({**START, "corners": [[300, 200], [310, 200], [308, 190], [302, 190]]}, "bad_request"),
         ({**START, "start_score": {"near": -1, "far": 0}}, "bad_request"),
         ({**START, "start_score": {"near": 21, "far": 3}}, "bad_request"),
+        ({**START, "start_score": {"near": 31, "far": 31}}, "bad_request"),
         ({"type": "resume", "session_id": "nope"}, "not_found"),
     ],
 )
@@ -172,6 +173,28 @@ def test_bad_first_messages(tmp_path: Path, message: dict, code: str) -> None:
         assert ws.receive_json()["code"] == code
         with pytest.raises(WebSocketDisconnect):
             ws.receive_json()
+
+
+def test_non_object_first_message_is_a_bad_request(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json([1, 2])
+        assert ws.receive_json()["code"] == "bad_request"
+
+
+def test_quality_level_stops_at_the_last_configured_scale() -> None:
+    from shuttlesense.stream.perception import ReplayPerception
+    from shuttlesense.stream.session import LiveSession, StartRequest
+    from shuttlesense.stream.synthetic import synthetic_record
+
+    record, _ = synthetic_record()
+    config = {"live": {"scales": [1.0, 0.5], "check_every": 1, "budget_ms": 0}}
+    session = LiveSession(
+        session_id="s", request=StartRequest(fps=30, width=640, height=360), config=config,
+        perception=ReplayPerception(record, (640, 360)), court_corners=None, recording=None,
+    )  # fmt: skip
+    for i, frame in enumerate(blank_frames(5)):
+        session.process(encode(frame, i, i * 33.0)[12:], i, i * 33.0, time.monotonic())
+    assert session.level == 1
 
 
 def test_token_is_required_when_set(tmp_path: Path) -> None:

@@ -25,6 +25,16 @@ def game_winner(near: int, far: int) -> PlayerSide | None:
     return None
 
 
+def validate_start_score(score: ScorePair) -> None:
+    """Raise ValueError unless the score can occur in a game that is still on."""
+    if min(score.near, score.far) < 0:
+        raise ValueError("start_score cannot be negative")
+    if game_winner(score.near, score.far) is not None:
+        raise ValueError("start_score is already a finished game")
+    if max(score.near, score.far) > 29:  # 30 ends the game, so 30-30 or 31-31 never happen
+        raise ValueError("start_score cannot go above 29 in a game that is still on")
+
+
 def apply_rallies(rallies: Sequence[Rally], start: ScorePair | None = None) -> ScorePair:
     """Set each rally's score_after from its winner and return the final score.
 

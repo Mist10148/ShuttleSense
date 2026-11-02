@@ -8,6 +8,7 @@ stay complete) but get no perception, which the record shows as frames without a
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -130,6 +131,10 @@ class LiveSession:
         self._skipped_since_check = 0
         self._next_ts: float | None = None
         self.started_at = time.time()
+        # Held while a worker thread processes frames or a decision; finish() takes it too,
+        # so a shutdown never finalizes a record that a frame is still being added to.
+        self.lock = threading.RLock()
+        self._drop_lock = threading.Lock()  # drop() runs on the event loop, admit() on a worker
 
     # Frames -------------------------------------------------------------------
 
@@ -154,6 +159,9 @@ class LiveSession:
             self._writer = cv2.VideoWriter(
                 str(self.recording), fourcc, self.fps, (self.width, self.height)
             )
+            if not self._writer.isOpened():
+                self._writer = None
+                raise RuntimeError(f"cannot write the live recording to {self.recording}")
         self._writer.write(frame)
 
     def admit(self, ts: float) -> bool:
@@ -166,7 +174,7 @@ class LiveSession:
             return True
         period = 1000.0 / self.fps
         if self._next_ts is not None and ts < self._next_ts - period / 4:
-            self.stats.dropped += 1
+            self._count_drop()
             return False
         nxt = (self._next_ts if self._next_ts is not None else ts) + period
         self._next_ts = nxt if nxt > ts - period else ts + period  # resync after a gap
@@ -174,7 +182,11 @@ class LiveSession:
 
     def drop(self) -> None:
         """A frame the route had no room to queue."""
-        self.stats.dropped += 1
+        self._count_drop()
+
+    def _count_drop(self) -> None:
+        with self._drop_lock:
+            self.stats.dropped += 1
 
     def skip(self, jpeg: bytes, client_frame: int, ts: float) -> list[Event]:
         """A frame there is no time for: record it, keep the timeline, no perception."""
@@ -236,7 +248,8 @@ class LiveSession:
         self._since_check, self._skipped_since_check = [], 0
         budget = float(self.live["budget_ms"])
         old = self.level
-        if (p95 > budget or drop > self.live["max_drop_rate"]) and self.level < 2:
+        lowest = len(self.live["scales"]) - 1
+        if (p95 > budget or drop > self.live["max_drop_rate"]) and self.level < lowest:
             self.level += 1
         elif p95 < budget / 2 and drop < 0.05 and self.level > 0:
             self.level -= 1
@@ -265,15 +278,17 @@ class LiveSession:
     # End ------------------------------------------------------------------------
 
     def finish(self) -> ClipRecord:
-        if self._writer is not None:
-            self._writer.release()
-            self._writer = None
-        record = self.analyzer.finalize()
-        record.source_name = self.request.name or "live session"
-        return record
+        with self.lock:
+            if self._writer is not None:
+                self._writer.release()
+                self._writer = None
+            record = self.analyzer.finalize()
+            record.source_name = self.request.name or "live session"
+            return record
 
     def close(self) -> None:
         """Drop the session without saving (nothing was received)."""
-        if self._writer is not None:
-            self._writer.release()
-            self._writer = None
+        with self.lock:
+            if self._writer is not None:
+                self._writer.release()
+                self._writer = None

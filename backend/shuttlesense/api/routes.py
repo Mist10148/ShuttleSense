@@ -51,10 +51,10 @@ from shuttlesense.referee import (
     apply_corrections,
     apply_user_changes,
     build_events,
-    game_winner,
     load_overrides,
     save_corrections,
     save_overrides,
+    validate_start_score,
 )
 from shuttlesense.render import OVERLAYS
 from shuttlesense.schema import (
@@ -246,10 +246,10 @@ def _check_overlays(names: list[str] | None) -> list[str]:
 def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
     video = _video_or_404(storage, body.video_id)
     if body.start_score is not None:
-        if min(body.start_score.near, body.start_score.far) < 0:
-            raise HTTPException(status_code=400, detail="start_score cannot be negative")
-        if game_winner(body.start_score.near, body.start_score.far) is not None:
-            raise HTTPException(status_code=400, detail="start_score is already a finished game")
+        try:
+            validate_start_score(body.start_score)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.court_corners_px is not None:
         try:
             validate_corners(body.court_corners_px)

@@ -95,6 +95,8 @@ class StreamAnalyzer:
         self.open_rally_start: int | None = None
         self.overrides: list[Any] = []  # LineCallOverrideIn
         self.corrections: list[ScoreCorrection] = []
+        self._strokes_key: tuple[int | None, int] = (None, 0)  # (rally start, hits) counted
+        self._strokes = 0
 
     # Per frame ----------------------------------------------------------------
 
@@ -144,7 +146,6 @@ class StreamAnalyzer:
 
     def _frame_event(self, frame: Frame) -> Event:
         start = self.open_rally_start
-        strokes = sum(1 for h in self.record.hits if start is not None and h.frame >= start)
         return {
             "type": "frame",
             "frame": frame.frame,
@@ -155,8 +156,18 @@ class StreamAnalyzer:
             "speed_kmh": frame.shuttle_speed_kmh,
             "rally_state": self.state,
             "rally_start_frame": start,
-            "strokes_in_rally": strokes,
+            "strokes_in_rally": self._strokes_in_rally(start),
         }
+
+    def _strokes_in_rally(self, start: int | None) -> int:
+        """Committed hits since the open rally's start, recounted only when either changes."""
+        key = (start, len(self.record.hits))
+        if key != self._strokes_key:
+            self._strokes_key = key
+            self._strokes = (
+                0 if start is None else sum(1 for h in self.record.hits if h.frame >= start)
+            )
+        return self._strokes
 
     # Window -------------------------------------------------------------------
 

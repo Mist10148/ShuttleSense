@@ -565,6 +565,8 @@ def test_finished_game_start_score_is_400(client: TestClient, tiny_video: Path) 
     video = upload(client, tiny_video).json()
     body = {"video_id": video["id"], "referee": True, "start_score": {"near": 21, "far": 15}}
     assert client.post("/jobs", json=body).status_code == 400
+    body["start_score"] = {"near": 31, "far": 31}  # past the 30 cap: cannot happen
+    assert client.post("/jobs", json=body).status_code == 400
     body["start_score"] = {"near": 21, "far": 20}  # deuce: still on
     assert client.post("/jobs", json=body).status_code == 202
 
