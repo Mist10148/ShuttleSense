@@ -49,7 +49,7 @@ def _wait_done(client: TestClient, job_id: str) -> dict:
 def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         with client.websocket_connect("/live") as ws:
-            ws.send_json(START)
+            ws.send_json({**START, "court": "doubles"})
             started = ws.receive_json()
             assert started["type"] == "started" and not started["resumed"]
             assert (started["width"], started["height"]) == (640, 360)
@@ -78,6 +78,11 @@ def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
         # REST overrides work on a saved live session like on an upload.
         res = client.patch(f"/jobs/{job['id']}/line-calls/{call['id']}", json={"call": "out"})
         assert res.status_code == 200
+        before = client.get(f"/jobs/{job['id']}/record").json()
+        response = client.post(f"/jobs/{job['id']}/render", json={"overlays": ["trail"]})
+        assert response.status_code == 202
+        assert _wait_done(client, job["id"])["status"] == "done"
+        assert client.get(f"/jobs/{job['id']}/record").json() == before
 
 
 def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:

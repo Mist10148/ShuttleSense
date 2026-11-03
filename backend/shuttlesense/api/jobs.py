@@ -309,17 +309,20 @@ class JobManager:
         out_dir = self.storage.job_dir(job_id)
         try:
             with self.gpu:
-                self.pipeline(
-                    source,
-                    out_dir,
-                    clip_id=job_id,
-                    config=self.job_config(job),
-                    court_corners_px=job.court_corners_px,
-                    overlays=job.overlays,
-                    referee_enabled=job.referee,
-                    device=self.device,
-                    on_event=lambda n, s, p: self._on_event(job_id, n, s, p),
-                )
+                if job.mode == "live" and self.has_outputs(job_id):
+                    self._rerender_live(job, source, out_dir)
+                else:
+                    self.pipeline(
+                        source,
+                        out_dir,
+                        clip_id=job_id,
+                        config=self.job_config(job),
+                        court_corners_px=job.court_corners_px,
+                        overlays=job.overlays,
+                        referee_enabled=job.referee,
+                        device=self.device,
+                        on_event=lambda n, s, p: self._on_event(job_id, n, s, p),
+                    )
         except JobCancelled:
             self.storage.delete_job(job_id)
             return
@@ -349,3 +352,21 @@ class JobManager:
             finished_at=utcnow(),
             outputs=JobOutputs(**outputs),
         )
+
+    def _rerender_live(self, job: Job, source: Path, out_dir: Path) -> None:
+        """Render the saved live analysis, rather than analyzing its recording again."""
+        from shuttlesense.io import FrameReader
+        from shuttlesense.render import render_video
+        from shuttlesense.schema import load_record
+
+        record = load_record(self.storage.output_path(job.id, "record").read_text(encoding="utf-8"))
+        for name in STAGE_NAMES:
+            self._on_event(job.id, name, "pending" if name == "render" else "skipped", 0.0)
+        self._on_event(job.id, "render", "running", 0.0)
+        reader = FrameReader(source, target_height=record.height, max_fps=record.fps)
+        render_video(
+            record, reader, out_dir / "annotated.mp4", overlays=job.overlays,
+            config=self.job_config(job),
+            progress=lambda p: self._on_event(job.id, "render", "running", p),
+        )  # fmt: skip
+        self._on_event(job.id, "render", "done", 1.0)
