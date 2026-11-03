@@ -58,6 +58,8 @@ class LiveState {
     this.stages = const {},
     this.savedJobId,
     this.fps = 30,
+    this.processedFrames,
+    this.notice,
   });
 
   final LivePhase phase;
@@ -100,6 +102,13 @@ class LiveState {
   final Map<String, bool> stages;
   final String? savedJobId;
   final double fps;
+
+  /// Frames the server processed with perception (from its `stats` events).
+  final int? processedFrames;
+
+  /// A short message for a snack bar (a decision that did not go through); the id makes
+  /// the same text show again.
+  final ({int id, String text})? notice;
 
   bool get reducedQuality => qualityLevel > 0;
 
@@ -149,6 +158,8 @@ class LiveState {
     Map<String, bool>? stages,
     String? savedJobId,
     double? fps,
+    int? processedFrames,
+    ({int id, String text})? notice,
   }) => LiveState(
     phase: phase ?? this.phase,
     error: error,
@@ -179,6 +190,8 @@ class LiveState {
     stages: stages ?? this.stages,
     savedJobId: savedJobId ?? this.savedJobId,
     fps: fps ?? this.fps,
+    processedFrames: processedFrames ?? this.processedFrames,
+    notice: notice ?? this.notice,
   );
 }
 
@@ -317,7 +330,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           corners: const [],
         ),
       );
-    } on Exception catch (e) {
+    } on Object catch (e) {
       _set(state.copyWith(error: 'Could not take a picture: $e'));
     }
   }
@@ -376,13 +389,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     try {
       await socket.ready;
     } on Object {
-      await socket.close();
+      unawaited(socket.close());
       final message = 'Cannot reach the live server at ${api.config.baseUrl}';
       fail(message);
       return (started: null, refused: _Refused(null, message));
     }
     if (generation != _generation) {
-      await socket.close();
+      unawaited(socket.close());
       return (started: null, refused: _Refused(null, 'cancelled'));
     }
     // The old socket may still be open (a decode error, not a drop); close it so the server
@@ -407,8 +420,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           stages: (event['stages'] as Map? ?? const {}).map(
             (k, v) => MapEntry(k as String, v as bool),
           ),
+          score: event['score'] == null ? null : Score.fromJson(event['score'] as Json),
         ),
       );
+      _seed(event);
       return (started: event, refused: null);
     } on Object catch (e) {
       final refused = e is _Refused
@@ -420,12 +435,29 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
                   : 'Unexpected answer from the live server: $e',
             );
       if (_socket == socket) _socket = null;
-      await socket.close();
+      // A server that never answered may never finish the close handshake either.
+      unawaited(socket.close());
       fail(refused.message);
       return (started: null, refused: refused);
     } finally {
       if (identical(_started, started)) _started = null;
     }
+  }
+
+  /// The session so far from `started`: a fresh start has only the start score, a resume
+  /// gets back every hit, rally and call it missed while away.
+  void _seed(Json started) {
+    if (!started.containsKey('rallies')) return; // an older backend
+    state.hits
+      ..clear()
+      ..addAll(asList(started['hits']).map(Hit.fromJson));
+    state.rallies
+      ..clear()
+      ..addAll(asList(started['rallies']).map(Rally.fromJson));
+    state.lineCalls
+      ..clear()
+      ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
+    _set(state.copyWith(speedKmh: state.speedKmh));
   }
 
   void _beginStreaming() {
@@ -486,7 +518,15 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       case 'frame':
         _onFrame(e);
       case 'hit':
-        state.hits.add(Hit.fromJson(e['hit'] as Json));
+        // Kept in frame order: hitAt and the timeline assume it, and the server may commit
+        // an earlier hit after a later one.
+        final hit = Hit.fromJson(e['hit'] as Json);
+        final hits = state.hits;
+        var at = hits.length;
+        while (at > 0 && hits[at - 1].frame > hit.frame) {
+          at--;
+        }
+        hits.insert(at, hit);
         _set(state.copyWith(speedKmh: state.speedKmh));
       case 'line_call':
         final call = LineCall.fromJson(e['line_call'] as Json);
@@ -528,8 +568,11 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
             speedKmh: state.speedKmh,
           ),
         );
+      case 'stats':
+        _set(state.copyWith(processedFrames: asInt(e['processed']), speedKmh: state.speedKmh));
       case 'saved':
-        _saved?.complete(e['job_id'] as String?);
+        final saved = _saved;
+        if (saved != null && !saved.isCompleted) saved.complete(e['job_id'] as String?);
       case 'error':
         _onServerError(e);
     }
@@ -609,9 +652,38 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     // Mid-session: frame-level problems, an override of an unknown call (not_found) and a
     // server-side failure (internal: the server closes the socket and keeps the session, so
     // the app resumes) do not end the session.
-    if (const {'bad_frame', 'bad_message', 'not_found', 'internal'}.contains(code)) return;
+    if (code == 'not_found') {
+      // A decision for a rally or call the server does not have, or nothing to undo.
+      _notify(e['detail'] as String? ?? 'The server did not find that rally or call');
+      return;
+    }
+    if (const {'bad_frame', 'bad_message', 'internal'}.contains(code)) return;
     _streaming = false;
+    // Let go of the socket so the server detaches the session and frees the GPU.
+    final socket = _socket;
+    _socket = null;
+    unawaited(_events?.cancel());
+    _events = null;
+    if (socket != null) unawaited(socket.close());
     _set(state.copyWith(phase: LivePhase.error, error: message));
+  }
+
+  int _notices = 0;
+
+  void _notify(String text) =>
+      _set(state.copyWith(notice: (id: ++_notices, text: text), speedKmh: state.speedKmh));
+
+  /// Whether a referee decision can reach the server now.
+  bool get canDecide => state.phase == LivePhase.live && _socket != null;
+
+  /// Send a decision, or say why it cannot be sent (no silent drop while reconnecting).
+  void _decide(Json message) {
+    final socket = _socket;
+    if (state.phase != LivePhase.live || socket == null) {
+      _notify('Not connected: the decision was not sent. Try again once live.');
+      return;
+    }
+    socket.sendJson(message);
   }
 
   /// The socket closed: resume if it dropped mid-session, fail fast if it was saving.
@@ -660,10 +732,27 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   void overrideCall(int lineCallId, String call) =>
-      _socket?.sendJson({'type': 'override', 'line_call_id': lineCallId, 'call': call});
+      _decide({'type': 'override', 'line_call_id': lineCallId, 'call': call});
 
-  Future<void> correct(int rallyIndex, String winner) async =>
-      _socket?.sendJson({'type': 'correct', 'rally_index': rallyIndex, 'winner': winner});
+  /// Set a rally's winner, or clear it ([winner] null) so it does not count.
+  Future<void> correct(int rallyIndex, String? winner) async =>
+      _decide({'type': 'correct', 'rally_index': rallyIndex, 'winner': winner});
+
+  /// A point for a rally the system missed.
+  void award(String winner) => _decide({'type': 'award', 'winner': winner});
+
+  /// Take back the newest correction or award.
+  void undo() => _decide({'type': 'undo'});
+
+  /// Give up connecting or reconnecting and go back to the camera. A session the server
+  /// already started is saved to History once its resume window runs out.
+  Future<void> cancel() async {
+    final hadSession = state.sessionId != null;
+    await openCamera();
+    if (hadSession) {
+      _notify('Stopped trying. What reached the server is saved to History in about a minute.');
+    }
+  }
 
   /// Stop streaming and wait for the server to save the session.
   Future<void> stop() async {

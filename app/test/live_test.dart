@@ -58,6 +58,15 @@ Future<void> events(WidgetTester tester) async {
   await tester.pump();
 }
 
+Map<String, dynamic> _hit(int id, int frame) => {
+  'id': id,
+  'frame': frame,
+  'time_s': frame / 15,
+  'player': 'near',
+  'stroke': 'smash',
+  'feedback': <dynamic>[],
+};
+
 void main() {
   test('frame packets carry index and capture time before the JPEG', () {
     final packet = framePacket(7, 1234.5, Uint8List.fromList([1, 2, 3]));
@@ -238,6 +247,81 @@ void main() {
     await events(tester);
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
+    expect(find.text('no such line call'), findsOneWidget); // said, not swallowed
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('decisions while reconnecting are refused out loud, and Cancel gives up', (
+    tester,
+  ) async {
+    // Every resume is refused as not yet known, so the app keeps reconnecting.
+    final sockets = await pumpLive(
+      tester,
+      onHello: (hello) => hello['type'] == 'resume'
+          ? {'type': 'error', 'code': 'not_found', 'detail': 'not yet'}
+          : startedEvent(),
+    );
+    await startWithoutCourt(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final controller = container.read(liveControllerProvider.notifier);
+    await sockets.single.drop();
+    await events(tester);
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(controller.canDecide, isFalse);
+    controller.award('near');
+    await events(tester);
+    expect(find.textContaining('the decision was not sent'), findsOneWidget);
+    expect(sockets.single.sent.where((m) => m['type'] == 'award'), isEmpty);
+    await tester.tap(find.text('Cancel'));
+    await events(tester);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Start without court'), findsOneWidget);
+    expect(find.textContaining('saved to History in about a minute'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 30));
+  });
+
+  testWidgets('started restores the session so far and hits stay in frame order', (tester) async {
+    final sockets = await pumpLive(
+      tester,
+      onHello: (_) => {
+        ...startedEvent(),
+        'score': {'near': 7, 'far': 3, 'server': 'near', 'service_court': 'left'},
+        'rallies': [
+          {'index': 0, 'start_frame': 0, 'end_frame': 40, 'winner': 'near'},
+        ],
+        'line_calls': <dynamic>[],
+        'hits': [_hit(0, 10)],
+      },
+    );
+    await startWithoutCourt(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    var state = container.read(liveControllerProvider);
+    expect((state.score!.near, state.score!.far), (7, 3));
+    expect(state.rallies.single.winner, 'near');
+    sockets.single.emit({'type': 'hit', 'hit': _hit(2, 30)});
+    sockets.single.emit({'type': 'hit', 'hit': _hit(1, 20)});
+    sockets.single.emit({'type': 'stats', 'processed': 12});
+    await events(tester);
+    state = container.read(liveControllerProvider);
+    expect(state.hits.map((h) => h.frame), [10, 20, 30]);
+    expect(find.textContaining('analysed 12'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a start score also counts without a court', (tester) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await tester.tap(find.text('Game already under way'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('7').last);
+    await tester.pumpAndSettle();
+    await startWithoutCourt(tester);
+    expect(sockets.single.sent.first['start_score'], {'near': 7, 'far': 0});
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));

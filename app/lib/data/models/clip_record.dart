@@ -309,28 +309,98 @@ class ScorePair {
 }
 
 class ScoreCorrection {
-  const ScoreCorrection({required this.rallyIndex, this.winnerBefore, required this.winnerAfter});
+  const ScoreCorrection({
+    required this.rallyIndex,
+    this.winnerBefore,
+    this.winnerAfter,
+    this.kind = 'winner',
+    this.frame,
+  });
 
   final int rallyIndex;
   final String? winnerBefore;
-  final String winnerAfter;
+
+  /// null: the rally was made undecided again.
+  final String? winnerAfter;
+
+  /// `winner` (a rally's winner set or cleared) or `award` (a point the system missed).
+  final String kind;
+  final int? frame;
+
+  bool get isAward => kind == 'award';
 
   factory ScoreCorrection.fromJson(Json j) => ScoreCorrection(
     rallyIndex: asInt(j['rally_index'])!,
     winnerBefore: j['winner_before'] as String?,
-    winnerAfter: j['winner_after'] as String,
+    winnerAfter: j['winner_after'] as String?,
+    kind: j['kind'] as String? ?? 'winner',
+    frame: asInt(j['frame']),
   );
 }
 
+/// The current game's score (the last game's once the match is over) and the match state,
+/// all derived by the backend from the rally winners (D21).
 class Score extends ScorePair {
-  const Score({required super.near, required super.far, this.corrections = const []});
+  const Score({
+    required super.near,
+    required super.far,
+    this.corrections = const [],
+    this.bestOf = 1,
+    this.firstServer,
+    this.game = 1,
+    this.games = const [],
+    this.gamesWon = const ScorePair(near: 0, far: 0),
+    this.server,
+    this.serviceCourt,
+    this.gamePoint = const [],
+    this.matchPoint = const [],
+    this.matchWinner,
+    this.interval = false,
+    this.changeEnds = false,
+  });
 
   final List<ScoreCorrection> corrections;
+  final int bestOf;
+  final String? firstServer;
+  final int game;
+
+  /// Finished games, in order.
+  final List<ScorePair> games;
+  final ScorePair gamesWon;
+
+  /// Who serves the next rally, and from which court (`right` / `left`); null if unknown.
+  final String? server;
+  final String? serviceCourt;
+  final List<String> gamePoint;
+  final List<String> matchPoint;
+  final String? matchWinner;
+
+  /// The last rally took the leader to 11 (60 s interval).
+  final bool interval;
+
+  /// Players change ends now: after a game, and at 11 in the deciding game.
+  final bool changeEnds;
+
+  bool get matchOver => matchWinner != null;
 
   factory Score.fromJson(Json j) => Score(
     near: asInt(j['near'])!,
     far: asInt(j['far'])!,
     corrections: asList(j['corrections']).map(ScoreCorrection.fromJson).toList(),
+    bestOf: asInt(j['best_of']) ?? 1,
+    firstServer: j['first_server'] as String?,
+    game: asInt(j['game']) ?? 1,
+    games: asList(j['games']).map(ScorePair.fromJson).toList(),
+    gamesWon: j['games_won'] == null
+        ? const ScorePair(near: 0, far: 0)
+        : ScorePair.fromJson(j['games_won'] as Json),
+    server: j['server'] as String?,
+    serviceCourt: j['service_court'] as String?,
+    gamePoint: [for (final s in j['game_point'] as List? ?? const []) s as String],
+    matchPoint: [for (final s in j['match_point'] as List? ?? const []) s as String],
+    matchWinner: j['match_winner'] as String?,
+    interval: j['interval'] as bool? ?? false,
+    changeEnds: j['change_ends'] as bool? ?? false,
   );
 }
 
@@ -367,6 +437,7 @@ class Rally {
     this.landing,
     this.winner,
     this.scoreAfter,
+    this.game = 1,
   });
 
   final int index;
@@ -379,6 +450,9 @@ class Rally {
   final String? winner;
   final ScorePair? scoreAfter;
 
+  /// 1-based game of the match the rally was played in.
+  final int game;
+
   factory Rally.fromJson(Json j) => Rally(
     index: asInt(j['index'])!,
     startFrame: asInt(j['start_frame'])!,
@@ -387,6 +461,7 @@ class Rally {
     landing: j['landing'] == null ? null : Landing.fromJson(j['landing'] as Json),
     winner: j['winner'] as String?,
     scoreAfter: j['score_after'] == null ? null : ScorePair.fromJson(j['score_after'] as Json),
+    game: asInt(j['game']) ?? 1,
   );
 }
 

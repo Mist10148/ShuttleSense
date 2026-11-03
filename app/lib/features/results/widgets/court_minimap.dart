@@ -16,6 +16,9 @@ const int kTrailLength = 15;
 /// Side of a heatmap cell in meters.
 const double kHeatCellM = 0.5;
 
+/// Frames between heatmap rebuilds while a live session grows.
+const int kHeatRebuildFrames = 30;
+
 /// F10: top-down court with both players, the shuttle trail, the current rally's hits and
 /// the landing of every line call so far (F20: green in, red out, amber still uncertain).
 /// The Heatmap toggle (T5.5) shades where each player stood over the whole clip.
@@ -32,13 +35,17 @@ class CourtMinimap extends StatefulWidget {
 class _CourtMinimapState extends State<CourtMinimap> {
   var _heatmap = false;
   HeatGrid? _heat;
-  ClipRecord? _heatOf;
+  (String, int)? _heatKey;
 
-  /// Built once per record (a live record is a new object on every update).
+  /// Built once per clip, and during a live session again every [kHeatRebuildFrames]
+  /// frames (the live record is a new object on every event, and positions never change
+  /// after the fact, so rebuilding on each one would cost a pass over every frame).
   HeatGrid _heatGrid() {
-    if (!identical(_heatOf, widget.record)) {
-      _heat = HeatGrid.fromRecord(widget.record);
-      _heatOf = widget.record;
+    final record = widget.record;
+    final key = (record.clipId, record.frames.length ~/ kHeatRebuildFrames);
+    if (_heat == null || key != _heatKey) {
+      _heat = HeatGrid.fromRecord(record);
+      _heatKey = key;
     }
     return _heat!;
   }
@@ -76,7 +83,9 @@ class _CourtMinimapState extends State<CourtMinimap> {
               ),
             )
           : Text(
-              'Calibrate the court when uploading to see player and shuttle positions.',
+              record.mode == 'live'
+                  ? 'Calibrate the court before going live to see player and shuttle positions.'
+                  : 'Calibrate the court when uploading to see player and shuttle positions.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
     );

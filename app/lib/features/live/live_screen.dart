@@ -26,6 +26,13 @@ class LiveScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(liveControllerProvider);
     final controller = ref.read(liveControllerProvider.notifier);
+    ref.listen(liveControllerProvider.select((s) => s.notice), (_, notice) {
+      if (notice == null) return;
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(notice.text)));
+    });
+    final waiting = {LivePhase.connecting, LivePhase.reconnecting}.contains(state.phase);
     final streaming = {
       LivePhase.connecting,
       LivePhase.live,
@@ -36,7 +43,16 @@ class LiveScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Live'),
         actions: [
-          if (streaming)
+          if (waiting)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: OutlinedButton.icon(
+                onPressed: controller.cancel,
+                icon: const Icon(Icons.close),
+                label: const Text('Cancel'),
+              ),
+            )
+          else if (streaming)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton.icon(
@@ -137,14 +153,19 @@ class _ReadyView extends ConsumerWidget {
               label: const Text('Calibrate court'),
             ),
             OutlinedButton.icon(
-              onPressed: () => controller.start(),
+              onPressed: () {
+                // Without a court there are no line calls, but awards and corrections still
+                // keep score from the start score.
+                final score = ref.read(liveStartScoreProvider.notifier);
+                controller.start(startScore: score.state);
+                score.state = null; // belongs to this session only
+              },
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start without court'),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        // Scoring needs the calibrated court, so the score is used by "Go live" after it.
         StartScoreField(
           value: ref.watch(liveStartScoreProvider),
           onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
@@ -380,7 +401,7 @@ class _LiveView extends ConsumerWidget {
   }
 }
 
-/// Rally timer, received frames, latency and the reduced-quality warning.
+/// Rally timer, latency, frames sent and analysed, and the reduced-quality warning.
 class LiveStatusBar extends StatelessWidget {
   const LiveStatusBar({super.key, required this.state});
 
@@ -405,6 +426,15 @@ class LiveStatusBar extends StatelessWidget {
           avatar: const Icon(Icons.network_check, size: 16),
           label: Text(
             state.latencyMs == null ? 'Latency –' : 'Latency ${state.latencyMs!.round()} ms',
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
+        Chip(
+          avatar: const Icon(Icons.photo_camera_outlined, size: 16),
+          label: Text(
+            state.processedFrames == null
+                ? 'Sent ${state.sentFrames}'
+                : 'Sent ${state.sentFrames} · analysed ${state.processedFrames}',
           ),
           visualDensity: VisualDensity.compact,
         ),
