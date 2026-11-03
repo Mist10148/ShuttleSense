@@ -265,10 +265,46 @@ Open from that review (not fixed):
 
 - The doubles service order and partners: the tracker follows one player per side.
 - The live timeline uses the announced fps, not capture time.
-- Under load, skipped frames count as a lost shuttle.
+- Under load, skipped frames can limit hit detection and delay a rally decision.
 - On a portrait camera the overlay can be letterboxed against the preview.
 - The 1.15 m serve height rule cannot be measured from 2D pose.
-- A re-rendered live job is scored with singles lines.
+
+### Live reliability follow-up (Nov 4)
+
+- Saved live jobs now re-render the saved analysis instead of running perception again. This
+  preserves doubles line calls, score corrections and coaching data, including overrides.
+- Frames skipped by live perception no longer count as evidence that the shuttle was lost or
+  stationary. This is conservative: sustained skipping can delay a rally decision, and hits
+  occurring in skipped frames can still be missed.
+- Remaining implementation work: use capture time consistently through the recorded video,
+  event timeline, rally detection and resume; correct portrait preview/overlay geometry and
+  verify it against real camera stills. Current video and event times use the announced fps,
+  so irregular capture and queue drops can compress elapsed time. Do not claim live timing or
+  camera alignment is fixed until playback and device tests confirm it.
+- Doubles partners and service order are not tracked; a single 2D camera cannot verify the
+  1.15 m service-height rule. Line calls, speed and coaching remain estimates.
+- Local environment check: the base stack is present, but PyTorch is CPU-only; ONNX Runtime,
+  rtmlib, SciPy, model weights and sample footage are absent. Model-backed and real-footage
+  evaluations therefore remain open.
+- Verification: backend Ruff checks passed; the non-GPU suite passed 292 tests, and the
+  additional skipped-frame window test passed separately. Flutter analysis and formatting
+  checks passed, as did all 169 Flutter tests.
+
+### Remaining phase work by dependency
+
+- **Team and infrastructure (T0.6–T0.10, T1.1–T1.9):** team setup and agreements, shared
+  weights/data storage, consented clips, contract reviews, GPU/Colab setup and device connections.
+- **Perception and classifier (T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.14):** obtain
+  weights and labelled footage, settle the label mapping, extract and train, then evaluate
+  tracking, hits, strokes, ablation and latency on the specified splits and hardware.
+- **App and analysis (T4.1–T4.13, T5.1, T5.12–T5.13):** finish outstanding platform,
+  accessibility and visual checks, icon artwork, and calibrated speed evaluation.
+- **Referee and live (T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15):** label rallies and
+  landings; measure accuracy and model-backed latency; test a real camera, coach API key,
+  award/undo and coach panel on the specified devices.
+- **Release (T7.1–T7.14):** collect and review labelled phone footage; run final evaluations,
+  platform end-to-end tests and license audit; prepare artifacts, evaluation and demo media;
+  conduct the team rehearsal and release only after the gates are met.
 
 Verified on Nov 3:
 - Backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (291 tests).

@@ -36,6 +36,15 @@
 
 T8.13–T8.16 came out of a review of what a referee or coach courtside needs and are on `main` with tests. T8.14 and T8.15 stay ⬜ until they are tried on a device in a real session. Issues #109–#112 (the ✅ ones closed).
 
+### Reliability follow-up on Nov 4
+
+Re-rendering a saved live session now draws from its saved record, preserving the original
+singles or doubles calls, score corrections and coaching. Skipped perception frames are treated
+as unobserved when detecting a rally end; prolonged skipping can delay a decision and still
+miss hits. Capture-time-based playback and portrait camera alignment remain open, as do the
+real-camera, device, accuracy and latency checks in the task cards below. Doubles partners and
+individual service order are not tracked, and 2D pose does not establish serve height.
+
 ### Status on Oct 31
 
 Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app `flutter test`). A task stays ⬜ until its acceptance check is met:
