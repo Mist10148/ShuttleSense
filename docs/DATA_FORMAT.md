@@ -111,7 +111,8 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
       "stroke_count": 7,
       "landing": {"x_m": 4.9, "y_m": 12.1, "in_court": true, "confidence": 0.72},
       "winner": "near",
-      "score_after": {"near": 11, "far": 9}
+      "score_after": {"near": 11, "far": 9},                   // score of its game after it; null once the match is over
+      "game": 1                                                // v1.1: game of the match (D21)
     }
   ],
 
@@ -119,8 +120,24 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
     "near": 11,
     "far": 9,
     "corrections": [
-      {"rally_index": 0, "winner_before": "far", "winner_after": "near", "at": "2026-11-17T10:22:00Z"}
-    ]
+      {"rally_index": 0, "winner_before": "far", "winner_after": "near", "at": "2026-11-17T10:22:00Z",
+       "kind": "winner", "frame": null},                     // winner_after null: rally undecided again
+      {"rally_index": 1, "winner_before": null, "winner_after": "far", "at": "2026-11-17T10:23:00Z",
+       "kind": "award", "frame": 640}                        // a point the system missed, counted before rally 1
+    ],
+    // Match state (v1.1 additions, D21), derived from the rally winners:
+    "best_of": 1,                                            // 1 or 3
+    "first_server": "near",                                  // set by the user, null if unknown
+    "game": 1,                                               // current game (the last one once the match is over)
+    "games": [],                                             // finished games: [{"near": 21, "far": 17}, ...]
+    "games_won": {"near": 0, "far": 0},
+    "server": "near",                                        // serves the next rally; null until known
+    "service_court": "right",                                // right on the server's even score, else left
+    "game_point": [],                                        // sides one point from the game
+    "match_point": [],
+    "match_winner": null,
+    "interval": false,                                       // the last rally took the leader to 11
+    "change_ends": false                                     // after a game, and at 11 in the deciding game
   },
 
   "summary": {                                                 // F13

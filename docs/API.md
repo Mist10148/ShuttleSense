@@ -105,7 +105,9 @@ Start processing.
 | `court_corners_px` | no | 4 points in the order defined in [DATA_FORMAT.md](DATA_FORMAT.md#court-corners-order); omit to skip P2/P3 court features. `400` if they are not a convex quadrilateral in that order, or if the court they outline covers less than 10% or more than 95% of the frame ("corners look wrong") |
 | `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all nine (overlays whose stage did not run are simply not drawn) |
 | `referee` | no | Run the referee layer (rally state, line calls, score); default `false` |
-| `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative or already a finished game (e.g. 21–15) |
+| `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative, already a finished game (e.g. 21–15) or above 29 |
+| `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of game 1 |
+| `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 
 Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 
@@ -143,7 +145,7 @@ Job object, polled by the processing screen every 1 to 2 s.
 }
 ```
 
-`court_corners_px`, `overlays`, `referee` and `start_score` echo the options the job was created with, so the app can retry or re-render with the same settings.
+`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of` and `first_server` echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
@@ -171,7 +173,17 @@ Correct the winner of a rally (F16). Body:
 {"rally_index": 3, "winner": "far"}
 ```
 
+`"winner": null` makes the rally undecided again, so it does not count.
+
 Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`), or if the referee stage did not run or found no rallies.
+
+### `POST /jobs/{job_id}/score/award`
+
+A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response, exports and `409` cases as `PATCH /jobs/{job_id}/score`.
+
+### `POST /jobs/{job_id}/score/undo`
+
+Takes back the newest correction or award; a rally's winner goes back to what it was before that correction. Same response as above; `404` when there is nothing to undo. Line-call overrides are not undone here: override the call again.
 
 ### `PATCH /jobs/{job_id}/line-calls/{call_id}`
 
@@ -189,27 +201,30 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Message | Format | Notes |
 | --- | --- | --- |
-| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2"}` | First message. Corners are in the pixels of the frames the app will send |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of` and `first_server` as in `POST /jobs` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override |
-| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction |
+| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; `"winner": null` makes the rally undecided |
+| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far |
+| `undo` | `{"type": "undo"}` | Takes back the newest correction or award (`not_found` when there is none) |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |
 
 **Server → client** (JSON)
 
 | Event | Payload |
 | --- | --- |
-| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms` |
+| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` (null before the first rally). After a resume this restores the whole view |
 | `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (boxes and keypoints), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
 | `hit` | `hit`: a clip-record hit (stroke, confidence, feedback, speed); sent about `hit_lag` frames after the contact |
 | `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
 | `line_call` | `line_call`: a clip-record line call (again after an override) |
-| `score` | `score` and every `rallies[]` entry |
+| `score` | `score` (with the match state: `game`, `games`, `games_won`, `server`, `service_court`, `game_point`, `match_point`, `match_winner`, `interval`, `change_ends`) and every `rallies[]` entry |
+| `coaching` | After each closed rally: `coaching` (session notes and `top_fixes` so far, as in the record) and `rally_summary`: `index`, `game`, `duration_s`, `strokes`, `peak_speed_kmh`, `winner`, `call`, `margin_cm`, `faults` (`hit_id`, `time_s`, `player`, `stroke`, `rule`, `tip` for each failed form rule) |
 | `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: a camera faster than `live.max_fps` is thinned to it by capture time, and frames beyond `live.max_queue_frames` waiting are discarded |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
 

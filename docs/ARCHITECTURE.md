@@ -140,16 +140,16 @@ sequenceDiagram
     participant App
     participant WS as WS /live
     participant S as LiveSession (worker thread)
-    App->>WS: start {fps, width, height, corners, start_score, court}
-    WS-->>App: started {session_id, stages available}
+    App->>WS: start {fps, width, height, corners, start_score, court, best_of, first_server}
+    WS-->>App: started {session_id, stages, score, rallies, line_calls, hits so far}
     loop every camera frame
         App->>WS: header (frame index, capture ms) + JPEG
         WS->>S: newest frame (older waiting frames: record only)
         S-->>App: frame {shuttle, players, court, speed, rally_state, latency_ms}
-        S-->>App: hit / rally / line_call / score (when settled)
+        S-->>App: hit / rally / line_call / score / coaching (when settled)
         S-->>App: stats, degraded {level, reason}
     end
-    App->>WS: override / correct (any time)
+    App->>WS: override / correct / award / undo (any time)
     App->>WS: stop
     WS-->>App: saved {job_id}
 ```
