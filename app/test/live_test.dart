@@ -312,6 +312,106 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('referee and coach panels: match setup, award, undo, callout, coaching', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    Future<void> pick(String label) async {
+      final segment = find.descendant(
+        of: find.byWidgetPredicate((w) => w is SegmentedButton),
+        matching: find.text(label),
+      );
+      await tester.ensureVisible(segment);
+      await tester.tap(segment);
+      await tester.pump();
+    }
+
+    await pick('Best of 3');
+    await pick('Near');
+    await pick('Doubles');
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    expect(socket.sent.first['best_of'], 3);
+    expect(socket.sent.first['first_server'], 'near');
+    expect(socket.sent.first['court'], 'doubles');
+    expect(find.text('Notes appear here after each rally.'), findsOneWidget);
+
+    socket.emit(frameEvent(0));
+    socket.emit({
+      'type': 'score',
+      'score': {
+        'near': 0,
+        'far': 0,
+        'best_of': 3,
+        'server': 'near',
+        'service_court': 'right',
+        'corrections': [
+          {'rally_index': 0, 'winner_before': null, 'winner_after': 'near', 'kind': 'award'},
+        ],
+      },
+      'rallies': <dynamic>[],
+    });
+    socket.emit({
+      'type': 'hit',
+      'hit': {..._hit(0, 0), 'speed_kmh': 212.0},
+    });
+    socket.emit({
+      'type': 'coaching',
+      'coaching': {
+        'session_notes': [
+          {
+            'id': 'elbow_extension:near',
+            'rule': 'elbow_extension',
+            'player': 'near',
+            'text': 'Near player: Bent hitting arm at contact on 2 of 3 smashes',
+            'count': 2,
+            'total': 3,
+            'severity': 1.0,
+          },
+        ],
+        'top_fixes': ['elbow_extension:near'],
+      },
+      'rally_summary': {
+        'index': 0,
+        'duration_s': 6.2,
+        'strokes': 5,
+        'peak_speed_kmh': 230.0,
+        'winner': 'far',
+        'call': 'out',
+        'faults': [
+          {
+            'hit_id': 0,
+            'player': 'near',
+            'stroke': 'smash',
+            'rule': 'elbow_extension',
+            'tip': 'Extend your hitting arm fully at contact.',
+          },
+        ],
+      },
+    });
+    await events(tester);
+    expect(find.text('Game 1 of 3 · games 0–0'), findsOneWidget);
+    expect(find.text('Near serves · right court'), findsOneWidget);
+    expect(find.text('Smash by Near · 212 km/h (est.)'), findsOneWidget);
+    expect(find.textContaining('Rally 1 · 5 strokes · 6.2 s'), findsOneWidget);
+    expect(find.text('Near, Smash: Extend your hitting arm fully at contact.'), findsOneWidget);
+    expect(
+      find.text('1. Near player: Bent hitting arm at contact on 2 of 3 smashes'),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(find.text('Point Far'));
+    await tester.tap(find.text('Point Far'));
+    await tester.tap(find.text('Undo'));
+    await events(tester);
+    expect(socket.sent.where((m) => m['type'] == 'award').single['winner'], 'far');
+    expect(socket.sent.where((m) => m['type'] == 'undo'), hasLength(1));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('a start score also counts without a court', (tester) async {
     final sockets = await pumpLive(tester, size: laptop);
     await tester.tap(find.text('Game already under way'));

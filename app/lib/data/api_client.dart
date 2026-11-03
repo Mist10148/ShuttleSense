@@ -167,6 +167,7 @@ class ApiClient {
         'referee': options.referee,
         if (options.startScore != null)
           'start_score': {'near': options.startScore!.near, 'far': options.startScore!.far},
+        if (options.referee) ...{'best_of': options.bestOf, 'first_server': options.firstServer},
         if (corners != null)
           'court_corners_px': [
             for (final c in corners) [c.x, c.y],
@@ -212,15 +213,32 @@ class ApiClient {
     return Job.fromJson(res.data!);
   });
 
+  /// Set a rally's winner; [winner] null makes it undecided again.
   Future<ScoreUpdate> correctScore(
     String jobId, {
     required int rallyIndex,
-    required String winner,
+    required String? winner,
   }) => _call(() async {
     final res = await _dio.patch<Json>(
       '/jobs/$jobId/score',
       data: {'rally_index': rallyIndex, 'winner': winner},
     );
+    return ScoreUpdate.fromJson(res.data!);
+  });
+
+  /// A point for a rally the referee layer missed, counted from [frame] on (D21).
+  Future<ScoreUpdate> awardPoint(String jobId, {required String winner, int? frame}) =>
+      _call(() async {
+        final res = await _dio.post<Json>(
+          '/jobs/$jobId/score/award',
+          data: {'winner': winner, 'frame': frame},
+        );
+        return ScoreUpdate.fromJson(res.data!);
+      });
+
+  /// Take back the newest correction or award.
+  Future<ScoreUpdate> undoScore(String jobId) => _call(() async {
+    final res = await _dio.post<Json>('/jobs/$jobId/score/undo');
     return ScoreUpdate.fromJson(res.data!);
   });
 

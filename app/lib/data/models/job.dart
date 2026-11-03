@@ -75,6 +75,8 @@ class Job {
     this.courtCorners,
     this.referee = false,
     this.startScore,
+    this.bestOf = 1,
+    this.firstServer,
     this.mode = 'upload',
   });
 
@@ -96,6 +98,8 @@ class Job {
   final List<({double x, double y})>? courtCorners;
   final bool referee;
   final ({int near, int far})? startScore;
+  final int bestOf;
+  final String? firstServer;
 
   /// upload, or live for a saved live session.
   final String mode;
@@ -123,6 +127,8 @@ class Job {
     referee: referee,
     calibrate: courtCorners != null,
     startScore: startScore,
+    bestOf: bestOf,
+    firstServer: firstServer,
   );
 
   factory Job.fromJson(Json j) => Job(
@@ -145,6 +151,8 @@ class Job {
       final Json s => (near: asInt(s['near']) ?? 0, far: asInt(s['far']) ?? 0),
       _ => null,
     },
+    bestOf: asInt(j['best_of']) ?? 1,
+    firstServer: j['first_server'] as String?,
     mode: j['mode'] as String? ?? 'upload',
   );
 }
@@ -156,6 +164,8 @@ class JobOptions {
     this.referee = false,
     this.calibrate = true,
     this.startScore,
+    this.bestOf = 1,
+    this.firstServer,
   });
 
   final Set<String> overlays;
@@ -165,15 +175,36 @@ class JobOptions {
   /// For clips that start mid-game (P3 referee).
   final ({int near, int far})? startScore;
 
+  /// Games in the match (1 or 3) and who serves first (null: unknown), D21.
+  final int bestOf;
+  final String? firstServer;
+
   JobOptions copyWith({Set<String>? overlays, bool? referee, bool? calibrate}) => JobOptions(
     overlays: overlays ?? this.overlays,
     referee: referee ?? this.referee,
     calibrate: calibrate ?? this.calibrate,
     startScore: startScore,
+    bestOf: bestOf,
+    firstServer: firstServer,
   );
 
-  JobOptions withStartScore(({int near, int far})? score) =>
-      JobOptions(overlays: overlays, referee: referee, calibrate: calibrate, startScore: score);
+  JobOptions withStartScore(({int near, int far})? score) => JobOptions(
+    overlays: overlays,
+    referee: referee,
+    calibrate: calibrate,
+    startScore: score,
+    bestOf: bestOf,
+    firstServer: firstServer,
+  );
+
+  JobOptions withMatch({required int bestOf, String? firstServer}) => JobOptions(
+    overlays: overlays,
+    referee: referee,
+    calibrate: calibrate,
+    startScore: startScore,
+    bestOf: bestOf,
+    firstServer: firstServer,
+  );
 
   /// What to send to the server: no referee without calibration, no start score without the
   /// referee, and only the overlays that can be drawn (greyed-out chips keep their remembered

@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/models/clip_record.dart';
 import '../../shared/disclaimers.dart';
+import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/start_score_field.dart';
 import '../calibration/calibration_screen.dart';
 import '../mode/mode_screen.dart';
@@ -137,6 +140,8 @@ class _ReadyView extends ConsumerWidget {
           'with the whole court in view. Calibrate the court for the minimap, speed and line '
           'calls.',
         ),
+        const SizedBox(height: 8),
+        Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
         if (state.error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -170,8 +175,11 @@ class _ReadyView extends ConsumerWidget {
           value: ref.watch(liveStartScoreProvider),
           onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
         ),
-        const SizedBox(height: 16),
-        Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
+        MatchSetupField(
+          value: ref.watch(liveMatchSetupProvider),
+          onChanged: ref.read(liveMatchSetupProvider.notifier).set,
+          showCourt: true,
+        ),
       ],
     );
   }
@@ -386,6 +394,7 @@ class _LiveView extends ConsumerWidget {
             peakSpeedKmh: state.peakSpeedKmh,
             strokeCount: state.strokesInRally,
           ),
+          if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
           if (call != null)
             LineCallBanner(call: call, onDecide: (c) => controller.overrideCall(call.id, c)),
         ],
@@ -396,7 +405,109 @@ class _LiveView extends ConsumerWidget {
         onSeek: (_) {},
       ),
       minimap: CourtMinimap(record: record, frameIndex: frameIndex),
-      scoreboard: Scoreboard(record: record, frameIndex: frameIndex, onCorrect: controller.correct),
+      scoreboard: Scoreboard(
+        record: record,
+        frameIndex: frameIndex,
+        live: true,
+        busy: state.phase != LivePhase.live,
+        onCorrect: controller.correct,
+        onAward: controller.award,
+        onUndo: controller.undo,
+      ),
+      coach: LiveCoachPanel(state: state),
+    );
+  }
+}
+
+/// The newest hit: stroke, player and speed, the live "callout".
+class HitCallout extends StatelessWidget {
+  const HitCallout({super.key, required this.hit});
+
+  final Hit hit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PlayerColors.of(context);
+    final stroke = kStrokeLabels[hit.stroke] ?? 'Hit';
+    final speed = hit.speedKmh == null ? '' : ' · ${hit.speedKmh!.round()} km/h (est.)';
+    final side = hit.player == 'near' ? 'Near' : 'Far';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          children: [
+            Icon(Icons.bolt, color: colors.forSide(hit.player), size: 20),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                '$stroke by $side$speed',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Between-rally coaching (F21): what the last rally showed and the running top fixes,
+/// from the server's `coaching` events. Chat opens once the session is saved.
+class LiveCoachPanel extends StatelessWidget {
+  const LiveCoachPanel({super.key, required this.state});
+
+  final LiveState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final last = state.lastRally;
+    final coaching = state.coaching;
+    final top = coaching?.topFixes.take(3).toList() ?? const <SessionNote>[];
+    return SectionCard(
+      title: 'Coach',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (last == null)
+            Text('Notes appear here after each rally.', style: theme.textTheme.bodyMedium)
+          else ...[
+            Text('Last rally', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              [
+                'Rally ${last.index + 1}',
+                '${last.strokes} strokes',
+                if (last.durationS != null) '${last.durationS!.toStringAsFixed(1)} s',
+                if (last.peakSpeedKmh != null) 'peak ${last.peakSpeedKmh!.round()} km/h (est.)',
+                if (last.call != null) 'landed ${last.call}',
+                if (last.winner != null) '${last.winner == 'near' ? 'Near' : 'Far'} won',
+              ].join(' · '),
+            ),
+            for (final f in last.faults.where((f) => f.tip != null).take(3))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${f.player == 'near' ? 'Near' : 'Far'}'
+                  '${f.stroke == null ? '' : ', ${kStrokeLabels[f.stroke] ?? f.stroke}'}: ${f.tip}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+          ],
+          if (top.isNotEmpty) ...[
+            const Divider(height: 20),
+            Text('Focus so far', style: theme.textTheme.titleSmall),
+            for (final (i, note) in top.indexed)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('${i + 1}. ${note.text}'),
+              ),
+          ],
+          const SizedBox(height: 8),
+          Text(kCoachingDisclaimer, style: theme.textTheme.bodySmall),
+        ],
+      ),
     );
   }
 }

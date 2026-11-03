@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/clip_record.dart';
 import '../../data/models/json.dart';
+import '../../core/config/server_config.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../shared/widgets/match_setup_field.dart';
 import '../calibration/calibration_screen.dart' show Corner;
 import 'frame_source.dart';
 import 'live_socket.dart';
@@ -20,6 +22,50 @@ enum LivePhase {
   stopping,
   saved,
   error,
+}
+
+/// What happened in the rally that just closed (the server's `coaching` event).
+class RallySummary {
+  const RallySummary({
+    required this.index,
+    this.game = 1,
+    this.durationS,
+    this.strokes = 0,
+    this.peakSpeedKmh,
+    this.winner,
+    this.call,
+    this.faults = const [],
+  });
+
+  final int index;
+  final int game;
+  final double? durationS;
+  final int strokes;
+  final double? peakSpeedKmh;
+  final String? winner;
+  final String? call;
+
+  /// Form rules that failed in this rally: the tip to show and the stroke it was on.
+  final List<({int hitId, String player, String? stroke, String? tip})> faults;
+
+  factory RallySummary.fromJson(Json j) => RallySummary(
+    index: asInt(j['index'])!,
+    game: asInt(j['game']) ?? 1,
+    durationS: asDouble(j['duration_s']),
+    strokes: asInt(j['strokes']) ?? 0,
+    peakSpeedKmh: asDouble(j['peak_speed_kmh']),
+    winner: j['winner'] as String?,
+    call: j['call'] as String?,
+    faults: [
+      for (final f in asList(j['faults']))
+        (
+          hitId: asInt(f['hit_id']) ?? 0,
+          player: f['player'] as String? ?? 'near',
+          stroke: f['stroke'] as String?,
+          tip: f['tip'] as String?,
+        ),
+    ],
+  );
 }
 
 /// A player box and keypoints in processing pixels, for the overlay.
@@ -60,6 +106,8 @@ class LiveState {
     this.fps = 30,
     this.processedFrames,
     this.notice,
+    this.coaching,
+    this.lastRally,
   });
 
   final LivePhase phase;
@@ -110,6 +158,10 @@ class LiveState {
   /// the same text show again.
   final ({int id, String text})? notice;
 
+  /// Session notes so far and what the last rally showed (between-rally coaching, F21).
+  final Coaching? coaching;
+  final RallySummary? lastRally;
+
   bool get reducedQuality => qualityLevel > 0;
 
   int get frameIndex => frames.isEmpty ? 0 : frames.length - 1;
@@ -129,6 +181,7 @@ class LiveState {
     rallies: rallies,
     lineCalls: lineCalls,
     score: score,
+    coaching: coaching,
   );
 
   LiveState copyWith({
@@ -160,6 +213,8 @@ class LiveState {
     double? fps,
     int? processedFrames,
     ({int id, String text})? notice,
+    Coaching? coaching,
+    RallySummary? lastRally,
   }) => LiveState(
     phase: phase ?? this.phase,
     error: error,
@@ -192,6 +247,8 @@ class LiveState {
     fps: fps ?? this.fps,
     processedFrames: processedFrames ?? this.processedFrames,
     notice: notice ?? this.notice,
+    coaching: coaching ?? this.coaching,
+    lastRally: lastRally ?? this.lastRally,
   );
 }
 
@@ -356,6 +413,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
     }
+    final match = ref.read(liveMatchSetupProvider);
     final connected = await _connect({
       'type': 'start',
       'fps': _fps,
@@ -367,7 +425,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
               for (final c in corners) [c.x, c.y],
             ],
       'start_score': startScore == null ? null : {'near': startScore.near, 'far': startScore.far},
-      'court': 'singles',
+      'court': match.court,
+      'best_of': match.bestOf,
+      'first_server': match.firstServer,
     });
     if (connected.started == null) return;
     _beginStreaming();
@@ -457,7 +517,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     state.lineCalls
       ..clear()
       ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
-    _set(state.copyWith(speedKmh: state.speedKmh));
+    final coaching = started['coaching'] as Json?;
+    _set(
+      state.copyWith(
+        speedKmh: state.speedKmh,
+        coaching: coaching == null ? null : Coaching.fromJson(coaching),
+      ),
+    );
   }
 
   void _beginStreaming() {
@@ -532,7 +598,18 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         final call = LineCall.fromJson(e['line_call'] as Json);
         final i = state.lineCalls.indexWhere((c) => c.id == call.id);
         i < 0 ? state.lineCalls.add(call) : state.lineCalls[i] = call;
+        // A new call is felt as well as seen: the referee may be watching the court.
+        if (i < 0) unawaited(HapticFeedback.mediumImpact());
         _set(state.copyWith(speedKmh: state.speedKmh));
+      case 'coaching':
+        final summary = e['rally_summary'] as Json?;
+        _set(
+          state.copyWith(
+            coaching: Coaching.fromJson(e['coaching'] as Json),
+            lastRally: summary == null ? null : RallySummary.fromJson(summary),
+            speedKmh: state.speedKmh,
+          ),
+        );
       case 'rally':
         if (e['state'] == 'in_play') {
           _set(
@@ -788,6 +865,36 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
 final liveControllerProvider = AutoDisposeNotifierProvider<LiveController, LiveState>(
   LiveController.new,
+);
+
+/// Match settings for the next live session (best of, first server, singles or doubles
+/// lines); remembered on the device.
+class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
+  static const _key = 'live.match';
+
+  @override
+  MatchSetup build() {
+    final saved = ref.read(sharedPreferencesProvider).getStringList(_key);
+    if (saved == null || saved.length != 3) return kDefaultMatchSetup;
+    return (
+      bestOf: saved[0] == '3' ? 3 : 1,
+      firstServer: const {'near', 'far'}.contains(saved[1]) ? saved[1] : null,
+      court: saved[2] == 'doubles' ? 'doubles' : 'singles',
+    );
+  }
+
+  Future<void> set(MatchSetup setup) async {
+    state = setup;
+    await ref.read(sharedPreferencesProvider).setStringList(_key, [
+      '${setup.bestOf}',
+      setup.firstServer ?? '',
+      setup.court,
+    ]);
+  }
+}
+
+final liveMatchSetupProvider = NotifierProvider<LiveMatchSetupNotifier, MatchSetup>(
+  LiveMatchSetupNotifier.new,
 );
 
 /// Score at the start of a live session that joins a game under way (P3 referee). Kept

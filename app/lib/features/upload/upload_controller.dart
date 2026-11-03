@@ -41,6 +41,8 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   static const _overlaysKey = 'options.overlays';
   static const _calibrateKey = 'options.calibrate';
   static const _refereeKey = 'options.referee';
+  static const _bestOfKey = 'options.best_of';
+  static const _firstServerKey = 'options.first_server';
 
   @override
   JobOptions build() {
@@ -52,6 +54,8 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
           : overlays.where(kOverlays.containsKey).toSet(),
       calibrate: prefs.getBool(_calibrateKey) ?? true,
       referee: prefs.getBool(_refereeKey) ?? false,
+      bestOf: prefs.getInt(_bestOfKey) == 3 ? 3 : 1,
+      firstServer: prefs.getString(_firstServerKey),
     );
   }
 
@@ -65,6 +69,16 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
     await prefs.setStringList(_overlaysKey, next.overlays.toList());
     await prefs.setBool(_calibrateKey, next.calibrate);
     await prefs.setBool(_refereeKey, next.referee);
+  }
+
+  /// Remembered: a team usually records the same kind of match.
+  Future<void> setMatch({required int bestOf, String? firstServer}) async {
+    state = state.withMatch(bestOf: bestOf, firstServer: firstServer);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(_bestOfKey, bestOf);
+    firstServer == null
+        ? await prefs.remove(_firstServerKey)
+        : await prefs.setString(_firstServerKey, firstServer);
   }
 
   /// For a clip that begins mid-game; not remembered, it belongs to one clip.

@@ -195,7 +195,7 @@ class FakeApiClient extends ApiClient {
   Future<ScoreUpdate> correctScore(
     String jobId, {
     required int rallyIndex,
-    required String winner,
+    required String? winner,
   }) => _answer('correctScore $jobId $rallyIndex $winner', () {
     final after = ScorePair(near: winner == 'near' ? 1 : 0, far: winner == 'far' ? 1 : 0);
     final rallies = [
@@ -215,6 +215,41 @@ class FakeApiClient extends ApiClient {
     final score = Score(near: after.near, far: after.far);
     record = record.copyWith(rallies: rallies, score: score);
     return ScoreUpdate(score: score, rallies: rallies);
+  });
+
+  /// Score before each award, so undo can restore it.
+  final _beforeAwards = <Score>[];
+
+  @override
+  Future<ScoreUpdate> awardPoint(String jobId, {required String winner, int? frame}) =>
+      _answer('awardPoint $jobId $winner $frame', () {
+        final old = record.score ?? const Score(near: 0, far: 0);
+        _beforeAwards.add(old);
+        final score = Score(
+          near: old.near + (winner == 'near' ? 1 : 0),
+          far: old.far + (winner == 'far' ? 1 : 0),
+          corrections: [
+            ...old.corrections,
+            ScoreCorrection(
+              rallyIndex: record.rallies.length,
+              winnerAfter: winner,
+              kind: 'award',
+              frame: frame,
+            ),
+          ],
+          server: winner,
+        );
+        record = record.copyWith(score: score);
+        return ScoreUpdate(score: score, rallies: record.rallies);
+      });
+
+  @override
+  Future<ScoreUpdate> undoScore(String jobId) => _answer('undoScore $jobId', () {
+    final score = _beforeAwards.isEmpty
+        ? (record.score ?? const Score(near: 0, far: 0))
+        : _beforeAwards.removeLast();
+    record = record.copyWith(score: score);
+    return ScoreUpdate(score: score, rallies: record.rallies);
   });
 
   @override

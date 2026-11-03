@@ -72,6 +72,44 @@ final recordJson = <String, dynamic>{
 };
 
 void main() {
+  test('match state, awards and null-winner corrections parse', () {
+    final score = Score.fromJson({
+      'near': 3,
+      'far': 1,
+      'best_of': 3,
+      'first_server': 'far',
+      'game': 2,
+      'games': [
+        {'near': 21, 'far': 19},
+      ],
+      'games_won': {'near': 1, 'far': 0},
+      'server': 'near',
+      'service_court': 'left',
+      'game_point': <dynamic>[],
+      'match_point': <dynamic>[],
+      'corrections': [
+        {'rally_index': 2, 'winner_before': 'near', 'winner_after': null},
+        {
+          'rally_index': 4,
+          'winner_before': null,
+          'winner_after': 'far',
+          'kind': 'award',
+          'frame': 900,
+        },
+      ],
+    });
+    expect(score.game, 2);
+    expect(score.games.single, const ScorePair(near: 21, far: 19));
+    expect(score.gamesWon, const ScorePair(near: 1, far: 0));
+    expect((score.server, score.serviceCourt), ('near', 'left'));
+    expect(score.corrections.first.winnerAfter, isNull);
+    expect(score.corrections.last.isAward, isTrue);
+    expect(score.corrections.last.frame, 900);
+    // A 1.0/early 1.1 record without the fields still parses with defaults.
+    final old = Score.fromJson({'near': 1, 'far': 0});
+    expect((old.bestOf, old.game, old.server, old.matchOver), (1, 1, null, false));
+  });
+
   group('ClipRecord', () {
     final record = ClipRecord.fromJson(recordJson);
 

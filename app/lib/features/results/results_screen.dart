@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
+import '../../data/api_client.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/health.dart';
 import '../../data/models/job.dart';
@@ -252,13 +253,20 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     _openIfAvailable();
   }
 
-  /// F16: flip a rally's winner on the server and show the re-scored rallies.
-  Future<void> _correct(int rallyIndex, String winner) async {
+  /// F16: flip (or clear) a rally's winner on the server and show the re-scored rallies.
+  Future<void> _correct(int rallyIndex, String? winner) =>
+      _changeScore((api) => api.correctScore(widget.jobId, rallyIndex: rallyIndex, winner: winner));
+
+  /// D21: a point the referee layer missed, at the playback position.
+  Future<void> _award(String winner) =>
+      _changeScore((api) => api.awardPoint(widget.jobId, winner: winner, frame: _frameIndex.value));
+
+  Future<void> _undo() => _changeScore((api) => api.undoScore(widget.jobId));
+
+  Future<void> _changeScore(Future<ScoreUpdate> Function(ApiClient api) change) async {
     setState(() => _correcting = true);
     try {
-      final update = await ref
-          .read(apiClientProvider)
-          .correctScore(widget.jobId, rallyIndex: rallyIndex, winner: winner);
+      final update = await change(ref.read(apiClientProvider));
       if (!mounted) return;
       setState(() => _record = _record.copyWith(rallies: update.rallies, score: update.score));
       // The server also rebuilt summary.json; fetch the record again for the chart.
@@ -378,6 +386,8 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   frameIndex: frameIndex,
                   busy: _correcting,
                   onCorrect: _correct,
+                  onAward: _award,
+                  onUndo: _undo,
                 ),
                 const SizedBox(height: 16),
                 chart,
