@@ -161,6 +161,23 @@ def test_skipped_frames_do_not_run_the_windowed_stages(monkeypatch) -> None:
     assert ticks == [9]
 
 
+def test_skipped_frames_are_passed_to_referee_in_window_coordinates(monkeypatch) -> None:
+    from shuttlesense import analytics, hits, referee
+    from shuttlesense.schema import Players, Shuttle
+
+    analyzer = _session(30).analyzer
+    analyzer.tick_every = 100
+    for i in range(6):
+        analyzer.add_frame(Shuttle(), Players(), tick=i != 3)
+    analyzer.anchor = 2
+    seen = []
+    monkeypatch.setattr(hits, "run", lambda record, ctx: record)
+    monkeypatch.setattr(analytics, "run", lambda record, ctx: record)
+    monkeypatch.setattr(referee, "run", lambda record, ctx: seen.append(ctx.config))
+    analyzer._run_stages(analyzer._window(2, 5))
+    assert seen[0]["_unobserved_frames"] == {1}
+
+
 def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
     from shuttlesense.pose.tracking import PlayerTracker
     from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player
