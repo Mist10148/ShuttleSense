@@ -6,6 +6,11 @@
 Frames are sent one at a time and the next one only after the server's `frame` event for
 it arrives, so the measured time is frame sent -> overlay event back (network + decode +
 perception + analysis), without queueing. --realtime additionally paces frames at --fps.
+
+Event lag is how late a decision arrives after the frame it is about: a hit after its
+contact frame, a line call after its landing frame, a closed rally after its end frame. It
+is reported in frames (the look-ahead the stages wait for, independent of the machine) and
+in ms from sending that frame (meaningful with --realtime, where frames come at camera pace).
 The websocket client comes with uvicorn[standard] (requirements/base.txt).
 """
 
@@ -63,6 +68,9 @@ def run(
     # their video time, so every sent frame gets its frame event back.
     step = fps / float(started["fps"])
     latencies, server_ms, counts = [], [], {}
+    sent_at: dict[int, float] = {}  # server frame -> when it was sent
+    lags: dict[str, dict[str, list[float]]] = {}
+    current = -1  # newest server frame with its frame event back
     t0, wall0 = time.perf_counter(), time.time() * 1000
     kept = -1
     for i, frame in enumerate(frames):
@@ -78,6 +86,14 @@ def run(
         while True:
             event = conn.receive_json()
             counts[event["type"]] = counts.get(event["type"], 0) + 1
+            ref = _event_frame(event)
+            if ref is not None and ref in sent_at:
+                lag = lags.setdefault(event["type"], {"frames": [], "ms": []})
+                lag["frames"].append(current - ref)
+                lag["ms"].append((time.perf_counter() - sent_at[ref]) * 1000)
+            if event["type"] == "frame" and "frame" in event:
+                current = max(current, int(event["frame"]))
+                sent_at.setdefault(int(event["frame"]), sent)
             if event["type"] == "frame" and event.get("client_frame") == i:
                 latencies.append((time.perf_counter() - sent) * 1000)
                 if "latency_ms" in event:
@@ -97,9 +113,26 @@ def run(
         "round_trip_ms": _pcts(latencies),
         "server_ms": _pcts(server_ms),
         "throughput_fps": round(len(latencies) / elapsed, 1) if elapsed else 0.0,
+        "event_lag": {
+            kind: {"count": len(v["frames"]), "frames": _pcts(v["frames"]), "ms": _pcts(v["ms"])}
+            for kind, v in sorted(lags.items())
+        },
+        "fps": float(started["fps"]),
         "events": counts,
         "job_id": event["job_id"],
     }
+
+
+def _event_frame(event: dict) -> int | None:
+    """The frame a decision event is about (None for frame, score and status events)."""
+    kind = event.get("type")
+    if kind == "hit":
+        return int(event["hit"]["frame"])
+    if kind == "line_call":
+        return None if event["line_call"].get("override") else int(event["line_call"]["frame"])
+    if kind == "rally" and event.get("rally"):
+        return int(event["rally"]["end_frame"])
+    return None
 
 
 def _pcts(values: list[float]) -> dict[str, float]:

@@ -20,6 +20,17 @@ def test_live_replay_in_process_reports_latency_and_events(tmp_path: Path, capsy
     assert json.loads(capsys.readouterr().out) == result
 
 
+def test_live_replay_reports_event_lag_in_frames(tmp_path: Path) -> None:
+    from shuttlesense import live_replay
+
+    out = tmp_path / "replay.json"
+    live_replay.main(["--in-process", "--fake", "--frames", "240", "--json", str(out)])
+    lag = json.loads(out.read_text(encoding="utf-8"))["event_lag"]
+    # Hits wait for the stroke window's look-ahead; rallies for the rest rule on top.
+    assert lag["hit"]["count"] >= 1 and lag["hit"]["frames"]["p50"] >= 6
+    assert lag["rally"]["frames"]["p50"] > lag["hit"]["frames"]["p50"]
+
+
 def test_live_replay_sends_only_the_frames_the_server_keeps() -> None:
     from shuttlesense import live_replay
 

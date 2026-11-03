@@ -1,6 +1,7 @@
 """Live latency benchmark (T8.12): frame sent -> overlay event back, through WS /live.
 
 Usage: python scripts/bench_live.py --fake [--frames 300]            # no GPU, no models
+       (reports frame round trip, server time and event lag per event type)
        python scripts/bench_live.py --url ws://127.0.0.1:8000/live --video ../samples/rally01.mp4
                 [--corners x1,y1,...] [--realtime] [--out ../docs/results/live_latency.md]
 
@@ -71,6 +72,29 @@ def to_markdown(result: dict, args: argparse.Namespace, command: str) -> str:
         f"Budget: p95 <= {budget} ms.",
         "",
     ]
+    lag = result.get("event_lag") or {}
+    if lag:
+        fps = result.get("fps") or 30.0
+        lines += [
+            f"Event lag: how many frames after the frame it is about each decision arrives "
+            f"(at {fps:g} fps), and the time since that frame was sent"
+            + (
+                " (frames paced at camera rate)."
+                if args.realtime
+                else " (frames sent back to back, so the ms column is not camera time)."
+            ),
+            "",
+            "| Event | Count | p50 frames | p95 frames | p95 s at camera rate | p50 ms | p95 ms |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for kind, v in lag.items():
+            f, ms = v["frames"], v["ms"]
+            p95_s = round(f["p95"] / fps, 2) if "p95" in f else "–"
+            lines.append(
+                f"| {kind} | {v['count']} | {f.get('p50', '–')} | {f.get('p95', '–')} | {p95_s} "
+                f"| {ms.get('p50', '–')} | {ms.get('p95', '–')} |"
+            )
+        lines.append("")
     if args.fake:
         lines.append(
             "Fake perception replays synthetic rallies instead of running TrackNetV3 and pose, "

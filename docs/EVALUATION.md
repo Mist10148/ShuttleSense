@@ -29,15 +29,16 @@ Written evaluation of ShuttleSense (T7.9). Each section names the report in [doc
 - **Strokes:** a 1D CNN over 32-frame windows of pose and shuttle features. Training uses 3 seeds and reports mean ± std. The pose-only ablation uses the same seeds.
 - **Phone footage:** processed with the frozen pipeline and calibration.
 - **Line calls:** each labelled rally is matched to a predicted rally (start and end within ±1 s, as for rally boundaries). Only certain calls count towards precision and recall; UNCERTAIN calls are the ones the app hands to the user, and their share is reported next to the scores so a low false-call rate cannot hide behind many uncertain calls. The near-line false-call rate uses the labelled landing position when the label has one, otherwise the predicted margin, and the report states which. ShuttleSet labels come from `lose_reason` (out, or landed in); net faults and other reasons are skipped, and the mapping must be checked against the downloaded CSVs before reporting.
-- **Live latency:** `scripts/bench_live.py` sends frames one at a time and waits for each frame's event, so the number is the processing path without queueing (network on localhost, JPEG decode, perception, windowed analysis). Events that need look-ahead lag by design: hits by 17 frames (0.57 s at 30 fps) plus at most one 5-frame tick, line calls until the shuttle has rested for 20 frames (0.67 s).
+- **Live latency:** `scripts/bench_live.py` sends frames one at a time and waits for each frame's event, so the number is the processing path without queueing (network on localhost, JPEG decode, perception, windowed analysis). Events that need look-ahead lag by design: hits by 17 frames (0.57 s at 30 fps) plus at most one 5-frame tick, line calls and rally ends until the rest rule and the settle window have passed. The benchmark measures this event lag per event type, in frames after the frame the event is about (contact, landing, rally end), which does not depend on the machine.
 
 ## 4. Results
 
-Most results are to be filled in from the reports in §1. Measured so far (Oct 31, commit noted in each report):
+Most results are to be filled in from the reports in §1. Measured so far (Nov 3, commit noted in each report):
 
 | What | Result | Report |
 | --- | --- | --- |
-| Live pipeline overhead without models (fake perception, in-process, 600 frames) | p50 10.1 ms, p95 20.7 ms frame → event round trip; server side p95 17.5 ms; 82 fps one at a time | [results/live_latency.md](results/live_latency.md) |
+| Live pipeline overhead without models (fake perception, in-process, 600 frames) | p50 10.9 ms, p95 23.8 ms frame → event round trip; server side p95 20.0 ms; 73 fps one at a time | [results/live_latency.md](results/live_latency.md) |
+| Live event lag (same run) | Hits p50 19 / p95 21 frames after contact (0.7 s at 30 fps); line calls and rally ends p50 49 / p95 51 frames after landing (1.7 s) | [results/live_latency.md](results/live_latency.md) |
 | Offline vs live on synthetic rallies | Identical hits (10), rallies (3), line calls (IN, OUT, UNCERTAIN) and score | `pytest tests/test_stream.py` |
 | Live latency with TrackNetV3 and pose on the RTX 4050 | **Not measured**: the weights are not installed yet. Run `scripts/bench_live.py --url ... --video <team clip>` against a server with `stages` both true | – |
 | Line-call precision / recall / near-line false calls | **Not measured**: no labelled landings yet | – |
