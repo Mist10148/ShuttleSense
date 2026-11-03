@@ -120,3 +120,12 @@ def test_stage_on_golden_record() -> None:
     assert all(h.rally_index == 0 for h in out.hits)
     assert out.frames[10].rally_state == "in_play"
     assert out.score.near + out.score.far >= 7
+
+
+def test_unobserved_frames_do_not_close_a_rally() -> None:
+
+    visible = np.array([True, False, False, False, True])
+    xy = np.array([[0, 0], [0, 0], [0, 0], [0, 0], [20, 0]])
+    cfg = {"lost_frames_end": 3, "stationary_frames_end": 3}
+    assert segment_rallies(visible, xy, [0], cfg)[0].closed
+    assert not segment_rallies(visible, xy, [0], cfg, unobserved={2})[0].closed

@@ -34,7 +34,12 @@ class Segment:
 
 
 def _rest_after(
-    visible: np.ndarray, xy: np.ndarray, frame: int, stop: int, cfg: dict[str, Any]
+    visible: np.ndarray,
+    xy: np.ndarray,
+    frame: int,
+    stop: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
 ) -> tuple[int, int | None] | None:
     """First rally end in [frame, stop): (end frame, landing frame) or None if play goes on.
 
@@ -48,6 +53,10 @@ def _rest_after(
     last_visible, missing = frame, 0
     rest_start: int | None = None
     for i in range(frame, stop):
+        if i in unobserved:
+            # No observation is neither a lost shuttle nor evidence of a stationary one.
+            missing, rest_start = 0, None
+            continue
         if not visible[i]:
             missing += 1
             if missing >= lost:
@@ -67,7 +76,12 @@ def _rest_after(
 
 
 def segment_rallies(
-    visible: np.ndarray, xy: np.ndarray, hits: list[int], cfg: dict[str, Any]
+    visible: np.ndarray,
+    xy: np.ndarray,
+    hits: list[int],
+    cfg: dict[str, Any],
+    *,
+    unobserved: set[int] | None = None,
 ) -> list[Segment]:
     """Split a clip into rallies from hit frames and the shuttle trajectory.
 
@@ -89,7 +103,7 @@ def segment_rallies(
             start = 0  # clip starts mid-rally: no serve seen
         while True:
             stop = hits[k + 1] if k + 1 < len(hits) else n
-            rest = _rest_after(visible, xy, hits[k], stop, cfg)
+            rest = _rest_after(visible, xy, hits[k], stop, cfg, unobserved or set())
             # A "rest" followed by another hit within lost_frames_end is detector noise:
             # a new rally needs a pause before its serve.
             if rest is not None and k + 1 < len(hits) and hits[k + 1] - rest[0] < lost:
@@ -172,7 +186,13 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         raise StageSkipped("no hits, so no rallies")
     cfg = ctx.stage_config("referee")
     xy, visible = track_arrays(record)
-    segments = segment_rallies(visible, np.nan_to_num(xy), [h.frame for h in record.hits], cfg)
+    segments = segment_rallies(
+        visible,
+        np.nan_to_num(xy),
+        [h.frame for h in record.hits],
+        cfg,
+        unobserved=set(ctx.config.get("_unobserved_frames", ())),
+    )
 
     size = record.court.court_size_m if record.court else None
     line_cfg = line_call_config(cfg)
