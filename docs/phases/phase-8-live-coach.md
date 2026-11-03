@@ -27,14 +27,14 @@
 | [T8.10](#t810) | App line-call banner, minimap landings, session summary | M6 | 6 h | T8.3, T8.4 | ⬜ | [#106](https://github.com/Mist10148/ShuttleSense/issues/106) |
 | [T8.11](#t811) | App coach chat screen | M4 | 5 h | T8.8 | ⬜ | [#107](https://github.com/Mist10148/ShuttleSense/issues/107) |
 | [T8.12](#t812) | Line-call and live latency evaluation | M4 + M2 | 5 h | T8.3, T8.6, T7.1 | ⬜ | [#108](https://github.com/Mist10148/ShuttleSense/issues/108) |
-| [T8.13](#t813) | Match play: games, server, service court, intervals | M3 + M1 | 4 h | T6.3 | ✅ | — |
-| [T8.14](#t814) | Award a point, clear a winner, undo | M1 + M6 | 3 h | T8.13 | ⬜ | — |
-| [T8.15](#t815) | Between-rally coaching in live mode | M3 + M6 | 4 h | T8.4, T8.6 | ⬜ | — |
-| [T8.16](#t816) | Live state snapshot on start and resume | M1 + M6 | 2 h | T8.6 | ✅ | — |
+| [T8.13](#t813) | Match play: games, server, service court, intervals | M3 + M1 | 4 h | T6.3 | ✅ | [#109](https://github.com/Mist10148/ShuttleSense/issues/109) |
+| [T8.14](#t814) | Award a point, clear a winner, undo | M1 + M6 | 3 h | T8.13 | ⬜ | [#110](https://github.com/Mist10148/ShuttleSense/issues/110) |
+| [T8.15](#t815) | Between-rally coaching in live mode | M3 + M6 | 4 h | T8.4, T8.6 | ⬜ | [#111](https://github.com/Mist10148/ShuttleSense/issues/111) |
+| [T8.16](#t816) | Live state snapshot on start and resume | M1 + M6 | 2 h | T8.6 | ✅ | [#112](https://github.com/Mist10148/ShuttleSense/issues/112) |
 
 ### Added on Nov 3
 
-T8.13–T8.16 came out of a review of what a referee or coach courtside needs and are on `main` with tests. T8.14 and T8.15 stay ⬜ until they are tried on a device in a real session. Their GitHub issues are not created yet.
+T8.13–T8.16 came out of a review of what a referee or coach courtside needs and are on `main` with tests. T8.14 and T8.15 stay ⬜ until they are tried on a device in a real session. Issues #109–#112 (the ✅ ones closed).
 
 ### Status on Oct 31
 

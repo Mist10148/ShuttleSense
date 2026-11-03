@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 9 phases (0–8) and **112 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#108; T8.13–T8.16, added Nov 3, have no issues yet).
+The 3-week build is split into 9 phases (0–8) and **112 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112).
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -291,7 +291,6 @@ Verified on Nov 3:
   - GPU benchmarks: `scripts/benchmark.py` (T2.9) and `scripts/bench_live.py` with models (T8.12).
 - **Real-world checks:**
   - A live session on a real camera (T8.6), including award/undo and the coach panel (T8.14, T8.15).
-- **GitHub:** issues for T8.13–T8.16 under the Phase 8 milestone.
   - One coach chat with a real API key (T8.8).
   - Device checks for T5.1, T5.12 and T7.4.
 - **Release:**
