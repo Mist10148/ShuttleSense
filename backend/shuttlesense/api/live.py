@@ -303,6 +303,7 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             "fps": session.fps, "width": session.width, "height": session.height,
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],
+            **_snapshot(session),
         })  # fmt: skip
     except Exception:  # the client left before the session started
         if first["type"] == "resume":
@@ -311,6 +312,20 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             await asyncio.to_thread(manager.finish, entry)
         return
     await _serve(ws, manager, entry)
+
+
+def _snapshot(session: LiveSession) -> dict[str, Any]:
+    """What the app shows so far, so a start shows the start score and a resume restores all."""
+    with session.lock:
+        record = session.analyzer.record
+        dump = lambda items: [i.model_dump(mode="json") for i in items]  # noqa: E731
+        return {
+            "score": record.score.model_dump(mode="json") if record.score else None,
+            "rallies": dump(record.rallies),
+            "line_calls": dump(record.line_calls),
+            "hits": dump(record.hits),
+            "coaching": session.analyzer.coaching_event()["coaching"] if record.rallies else None,
+        }
 
 
 async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:

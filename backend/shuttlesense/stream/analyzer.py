@@ -285,8 +285,58 @@ class StreamAnalyzer:
         self.open_rally_start = None
         events.append({"type": "rally", "state": "between_rallies", "rally": _dump(rally)})
         events.append(self._score_event())
+        if not open_rally:
+            events.append(self.coaching_event(rally.index))
         self.state = "between_rallies"
         return events
+
+    def coaching_event(self, rally_index: int | None = None) -> Event:
+        """Session notes so far and, after a rally, what happened in it (F21 between rallies).
+
+        The same deterministic notes as the saved session (feedback/patterns.py), so the
+        coach panel during play and the summary afterwards agree.
+        """
+        from shuttlesense.feedback import build_coaching
+
+        coaching = build_coaching(self.record, self.config.get("stages", {}).get("feedback"))
+        event: Event = {"type": "coaching", "coaching": _dump(coaching), "rally_summary": None}
+        rally = next((r for r in self.record.rallies if r.index == rally_index), None)
+        if rally is not None:
+            event["rally_summary"] = self._rally_summary(rally)
+        return event
+
+    def _rally_summary(self, rally: Rally) -> Event:
+        fps = self.record.fps or 30.0
+        hits = [h for h in self.record.hits if h.rally_index == rally.index]
+        speeds = [
+            f.shuttle_speed_kmh
+            for f in self.record.frames[rally.start_frame : rally.end_frame + 1]
+            if f.shuttle_speed_kmh is not None
+        ]
+        call = next((c for c in self.record.line_calls if c.rally_index == rally.index), None)
+        return {
+            "index": rally.index,
+            "game": rally.game,
+            "duration_s": round((rally.end_frame - rally.start_frame) / fps, 1),
+            "strokes": len(hits),
+            "peak_speed_kmh": round(max(speeds), 1) if speeds else None,
+            "winner": rally.winner,
+            "call": call.effective_call if call else None,
+            "margin_cm": call.margin_cm if call else None,
+            "faults": [
+                {
+                    "hit_id": h.id,
+                    "time_s": h.time_s,
+                    "player": h.player,
+                    "stroke": h.stroke,
+                    "rule": f.rule,
+                    "tip": f.tip,
+                }  # fmt: skip
+                for h in hits
+                for f in h.feedback
+                if not f.passed
+            ],
+        }
 
     def _set_state(self, open_start: int | None) -> list[Event]:
         if open_start is None:

@@ -97,6 +97,24 @@ def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
         assert ws.receive_json()["code"] == "not_found"
 
 
+def test_started_snapshot_and_coaching_between_rallies(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "start_score": {"near": 5, "far": 3}, "best_of": 3})
+        started = ws.receive_json()
+        assert (started["score"]["near"], started["score"]["far"]) == (5, 3)
+        assert started["score"]["best_of"] == 3 and started["rallies"] == []
+        assert started["coaching"] is None
+        events = _send_frames(ws, 230)
+        coaching = next(e for e in events if e["type"] == "coaching")
+        summary = coaching["rally_summary"]
+        assert summary["index"] == 0 and summary["strokes"] >= 1 and summary["duration_s"] > 0
+        assert summary["call"] in ("in", "out") and isinstance(summary["faults"], list)
+        assert "top_fixes" in coaching["coaching"]
+        ws.send_json({"type": "stop"})
+        while ws.receive_json()["type"] != "saved":
+            pass
+
+
 def test_live_award_clear_and_undo(tmp_path: Path) -> None:
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
         ws.send_json({**START, "first_server": "near"})
@@ -137,6 +155,7 @@ def test_resume_after_a_dropped_connection(tmp_path: Path) -> None:
             ws.send_json({"type": "resume", "session_id": session_id})
             started = ws.receive_json()
             assert started["resumed"] and started["frames"] == 20
+            assert started["score"] is not None and "hits" in started
             events = _send_frames(ws, 5, first=20)
             assert [e["frame"] for e in events if e["type"] == "frame"] == list(range(20, 25))
             ws.send_json({"type": "stop"})
