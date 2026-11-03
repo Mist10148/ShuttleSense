@@ -63,8 +63,12 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 - [ ] **Rally state:** "In play" or "Between rallies", rally timer and shot count
 - [ ] **Line calls:** IN / OUT per landing with margin and confidence; calls near a line are UNCERTAIN and ask you to confirm or override
 - [ ] **Assisted scoreboard:** BWF 21-point rally scoring with manual correction in the app
+- [ ] **Match play:** one game or best of 3, who serves from which service court, interval at 11, change of ends, game and match point; award a missed point and undo
 - [ ] **Session coaching notes:** pattern-level cues ("late split-step on 4 of 6 net shots") and the top 3 fixes, each linked to the moments that show it
+- [ ] **Live coaching:** after each rally, what it showed (strokes, length, peak speed, form tips) and the running top 3 fixes
 - [ ] **Coach chat:** ask about your session; answers come only from the clip record and cite moments you can tap to seek
+
+The code for every feature above is on `main` with tests. A box is ticked at release (T7.8), once the feature has been checked on real footage with the trained models.
 
 ---
 

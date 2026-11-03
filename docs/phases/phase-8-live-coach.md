@@ -27,6 +27,14 @@
 | [T8.10](#t810) | App line-call banner, minimap landings, session summary | M6 | 6 h | T8.3, T8.4 | ⬜ | [#106](https://github.com/Mist10148/ShuttleSense/issues/106) |
 | [T8.11](#t811) | App coach chat screen | M4 | 5 h | T8.8 | ⬜ | [#107](https://github.com/Mist10148/ShuttleSense/issues/107) |
 | [T8.12](#t812) | Line-call and live latency evaluation | M4 + M2 | 5 h | T8.3, T8.6, T7.1 | ⬜ | [#108](https://github.com/Mist10148/ShuttleSense/issues/108) |
+| [T8.13](#t813) | Match play: games, server, service court, intervals | M3 + M1 | 4 h | T6.3 | ✅ | — |
+| [T8.14](#t814) | Award a point, clear a winner, undo | M1 + M6 | 3 h | T8.13 | ⬜ | — |
+| [T8.15](#t815) | Between-rally coaching in live mode | M3 + M6 | 4 h | T8.4, T8.6 | ⬜ | — |
+| [T8.16](#t816) | Live state snapshot on start and resume | M1 + M6 | 2 h | T8.6 | ✅ | — |
+
+### Added on Nov 3
+
+T8.13–T8.16 came out of a review of what a referee or coach courtside needs and are on `main` with tests. T8.14 and T8.15 stay ⬜ until they are tried on a device in a real session. Their GitHub issues are not created yet.
 
 ### Status on Oct 31
 
@@ -199,8 +207,66 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 **Steps**
 - [ ] Landing labels: ShuttleSet landing positions converted to court metres where the court is calibrated, plus team phone clips labelled with `scripts/label_landings.py`.
 - [x] `scripts/eval_line_calls.py`: precision/recall for IN and OUT, false-call rate for landings within 20 cm of a line, share of UNCERTAIN calls.
-- [ ] `scripts/bench_live.py`: frame-to-event latency p50/p95 and event lag, fake and GPU.
+- [x] `scripts/bench_live.py`: frame-to-event latency p50/p95 and event lag per event type; fake run in `docs/results/live_latency.md` (Nov 3).
+- [ ] The same with TrackNetV3 and pose on the team GPU.
 - [x] Report in `docs/EVALUATION.md` only what was run.
+
+---
+
+<a id="t813"></a>
+### T8.13 · Match play: games, server, service court, intervals
+
+**Owner:** M3 + M1 · **Priority:** P3 · **Area:** backend · **Refs:** F16, D21
+
+**Steps**
+- [x] `referee/match.py::play(winners, start, best_of, first_server)`: per-rally game and score, finished games, games won, next server (rally winner; game winner serves first), service court from the server's score parity, interval at 11, change of ends after a game and at 11 in the deciding game, game and match point, match winner.
+- [x] `scoring.apply_rallies` uses it; `best_of` (1 or 3) and `first_server` on `POST /jobs` and the live `start`; the new `Score` fields and `Rally.game` are optional v1.1 additions.
+- [x] Start scores above 29 in an open game are refused (upload and live share `validate_start_score`).
+
+**Tests.** `tests/test_match.py`, `test_api.py::test_job_match_settings_reach_the_record`, `test_live.py` start-message cases.
+
+**Acceptance criteria.** With `best_of=1` the old single-game behaviour is unchanged; every correction re-derives the whole match.
+
+---
+
+<a id="t814"></a>
+### T8.14 · Award a point, clear a winner, undo
+
+**Owner:** M1 + M6 · **Priority:** P3 · **Area:** backend, app · **Refs:** F16, D21
+
+**Steps**
+- [x] `ScoreCorrection.kind = "award"` places a point before the next detected rally; `winner_after: null` clears a rally. Kept in `corrections.json` (survives re-renders).
+- [x] Live `award` and `undo` messages; REST `POST /jobs/{id}/score/award` and `/score/undo`.
+- [x] App scoreboard: Point Near / Point Far, Undo, tap the chosen winner to clear; live decisions while reconnecting are refused with a message.
+- [ ] Try it courtside: award a missed rally and undo it during a real live session.
+
+**Tests.** `test_live.py::test_live_award_clear_and_undo`, `test_api.py::test_award_and_undo_over_rest`, `scoreboard_test.dart`, `live_test.dart`.
+
+---
+
+<a id="t815"></a>
+### T8.15 · Between-rally coaching in live mode
+
+**Owner:** M3 + M6 · **Priority:** P3 · **Area:** backend, app · **Refs:** F21
+
+**Steps**
+- [x] After each closed rally the server sends `coaching`: the session notes and top fixes so far (same `feedback/patterns.py` as the saved session) and a rally summary (length, strokes, peak speed, winner, call, form faults).
+- [x] Live coach panel: last rally and "Focus so far"; a callout for the newest hit.
+- [ ] Check on a device that the panel is readable between rallies at arm's length (phone and tablet).
+
+**Tests.** `test_live.py::test_started_snapshot_and_coaching_between_rallies`, `live_test.dart` referee and coach panels.
+
+---
+
+<a id="t816"></a>
+### T8.16 · Live state snapshot on start and resume
+
+**Owner:** M1 + M6 · **Priority:** P3 · **Area:** backend, app · **Refs:** F19
+
+**Steps**
+- [x] `started` carries `score`, `rallies`, `line_calls`, `hits` and `coaching`; the app seeds its view from it, so a start score shows at once and a resume restores what was missed.
+
+**Tests.** `test_live.py` resume and snapshot tests, `live_test.dart` "started restores the session so far".
 
 ---
 
@@ -208,5 +274,6 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 
 1. Upload a clip: results show line calls, the session summary and chat.
 2. Go live with the laptop webcam: overlays, score and calls update during play; stop saves the session to History.
-3. Override an UNCERTAIN call; the score changes.
-4. Show the latency and line-call numbers next to the commands that produced them.
+3. Override an UNCERTAIN call; the score changes. Award a missed point and undo it.
+4. Live with Best of 3 and a first server: the scoreboard shows who serves from which court and the coach panel fills after each rally.
+5. Show the latency, event-lag and line-call numbers next to the commands that produced them.

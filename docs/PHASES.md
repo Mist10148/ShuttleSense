@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#108).
+The 3-week build is split into 9 phases (0–8) and **112 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#108; T8.13–T8.16, added Nov 3, have no issues yet).
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -12,7 +12,7 @@ The 3-week build is split into 9 phases (0–8) and **108 tasks**. This page is 
 | 5 | [P2 analysis](phases/phase-5-analysis.md) | Nov 9 – Nov 17 | 14 | Calibration, minimap, speed, counter, feedback, exports |
 | 6 | [P3 referee](phases/phase-6-referee.md) | Nov 16 – Nov 18 | 7 | Rally state + scoreboard with correction on team footage |
 | 7 | [Freeze, evaluation, release](phases/phase-7-release.md) | Nov 18 – Nov 20 | 14 | `v1.0.0` release, README results, demo delivered |
-| 8 | [Live mode, line calls and coaching](phases/phase-8-live-coach.md) | Nov 9 – Nov 18 | 12 | Upload and Live both end in a results view with line calls, coaching notes and chat; live runs against the fake source in CI |
+| 8 | [Live mode, line calls and coaching](phases/phase-8-live-coach.md) | Nov 9 – Nov 18 | 16 | Upload and Live both end in a results view with line calls, coaching notes and chat; live runs against the fake source in CI |
 
 **Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · **feature freeze Wed Nov 18** · final demo Fri Nov 20. Since PRD v1.2 the referee layer is committed scope; the old P3 go/no-go on Nov 16 is gone ([D17](DECISIONS.md)).
 
@@ -232,6 +232,49 @@ Verified on Nov 2:
 - App `flutter analyze`, `dart format` and `flutter test` pass (162 tests).
 - Release builds were not re-run.
 
+### Live referee and coach pass (Nov 3)
+
+New tasks T8.13–T8.16 ([phase 8](phases/phase-8-live-coach.md#t813)), on `main` with tests:
+
+- **Match play (D21):** games and best of 3, who serves next and from which service court, the interval at 11, change of ends, game and match point. These are derived from the rally winners plus the user's `best_of` and `first_server`.
+- **Referee controls:** award a point the system missed, clear a rally's winner, and undo the newest score change. These work live and on results.
+- **Live coaching:** after each rally the coach panel shows the rally summary and the running top 3 fixes. A callout shows the newest hit, and a haptic tap marks each new line call.
+- **Live snapshot:** `started` restores the score, rallies, calls and hits after a resume.
+- **Event lag (T8.12):** `bench_live.py` now reports how late each event arrives. Fake run: hits come 19–21 frames after contact, calls 49–51 frames after landing.
+
+Fixes found in the same review:
+
+- **Backend:**
+  - A non-object first message now gets `bad_request`.
+  - A mid-session `internal` error closes with 1011.
+  - Failed saves after the TTL are logged, and shutdown waits for a frame in progress.
+  - The recording writer is checked.
+  - The quality level follows the configured scales.
+  - Per-frame stroke counting no longer rescans all hits.
+  - Start scores above 29 are refused.
+- **App:**
+  - A decision made while reconnecting is refused with a message, not dropped. A `not_found` is shown.
+  - Connecting never waits on a socket close. A fatal error releases the socket, so the server frees the GPU.
+  - There is a Cancel button while connecting or reconnecting.
+  - `calibrate` catches every error, and a second `saved` cannot throw.
+  - Hits stay in frame order, and the frames analysed are shown.
+  - A start score also counts without a court.
+  - The heatmap is rebuilt every 30 live frames, not on every event.
+
+Open from that review (not fixed):
+
+- The doubles service order and partners: the tracker follows one player per side.
+- The live timeline uses the announced fps, not capture time.
+- Under load, skipped frames count as a lost shuttle.
+- On a portrait camera the overlay can be letterboxed against the preview.
+- The 1.15 m serve height rule cannot be measured from 2D pose.
+- A re-rendered live job is scored with singles lines.
+
+Verified on Nov 3:
+- Backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (291 tests).
+- App `flutter analyze`, `dart format` and `flutter test` pass (169 tests).
+- `flutter build web --release` passes. The Windows and APK builds were not re-run.
+
 ### Left for M1 (needs GitHub admin, hardware, data or the team)
 
 - **GitHub:**
@@ -247,7 +290,8 @@ Verified on Nov 2:
   - Run the Colab tunnel (T1.7).
   - GPU benchmarks: `scripts/benchmark.py` (T2.9) and `scripts/bench_live.py` with models (T8.12).
 - **Real-world checks:**
-  - A live session on a real camera (T8.6).
+  - A live session on a real camera (T8.6), including award/undo and the coach panel (T8.14, T8.15).
+- **GitHub:** issues for T8.13–T8.16 under the Phase 8 milestone.
   - One coach chat with a real API key (T8.8).
   - Device checks for T5.1, T5.12 and T7.4.
 - **Release:**
@@ -273,5 +317,5 @@ Verified on Nov 2:
 | [4](phases/phase-4-app-mvp.md) | T4.1 Connect · T4.2 Upload · T4.3 Options + start · T4.4 Processing · T4.5 Results layout · T4.6 Video player · T4.7 Timeline · T4.8 History · T4.9 States + theming · T4.10 Platform config · T4.11 Accessibility · T4.12 Widget tests · T4.13 Icon + splash |
 | [5](phases/phase-5-analysis.md) | T5.1 Calibration UI · T5.2 Homography stage · T5.3 Court overlay · T5.4 Court positions · T5.5 App minimap · T5.6 Speed · T5.7 Stroke counter · T5.8 Feedback rules · T5.9 Tips in app · T5.10 Exports · T5.11 Downloads + chart · T5.12 Re-render · T5.13 Speed sanity · T5.14 Minimap overlay |
 | [6](phases/phase-6-referee.md) | T6.1 Rally state · T6.2 Landing in/out · T6.3 Scoring · T6.4 Correction API · T6.5 App scoreboard · T6.6 Score overlays · T6.7 Rally evaluation |
-| [8](phases/phase-8-live-coach.md) | T8.1 Scope docs · T8.2 Schema 1.1 · T8.3 Line calls · T8.4 Session notes · T8.5 Incremental stages · T8.6 Live socket · T8.7 Fake live source · T8.8 Coach chat API · T8.9 App mode + live · T8.10 App calls + summary · T8.11 App chat · T8.12 Line-call + latency eval |
+| [8](phases/phase-8-live-coach.md) | T8.1 Scope docs · T8.2 Schema 1.1 · T8.3 Line calls · T8.4 Session notes · T8.5 Incremental stages · T8.6 Live socket · T8.7 Fake live source · T8.8 Coach chat API · T8.9 App mode + live · T8.10 App calls + summary · T8.11 App chat · T8.12 Line-call + latency eval · T8.13 Match play · T8.14 Award + undo · T8.15 Live coaching · T8.16 Live snapshot |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |
