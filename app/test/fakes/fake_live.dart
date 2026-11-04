@@ -17,6 +17,8 @@ class FakeFrameSource implements FrameSource {
   /// Set to make the next captures fail (the camera was unplugged or taken).
   Object? captureError;
   int captures = 0;
+  int width = 1280;
+  int height = 720;
   bool disposed = false;
 
   @override
@@ -31,7 +33,7 @@ class FakeFrameSource implements FrameSource {
   Future<CapturedFrame> capture() async {
     if (captureError != null) throw captureError!;
     captures++;
-    return (jpeg: Uint8List.fromList([0xFF, 0xD8, captures % 256]), width: 1280, height: 720);
+    return (jpeg: Uint8List.fromList([0xFF, 0xD8, captures % 256]), width: width, height: height);
   }
 
   @override

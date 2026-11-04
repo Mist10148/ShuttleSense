@@ -303,6 +303,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool _streaming = false;
   bool _disposed = false;
   int _nextFrame = 0;
+  ({int width, int height})? _captureSize;
   Completer<String?>? _saved;
   Completer<Json>? _started;
 
@@ -334,6 +335,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _generation++;
     _streaming = false;
     _nextFrame = 0;
+    _captureSize = null;
     _started = null;
     _saved = null;
     final events = _events, socket = _socket, source = _source;
@@ -405,10 +407,19 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       // server times everything (the recording, speeds, the rally clock) by the rate sent.
       final clock = Stopwatch()..start();
       first = await source.capture();
+      if (corners != null &&
+          corners.length == 4 &&
+          state.stillSize != (width: first.width, height: first.height)) {
+        throw StateError('Camera orientation changed. Recalibrate the court before starting.');
+      }
       for (var i = 0; i < 2; i++) {
-        await source.capture();
+        final sample = await source.capture();
+        if (sample.width != first.width || sample.height != first.height) {
+          throw StateError('Camera orientation changed. Start again and recalibrate.');
+        }
       }
       _fps = liveFps(clock.elapsed, 3);
+      _captureSize = (width: first.width, height: first.height);
     } on Object catch (e) {
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
@@ -552,6 +563,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       try {
         final frame = await source.capture();
         if (!current() || state.phase != LivePhase.live) continue;
+        if (_captureSize != (width: frame.width, height: frame.height)) {
+          throw StateError('Camera orientation changed. Start a new session and recalibrate.');
+        }
         socket.sendFrame(
           _nextFrame++,
           DateTime.now().millisecondsSinceEpoch.toDouble(),

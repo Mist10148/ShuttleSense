@@ -68,6 +68,22 @@ Map<String, dynamic> _hit(int id, int frame) => {
 };
 
 void main() {
+  testWidgets('changing capture orientation stops the session before sending a distorted frame', (
+    tester,
+  ) async {
+    final source = FakeFrameSource();
+    final sockets = await pumpLive(tester, source: source);
+    await startWithoutCourt(tester);
+    source.width = 720;
+    source.height = 1280;
+    final sent = sockets.single.frames.length;
+    await tester.pump(const Duration(seconds: 1));
+    await events(tester);
+    expect(sockets.single.frames.length, sent);
+    expect(find.textContaining('Camera orientation changed'), findsOneWidget);
+    expect(sockets.single.sent.any((message) => message['type'] == 'stop'), isTrue);
+  });
+
   test('frame packets carry index and capture time before the JPEG', () {
     final packet = framePacket(7, 1234.5, Uint8List.fromList([1, 2, 3]));
     final header = ByteData.sublistView(packet, 0, 12);
@@ -124,6 +140,24 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     });
   }
+
+  testWidgets('orientation change after calibration requires recalibration', (tester) async {
+    final source = FakeFrameSource();
+    final sockets = await pumpLive(tester, size: laptop, source: source);
+    await tester.tap(find.text('Calibrate court'));
+    await tester.pumpAndSettle();
+    final canvas = tester.getRect(find.byType(Image).first);
+    for (final (fx, fy) in [(0.2, 0.9), (0.8, 0.9), (0.7, 0.3), (0.3, 0.3)]) {
+      await tester.tapAt(Offset(canvas.left + canvas.width * fx, canvas.top + canvas.height * fy));
+      await tester.pump();
+    }
+    source.width = 720;
+    source.height = 1280;
+    await tester.tap(find.text('Go live'));
+    await events(tester);
+    expect(find.textContaining('Recalibrate the court'), findsOneWidget);
+    expect(sockets, isEmpty);
+  });
 
   testWidgets('calibrating on a still sends the corners', (tester) async {
     final sockets = await pumpLive(tester, size: laptop);
