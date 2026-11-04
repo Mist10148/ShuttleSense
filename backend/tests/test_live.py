@@ -46,6 +46,18 @@ def _wait_done(client: TestClient, job_id: str) -> dict:
     raise AssertionError("live job never finished rendering")
 
 
+@pytest.mark.parametrize("timestamp", [float("nan"), float("inf"), float("-inf")])
+def test_invalid_capture_time_does_not_break_session(tmp_path: Path, timestamp: float) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        frame = next(blank_frames(1))
+        ws.send_bytes(encode(frame, 0, timestamp))
+        assert ws.receive_json()["code"] == "bad_frame"
+        ws.send_bytes(encode(frame, 1, time.time() * 1000))
+        assert ws.receive_json()["type"] == "frame"
+
+
 def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         with client.websocket_connect("/live") as ws:

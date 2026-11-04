@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import hmac
 import logging
+import math
 import struct
 import threading
 import time
@@ -434,6 +435,9 @@ def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> l
             events.append({"type": "error", "code": "bad_frame", "detail": "frame too short"})
             continue
         client_frame, ts = HEADER.unpack_from(data)
+        if not math.isfinite(ts):
+            events.append({"type": "error", "code": "bad_frame", "detail": "invalid capture time"})
+            continue
         jpeg = data[HEADER.size :]
         if i < len(frames) - 1:
             events += session.skip(jpeg, client_frame, ts)
