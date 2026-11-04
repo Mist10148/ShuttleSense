@@ -269,6 +269,24 @@ Open from that review (not fixed):
 - On a portrait camera the overlay can be letterboxed against the preview.
 - The 1.15 m serve height rule cannot be measured from 2D pose.
 
+### Completion follow-up (Nov 5)
+
+- Live frames with non-finite capture timestamps are rejected without ending the session.
+  The app stops a session if captured dimensions change, and requires recalibration if
+  the dimensions have changed since the calibration still. This prevents silent distortion;
+  it does not establish alignment between a camera preview and its captured stills.
+- The laptop has an RTX 4050, but its project environment has CPU-only PyTorch and no
+  ONNX Runtime, rtmlib, SciPy, model weights or sample footage. Flutter detects Windows,
+  Chrome and Edge, but no phone or tablet. Do not mark the model or physical-device gates done.
+- Next independent work: implement one capture-time-based timeline shared by recorded video,
+  frame-indexed analysis and resume (T8.6); correct and verify preview-to-still geometry
+  including portrait, crop and mirroring (T8.9); then rerun the corresponding device tests.
+- Team priorities: obtain consented rallies and labels (T0.10, T7.1, T8.12); provision and
+  verify model weights and the GPU stack (T0.9, T1.4–T1.6); settle the stroke mapping and
+  train/evaluate on the prescribed splits (T3.3, T3.5–T3.9); perform platform, real-camera,
+  line-call and latency checks (T1.8, T7.4, T8.6, T8.12, T8.14–T8.15); then complete the
+  release audit, artifacts, demo and team review (T7.2–T7.14).
+
 ### Live reliability follow-up (Nov 4)
 
 - Saved live jobs now re-render the saved analysis instead of running perception again. This
