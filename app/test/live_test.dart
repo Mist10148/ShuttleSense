@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,16 @@ import 'package:shuttlesense_app/features/results/widgets/status_strip.dart';
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_live.dart';
 import 'helpers.dart';
+
+class DelayedCaptureSource extends FakeFrameSource {
+  final pending = Completer<void>();
+
+  @override
+  Future<CapturedFrame> capture() async {
+    await pending.future;
+    return super.capture();
+  }
+}
 
 /// Pumps the live screen with a fake camera and a fake server; returns the sockets opened.
 Future<List<FakeLiveSocket>> pumpLive(
@@ -68,6 +79,22 @@ Map<String, dynamic> _hit(int id, int frame) => {
 };
 
 void main() {
+  testWidgets('cancelling during camera sampling cannot start an abandoned session', (
+    tester,
+  ) async {
+    final source = DelayedCaptureSource();
+    final sockets = await pumpLive(tester, source: source);
+    await tester.tap(find.text('Start without court'));
+    await events(tester);
+    await tester.tap(find.text('Cancel'));
+    await events(tester);
+    source.pending.complete();
+    await events(tester);
+    expect(sockets, isEmpty);
+    expect(find.text('Start without court'), findsOneWidget);
+    expect(find.textContaining('Camera stopped'), findsNothing);
+  });
+
   testWidgets('changing capture orientation stops the session before sending a distorted frame', (
     tester,
   ) async {

@@ -358,6 +358,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       await source.start();
     } on Object catch (e) {
       await source.dispose();
+      if (_disposed || generation != _generation) return;
       _set(
         state.copyWith(
           phase: LivePhase.error,
@@ -379,8 +380,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Future<void> calibrate() async {
     final source = _source;
     if (source == null) return;
+    final generation = _generation;
     try {
       final frame = await source.capture();
+      if (_disposed || generation != _generation) return;
       _set(
         state.copyWith(
           phase: LivePhase.calibrating,
@@ -390,6 +393,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         ),
       );
     } on Object catch (e) {
+      if (_disposed || generation != _generation) return;
       _set(state.copyWith(error: 'Could not take a picture: $e'));
     }
   }
@@ -400,6 +404,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Future<void> start({List<Corner>? corners, ({int near, int far})? startScore}) async {
     final source = _source;
     if (source == null) return;
+    final generation = _generation;
     _set(state.copyWith(phase: LivePhase.connecting, corners: corners ?? const []));
     final CapturedFrame first;
     try {
@@ -407,6 +412,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       // server times everything (the recording, speeds, the rally clock) by the rate sent.
       final clock = Stopwatch()..start();
       first = await source.capture();
+      if (_disposed || generation != _generation) return;
       if (corners != null &&
           corners.length == 4 &&
           state.stillSize != (width: first.width, height: first.height)) {
@@ -414,6 +420,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       for (var i = 0; i < 2; i++) {
         final sample = await source.capture();
+        if (_disposed || generation != _generation) return;
         if (sample.width != first.width || sample.height != first.height) {
           throw StateError('Camera orientation changed. Start again and recalibrate.');
         }
@@ -421,6 +428,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _fps = liveFps(clock.elapsed, 3);
       _captureSize = (width: first.width, height: first.height);
     } on Object catch (e) {
+      if (_disposed || generation != _generation) return;
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
     }
@@ -440,7 +448,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       'best_of': match.bestOf,
       'first_server': match.firstServer,
     });
-    if (connected.started == null) return;
+    if (connected.started == null || _disposed || generation != _generation) return;
     _beginStreaming();
   }
 
@@ -454,7 +462,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final generation = _generation;
     final socket = ref.read(liveSocketFactoryProvider)(api.liveUri());
     void fail(String message) {
-      if (!quiet) _set(state.copyWith(phase: LivePhase.error, error: message));
+      if (!quiet && !_disposed && generation == _generation) {
+        _set(state.copyWith(phase: LivePhase.error, error: message));
+      }
     }
 
     try {
@@ -480,6 +490,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     socket.sendJson(hello);
     try {
       final event = await started.future.timeout(kStartTimeout);
+      if (_disposed || generation != _generation) {
+        return (started: null, refused: _Refused(null, 'cancelled'));
+      }
       final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
       _set(
         state.copyWith(
