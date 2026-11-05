@@ -463,14 +463,21 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
 
 def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     try:
-        if msg.get("type") == "override" and msg.get("call") in ("in", "out"):
-            return session.override(int(msg["line_call_id"]), msg["call"])
+        if (
+            msg.get("type") == "override"
+            and type(msg.get("line_call_id")) is int
+            and msg["line_call_id"] >= 0
+            and msg.get("call") in ("in", "out")
+        ):
+            return session.override(msg["line_call_id"], msg["call"])
         if (
             msg.get("type") == "correct"
+            and type(msg.get("rally_index")) is int
+            and msg["rally_index"] >= 0
             and "winner" in msg
             and msg["winner"] in ("near", "far", None)
         ):
-            return session.correct(int(msg["rally_index"]), msg.get("winner"))
+            return session.correct(msg["rally_index"], msg.get("winner"))
         if msg.get("type") == "award" and msg.get("winner") in ("near", "far"):
             return session.award(msg["winner"])
         if msg.get("type") == "undo":

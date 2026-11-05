@@ -204,8 +204,8 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of` and `first_server` as in `POST /jobs` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
-| `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override |
-| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; `"winner": null` makes the rally undecided |
+| `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |
+| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided |
 | `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far |
 | `undo` | `{"type": "undo"}` | Takes back the newest correction or award (`not_found` when there is none) |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |

@@ -306,6 +306,24 @@ def test_non_object_control_message_is_rejected_not_fatal(tmp_path: Path) -> Non
         assert ws.receive_json()["type"] == "saved"
 
 
+def test_invalid_referee_ids_cannot_change_a_rally_or_end_the_session(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        for value in (0.5, True, "0", -1):
+            ws.send_json({"type": "correct", "rally_index": value, "winner": "near"})
+            assert ws.receive_json()["code"] == "bad_message"
+            ws.send_json({"type": "override", "line_call_id": value, "call": "in"})
+            assert ws.receive_json()["code"] == "bad_message"
+        ws.send_text('{"type":"correct","rally_index":Infinity,"winner":"near"}')
+        assert ws.receive_json()["code"] == "bad_message"
+        ws.send_json({"type": "award", "winner": "far"})
+        assert ws.receive_json()["score"]["far"] == 1
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "saved"
+
+
 def test_malformed_json_is_rejected_not_fatal(tmp_path: Path) -> None:
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
         ws.send_json(START)
