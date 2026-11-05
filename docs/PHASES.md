@@ -271,6 +271,9 @@ Open from that review (not fixed):
 
 ### Completion follow-up (Nov 5)
 
+- Cancelling while the camera samples its initial frame rate no longer allows that abandoned
+  attempt to start a live session. Stale camera and connection callbacks also cannot replace
+  the state of a later attempt. The live widget suite covers cancellation during capture.
 - Live frames with non-finite capture timestamps are rejected without ending the session.
   The app stops a session if captured dimensions change, and requires recalibration if
   the dimensions have changed since the calibration still. This prevents silent distortion;
