@@ -255,9 +255,11 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Owner:** M4 · **Estimate:** 2 h · **Priority:** C · **Area:** app · **Refs:** — · **Depends on:** — · **Blocks:** T7.6
 
 **Steps**
-- [ ] Design a simple shuttlecock icon (SVG → 1024 px PNG in `app/assets/icon/`).
-- [ ] Generate platform icons with `flutter_launcher_icons` and a splash with `flutter_native_splash` (dev dependencies; add to TECH_STACK).
-- [ ] Replace the default web favicon.
+- [x] Design a shuttlecock mark in the app palette. Regenerate platform assets with
+  `python app/tool/generate_brand_assets.py` from the repository root (requires Pillow).
+- [x] Add Android and iOS launch screens, Windows launcher artwork, and a web loading screen.
+- [x] Replace the default web favicon and installed web app icons.
+- [ ] M4 reviews the artwork and verifies the launcher icon and startup on the target devices.
 
 **Acceptance criteria.** Custom icon on Android, Windows taskbar and browser tab.
 

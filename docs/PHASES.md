@@ -261,7 +261,7 @@ Fixes found in the same review:
   - A start score also counts without a court.
   - The heatmap is rebuilt every 30 live frames, not on every event.
 
-Open from that review (not fixed):
+Open at the time of that review:
 
 - The doubles service order and partners: the tracker follows one player per side.
 - The live timeline uses the announced fps, not capture time.
@@ -284,9 +284,6 @@ Open from that review (not fixed):
 - The laptop has an RTX 4050, but its project environment has CPU-only PyTorch and no
   ONNX Runtime, rtmlib, SciPy, model weights or sample footage. Flutter detects Windows,
   Chrome and Edge, but no phone or tablet. Do not mark the model or physical-device gates done.
-- Next independent work: implement one capture-time-based timeline shared by recorded video,
-  frame-indexed analysis and resume (T8.6); correct and verify preview-to-still geometry
-  including portrait, crop and mirroring (T8.9); then rerun the corresponding device tests.
 - Team priorities: obtain consented rallies and labels (T0.10, T7.1, T8.12); provision and
   verify model weights and the GPU stack (T0.9, T1.4–T1.6); settle the stroke mapping and
   train/evaluate on the prescribed splits (T3.3, T3.5–T3.9); perform platform, real-camera,
@@ -300,11 +297,6 @@ Open from that review (not fixed):
 - Frames skipped by live perception no longer count as evidence that the shuttle was lost or
   stationary. This is conservative: sustained skipping can delay a rally decision, and hits
   occurring in skipped frames can still be missed.
-- Remaining implementation work: use capture time consistently through the recorded video,
-  event timeline, rally detection and resume; correct portrait preview/overlay geometry and
-  verify it against real camera stills. Current video and event times use the announced fps,
-  so irregular capture and queue drops can compress elapsed time. Do not claim live timing or
-  camera alignment is fixed until playback and device tests confirm it.
 - Doubles partners and service order are not tracked; a single 2D camera cannot verify the
   1.15 m service-height rule. Line calls, speed and coaching remain estimates.
 - Local environment check: the base stack is present, but PyTorch is CPU-only; ONNX Runtime,
@@ -314,21 +306,40 @@ Open from that review (not fixed):
   additional skipped-frame window test passed separately. Flutter analysis and formatting
   checks passed, as did all 169 Flutter tests.
 
+### Live workflow and startup pass (Nov 5)
+
+- Capture timestamps now place images in the same frame slots used by the live events and the
+  saved video. Missing slots repeat the last image for playback and contribute no new
+  observations. Very long gaps are shortened to the resume window and reported in the app.
+- The live overlay uses the exact analyzed capture. Its image and markers share a fitted
+  rectangle. Orientation changes require a new calibration. Portrait and landscape
+  alignment were exercised with a fake camera. Real-camera orientation, crop and mirroring
+  still need device checks.
+- Referee shows the oldest unresolved call first. Live commands wait for a matching score
+  update or error. Coach opens with a cue from the last rally, followed by session notes and
+  the rally details. Both views show the score and session status.
+- The fake live recovery test checks an interrupted session through resume, decision
+  and undo, save, History, and citation seeks in the rendered MP4. The launcher artwork
+  and startup screens are implemented. M4's review and device startup checks remain open.
+- Backend Ruff checks and 303 non-GPU tests passed. The live and stream suites were rerun
+  after the corrupt-capture fix, and the additional queue-overflow regression passed.
+  Dart formatting and Flutter analysis passed. The full Flutter suite passed 175 tests,
+  including the live layouts at 360, 800 and 1280 dp and 200% text size. The additional
+  History widget test verified navigation to a saved live replay.
+- The web and Windows release builds passed startup smoke checks. The Android release
+  build succeeded on retry with a smaller Gradle heap after the default JVM ran out of
+  memory. The APK contains the launcher and splash resources and uses debug signing.
+  Phone and tablet installation and iOS startup remain open.
+
 ### Remaining phase work by dependency
 
-- **Team and infrastructure (T0.6–T0.10, T1.1–T1.9):** team setup and agreements, shared
-  weights/data storage, consented clips, contract reviews, GPU/Colab setup and device connections.
-- **Perception and classifier (T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.14):** obtain
-  weights and labelled footage, settle the label mapping, extract and train, then evaluate
-  tracking, hits, strokes, ablation and latency on the specified splits and hardware.
-- **App and analysis (T4.1–T4.13, T5.1, T5.12–T5.13):** finish outstanding platform,
-  accessibility and visual checks, icon artwork, and calibrated speed evaluation.
-- **Referee and live (T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15):** label rallies and
-  landings; measure accuracy and model-backed latency; test a real camera, coach API key,
-  award/undo and coach panel on the specified devices.
-- **Release (T7.1–T7.14):** collect and review labelled phone footage; run final evaluations,
-  platform end-to-end tests and license audit; prepare artifacts, evaluation and demo media;
-  conduct the team rehearsal and release only after the gates are met.
+| Tasks | Owners | Next action and evidence |
+| --- | --- | --- |
+| T0.6–T0.10, T1.1–T1.9 | M1 and team | Provision shared storage, record consented clips, review schema and API, and document GPU/Colab setup and device connections. Record teammate sign-offs, artifact checksums and platform results. |
+| T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.14 | M2–M5 | Install weights, agree on labels, extract features and train on the documented splits. Report tracking, hits, strokes, ablation and timings. |
+| T4.1–T4.13, T5.1, T5.12–T5.13 | M4, M6, M2 | Verify target devices in both themes and at 200% text size, sign off on the artwork, and publish the calibrated speed check on team clips. |
+| T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15 | M1–M4, M6 | Label rallies and landings, measure model latency and accuracy, and verify camera, chat and courtside controls. Save commands, metrics and the device checklist. |
+| T7.1–T7.14 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
 Verified on Nov 3:
 - Backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (291 tests).

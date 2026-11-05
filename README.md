@@ -205,7 +205,7 @@ In the app, enter the backend address (for example `http://192.168.1.20:8000`) o
 1. Connect to the backend (laptop on the same Wi-Fi, or the Colab tunnel URL with its token).
 2. Choose **Upload clip** or **Go live** (the app remembers it; switch any time from the app bar or Settings).
 3. **Upload:** pick a rally video, tap the 4 court corners (or skip; court features turn off), choose overlays and start processing.
-4. **Live:** put the camera on a tripod, tap **Calibrate court** and the 4 corners on a still (or start without court), then **Go live**. Shuttle trail, player boxes, rally state and timer, speed, hit callouts, score and IN / OUT calls update while you play. **Stop** saves the session to History.
+4. **Live:** put the camera on a tripod, tap **Calibrate court** and the 4 corners on a still (or start without court), then **Go live**. Use **Referee** to review calls and correct the score, or **Coach** for a cue before the next rally. Both show the score and session status. **Stop** saves a replay to History with coaching notes and chat when configured.
 5. Review the annotated video, minimap, stroke timeline, line calls and form tips. Confirm or override UNCERTAIN calls; the score follows.
 6. Open the **Coach** tab for the top 3 things to fix (tap a time to watch it), and **Ask your coach** questions about the session (needs a Claude API key on the backend).
 7. Share or download the MP4, JSON and CSV; delete the job from the server when done.
@@ -284,7 +284,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
 | Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured: no labelled landings yet (`scripts/eval_line_calls.py` is ready) |
 | Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps, models installed | ≤ 300 ms | Not measured: TrackNetV3 and pose weights are not installed on the team laptop yet |
-| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 20.7 ms round trip, 17.5 ms server side ([live_latency.md](docs/results/live_latency.md)) |
+| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 29.6 ms round trip, 25.9 ms server side ([live_latency.md](docs/results/live_latency.md)) |
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
@@ -321,7 +321,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - **Camera angle:** the pretrained models learned from elevated, behind-the-court broadcast footage. Side-view phone clips will be less accurate; film from an elevated position behind the baseline for best results.
 - **Speed is estimated:** one camera gives a 2D court-plane approximation, so speed is underestimated when the shuttle travels toward or away from the camera.
 - **Line calls are automated estimates, not official calls:** with one camera they are not Hawk-Eye-level officiating and are never labelled "official" or "certified". Each call shows its confidence; calls inside the uncertainty band (set from calibration and tracking error) are UNCERTAIN until you confirm them, and every call and point can be overridden.
-- **Live latency has two parts:** shuttle and player overlays aim for ≤ 300 ms, but hits, strokes and line calls need a few frames of look-ahead, so they arrive about 0.5 to 1 s after the event. When the backend falls behind it drops frames or lowers resolution and shows "reduced quality".
+- **Live latency has two parts:** shuttle and player overlays have a provisional target of ≤ 300 ms. Hits and line calls also need look-ahead. In the synthetic benchmark, hits arrived roughly 0.7 s and line calls roughly 1.7 s after the event at a 30 fps camera rate. The model and device measurements are still open. When the backend falls behind it can skip perception or lower resolution.
 - **Live from a browser or Windows webcam is lower frame rate** than from a phone, which reduces tracking quality.
 - **Needs a backend:** phones and tablets do not run the models; they need the laptop backend on the same network or the Colab tunnel.
 - **Singles only** in this version.

@@ -151,6 +151,8 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 - [x] Newest-frame queue; when p95 processing time over the last 30 frames is above the budget, lower the input resolution, then skip frames, and send `degraded`.
 - [x] Keep a disconnected session for 60 s so the app can resume; refuse a second session while the GPU is busy.
 - [x] On `stop`, write the received frames to `source.mp4` and the record as a normal done job with `mode = "live"`.
+- [x] Use the same capture-based frame slots for the recording and record, including
+  when queue overflow or reconnect leaves missing captures. Cap gaps at the resume window.
 
 **Tests.** `tests/test_live.py` (protocol, degrade, resume, save, auth).
 
@@ -256,6 +258,9 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 - [x] `ScoreCorrection.kind = "award"` places a point before the next detected rally; `winner_after: null` clears a rally. Kept in `corrections.json` (survives re-renders).
 - [x] Live `award` and `undo` messages; REST `POST /jobs/{id}/score/award` and `/score/undo`.
 - [x] App scoreboard: Point Near / Point Far, Undo, tap the chosen winner to clear; live decisions while reconnecting are refused with a message.
+- [x] Put unresolved line calls first and show Clear last winner beside point and undo controls.
+  Lock decision controls until the server acknowledges the request, the connection drops, or the
+  request times out. After a timeout, check the displayed score before repeating a decision.
 - [ ] Try it courtside: award a missed rally and undo it during a real live session.
 
 **Tests.** `test_live.py::test_live_award_clear_and_undo`, `test_api.py::test_award_and_undo_over_rest`, `scoreboard_test.dart`, `live_test.dart`.
@@ -269,7 +274,8 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 
 **Steps**
 - [x] After each closed rally the server sends `coaching`: the session notes and top fixes so far (same `feedback/patterns.py` as the saved session) and a rally summary (length, strokes, peak speed, winner, call, form faults).
-- [x] Live coach panel: last rally and "Focus so far"; a callout for the newest hit.
+- [x] Live Referee and Coach views share the score and session status. Coach leads with one cue
+  from the latest rally, then the top session notes and rally details.
 - [ ] Check on a device that the panel is readable between rallies at arm's length (phone and tablet).
 
 **Tests.** `test_live.py::test_started_snapshot_and_coaching_between_rallies`, `live_test.dart` referee and coach panels.
@@ -295,3 +301,5 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 3. Override an UNCERTAIN call; the score changes. Award a missed point and undo it.
 4. Live with Best of 3 and a first server: the scoreboard shows who serves from which court and the coach panel fills after each rally.
 5. Show the latency, event-lag and line-call numbers next to the commands that produced them.
+6. Reconnect after a brief camera or network interruption. Check that the saved clip keeps the
+   gap in playback and that line calls and coaching citations still seek to the right frames.

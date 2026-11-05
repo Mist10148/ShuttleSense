@@ -33,13 +33,14 @@ Written evaluation of ShuttleSense (T7.9). Each section names the report in [doc
 
 ## 4. Results
 
-Most results are to be filled in from the reports in §1. Measured so far (Nov 3, commit noted in each report):
+Most results are to be filled in from the reports in §1. Each benchmark report records its date and commit.
 
 | What | Result | Report |
 | --- | --- | --- |
-| Live pipeline overhead without models (fake perception, in-process, 600 frames) | p50 10.9 ms, p95 23.8 ms frame → event round trip; server side p95 20.0 ms; 73 fps one at a time | [results/live_latency.md](results/live_latency.md) |
+| Live pipeline overhead without models (fake perception, in-process, 600 frames) | p50 13.0 ms, p95 29.6 ms frame → event round trip; server side p95 25.9 ms; 61.6 fps one at a time | [results/live_latency.md](results/live_latency.md) |
 | Live event lag (same run) | Hits p50 19 / p95 21 frames after contact (0.7 s at 30 fps); line calls and rally ends p50 49 / p95 51 frames after landing (1.7 s) | [results/live_latency.md](results/live_latency.md) |
 | Offline vs live on synthetic rallies | Identical hits (10), rallies (3), line calls (IN, OUT, UNCERTAIN) and score | `pytest tests/test_stream.py` |
+| Saved live replay after reconnect | Fake session with two missing capture slots, an uncertain call resolved, and a point awarded and undone. All coach citations seek to readable frames in the rendered MP4; the saved score matches the live decision. | `pytest tests/test_live.py -k saved_replay` |
 | Live latency with TrackNetV3 and pose on the RTX 4050 | **Not measured**: the weights are not installed yet. Run `scripts/bench_live.py --url ... --video <team clip>` against a server with `stages` both true | – |
 | Line-call precision / recall / near-line false calls | **Not measured**: no labelled landings yet | – |
 
