@@ -271,6 +271,9 @@ Open from that review (not fixed):
 
 ### Completion follow-up (Nov 5)
 
+- Reduced-quality live pose detections now scale horizontal and vertical coordinates
+  independently, accounting for rounding in resized frame dimensions. Live referee controls
+  reject non-integer or negative IDs instead of coercing them to another rally or line call.
 - Cancelling while the camera samples its initial frame rate no longer allows that abandoned
   attempt to start a live session. Stale camera and connection callbacks also cannot replace
   the state of a later attempt. The live widget suite covers cancellation during capture.
