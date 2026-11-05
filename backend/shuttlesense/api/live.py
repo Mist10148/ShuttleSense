@@ -448,7 +448,6 @@ def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> l
                 {"type": "error", "code": "bad_frame", "detail": "capture time went backwards"}
             )
             continue
-        session.last_capture_ts = ts
         jpeg = data[HEADER.size :]
         if i < len(frames) - 1:
             events += session.skip(jpeg, client_frame, ts)

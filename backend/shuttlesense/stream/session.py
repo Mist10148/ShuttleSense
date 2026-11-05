@@ -93,7 +93,7 @@ class LiveSession:
         recording: Path | None,
         device: str = "cpu",
         classify=None,
-        resume_window_s: float = 30,
+        resume_window_s: float = 60,
     ) -> None:
         self.id = session_id
         self.request = request
@@ -143,7 +143,7 @@ class LiveSession:
         # Held while a worker thread processes frames or a decision; finish() takes it too,
         # so a shutdown never finalizes a record that a frame is still being added to.
         self.lock = threading.RLock()
-        self._drop_lock = threading.Lock()  # drop() runs on the event loop, admit() on a worker
+        self._drop_lock = threading.Lock()  # drop() runs on the event loop as well as the worker
 
     # Frames -------------------------------------------------------------------
 
@@ -186,11 +186,13 @@ class LiveSession:
             else self._anchor_slot + math.ceil(elapsed_slots - 0.5 - 1e-9)
         )
         if slot < index:
+            self.last_capture_ts = ts
             self._count_drop()
             return None, []
         frame = self._decode(jpeg)
         if frame is None:
             return None, [{"type": "error", "code": "bad_frame", "detail": "could not decode JPEG"}]
+        self.last_capture_ts = ts
 
         events: list[Event] = []
         if oversized:

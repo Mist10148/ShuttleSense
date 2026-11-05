@@ -59,7 +59,7 @@ def test_invalid_capture_time_does_not_break_session(tmp_path: Path, timestamp: 
 
 
 def test_capture_time_must_not_go_backwards_across_resume(tmp_path: Path) -> None:
-    with make_client(tmp_path) as client:
+    with make_client(tmp_path, live_session_ttl_s=2) as client:
         frame = next(blank_frames(1))
         with client.websocket_connect("/live") as ws:
             ws.send_json(START)
@@ -71,11 +71,13 @@ def test_capture_time_must_not_go_backwards_across_resume(tmp_path: Path) -> Non
             assert ws.receive_json()["resumed"]
             ws.send_bytes(encode(frame, 1, 999))
             assert ws.receive_json()["code"] == "bad_frame"
+            ws.send_bytes(encode(frame, 1, 1e308)[:12] + b"corrupt JPEG")
+            assert ws.receive_json()["code"] == "bad_frame"
             ws.send_bytes(encode(frame, 2, 1100))
             assert ws.receive_json()["frame"] == 3
             ws.send_bytes(encode(frame, 3, 1e308))
             assert ws.receive_json()["code"] == "capture_gap"
-            assert ws.receive_json()["frame"] == 1804
+            assert ws.receive_json()["frame"] == 64
 
 
 def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
@@ -184,7 +186,8 @@ def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
         record = ClipRecord.model_validate(client.get(f"/jobs/{job['id']}/record").json())
         assert record.score.model_dump(mode="json") == corrected
         assert record.num_frames == 420
-        assert all(not f.shuttle.visible and f.shuttle_speed_kmh is None for f in record.frames[1:3])
+        for frame in record.frames[1:3]:
+            assert not frame.shuttle.visible and frame.shuttle_speed_kmh is None
         assert record.line_calls[call["id"]].effective_call == "in"
         digest = build_digest(record)
         assert f"Final score {corrected['near']}-{corrected['far']}" in digest.text
