@@ -208,6 +208,57 @@ def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
             video.release()
 
 
+def test_queue_overflow_leaves_unobserved_slots_in_the_record(tmp_path: Path, monkeypatch) -> None:
+    from threading import Event
+
+    from shuttlesense.api import live
+
+    processing = Event()
+    release = Event()
+    overflowed = Event()
+    frames = live._frames
+    drop = live.LiveSession.drop
+
+    def block_first_batch(session, batch):
+        if not processing.is_set():
+            processing.set()
+            assert release.wait(5)
+        return frames(session, batch)
+
+    def observe_drop(session):
+        drop(session)
+        if session.stats.dropped == 4:
+            overflowed.set()
+
+    monkeypatch.setattr(live, "_frames", block_first_batch)
+    monkeypatch.setattr(live.LiveSession, "drop", observe_drop)
+    with make_client(tmp_path) as client:
+        client.app.state.jobs.config["live"]["max_queue_frames"] = 2
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            ws.receive_json()
+            packets = [encode(f, i, i * 1000 / 30) for i, f in enumerate(blank_frames(8))]
+            ws.send_bytes(packets[0])
+            try:
+                assert processing.wait(5)
+                for packet in packets[1:7]:
+                    ws.send_bytes(packet)
+                assert overflowed.wait(5)
+            finally:
+                release.set()
+            assert [ws.receive_json()["frame"] for _ in range(3)] == [0, 1, 2]
+            ws.send_bytes(packets[7])
+            assert ws.receive_json()["frame"] == 7
+            ws.send_json({"type": "stop"})
+            while (saved := ws.receive_json())["type"] != "saved":
+                pass
+            assert saved["stats"]["dropped"] == 4
+        record = client.get(f"/jobs/{saved['job_id']}/record").json()
+        assert record["num_frames"] == 8
+        for frame in record["frames"][3:7]:
+            assert not frame["shuttle"]["visible"] and frame["shuttle_speed_kmh"] is None
+
+
 def test_started_snapshot_and_coaching_between_rallies(tmp_path: Path) -> None:
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
         ws.send_json({**START, "start_score": {"near": 5, "far": 3}, "best_of": 3})
