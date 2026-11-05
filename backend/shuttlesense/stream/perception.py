@@ -31,12 +31,12 @@ class Perception(Protocol):
     def __call__(self, frame: np.ndarray, index: int) -> tuple[Shuttle, Players]: ...
 
 
-def _scale_person(p: Player, s: float) -> Player:
-    """A player with every pixel coordinate multiplied by s."""
+def _scale_person(p: Player, sx: float, sy: float) -> Player:
+    """Map a detection from its input dimensions to session pixels."""
     x, y, w, h = p.bbox
     return Player(
-        bbox=(x * s, y * s, w * s, h * s),
-        keypoints=[(kx * s, ky * s, ks) for kx, ky, ks in p.keypoints],
+        bbox=(x * sx, y * sy, w * sx, h * sy),
+        keypoints=[(kx * sx, ky * sy, ks) for kx, ky, ks in p.keypoints],
         score=p.score,
     )
 
@@ -135,9 +135,9 @@ class ModelPerception:
         from shuttlesense.pose.tracking import filter_players
 
         people = [p for p in self.detect(frame) if p.score >= self.min_person_score]
-        s = self.size[0] / frame.shape[1]
-        if abs(s - 1.0) > 1e-6:  # degraded: back to full-size pixels before court checks
-            people = [_scale_person(p, s) for p in people]
+        sx, sy = self.size[0] / frame.shape[1], self.size[1] / frame.shape[0]
+        if abs(sx - 1.0) > 1e-6 or abs(sy - 1.0) > 1e-6:
+            people = [_scale_person(p, sx, sy) for p in people]
         people = filter_players(
             people,
             frame_height=self.size[1],

@@ -7,7 +7,7 @@ from shuttlesense import analytics, feedback, hits, referee
 from shuttlesense.config import load_config
 from shuttlesense.stage import StageContext
 from shuttlesense.stream.analyzer import StreamAnalyzer, planned_classifier
-from shuttlesense.stream.perception import ReplayPerception
+from shuttlesense.stream.perception import ModelPerception, ReplayPerception
 from shuttlesense.stream.session import LiveSession, StartRequest, normalized_size
 from shuttlesense.stream.synthetic import CORNERS, synthetic_record
 
@@ -136,6 +136,26 @@ def test_replay_perception_scales_to_the_session() -> None:
     assert shuttle.x == pytest.approx(src.x / 2, abs=0.01)
     assert shuttle.y == pytest.approx(src.y / 2, abs=0.01)
     assert players.near.bbox[3] == pytest.approx(record.frames[10].players.near.bbox[3] / 2)
+
+
+def test_degraded_pose_scaling_uses_both_frame_dimensions(monkeypatch) -> None:
+    from shuttlesense.pose import tracking
+
+    record, _ = synthetic_record()
+    player = record.frames[10].players.near
+    model = ModelPerception.__new__(ModelPerception)
+    model.size = (640, 358)
+    model.detect = lambda frame: [player]
+    model.min_person_score = 0.0
+    model.homography = None
+    model.court_size = (6.1, 13.4)
+    model.tracker = type("Tracker", (), {"update": lambda self, people: (people[0], None)})()
+    monkeypatch.setattr(tracking, "filter_players", lambda people, **kwargs: people)
+    # Rounded resize dimensions can yield different horizontal and vertical scales.
+    scaled = model._players(np.zeros((268, 480, 3), np.uint8)).near
+    assert scaled.bbox[0] == pytest.approx(player.bbox[0] * (640 / 480))
+    assert scaled.bbox[1] == pytest.approx(player.bbox[1] * (358 / 268))
+    assert scaled.keypoints[0][1] == pytest.approx(player.keypoints[0][1] * (358 / 268))
 
 
 def _session(fps: float, tmp_path=None) -> LiveSession:
