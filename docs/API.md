@@ -221,12 +221,15 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `line_call` | `line_call`: a clip-record line call (again after an override) |
 | `score` | `score` (with the match state: `game`, `games`, `games_won`, `server`, `service_court`, `game_point`, `match_point`, `match_winner`, `interval`, `change_ends`) and every `rallies[]` entry |
 | `coaching` | After each closed rally and referee decision: `coaching` (session notes and `top_fixes` so far, as in the record) and the latest `rally_summary`: `index`, `game`, `duration_s`, `strokes`, `peak_speed_kmh`, `winner`, `call`, `margin_cm`, `faults` (`hit_id`, `time_s`, `player`, `stroke`, `rule`, `tip` for each failed form rule) |
-| `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: a camera faster than `live.max_fps` is thinned to it by capture time, and frames beyond `live.max_queue_frames` waiting are discarded |
+| `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: captures in already-filled frame slots and frames beyond `live.max_queue_frames` are discarded |
+| `error` with code `capture_gap` | A capture gap exceeded the resume window and was shortened in playback. The session continues |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
 | `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
+
+Live video and events use fixed-rate slots anchored at the first decoded capture. Missing slots repeat the previous image in playback and carry no new observations. The anchor survives resume. Gaps longer than the resume window are capped and the next capture starts a new anchor.
 
 ### `POST /jobs/{job_id}/chat`
 

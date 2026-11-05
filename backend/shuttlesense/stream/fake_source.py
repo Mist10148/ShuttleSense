@@ -59,4 +59,4 @@ def replay(frames: Iterator[np.ndarray], fps: float, *, realtime: bool = True) -
             delay = start + i / fps - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
-        yield encode(frame, i, time.time() * 1000)
+        yield encode(frame, i, i * 1000 / fps)

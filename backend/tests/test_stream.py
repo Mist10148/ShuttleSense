@@ -187,10 +187,28 @@ def test_a_faster_camera_is_thinned_to_max_fps() -> None:
         ts = i * 1000 / 60
         session.process(encode(frame, i, ts)[12:], i, ts, 0.0)
     assert session.analyzer.record.num_frames == 30 and session.stats.dropped == 30
-    # A camera at or under the cap keeps every frame, even with jittery timestamps.
-    slow = _session(25)
-    for i in range(10):
-        assert slow.admit(i * 40 + (5 if i % 2 else -5))
+
+
+def test_capture_slots_keep_video_and_record_aligned(tmp_path) -> None:
+    import cv2
+
+    from shuttlesense.stream.fake_source import blank_frames, encode
+
+    session = _session(25, tmp_path)
+    jpeg = encode(next(blank_frames(1)), 0, 0)[12:]
+    assert session.process(b"invalid", 0, 50, 0)[0]["code"] == "bad_frame"
+    assert session.process(jpeg, 1, 100, 0)[0]["frame"] == 0
+    assert session.process(jpeg, 2, 108, 0) == []
+    event = session.process(jpeg, 4, 224, 0)[0]
+    assert (event["frame"], event["time_s"], event["client_frame"]) == (3, 0.12, 4)
+    assert session.analyzer._unobserved == {1, 2}
+    session.finish()
+    video = cv2.VideoCapture(str(tmp_path / "rec.mp4"))
+    try:
+        assert video.get(cv2.CAP_PROP_FRAME_COUNT) == 4
+        assert video.get(cv2.CAP_PROP_FPS) == 25
+    finally:
+        video.release()
 
 
 def test_skipped_frames_do_not_run_the_windowed_stages(monkeypatch) -> None:
@@ -274,8 +292,9 @@ def test_session_degrades_when_over_budget(tmp_path) -> None:
 
     events = []
     for i, frame in enumerate(blank_frames(25)):
-        data = encode(frame, i, 0.0)
-        events += session.process(data[12:], i, 0.0, time.monotonic())
+        ts = i * 1000 / 30
+        data = encode(frame, i, ts)
+        events += session.process(data[12:], i, ts, time.monotonic())
     degraded = [e for e in events if e["type"] == "degraded"]
     assert degraded and degraded[0]["level"] == 1 and "budget" in degraded[0]["reason"]
     assert session.level == 2  # two checks over budget
@@ -288,7 +307,7 @@ def test_session_degrades_when_over_budget(tmp_path) -> None:
         got = (f.shuttle.visible, f.shuttle.x, f.shuttle.y)
         assert got == (expected.visible, expected.x, expected.y)
         assert f.players.near.bbox == pytest.approx(players.near.bbox)
-    session.skip(encode(next(blank_frames(1)), 25, 0.0)[12:], 25, 0.0)
+    session.skip(encode(next(blank_frames(1)), 25, 0.0)[12:], 25, 25 * 1000 / 30)
     record = session.finish()
     assert record.num_frames == 26 and session.stats.skipped == 1
     assert (tmp_path / "rec.mp4").stat().st_size > 0

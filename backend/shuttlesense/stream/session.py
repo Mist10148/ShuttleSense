@@ -8,6 +8,7 @@ stay complete) but get no perception, which the record shows as frames without a
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections import deque
@@ -92,6 +93,7 @@ class LiveSession:
         recording: Path | None,
         device: str = "cpu",
         classify=None,
+        resume_window_s: float = 30,
     ) -> None:
         self.id = session_id
         self.request = request
@@ -132,7 +134,10 @@ class LiveSession:
         self._last_players = Players()
         self._since_check: list[float] = []
         self._skipped_since_check = 0
-        self._next_ts: float | None = None
+        self._anchor_ts: float | None = None
+        self._anchor_slot = 0
+        self._max_padding = math.floor(resume_window_s * self.fps)
+        self._last_image: np.ndarray | None = None
         self.last_capture_ts: float | None = None
         self.started_at = time.time()
         # Held while a worker thread processes frames or a decision; finish() takes it too,
@@ -168,21 +173,42 @@ class LiveSession:
                 raise RuntimeError(f"cannot write the live recording to {self.recording}")
         self._writer.write(frame)
 
-    def admit(self, ts: float) -> bool:
-        """Thin a camera faster than max_fps down to it, by capture time (ms).
-
-        The recording and every time in the record assume `self.fps`, so frames beyond that
-        rate are dropped before they reach the timeline.
-        """
-        if self.request.fps <= self.fps:
-            return True
-        period = 1000.0 / self.fps
-        if self._next_ts is not None and ts < self._next_ts - period / 4:
+    def _prepare_frame(self, jpeg: bytes, ts: float) -> tuple[np.ndarray | None, list[Event]]:
+        """Place a capture on the shared video and record timeline."""
+        index = self.analyzer.record.num_frames
+        elapsed_slots = 0.0 if self._anchor_ts is None else (ts - self._anchor_ts) * self.fps / 1000
+        # Round to the nearest slot, keeping an exact halfway capture in the earlier slot.
+        relative_limit = index - self._anchor_slot + self._max_padding
+        oversized = elapsed_slots > relative_limit + 0.5 + 1e-9
+        slot = (
+            index + self._max_padding
+            if oversized
+            else self._anchor_slot + math.ceil(elapsed_slots - 0.5 - 1e-9)
+        )
+        if slot < index:
             self._count_drop()
-            return False
-        nxt = (self._next_ts if self._next_ts is not None else ts) + period
-        self._next_ts = nxt if nxt > ts - period else ts + period  # resync after a gap
-        return True
+            return None, []
+        frame = self._decode(jpeg)
+        if frame is None:
+            return None, [{"type": "error", "code": "bad_frame", "detail": "could not decode JPEG"}]
+
+        events: list[Event] = []
+        if oversized:
+            events.append({
+                "type": "error", "code": "capture_gap",
+                "detail": "A long camera gap was shortened in the recording.",
+            })  # fmt: skip
+        if self._anchor_ts is None or oversized:
+            self._anchor_ts, self._anchor_slot = ts, slot
+        if self._last_image is not None:
+            for _ in range(index, slot):
+                self._record_frame(self._last_image)
+                self.analyzer.add_frame(Shuttle(), Players(), tick=False)
+        return frame, events
+
+    def _append_frame(self, frame: np.ndarray) -> None:
+        self._record_frame(frame)
+        self._last_image = frame
 
     def drop(self) -> None:
         """A frame the route had no room to queue."""
@@ -194,34 +220,30 @@ class LiveSession:
 
     def skip(self, jpeg: bytes, client_frame: int, ts: float) -> list[Event]:
         """A frame there is no time for: record it, keep the timeline, no perception."""
-        if not self.admit(ts):
-            return []
+        frame, warnings = self._prepare_frame(jpeg, ts)
+        if frame is None:
+            return warnings
         self.stats.received += 1
         self.stats.skipped += 1
         self._skipped_since_check += 1
-        frame = self._decode(jpeg)
-        if frame is None:
-            return []
-        self._record_frame(frame)
+        self._append_frame(frame)
         # No windowed stages on skipped frames: they are the ones there is no time for.
         events = self.analyzer.add_frame(Shuttle(), self._last_players, tick=False)
         for e in events:
             if e["type"] == "frame":
                 e.update(client_frame=client_frame, ts=ts, skipped=True)
-        return events
+        return warnings + events
 
     def process(self, jpeg: bytes, client_frame: int, ts: float, received: float) -> list[Event]:
         """Full perception on one frame. `received` is time.monotonic() at arrival."""
-        if not self.admit(ts):
-            return []
-        self.stats.received += 1
-        frame = self._decode(jpeg)
+        frame, warnings = self._prepare_frame(jpeg, ts)
         if frame is None:
-            return [{"type": "error", "code": "bad_frame", "detail": "could not decode JPEG"}]
-        self._record_frame(frame)
+            return warnings
+        self.stats.received += 1
         index = len(self.analyzer.record.frames)
         scale = float(self.live["scales"][self.level])
         shuttle, players = self._perceive(frame, index, scale)
+        self._append_frame(frame)
         self._last_players = players
         events = self.analyzer.add_frame(shuttle, players)
         latency = (time.monotonic() - received) * 1000
@@ -231,7 +253,7 @@ class LiveSession:
         for e in events:
             if e["type"] == "frame":
                 e.update(client_frame=client_frame, ts=ts, latency_ms=round(latency, 1))
-        return events + self._check_quality()
+        return warnings + events + self._check_quality()
 
     def _perceive(self, frame: np.ndarray, index: int, scale: float) -> tuple[Shuttle, Players]:
         """Perception on a frame downscaled by `scale`; results come back in full-size pixels."""

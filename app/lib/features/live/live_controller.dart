@@ -764,6 +764,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify(e['detail'] as String? ?? 'The server did not find that rally or call');
       return;
     }
+    if (code == 'capture_gap') {
+      _notify(message);
+      return;
+    }
     if (const {'bad_frame', 'bad_message', 'internal'}.contains(code)) return;
     _streaming = false;
     // Let go of the socket so the server detaches the session and frees the GPU.

@@ -111,7 +111,7 @@ class LiveManager:
         return LiveSession(
             session_id=session_id, request=request, config=config, perception=perception,
             court_corners=corners, recording=recording, device=self.state.jobs.device,
-            classify=classify,
+            classify=classify, resume_window_s=self.ttl_s,
         )  # fmt: skip
 
     def resume(self, session_id: str) -> _Entry:

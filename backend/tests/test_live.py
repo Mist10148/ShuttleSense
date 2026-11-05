@@ -27,7 +27,7 @@ def _send_frames(ws, count: int, first: int = 0) -> list[dict]:
     """Send frames one at a time and collect every event they produce."""
     events = []
     for i, frame in enumerate(blank_frames(count), start=first):
-        ws.send_bytes(encode(frame, i, time.time() * 1000))
+        ws.send_bytes(encode(frame, i, i * 1000 / START["fps"]))
         while True:
             e = ws.receive_json()
             events.append(e)
@@ -65,14 +65,17 @@ def test_capture_time_must_not_go_backwards_across_resume(tmp_path: Path) -> Non
             ws.send_json(START)
             session_id = ws.receive_json()["session_id"]
             ws.send_bytes(encode(frame, 0, 1000))
-            assert ws.receive_json()["type"] == "frame"
+            assert ws.receive_json()["frame"] == 0
         with client.websocket_connect("/live") as ws:
             ws.send_json({"type": "resume", "session_id": session_id})
             assert ws.receive_json()["resumed"]
             ws.send_bytes(encode(frame, 1, 999))
             assert ws.receive_json()["code"] == "bad_frame"
             ws.send_bytes(encode(frame, 2, 1100))
-            assert ws.receive_json()["type"] == "frame"
+            assert ws.receive_json()["frame"] == 3
+            ws.send_bytes(encode(frame, 3, 1e308))
+            assert ws.receive_json()["code"] == "capture_gap"
+            assert ws.receive_json()["frame"] == 1804
 
 
 def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
@@ -370,7 +373,7 @@ def test_a_failing_frame_frees_the_gpu_after_the_ttl(tmp_path: Path, monkeypatch
             ws.receive_json()
             _send_frames(ws, 3)
             monkeypatch.setattr(LiveSession, "process", boom)
-            ws.send_bytes(encode(next(blank_frames(1)), 3, time.time() * 1000))
+            ws.send_bytes(encode(next(blank_frames(1)), 3, 100))
             assert ws.receive_json()["code"] == "internal"
         monkeypatch.undo()
         # The session was detached, not leaked: it is saved after the ttl and the GPU freed.
