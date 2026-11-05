@@ -139,6 +139,72 @@ def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
         assert error["code"] == "not_found" and error["decision_id"] == 12
 
 
+def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
+    import cv2
+
+    from shuttlesense.coach.digest import build_digest
+    from shuttlesense.schema import ClipRecord
+
+    with make_client(tmp_path) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({**START, "best_of": 3, "first_server": "near"})
+            session_id = ws.receive_json()["session_id"]
+            _send_frames(ws, 1)
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({"type": "resume", "session_id": session_id})
+            started = ws.receive_json()
+            assert started["resumed"] and started["frames"] == 1
+            events = _send_frames(ws, 417, first=3)
+            first = next(e for e in events if e["type"] == "frame")
+            assert (first["frame"], first["time_s"]) == (3, 0.1)
+            call = next(
+                e["line_call"]
+                for e in events
+                if e["type"] == "line_call" and e["line_call"]["uncertain"]
+            )
+            ws.send_json({"type": "override", "line_call_id": call["id"], "call": "in",
+                          "decision_id": 1})  # fmt: skip
+            while (reply := ws.receive_json()).get("decision_id") != 1:
+                pass
+            corrected = reply["score"]
+            assert ws.receive_json()["rally_summary"]["call"] == "in"
+            ws.send_json({"type": "award", "winner": "far"})
+            assert ws.receive_json()["score"]["far"] == corrected["far"] + 1
+            assert ws.receive_json()["type"] == "coaching"
+            ws.send_json({"type": "undo"})
+            assert ws.receive_json()["score"] == corrected
+            assert ws.receive_json()["type"] == "coaching"
+            ws.send_json({"type": "stop"})
+            while (event := ws.receive_json())["type"] != "saved":
+                pass
+        job = _wait_done(client, event["job_id"])
+        assert job["status"] == "done"
+        history = client.get("/jobs").json()
+        assert any(item["id"] == job["id"] and item["mode"] == "live" for item in history)
+        record = ClipRecord.model_validate(client.get(f"/jobs/{job['id']}/record").json())
+        assert record.score.model_dump(mode="json") == corrected
+        assert record.num_frames == 420
+        assert all(not f.shuttle.visible and f.shuttle_speed_kmh is None for f in record.frames[1:3])
+        assert record.line_calls[call["id"]].effective_call == "in"
+        digest = build_digest(record)
+        assert f"Final score {corrected['near']}-{corrected['far']}" in digest.text
+        playback = client.get(f"/jobs/{job['id']}/video")
+        assert playback.status_code == 200
+        replay = tmp_path / "replay.mp4"
+        replay.write_bytes(playback.content)
+        video = cv2.VideoCapture(str(replay))
+        try:
+            assert video.get(cv2.CAP_PROP_FRAME_COUNT) == record.num_frames
+            assert video.get(cv2.CAP_PROP_FPS) == record.fps
+            assert digest.moments
+            for moment in digest.moments:
+                assert moment.time_s == pytest.approx(moment.frame / record.fps, abs=0.001)
+                assert video.set(cv2.CAP_PROP_POS_FRAMES, moment.frame)
+                assert video.read()[0]
+        finally:
+            video.release()
+
+
 def test_started_snapshot_and_coaching_between_rallies(tmp_path: Path) -> None:
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
         ws.send_json({**START, "start_score": {"near": 5, "far": 3}, "best_of": 3})
