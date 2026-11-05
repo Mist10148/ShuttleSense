@@ -94,6 +94,32 @@ def test_override_and_correction_rescore() -> None:
         a.override(99, "in")
 
 
+def test_referee_decisions_refresh_latest_coaching_summary() -> None:
+    record, _ = synthetic_record()
+    a, live, _ = _live(record)
+    last = live.rallies[-1]
+    call = next(c for c in live.line_calls if c.rally_index == last.index)
+    events = a.override(call.id, "out")
+    assert events[-1]["type"] == "coaching"
+    assert events[-1]["rally_summary"]["call"] == "out"
+    events = a.correct(last.index, "far")
+    assert events[-1]["rally_summary"]["winner"] == "far"
+    events = a.undo()
+    assert events[-1]["rally_summary"]["winner"] == a.record.rallies[-1].winner
+
+
+def test_resume_snapshot_contains_latest_rally_summary() -> None:
+    from shuttlesense.api.live import _snapshot
+
+    record, _ = synthetic_record()
+    analyzer, live, _ = _live(record)
+    session = _session(30)
+    session.analyzer = analyzer
+    snapshot = _snapshot(session)
+    assert snapshot["rally_summary"]["index"] == live.rallies[-1].index
+    assert snapshot["rally_summary"]["winner"] == live.rallies[-1].winner
+
+
 def test_planned_classifier_labels_hits() -> None:
     from shuttlesense.stream.synthetic import planned_strokes
 

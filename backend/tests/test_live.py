@@ -58,6 +58,23 @@ def test_invalid_capture_time_does_not_break_session(tmp_path: Path, timestamp: 
         assert ws.receive_json()["type"] == "frame"
 
 
+def test_capture_time_must_not_go_backwards_across_resume(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        frame = next(blank_frames(1))
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            session_id = ws.receive_json()["session_id"]
+            ws.send_bytes(encode(frame, 0, 1000))
+            assert ws.receive_json()["type"] == "frame"
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({"type": "resume", "session_id": session_id})
+            assert ws.receive_json()["resumed"]
+            ws.send_bytes(encode(frame, 1, 999))
+            assert ws.receive_json()["code"] == "bad_frame"
+            ws.send_bytes(encode(frame, 2, 1100))
+            assert ws.receive_json()["type"] == "frame"
+
+
 def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         with client.websocket_connect("/live") as ws:
@@ -107,9 +124,11 @@ def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
         update = ws.receive_json()
         assert update["type"] == "line_call" and update["line_call"]["override"]["call"] == "out"
         assert ws.receive_json()["type"] == "score"
+        assert ws.receive_json()["type"] == "coaching"
         ws.send_json({"type": "correct", "rally_index": 0, "winner": "far"})
         score = ws.receive_json()
         assert score["type"] == "score" and score["rallies"][0]["winner"] == "far"
+        assert ws.receive_json()["type"] == "coaching"
         ws.send_json({"type": "override", "line_call_id": 99, "call": "in"})
         assert ws.receive_json()["code"] == "not_found"
 
@@ -139,18 +158,23 @@ def test_live_award_clear_and_undo(tmp_path: Path) -> None:
         ws.send_json({"type": "undo"})
         assert ws.receive_json() == {"type": "error", "code": "not_found",
                                      "detail": "nothing to undo"}  # fmt: skip
+        ws.send_json({"type": "correct", "rally_index": 0})
+        assert ws.receive_json()["code"] == "bad_message"
         ws.send_json({"type": "award", "winner": "far"})
         score = ws.receive_json()["score"]
         assert (score["near"], score["far"]) == (0, 1) and score["server"] == "far"
         assert score["corrections"][0]["kind"] == "award"
+        assert ws.receive_json()["type"] == "coaching"
         events = _send_frames(ws, 230)
         rally = next(e for e in events if e["type"] == "rally" and "rally" in e)["rally"]
         ws.send_json({"type": "correct", "rally_index": rally["index"], "winner": None})
         cleared = ws.receive_json()
         assert cleared["rallies"][rally["index"]]["winner"] is None
+        assert ws.receive_json()["type"] == "coaching"
         ws.send_json({"type": "undo"})
         undone = ws.receive_json()
         assert undone["rallies"][rally["index"]]["winner"] == rally["winner"]
+        assert ws.receive_json()["type"] == "coaching"
         ws.send_json({"type": "stop"})
         while (e := ws.receive_json())["type"] != "saved":
             pass

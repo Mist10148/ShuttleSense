@@ -203,7 +203,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | --- | --- | --- |
 | `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of` and `first_server` as in `POST /jobs` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
-| frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Frames larger than 720p are scaled down |
+| frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override |
 | `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; `"winner": null` makes the rally undecided |
 | `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far |
@@ -214,13 +214,13 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Event | Payload |
 | --- | --- |
-| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` (null before the first rally). After a resume this restores the whole view |
+| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` and `rally_summary` (null before the first rally). After a resume this restores the session summary |
 | `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (boxes and keypoints), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
 | `hit` | `hit`: a clip-record hit (stroke, confidence, feedback, speed); sent about `hit_lag` frames after the contact |
 | `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
 | `line_call` | `line_call`: a clip-record line call (again after an override) |
 | `score` | `score` (with the match state: `game`, `games`, `games_won`, `server`, `service_court`, `game_point`, `match_point`, `match_winner`, `interval`, `change_ends`) and every `rallies[]` entry |
-| `coaching` | After each closed rally: `coaching` (session notes and `top_fixes` so far, as in the record) and `rally_summary`: `index`, `game`, `duration_s`, `strokes`, `peak_speed_kmh`, `winner`, `call`, `margin_cm`, `faults` (`hit_id`, `time_s`, `player`, `stroke`, `rule`, `tip` for each failed form rule) |
+| `coaching` | After each closed rally and referee decision: `coaching` (session notes and `top_fixes` so far, as in the record) and the latest `rally_summary`: `index`, `game`, `duration_s`, `strokes`, `peak_speed_kmh`, `winner`, `call`, `margin_cm`, `faults` (`hit_id`, `time_s`, `player`, `stroke`, `rule`, `tip` for each failed form rule) |
 | `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: a camera faster than `live.max_fps` is thinned to it by capture time, and frames beyond `live.max_queue_frames` waiting are discarded |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |

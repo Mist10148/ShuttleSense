@@ -354,6 +354,7 @@ void main() {
         ],
         'line_calls': <dynamic>[],
         'hits': [_hit(0, 10)],
+        'rally_summary': {'index': 0, 'winner': 'near', 'call': 'in'},
       },
     );
     await startWithoutCourt(tester);
@@ -361,6 +362,8 @@ void main() {
     var state = container.read(liveControllerProvider);
     expect((state.score!.near, state.score!.far), (7, 3));
     expect(state.rallies.single.winner, 'near');
+    expect(state.lastRally?.winner, 'near');
+    expect(state.lastRally?.call, 'in');
     sockets.single.emit({'type': 'hit', 'hit': _hit(2, 30)});
     sockets.single.emit({'type': 'hit', 'hit': _hit(1, 20)});
     sockets.single.emit({'type': 'stats', 'processed': 12});

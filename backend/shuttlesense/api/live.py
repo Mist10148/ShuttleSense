@@ -320,12 +320,16 @@ def _snapshot(session: LiveSession) -> dict[str, Any]:
     with session.lock:
         record = session.analyzer.record
         dump = lambda items: [i.model_dump(mode="json") for i in items]  # noqa: E731
+        coaching = (
+            session.analyzer.coaching_event(record.rallies[-1].index) if record.rallies else None
+        )
         return {
             "score": record.score.model_dump(mode="json") if record.score else None,
             "rallies": dump(record.rallies),
             "line_calls": dump(record.line_calls),
             "hits": dump(record.hits),
-            "coaching": session.analyzer.coaching_event()["coaching"] if record.rallies else None,
+            "coaching": coaching["coaching"] if coaching else None,
+            "rally_summary": coaching["rally_summary"] if coaching else None,
         }
 
 
@@ -438,6 +442,12 @@ def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> l
         if not math.isfinite(ts):
             events.append({"type": "error", "code": "bad_frame", "detail": "invalid capture time"})
             continue
+        if session.last_capture_ts is not None and ts < session.last_capture_ts:
+            events.append(
+                {"type": "error", "code": "bad_frame", "detail": "capture time went backwards"}
+            )
+            continue
+        session.last_capture_ts = ts
         jpeg = data[HEADER.size :]
         if i < len(frames) - 1:
             events += session.skip(jpeg, client_frame, ts)
@@ -455,7 +465,11 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     try:
         if msg.get("type") == "override" and msg.get("call") in ("in", "out"):
             return session.override(int(msg["line_call_id"]), msg["call"])
-        if msg.get("type") == "correct" and msg.get("winner") in ("near", "far", None):
+        if (
+            msg.get("type") == "correct"
+            and "winner" in msg
+            and msg["winner"] in ("near", "far", None)
+        ):
             return session.correct(int(msg["rally_index"]), msg.get("winner"))
         if msg.get("type") == "award" and msg.get("winner") in ("near", "far"):
             return session.award(msg["winner"])

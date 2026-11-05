@@ -133,6 +133,7 @@ class LiveSession:
         self._since_check: list[float] = []
         self._skipped_since_check = 0
         self._next_ts: float | None = None
+        self.last_capture_ts: float | None = None
         self.started_at = time.time()
         # Held while a worker thread processes frames or a decision; finish() takes it too,
         # so a shutdown never finalizes a record that a frame is still being added to.

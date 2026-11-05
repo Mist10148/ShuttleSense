@@ -303,6 +303,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool _streaming = false;
   bool _disposed = false;
   int _nextFrame = 0;
+  final Stopwatch _captureClock = Stopwatch();
   ({int width, int height})? _captureSize;
   Completer<String?>? _saved;
   Completer<Json>? _started;
@@ -335,6 +336,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _generation++;
     _streaming = false;
     _nextFrame = 0;
+    _captureClock
+      ..stop()
+      ..reset();
     _captureSize = null;
     _started = null;
     _saved = null;
@@ -542,16 +546,19 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       ..clear()
       ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
     final coaching = started['coaching'] as Json?;
+    final summary = started['rally_summary'] as Json?;
     _set(
       state.copyWith(
         speedKmh: state.speedKmh,
         coaching: coaching == null ? null : Coaching.fromJson(coaching),
+        lastRally: summary == null ? null : RallySummary.fromJson(summary),
       ),
     );
   }
 
   void _beginStreaming() {
     if (_streaming) return;
+    _captureClock.start();
     _streaming = true;
     unawaited(_stream(_generation));
   }
@@ -579,11 +586,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         if (_captureSize != (width: frame.width, height: frame.height)) {
           throw StateError('Camera orientation changed. Start a new session and recalibrate.');
         }
-        socket.sendFrame(
-          _nextFrame++,
-          DateTime.now().millisecondsSinceEpoch.toDouble(),
-          frame.jpeg,
-        );
+        socket.sendFrame(_nextFrame++, _captureClock.elapsedMicroseconds / 1000.0, frame.jpeg);
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
       } on Object catch (e) {
         if (!current()) return;

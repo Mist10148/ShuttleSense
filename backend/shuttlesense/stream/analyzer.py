@@ -374,6 +374,11 @@ class StreamAnalyzer:
             "rallies": [_dump(r) for r in self.record.rallies],
         }
 
+    def _latest_coaching_event(self) -> Event:
+        """Refresh the visible summary after a referee changes a decision."""
+        index = self.record.rallies[-1].index if self.record.rallies else None
+        return self.coaching_event(index)
+
     def override(self, line_call_id: int, call: Call) -> list[Event]:
         from shuttlesense.referee import LineCallOverrideIn
 
@@ -385,7 +390,11 @@ class StreamAnalyzer:
             LineCallOverrideIn(rally_index=target.rally_index, call=call, at=datetime.now(UTC))
         )
         self._rescore()
-        return [{"type": "line_call", "line_call": _dump(target)}, self._score_event()]
+        return [
+            {"type": "line_call", "line_call": _dump(target)},
+            self._score_event(),
+            self._latest_coaching_event(),
+        ]
 
     def correct(self, rally_index: int, winner: PlayerSide | None) -> list[Event]:
         """Set a rally's winner, or clear it (None) so the rally does not count."""
@@ -397,7 +406,7 @@ class StreamAnalyzer:
             at=datetime.now(UTC),
         ))  # fmt: skip
         self._rescore()
-        return [self._score_event()]
+        return [self._score_event(), self._latest_coaching_event()]
 
     def award(self, winner: PlayerSide) -> list[Event]:
         """A point for a rally the referee layer missed, counted after the rallies so far."""
@@ -406,7 +415,7 @@ class StreamAnalyzer:
             at=datetime.now(UTC), kind="award", frame=max(0, len(self.record.frames) - 1),
         ))  # fmt: skip
         self._rescore()
-        return [self._score_event()]
+        return [self._score_event(), self._latest_coaching_event()]
 
     def undo(self) -> list[Event]:
         """Take back the newest score correction or award."""
@@ -416,7 +425,7 @@ class StreamAnalyzer:
             raise KeyError("nothing to undo")
         self.corrections = list(self.record.score.corrections)
         self._rescore()
-        return [self._score_event()]
+        return [self._score_event(), self._latest_coaching_event()]
 
     # End of session --------------------------------------------------------------
 
