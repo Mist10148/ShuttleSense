@@ -45,6 +45,15 @@ miss hits. Capture-time-based playback and portrait camera alignment remain open
 real-camera, device, accuracy and latency checks in the task cards below. Doubles partners and
 individual service order are not tracked, and 2D pose does not establish serve height.
 
+### Live decision and clock follow-up on Nov 5
+
+Referee corrections, point awards, undo and line-call overrides refresh the live coaching
+summary; reconnecting restores the latest rally summary. A correction without a `winner`
+field is rejected instead of silently clearing a winner. The app now sends monotonic capture
+times across reconnects, and the server rejects backwards timestamps. This does **not** fix
+the fixed-fps recording timeline: dropped or irregular frames can still compress playback and
+analysis time. Preview-to-still alignment and the real-device checks also remain open.
+
 ### Status on Oct 31
 
 Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app `flutter test`). A task stays ⬜ until its acceptance check is met:

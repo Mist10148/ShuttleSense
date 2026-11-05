@@ -76,6 +76,14 @@ For each artifact (Android phone, Windows, Chrome):
 
 Then repeat once with the real pipeline (fake pipeline off) on the laptop GPU, using `samples/rally01.mp4`.
 
+For live referee and coaching acceptance, also use a real camera and calibrated court:
+
+- [ ] Compare portrait and landscape preview, calibration still and overlays for crop, rotation and mirroring.
+- [ ] Record irregular capture and a reconnect; compare playback and rally/event times with elapsed time. This remains a known open issue.
+- [ ] Award and undo a point, clear a winner, override an uncertain call, and verify the score and coaching summary after each decision and after reconnecting.
+- [ ] Check the coaching panel at arm's length on a phone and tablet, and test chat with a configured API key.
+- [ ] Run the model-backed live latency and labelled landing evaluations in [Phase 8](phases/phase-8-live-coach.md#t812); record hardware and measured results.
+
 ## 6. Tag and publish
 
 ```bash
