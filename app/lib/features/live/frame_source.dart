@@ -14,7 +14,7 @@ typedef CapturedFrame = ({Uint8List jpeg, int width, int height});
 
 /// The camera could not be opened; [permissionDenied] when the user said no.
 class CameraUnavailable implements Exception {
-  CameraUnavailable(this.message, {this.permissionDenied = false});
+  const CameraUnavailable(this.message, {this.permissionDenied = false});
 
   final String message;
   final bool permissionDenied;
@@ -46,6 +46,9 @@ class CameraFrameSource implements FrameSource {
   ({int width, int height})? _size;
   DeviceOrientation? _sizeOrientation;
   String _label = 'Camera';
+
+  /// Orientation of the last captured still, including 180-degree turns.
+  DeviceOrientation? get captureOrientation => _sizeOrientation;
 
   @override
   String get label => _label;
@@ -99,13 +102,16 @@ class CameraFrameSource implements FrameSource {
   Future<CapturedFrame> capture() async {
     final controller = _controller;
     if (controller == null) throw StateError('camera not started');
+    final orientation = controller.value.deviceOrientation;
     final file = await controller.takePicture();
     final jpeg = await file.readAsBytes();
     // takePicture writes each still to a temp file; a long session would leave thousands.
     if (!kIsWeb) unawaited(File(file.path).delete().then((_) {}, onError: (_) {}));
     // Decoding every still for its size is costly; measure again only when the device
     // turned, which swaps width and height.
-    final orientation = controller.value.deviceOrientation;
+    if (controller.value.deviceOrientation != orientation) {
+      throw const CameraUnavailable('Camera orientation changed during capture. Recalibrate.');
+    }
     if (_size == null || orientation != _sizeOrientation) {
       _size = await _decodeSize(jpeg);
       _sizeOrientation = orientation;

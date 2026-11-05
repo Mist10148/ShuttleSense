@@ -119,6 +119,33 @@ void main() {
     expect(packet.sublist(12), [1, 2, 3]);
   });
 
+  for (final portrait in [true, false]) {
+    testWidgets('fits only the matching capture (portrait: $portrait)', (tester) async {
+      final source = FakeFrameSource();
+      if (portrait) {
+        source.width = 720;
+        source.height = 1280;
+      }
+      final sockets = await pumpLive(tester, source: source);
+      await startWithoutCourt(tester);
+      final socket = sockets.single;
+      expect(socket.frames, isNotEmpty);
+      socket.emit(frameEvent(0));
+      await events(tester);
+      final still = find.byType(Image);
+      expect(still, findsOneWidget);
+      final size = tester.getSize(still);
+      expect(size.aspectRatio, closeTo(source.width / source.height, 0.001));
+      socket.emit({...frameEvent(1), 'client_frame': 999});
+      await events(tester);
+      expect(still, findsNothing);
+      expect(find.byKey(const Key('camera-preview')), findsOneWidget);
+      await tester.tap(find.text('Stop'));
+      await events(tester);
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
+
   for (final MapEntry(key: name, value: size) in kSizes.entries) {
     testWidgets('$name: start, stream, see calls and quality, stop and save', (tester) async {
       final sockets = await pumpLive(tester, size: size);

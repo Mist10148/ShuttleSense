@@ -305,6 +305,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   int _nextFrame = 0;
   final Stopwatch _captureClock = Stopwatch();
   ({int width, int height})? _captureSize;
+  DeviceOrientation? _calibrationOrientation;
+  DeviceOrientation? _captureOrientation;
+  final _pendingImages = <int, Uint8List>{};
+  Uint8List? _analyzedImage;
   Completer<String?>? _saved;
   Completer<Json>? _started;
 
@@ -315,6 +319,16 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   double _fps = kLiveTargetFps;
 
   FrameSource? get source => _source;
+  Uint8List? get analyzedImage => _analyzedImage;
+  ({int width, int height})? get captureSize => _captureSize;
+
+  DeviceOrientation? _orientation(FrameSource source) =>
+      source is CameraFrameSource ? source.captureOrientation : null;
+
+  void _clearImages() {
+    _pendingImages.clear();
+    _analyzedImage = null;
+  }
 
   @override
   LiveState build() {
@@ -340,6 +354,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       ..stop()
       ..reset();
     _captureSize = null;
+    _calibrationOrientation = null;
+    _captureOrientation = null;
+    _clearImages();
     _started = null;
     _saved = null;
     final events = _events, socket = _socket, source = _source;
@@ -388,6 +405,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     try {
       final frame = await source.capture();
       if (_disposed || generation != _generation) return;
+      _calibrationOrientation = _orientation(source);
       _set(
         state.copyWith(
           phase: LivePhase.calibrating,
@@ -417,20 +435,25 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       final clock = Stopwatch()..start();
       first = await source.capture();
       if (_disposed || generation != _generation) return;
+      final orientation = _orientation(source);
       if (corners != null &&
           corners.length == 4 &&
-          state.stillSize != (width: first.width, height: first.height)) {
+          (state.stillSize != (width: first.width, height: first.height) ||
+              orientation != _calibrationOrientation)) {
         throw StateError('Camera orientation changed. Recalibrate the court before starting.');
       }
       for (var i = 0; i < 2; i++) {
         final sample = await source.capture();
         if (_disposed || generation != _generation) return;
-        if (sample.width != first.width || sample.height != first.height) {
+        if (sample.width != first.width ||
+            sample.height != first.height ||
+            _orientation(source) != orientation) {
           throw StateError('Camera orientation changed. Start again and recalibrate.');
         }
       }
       _fps = liveFps(clock.elapsed, 3);
       _captureSize = (width: first.width, height: first.height);
+      _captureOrientation = orientation;
     } on Object catch (e) {
       if (_disposed || generation != _generation) return;
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
@@ -582,14 +605,19 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       try {
         final frame = await source.capture();
-        if (!current() || state.phase != LivePhase.live) continue;
-        if (_captureSize != (width: frame.width, height: frame.height)) {
+        if (!current() || state.phase != LivePhase.live || socket != _socket) continue;
+        if (_captureSize != (width: frame.width, height: frame.height) ||
+            _captureOrientation != _orientation(source)) {
           throw StateError('Camera orientation changed. Start a new session and recalibrate.');
         }
-        socket.sendFrame(_nextFrame++, _captureClock.elapsedMicroseconds / 1000.0, frame.jpeg);
+        final index = _nextFrame++;
+        _pendingImages[index] = frame.jpeg;
+        if (_pendingImages.length > 12) _pendingImages.remove(_pendingImages.keys.first);
+        socket.sendFrame(index, _captureClock.elapsedMicroseconds / 1000.0, frame.jpeg);
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
       } on Object catch (e) {
         if (!current()) return;
+        _clearImages();
         _streaming = false;
         // Save what arrived so far, then let go of the socket so the server frees the GPU.
         socket.sendJson({'type': 'stop'});
@@ -686,6 +714,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   void _onFrame(Json e) {
+    final clientFrame = asInt(e['client_frame']);
+    _analyzedImage = e['skipped'] == true ? null : _pendingImages[clientFrame];
+    if (clientFrame != null) _pendingImages.removeWhere((index, _) => index <= clientFrame);
     final court = e['court'] as Json?;
     final speed = asDouble(e['speed_kmh']);
     final frame = asInt(e['frame'])!;
@@ -812,7 +843,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   Future<void> _reconnect(int generation) async {
-    _set(state.copyWith(phase: LivePhase.reconnecting));
+    _clearImages();
+    _set(state.copyWith(phase: LivePhase.reconnecting, trail: const [], players: const {}));
     String? lastError;
     for (final wait in kReconnectDelays) {
       await Future<void>.delayed(wait);
@@ -870,6 +902,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final socket = _socket;
     if (socket == null) return;
     _streaming = false;
+    _clearImages();
     _set(state.copyWith(phase: LivePhase.stopping));
     final saved = _saved = Completer<String?>();
     socket.sendJson({'type': 'stop'});

@@ -7,7 +7,7 @@ import 'package:shuttlesense_app/data/models/json.dart';
 import 'package:shuttlesense_app/features/live/frame_source.dart';
 import 'package:shuttlesense_app/features/live/live_socket.dart';
 
-/// A camera that returns the same small "JPEG" every time (the server is fake too).
+/// A camera that returns a decodable still (the server is fake too).
 class FakeFrameSource implements FrameSource {
   FakeFrameSource({this.error});
 
@@ -33,7 +33,14 @@ class FakeFrameSource implements FrameSource {
   Future<CapturedFrame> capture() async {
     if (captureError != null) throw captureError!;
     captures++;
-    return (jpeg: Uint8List.fromList([0xFF, 0xD8, captures % 256]), width: width, height: height);
+    return (
+      jpeg: base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8'
+        '/x8AAwMCAO+jP1sAAAAASUVORK5CYII=',
+      ),
+      width: width,
+      height: height,
+    );
   }
 
   @override

@@ -349,23 +349,49 @@ class _LiveView extends ConsumerWidget {
     final frameIndex = state.frameIndex;
     final call = bannerCall(record, frameIndex);
     final size = state.size;
+    final image = controller.analyzedImage;
+    final capture = controller.captureSize;
+    final aspect = capture == null ? 16 / 9 : capture.width / capture.height;
     final video = AspectRatio(
-      aspectRatio: size == null || size.height == 0 ? 16 / 9 : size.width / size.height,
+      aspectRatio: aspect,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            controller.source?.preview() ?? const ColoredBox(color: Colors.black),
-            if (size != null)
-              CustomPaint(
-                painter: LiveOverlayPainter(
-                  size: size,
-                  trail: state.trail,
-                  players: state.players,
-                  colors: PlayerColors.of(context),
-                ),
+            const ColoredBox(color: Colors.black),
+            Center(
+              child: AspectRatio(
+                aspectRatio: aspect,
+                child: image == null || size == null
+                    ? controller.source?.preview()
+                    : Image.memory(
+                        image,
+                        key: ObjectKey(image),
+                        fit: BoxFit.fill,
+                        cacheWidth: size.width,
+                        errorBuilder: (_, _, _) =>
+                            controller.source?.preview() ?? const SizedBox.shrink(),
+                        frameBuilder: (context, child, frame, _) {
+                          if (frame == null) return const SizedBox.expand();
+                          return Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              child,
+                              CustomPaint(
+                                painter: LiveOverlayPainter(
+                                  size: size,
+                                  trail: state.trail,
+                                  players: state.players,
+                                  colors: PlayerColors.of(context),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
               ),
+            ),
             if (state.phase != LivePhase.live)
               ColoredBox(
                 color: Colors.black54,
