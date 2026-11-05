@@ -97,7 +97,7 @@ void main() {
         ),
       );
       expect(find.text('IN'), findsOneWidget);
-      expect(find.textContaining('set by you'), findsOneWidget);
+      expect(find.textContaining('Confirmed by referee'), findsOneWidget);
       expect(find.text('Call OUT'), findsOneWidget);
       expect(find.text('Call IN'), findsNothing);
     });
@@ -123,6 +123,7 @@ void main() {
       );
       final both = goldenRecord().copyWith(lineCalls: [call(), later]);
       expect(bannerCall(both, 210)?.id, 1); // the new call is shown while recent
+      expect(bannerCall(both, 210, prioritizeReview: true)?.id, 0);
       expect(bannerCall(both, 200 + 30 * 5)?.id, 0); // then the one to review comes back
     });
   });

@@ -120,20 +120,23 @@ def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
 def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
         ws.send_json(START)
-        ws.receive_json()
+        assert ws.receive_json()["decision_ack"]
         events = _send_frames(ws, 230)
         call = next(e for e in events if e["type"] == "line_call")["line_call"]
-        ws.send_json({"type": "override", "line_call_id": call["id"], "call": "out"})
+        ws.send_json({"type": "override", "line_call_id": call["id"], "call": "out",
+                      "decision_id": 11})  # fmt: skip
         update = ws.receive_json()
         assert update["type"] == "line_call" and update["line_call"]["override"]["call"] == "out"
-        assert ws.receive_json()["type"] == "score"
+        score = ws.receive_json()
+        assert score["type"] == "score" and score["decision_id"] == 11
         assert ws.receive_json()["type"] == "coaching"
         ws.send_json({"type": "correct", "rally_index": 0, "winner": "far"})
         score = ws.receive_json()
         assert score["type"] == "score" and score["rallies"][0]["winner"] == "far"
         assert ws.receive_json()["type"] == "coaching"
-        ws.send_json({"type": "override", "line_call_id": 99, "call": "in"})
-        assert ws.receive_json()["code"] == "not_found"
+        ws.send_json({"type": "override", "line_call_id": 99, "call": "in", "decision_id": 12})
+        error = ws.receive_json()
+        assert error["code"] == "not_found" and error["decision_id"] == 12
 
 
 def test_started_snapshot_and_coaching_between_rallies(tmp_path: Path) -> None:

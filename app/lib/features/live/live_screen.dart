@@ -347,7 +347,8 @@ class _LiveView extends ConsumerWidget {
     final controller = ref.read(liveControllerProvider.notifier);
     final record = state.record;
     final frameIndex = state.frameIndex;
-    final call = bannerCall(record, frameIndex);
+    final call = bannerCall(record, frameIndex, prioritizeReview: true);
+    final decisionBusy = !controller.canDecide;
     final size = state.size;
     final image = controller.analyzedImage;
     final capture = controller.captureSize;
@@ -422,7 +423,11 @@ class _LiveView extends ConsumerWidget {
           ),
           if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
           if (call != null)
-            LineCallBanner(call: call, onDecide: (c) => controller.overrideCall(call.id, c)),
+            LineCallBanner(
+              call: call,
+              onDecide: (c) => controller.overrideCall(call.id, c),
+              busy: decisionBusy,
+            ),
         ],
       ),
       timeline: StrokeTimeline(
@@ -435,7 +440,7 @@ class _LiveView extends ConsumerWidget {
         record: record,
         frameIndex: frameIndex,
         live: true,
-        busy: state.phase != LivePhase.live,
+        busy: decisionBusy,
         onCorrect: controller.correct,
         onAward: controller.award,
         onUndo: controller.undo,

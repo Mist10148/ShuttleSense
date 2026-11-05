@@ -229,6 +229,8 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
 
+When `started.decision_ack` is true, a referee command can include a nonnegative integer `decision_id` (up to 2⁵³ − 1). The server echoes it on the command reply (`score` or `error`). Automatic score events have no decision ID.
+
 Live video and events use fixed-rate slots anchored at the first decoded capture. Missing slots repeat the previous image in playback and carry no new observations. The anchor survives resume. Gaps longer than the resume window are capped and the next capture starts a new anchor.
 
 ### `POST /jobs/{job_id}/chat`

@@ -493,11 +493,65 @@ void main() {
 
     await tester.ensureVisible(find.text('Point Far'));
     await tester.tap(find.text('Point Far'));
+    socket.emit({
+      'type': 'score',
+      'score': {
+        'near': 0,
+        'far': 1,
+        'corrections': [
+          {'rally_index': 0, 'winner_before': null, 'winner_after': 'far', 'kind': 'award'},
+        ],
+      },
+      'rallies': <dynamic>[],
+    });
+    await events(tester);
     await tester.tap(find.text('Undo'));
     await events(tester);
     expect(socket.sent.where((m) => m['type'] == 'award').single['winner'], 'far');
     expect(socket.sent.where((m) => m['type'] == 'undo'), hasLength(1));
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('an automatic score or late acknowledgment cannot release a pending decision', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(
+      tester,
+      onHello: (_) => {...startedEvent(), 'decision_ack': true},
+    );
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final controller = container.read(liveControllerProvider.notifier);
+    controller.award('near');
+    controller.award('near');
+    final id = socket.sent.where((e) => e['type'] == 'award').single['decision_id'];
+    final score = {
+      'type': 'score',
+      'score': {'near': 1, 'far': 0},
+      'rallies': [],
+    };
+    socket.emit(score);
+    await events(tester);
+    expect(controller.canDecide, isFalse);
+    await tester.pump(const Duration(seconds: 5));
+    expect(controller.canDecide, isTrue);
+    expect(find.textContaining('Decision unconfirmed'), findsOneWidget);
+    controller.undo();
+    socket.emit({...score, 'decision_id': id});
+    await events(tester);
+    expect(controller.canDecide, isFalse);
+    socket.emit({
+      'type': 'error',
+      'code': 'not_found',
+      'detail': 'Nothing to undo.',
+      'decision_id': socket.sent.last['decision_id'],
+    });
+    await events(tester);
+    expect(controller.canDecide, isTrue);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));

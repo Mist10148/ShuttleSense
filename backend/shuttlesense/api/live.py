@@ -304,6 +304,7 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             "fps": session.fps, "width": session.width, "height": session.height,
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],
+            "decision_ack": True,
             **_snapshot(session),
         })  # fmt: skip
     except Exception:  # the client left before the session started
@@ -458,7 +459,13 @@ def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> l
 
 def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     with session.lock:
-        return _control_locked(session, msg)
+        events = _control_locked(session, msg)
+    decision_id = msg.get("decision_id")
+    if type(decision_id) is int and 0 <= decision_id <= 2**53 - 1:
+        for event in events:
+            if event["type"] in ("score", "error"):
+                event["decision_id"] = decision_id
+    return events
 
 
 def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:

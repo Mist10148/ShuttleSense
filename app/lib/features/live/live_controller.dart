@@ -309,6 +309,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   DeviceOrientation? _captureOrientation;
   final _pendingImages = <int, Uint8List>{};
   Uint8List? _analyzedImage;
+  bool _decisionAck = false;
+  int _decisionSequence = 0;
+  int? _pendingDecision;
+  Timer? _decisionTimeout;
   Completer<String?>? _saved;
   Completer<Json>? _started;
 
@@ -357,6 +361,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _calibrationOrientation = null;
     _captureOrientation = null;
     _clearImages();
+    _clearDecision();
     _started = null;
     _saved = null;
     final events = _events, socket = _socket, source = _source;
@@ -558,6 +563,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// The session so far from `started`: a fresh start has only the start score, a resume
   /// gets back every hit, rally and call it missed while away.
   void _seed(Json started) {
+    _decisionAck = started['decision_ack'] == true;
     if (!started.containsKey('rallies')) return; // an older backend
     state.hits
       ..clear()
@@ -618,6 +624,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       } on Object catch (e) {
         if (!current()) return;
         _clearImages();
+        _clearDecision();
         _streaming = false;
         // Save what arrived so far, then let go of the socket so the server frees the GPU.
         socket.sendJson({'type': 'stop'});
@@ -690,6 +697,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           );
         }
       case 'score':
+        if (_matchesDecision(e)) _clearDecision();
         final rallies = asList(e['rallies']).map(Rally.fromJson).toList();
         state.rallies
           ..clear()
@@ -787,6 +795,12 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       starting.completeError(_Refused(code, message));
       return;
     }
+    if (_matchesDecision(e) &&
+        (_decisionAck || const {'not_found', 'bad_message'}.contains(code))) {
+      _clearDecision();
+      _notify(message);
+      return;
+    }
     // Mid-session: frame-level problems, an override of an unknown call (not_found) and a
     // server-side failure (internal: the server closes the socket and keeps the session, so
     // the app resumes) do not end the session.
@@ -801,6 +815,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     }
     if (const {'bad_frame', 'bad_message', 'internal'}.contains(code)) return;
     _streaming = false;
+    _clearDecision();
     // Let go of the socket so the server detaches the session and frees the GPU.
     final socket = _socket;
     _socket = null;
@@ -816,7 +831,17 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _set(state.copyWith(notice: (id: ++_notices, text: text), speedKmh: state.speedKmh));
 
   /// Whether a referee decision can reach the server now.
-  bool get canDecide => state.phase == LivePhase.live && _socket != null;
+  bool get canDecide =>
+      state.phase == LivePhase.live && _socket != null && _pendingDecision == null;
+
+  bool _matchesDecision(Json event) =>
+      _pendingDecision != null && (!_decisionAck || event['decision_id'] == _pendingDecision);
+
+  void _clearDecision() {
+    _decisionTimeout?.cancel();
+    _decisionTimeout = null;
+    _pendingDecision = null;
+  }
 
   /// Send a decision, or say why it cannot be sent (no silent drop while reconnecting).
   void _decide(Json message) {
@@ -825,7 +850,21 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify('Not connected: the decision was not sent. Try again once live.');
       return;
     }
-    socket.sendJson(message);
+    if (_pendingDecision != null) return;
+    final id = ++_decisionSequence;
+    _pendingDecision = id;
+    _decisionTimeout = Timer(const Duration(seconds: 5), () {
+      _clearDecision();
+      _notify('Decision unconfirmed. Check the score before trying again.');
+    });
+    try {
+      socket.sendJson({...message, if (_decisionAck) 'decision_id': id});
+    } on Object {
+      _clearDecision();
+      _notify('Could not send the decision. Check the connection and try again.');
+      return;
+    }
+    _set(state.copyWith(speedKmh: state.speedKmh));
   }
 
   /// The socket closed: resume if it dropped mid-session, fail fast if it was saving.
@@ -844,6 +883,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   Future<void> _reconnect(int generation) async {
     _clearImages();
+    _clearDecision();
     _set(state.copyWith(phase: LivePhase.reconnecting, trail: const [], players: const {}));
     String? lastError;
     for (final wait in kReconnectDelays) {
@@ -903,6 +943,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (socket == null) return;
     _streaming = false;
     _clearImages();
+    _clearDecision();
     _set(state.copyWith(phase: LivePhase.stopping));
     final saved = _saved = Completer<String?>();
     socket.sendJson({'type': 'stop'});
