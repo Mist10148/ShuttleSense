@@ -622,7 +622,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         socket.sendFrame(index, _captureClock.elapsedMicroseconds / 1000.0, frame.jpeg);
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
       } on Object catch (e) {
-        if (!current()) return;
+        if (!current() || socket != _socket) continue;
         _clearImages();
         _clearDecision();
         _streaming = false;

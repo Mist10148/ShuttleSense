@@ -185,6 +185,16 @@ void main() {
       await events(tester);
       expect(socket.sent.last, {'type': 'override', 'line_call_id': 0, 'call': 'out'});
 
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await events(tester);
+      await tester.ensureVisible(find.text('Coach'));
+      await tester.tap(find.text('Coach'));
+      await events(tester);
+      expect(find.text('Next rally'), findsOneWidget);
+      expect(find.text('Score and stats'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
       await tester.tap(find.text('Stop'));
       await events(tester);
       await tester.pump(const Duration(milliseconds: 100));
@@ -240,7 +250,10 @@ void main() {
     await pumpLive(
       tester,
       source: FakeFrameSource(
-        error: CameraUnavailable('Camera access was denied. Allow it.', permissionDenied: true),
+        error: const CameraUnavailable(
+          'Camera access was denied. Allow it.',
+          permissionDenied: true,
+        ),
       ),
     );
     expect(find.textContaining('Camera access was denied'), findsOneWidget);
@@ -425,6 +438,8 @@ void main() {
     expect(socket.sent.first['best_of'], 3);
     expect(socket.sent.first['first_server'], 'near');
     expect(socket.sent.first['court'], 'doubles');
+    await tester.tap(find.text('Coach'));
+    await events(tester);
     expect(find.text('Notes appear here after each rally.'), findsOneWidget);
 
     socket.emit(frameEvent(0));
@@ -505,6 +520,7 @@ void main() {
       'rallies': <dynamic>[],
     });
     await events(tester);
+    await tester.ensureVisible(find.text('Undo'));
     await tester.tap(find.text('Undo'));
     await events(tester);
     expect(socket.sent.where((m) => m['type'] == 'award').single['winner'], 'far');

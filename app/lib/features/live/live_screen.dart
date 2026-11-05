@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/clip_record.dart';
 import '../../shared/disclaimers.dart';
@@ -14,7 +15,6 @@ import '../calibration/calibration_screen.dart';
 import '../mode/mode_screen.dart';
 import '../results/widgets/court_minimap.dart';
 import '../results/widgets/line_call_banner.dart';
-import '../results/widgets/results_layout.dart';
 import '../results/widgets/scoreboard.dart';
 import '../results/widgets/status_strip.dart';
 import '../results/widgets/stroke_timeline.dart';
@@ -337,16 +337,25 @@ class _SavedView extends StatelessWidget {
   }
 }
 
-class _LiveView extends ConsumerWidget {
+class _LiveView extends ConsumerStatefulWidget {
   const _LiveView({required this.state});
 
   final LiveState state;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LiveView> createState() => _LiveViewState();
+}
+
+class _LiveViewState extends ConsumerState<_LiveView> {
+  bool _coach = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
     final controller = ref.read(liveControllerProvider.notifier);
     final record = state.record;
     final frameIndex = state.frameIndex;
+    final lastRally = record.rallies.lastOrNull;
     final call = bannerCall(record, frameIndex, prioritizeReview: true);
     final decisionBusy = !controller.canDecide;
     final size = state.size;
@@ -409,43 +418,105 @@ class _LiveView extends ConsumerWidget {
         ),
       ),
     );
-    return ResultsLayout(
-      video: video,
-      status: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LiveStatusBar(state: state),
-          StatusStrip(
-            rallyState: state.rallyState,
-            speedKmh: state.speedKmh,
-            peakSpeedKmh: state.peakSpeedKmh,
-            strokeCount: state.strokesInRally,
-          ),
-          if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
-          if (call != null)
-            LineCallBanner(
-              call: call,
-              onDecide: (c) => controller.overrideCall(call.id, c),
-              busy: decisionBusy,
-            ),
-        ],
+    final controls = [
+      StatusStrip(
+        rallyState: state.rallyState,
+        speedKmh: state.speedKmh,
+        peakSpeedKmh: state.peakSpeedKmh,
+        strokeCount: state.strokesInRally,
       ),
-      timeline: StrokeTimeline(
-        hits: state.hits,
-        currentHitId: state.hits.isEmpty ? null : state.hits.last.id,
-        onSeek: (_) {},
-      ),
-      minimap: CourtMinimap(record: record, frameIndex: frameIndex),
-      scoreboard: Scoreboard(
+      Scoreboard(
         record: record,
         frameIndex: frameIndex,
         live: true,
         busy: decisionBusy,
-        onCorrect: controller.correct,
+        showHistory: false,
         onAward: controller.award,
         onUndo: controller.undo,
+        onClearLast: lastRally?.winner == null
+            ? null
+            : () => controller.correct(lastRally!.index, null),
       ),
-      coach: LiveCoachPanel(state: state),
+      if (call != null)
+        LineCallBanner(
+          call: call,
+          onDecide: (c) => controller.overrideCall(call.id, c),
+          busy: decisionBusy,
+        ),
+      Wrap(
+        spacing: 8,
+        children: [
+          ChoiceChip(
+            label: const Text('Referee'),
+            selected: !_coach,
+            onSelected: (_) => setState(() => _coach = false),
+          ),
+          ChoiceChip(
+            label: const Text('Coach'),
+            selected: _coach,
+            onSelected: (_) => setState(() => _coach = true),
+          ),
+        ],
+      ),
+    ];
+    final details = _coach
+        ? LiveCoachPanel(state: state)
+        : SectionCard(
+            title: 'Rally history',
+            child: record.rallies.isEmpty
+                ? const Text('Completed rallies appear here. Tap a selected winner to clear it.')
+                : RallyHistory(
+                    record: record,
+                    frameIndex: frameIndex,
+                    onCorrect: decisionBusy ? null : controller.correct,
+                  ),
+          );
+    final camera = [
+      video,
+      LiveStatusBar(state: state),
+      if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
+    ];
+    final analysis = [
+      CourtMinimap(record: record, frameIndex: frameIndex),
+      SizedBox(
+        height: 220,
+        child: StrokeTimeline(
+          hits: state.hits,
+          currentHitId: state.hits.isEmpty ? null : state.hits.last.id,
+          onSeek: (_) {},
+        ),
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        Widget column(List<Widget> children) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final child in children)
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: child),
+          ],
+        );
+        final wide = Breakpoints.forWidth(constraints.maxWidth) != WindowClass.compact;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(12),
+          child: wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: column([...camera, ...analysis])),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: column([...controls, details])),
+                  ],
+                )
+              : column([
+                  ...controls,
+                  if (_coach) details,
+                  ...camera,
+                  if (!_coach) details,
+                  ...analysis,
+                ]),
+        );
+      },
     );
   }
 }
@@ -497,13 +568,30 @@ class LiveCoachPanel extends StatelessWidget {
     final coaching = state.coaching;
     final top = coaching?.topFixes.take(3).toList() ?? const <SessionNote>[];
     return SectionCard(
-      title: 'Coach',
+      title: 'Between-rally coaching',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (last == null)
-            Text('Notes appear here after each rally.', style: theme.textTheme.bodyMedium)
-          else ...[
+          Text('Next rally', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            _nextCue(last) ??
+                (last == null
+                    ? 'Notes appear here after each rally.'
+                    : 'Waiting for enough footage to suggest a cue.'),
+            style: theme.textTheme.titleMedium,
+          ),
+          if (top.isNotEmpty) ...[
+            const Divider(height: 20),
+            Text('Focus so far', style: theme.textTheme.titleSmall),
+            for (final (i, note) in top.indexed)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('${i + 1}. ${note.text}'),
+              ),
+          ],
+          if (last != null) ...[
+            const Divider(height: 20),
             Text('Last rally', style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
@@ -516,30 +604,25 @@ class LiveCoachPanel extends StatelessWidget {
                 if (last.winner != null) '${last.winner == 'near' ? 'Near' : 'Far'} won',
               ].join(' · '),
             ),
-            for (final f in last.faults.where((f) => f.tip != null).take(3))
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${f.player == 'near' ? 'Near' : 'Far'}'
-                  '${f.stroke == null ? '' : ', ${kStrokeLabels[f.stroke] ?? f.stroke}'}: ${f.tip}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-          ],
-          if (top.isNotEmpty) ...[
-            const Divider(height: 20),
-            Text('Focus so far', style: theme.textTheme.titleSmall),
-            for (final (i, note) in top.indexed)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('${i + 1}. ${note.text}'),
-              ),
           ],
           const SizedBox(height: 8),
           Text(kCoachingDisclaimer, style: theme.textTheme.bodySmall),
         ],
       ),
     );
+  }
+
+  String? _nextCue(RallySummary? rally) {
+    if (rally == null) return null;
+    for (final fault in rally.faults) {
+      final tip = fault.tip;
+      if (tip == null || tip.trim().isEmpty) continue;
+      final player = fault.player == 'near' ? 'Near' : 'Far';
+      final stroke = fault.stroke;
+      final who = stroke == null ? player : '$player, ${kStrokeLabels[stroke] ?? stroke}';
+      return '$who: $tip';
+    }
+    return null;
   }
 }
 

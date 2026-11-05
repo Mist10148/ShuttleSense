@@ -61,7 +61,7 @@ class CameraFrameSource implements FrameSource {
     } on CameraException catch (e) {
       throw _unavailable(e);
     }
-    if (cameras.isEmpty) throw CameraUnavailable('No camera found on this device');
+    if (cameras.isEmpty) throw const CameraUnavailable('No camera found on this device');
     final camera = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.back,
       orElse: () => cameras.first,

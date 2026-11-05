@@ -17,8 +17,10 @@ class Scoreboard extends StatelessWidget {
     this.onCorrect,
     this.onAward,
     this.onUndo,
+    this.onClearLast,
     this.busy = false,
     this.live = false,
+    this.showHistory = true,
   });
 
   final ClipRecord record;
@@ -32,10 +34,12 @@ class Scoreboard extends StatelessWidget {
 
   /// Take back the newest correction or award.
   final VoidCallback? onUndo;
+  final VoidCallback? onClearLast;
   final bool busy;
 
   /// A live session: the score is always the current one.
   final bool live;
+  final bool showHistory;
 
   /// Whether the playback position is past the last rally, where the match state (server,
   /// game point, ...) describes what is on screen.
@@ -113,22 +117,23 @@ class Scoreboard extends StatelessWidget {
                     icon: const Icon(Icons.undo, size: 18),
                     label: const Text('Undo'),
                   ),
+                  if (onClearLast != null)
+                    TextButton(
+                      onPressed: busy ? null : onClearLast,
+                      child: const Text('Clear last winner'),
+                    ),
                 ],
               ),
             ],
             if (busy) const LinearProgressIndicator(),
-            const SizedBox(height: 8),
-            for (final rally in record.rallies)
-              _RallyRow(
-                rally: rally,
-                showGame: total.bestOf > 1,
-                current: record.rallyAt(frameIndex)?.index == rally.index,
-                onCorrect: onCorrect == null || busy
-                    ? null
-                    : (winner) => onCorrect!(rally.index, winner),
+            if (showHistory) ...[
+              const SizedBox(height: 8),
+              RallyHistory(
+                record: record,
+                frameIndex: frameIndex,
+                onCorrect: busy ? null : onCorrect,
               ),
-            if (total.corrections.isNotEmpty)
-              Text(_changes(total.corrections), style: theme.textTheme.bodySmall),
+            ],
           ],
           if (summary != null && summary.strokeCounts.isNotEmpty) ...[
             const Divider(height: 24),
@@ -142,6 +147,34 @@ class Scoreboard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class RallyHistory extends StatelessWidget {
+  const RallyHistory({super.key, required this.record, required this.frameIndex, this.onCorrect});
+
+  final ClipRecord record;
+  final int frameIndex;
+  final void Function(int rallyIndex, String? winner)? onCorrect;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = record.rallyAt(frameIndex)?.index;
+    final corrections = record.score?.corrections ?? const <ScoreCorrection>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final rally in record.rallies)
+          _RallyRow(
+            rally: rally,
+            showGame: (record.score?.bestOf ?? 1) > 1,
+            current: current == rally.index,
+            onCorrect: onCorrect == null ? null : (winner) => onCorrect!(rally.index, winner),
+          ),
+        if (corrections.isNotEmpty)
+          Text(_changes(corrections), style: Theme.of(context).textTheme.bodySmall),
+      ],
     );
   }
 
