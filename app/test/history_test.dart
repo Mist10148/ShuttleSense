@@ -73,6 +73,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(visited, ['/jobs/job1/results']);
   });
+
+  testWidgets('History identifies a saved live session and opens its replay', (tester) async {
+    final live = Job.fromJson(jobJson(id: 'live1')..['mode'] = 'live');
+    final visited = await pumpScreen(
+      tester,
+      const HistoryScreen(),
+      api: FakeApiClient(jobs: [live]),
+    );
+    expect(find.textContaining('Live ·'), findsOneWidget);
+    await tester.tap(find.text('rally01.mp4'));
+    await tester.pumpAndSettle();
+    expect(visited, ['/jobs/live1/results']);
+  });
 }
 
 class _DeleteFails extends FakeApiClient {
