@@ -298,13 +298,13 @@ void main() {
     await events(tester);
     await sockets.single.drop();
     await events(tester);
-    expect(find.textContaining('reconnecting'), findsOneWidget);
+    expect(find.text('Reconnecting and refreshing the score…'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     await events(tester);
     await tester.pump(const Duration(milliseconds: 100));
     expect(sockets, hasLength(2));
     expect(sockets.last.sent.first, {'type': 'resume', 'session_id': 's1'});
-    expect(find.textContaining('reconnecting'), findsNothing);
+    expect(find.text('Reconnecting and refreshing the score…'), findsNothing);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
