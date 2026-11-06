@@ -526,6 +526,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         return (started: null, refused: _Refused(null, 'cancelled'));
       }
       final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
+      _seed(event);
       _set(
         state.copyWith(
           phase: LivePhase.live,
@@ -544,7 +545,6 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           strokesInRally: asInt(event['strokes_in_rally']),
         ),
       );
-      _seed(event);
       return (started: event, refused: null);
     } on Object catch (e) {
       final refused = e is _Refused
@@ -569,8 +569,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// gets back every hit, rally and call it missed while away.
   void _seed(Json started) {
     _decisionAck = started['decision_ack'] == true;
+    _padFrames(asInt(started['frames']) ?? 0);
     if (!started.containsKey('rallies')) return; // an older backend
-    _clearDecision();
     state.hits
       ..clear()
       ..addAll(asList(started['hits']).map(Hit.fromJson));
@@ -582,6 +582,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
     final coaching = started['coaching'] as Json?;
     final summary = started['rally_summary'] as Json?;
+    _clearDecision();
     _set(
       state.copyWith(
         speedKmh: state.speedKmh,
@@ -589,6 +590,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         lastRally: summary == null ? null : RallySummary.fromJson(summary),
       ),
     );
+  }
+
+  void _padFrames(int count) {
+    final frames = state.frames;
+    while (frames.length < count) {
+      frames.add(FrameInfo(frame: frames.length));
+    }
   }
 
   void _beginStreaming() {
@@ -746,9 +754,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       rallyState: e['rally_state'] as String?,
     );
     final frames = state.frames;
-    while (frames.length < frame) {
-      frames.add(FrameInfo(frame: frames.length));
-    }
+    _padFrames(frame);
     frame < frames.length ? frames[frame] = info : frames.add(info);
     final shuttle = e['shuttle'] as Json?;
     var trail = state.trail;

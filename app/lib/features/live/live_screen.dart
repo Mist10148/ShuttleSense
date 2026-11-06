@@ -410,7 +410,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 child: Center(
                   child: Text(switch (state.phase) {
                     LivePhase.connecting => 'Connecting… the server may be loading its models',
-                    LivePhase.reconnecting => 'Connection lost, reconnecting…',
+                    LivePhase.reconnecting => 'Refreshing camera connection…',
                     LivePhase.stopping => 'Saving the session…',
                     _ => '',
                   }, style: const TextStyle(color: Colors.white, fontSize: 18)),
