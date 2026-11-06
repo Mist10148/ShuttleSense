@@ -675,9 +675,9 @@ class LiveCoachPanel extends StatelessWidget {
       if (player != null && fault.player != player) continue;
       final tip = fault.tip;
       if (tip == null || tip.trim().isEmpty) continue;
-      final player = fault.player == 'near' ? 'Near' : 'Far';
+      final faultSide = fault.player == 'near' ? 'Near' : 'Far';
       final stroke = fault.stroke;
-      final who = stroke == null ? player : '$player, ${kStrokeLabels[stroke] ?? stroke}';
+      final who = stroke == null ? faultSide : '$faultSide, ${kStrokeLabels[stroke] ?? stroke}';
       return '$who: $tip';
     }
     return null;
