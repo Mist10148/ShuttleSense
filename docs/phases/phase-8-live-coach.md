@@ -259,8 +259,9 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 - [x] Live `award` and `undo` messages; REST `POST /jobs/{id}/score/award` and `/score/undo`.
 - [x] App scoreboard: Point Near / Point Far, Undo, tap the chosen winner to clear; live decisions while reconnecting are refused with a message.
 - [x] Put unresolved line calls first and show Clear last winner beside point and undo controls.
-  Lock decision controls until the server acknowledges the request, the connection drops, or the
-  request times out. After a timeout, check the displayed score before repeating a decision.
+  With acknowledgment support, a timeout or disconnect keeps decisions locked until a fresh
+  session snapshot arrives. The app never resends the decision. On older backends, check the
+  displayed score after a timeout before repeating a decision.
 - [ ] Try it courtside: award a missed rally and undo it during a real live session.
 
 **Tests.** `test_live.py::test_live_award_clear_and_undo`, `test_api.py::test_award_and_undo_over_rest`, `scoreboard_test.dart`, `live_test.dart`.

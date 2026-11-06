@@ -570,6 +570,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   void _seed(Json started) {
     _decisionAck = started['decision_ack'] == true;
     if (!started.containsKey('rallies')) return; // an older backend
+    _clearDecision();
     state.hits
       ..clear()
       ..addAll(asList(started['hits']).map(Hit.fromJson));
@@ -859,6 +860,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final id = ++_decisionSequence;
     _pendingDecision = id;
     _decisionTimeout = Timer(const Duration(seconds: 5), () {
+      if (_decisionAck) {
+        unawaited(_reconnect(_generation));
+        return;
+      }
       _clearDecision();
       _notify('Decision unconfirmed. Check the score before trying again.');
     });
@@ -888,7 +893,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   Future<void> _reconnect(int generation) async {
     _clearImages();
-    _clearDecision();
+    _decisionTimeout?.cancel();
+    if (!_decisionAck) _clearDecision();
+    final socket = _socket;
+    _socket = null;
+    unawaited(_events?.cancel());
+    _events = null;
+    if (socket != null) unawaited(socket.close());
     _set(state.copyWith(phase: LivePhase.reconnecting, trail: const [], players: const {}));
     String? lastError;
     for (final wait in kReconnectDelays) {

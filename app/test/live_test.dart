@@ -557,9 +557,9 @@ void main() {
     socket.emit(score);
     await events(tester);
     expect(controller.canDecide, isFalse);
-    await tester.pump(const Duration(seconds: 5));
+    socket.emit({...score, 'decision_id': id});
+    await events(tester);
     expect(controller.canDecide, isTrue);
-    expect(find.textContaining('Decision unconfirmed'), findsOneWidget);
     controller.undo();
     socket.emit({...score, 'decision_id': id});
     await events(tester);
@@ -576,6 +576,40 @@ void main() {
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
+
+  for (final applied in [true, false]) {
+    testWidgets('decision timeout refreshes score without resending (applied: $applied)', (
+      tester,
+    ) async {
+      final sockets = await pumpLive(
+        tester,
+        onHello: (hello) => {
+          ...startedEvent(resumed: hello['type'] == 'resume'),
+          'decision_ack': true,
+          'score': {'near': hello['type'] == 'resume' && applied ? 1 : 0, 'far': 0},
+          'rallies': [],
+          'line_calls': [],
+          'hits': [],
+        },
+      );
+      await startWithoutCourt(tester);
+      final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+      final controller = container.read(liveControllerProvider.notifier);
+      controller.award('near');
+      await tester.pump(const Duration(seconds: 5));
+      expect(controller.canDecide, isFalse);
+      expect(sockets.single.closed, isTrue);
+      await tester.pump(kReconnectDelays.first);
+      await events(tester);
+      expect(sockets.last.sent.single['type'], 'resume');
+      expect(sockets.first.sent.where((e) => e['type'] == 'award'), hasLength(1));
+      expect(container.read(liveControllerProvider).score!.near, applied ? 1 : 0);
+      expect(controller.canDecide, isTrue);
+      await tester.tap(find.text('Stop'));
+      await events(tester);
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
 
   testWidgets('a start score also counts without a court', (tester) async {
     final sockets = await pumpLive(tester, size: laptop);
