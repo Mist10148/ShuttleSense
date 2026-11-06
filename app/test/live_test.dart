@@ -510,6 +510,9 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.ensureVisible(find.text('Referee'));
+    await tester.tap(find.text('Referee'));
+    await events(tester);
     await tester.ensureVisible(find.text('Point Far'));
     await tester.tap(find.text('Point Far'));
     socket.emit({

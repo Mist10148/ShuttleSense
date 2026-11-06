@@ -357,6 +357,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final frameIndex = state.frameIndex;
     final lastRally = record.rallies.lastOrNull;
     final call = bannerCall(record, frameIndex, prioritizeReview: true);
+    final pendingReviews = record.lineCalls.where((call) => call.needsReview).length;
     final decisionBusy = !controller.canDecide;
     final size = state.size;
     final image = controller.analyzedImage;
@@ -419,30 +420,6 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       ),
     );
     final controls = [
-      StatusStrip(
-        rallyState: state.rallyState,
-        speedKmh: state.speedKmh,
-        peakSpeedKmh: state.peakSpeedKmh,
-        strokeCount: state.strokesInRally,
-      ),
-      Scoreboard(
-        record: record,
-        frameIndex: frameIndex,
-        live: true,
-        busy: decisionBusy,
-        showHistory: false,
-        onAward: controller.award,
-        onUndo: controller.undo,
-        onClearLast: lastRally?.winner == null
-            ? null
-            : () => controller.correct(lastRally!.index, null),
-      ),
-      if (call != null)
-        LineCallBanner(
-          call: call,
-          onDecide: (c) => controller.overrideCall(call.id, c),
-          busy: decisionBusy,
-        ),
       Wrap(
         spacing: 8,
         children: [
@@ -457,6 +434,41 @@ class _LiveViewState extends ConsumerState<_LiveView> {
             onSelected: (_) => setState(() => _coach = true),
           ),
         ],
+      ),
+      StatusStrip(
+        rallyState: state.rallyState,
+        speedKmh: state.speedKmh,
+        peakSpeedKmh: state.peakSpeedKmh,
+        strokeCount: state.strokesInRally,
+      ),
+      if (state.phase == LivePhase.reconnecting || (state.phase == LivePhase.live && decisionBusy))
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            state.phase == LivePhase.reconnecting
+                ? 'Reconnecting and refreshing the score…'
+                : 'Waiting for the referee decision to be confirmed…',
+          ),
+        ),
+      if (!_coach && pendingReviews > 0)
+        Text('$pendingReviews ${pendingReviews == 1 ? 'call' : 'calls'} awaiting review'),
+      if (!_coach && call != null)
+        LineCallBanner(
+          call: call,
+          onDecide: (c) => controller.overrideCall(call.id, c),
+          busy: decisionBusy,
+        ),
+      Scoreboard(
+        record: record,
+        frameIndex: frameIndex,
+        live: true,
+        busy: !_coach && decisionBusy,
+        showHistory: false,
+        onAward: _coach ? null : controller.award,
+        onUndo: _coach ? null : controller.undo,
+        onClearLast: _coach || lastRally?.winner == null
+            ? null
+            : () => controller.correct(lastRally!.index, null),
       ),
     ];
     final details = _coach
@@ -503,9 +515,9 @@ class _LiveViewState extends ConsumerState<_LiveView> {
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: column([...camera, ...analysis])),
-                    const SizedBox(width: 16),
                     Expanded(flex: 2, child: column([...controls, details])),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 3, child: column([...camera, ...analysis])),
                   ],
                 )
               : column([
