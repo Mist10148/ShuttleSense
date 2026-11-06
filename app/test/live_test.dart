@@ -33,6 +33,7 @@ Future<List<FakeLiveSocket>> pumpLive(
   Size size = phone,
   FakeFrameSource? source,
   bool unreachable = false,
+  Brightness brightness = Brightness.light,
   Map<String, dynamic>? Function(Map<String, dynamic> hello)? onHello,
 }) async {
   final sockets = <FakeLiveSocket>[];
@@ -40,6 +41,7 @@ Future<List<FakeLiveSocket>> pumpLive(
     tester,
     const LiveScreen(),
     size: size,
+    brightness: brightness,
     prefs: {'ui.mode': 'live'},
     overrides: [
       frameSourceFactoryProvider.overrideWithValue(() => source ?? FakeFrameSource()),
@@ -147,62 +149,78 @@ void main() {
   }
 
   for (final MapEntry(key: name, value: size) in kSizes.entries) {
-    testWidgets('$name: start, stream, see calls and quality, stop and save', (tester) async {
-      final sockets = await pumpLive(tester, size: size);
-      expect(find.byKey(const Key('camera-preview')), findsOneWidget);
-      expect(find.textContaining('not official calls'), findsOneWidget);
-      await startWithoutCourt(tester);
+    for (final brightness in Brightness.values) {
+      testWidgets('$name ${brightness.name}: start, review calls, coach and save', (tester) async {
+        final sockets = await pumpLive(tester, size: size, brightness: brightness);
+        expect(find.byKey(const Key('camera-preview')), findsOneWidget);
+        expect(find.textContaining('not official calls'), findsOneWidget);
+        await startWithoutCourt(tester);
 
-      final socket = sockets.single;
-      expect(socket.uri.toString(), 'ws://fake:8000/live');
-      final start = socket.sent.first;
-      expect(start['type'], 'start');
-      expect([start['width'], start['height']], [1280, 720]);
-      expect(start['corners'], isNull);
-      // Frames go out as the camera delivers them.
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(socket.frames, isNotEmpty);
+        final socket = sockets.single;
+        expect(socket.uri.toString(), 'ws://fake:8000/live');
+        final start = socket.sent.first;
+        expect(start['type'], 'start');
+        expect([start['width'], start['height']], [1280, 720]);
+        expect(start['corners'], isNull);
+        // Frames go out as the camera delivers them.
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(socket.frames, isNotEmpty);
 
-      for (var i = 0; i < 3; i++) {
-        socket.emit(frameEvent(i));
-      }
-      socket.emit(lineCallEvent());
-      socket.emit({
-        'type': 'degraded',
-        'level': 1,
-        'scale': 0.75,
-        'reason': 'processing p95 410 ms over the 300 ms budget',
+        for (var i = 0; i < 3; i++) {
+          socket.emit(frameEvent(i));
+        }
+        socket.emit(lineCallEvent());
+        socket.emit(lineCallEvent(id: 1, call: 'in'));
+        socket.emit({
+          'type': 'degraded',
+          'level': 1,
+          'scale': 0.75,
+          'reason': 'processing p95 410 ms over the 300 ms budget',
+        });
+        await events(tester);
+        expect(find.text('IN PLAY'), findsOneWidget);
+        expect(find.text('Latency 42 ms'), findsOneWidget);
+        expect(find.text('Reduced quality'), findsOneWidget);
+        expect(find.text('UNCERTAIN'), findsOneWidget);
+        expect(find.text('2 calls awaiting review'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.ensureVisible(find.text('Confirm OUT'));
+        await tester.tap(find.text('Confirm OUT'));
+        await events(tester);
+        expect(socket.sent.last, {'type': 'override', 'line_call_id': 0, 'call': 'out'});
+        socket.emit(lineCallEvent(override: 'out'));
+        socket.emit({
+          'type': 'score',
+          'score': {'near': 0, 'far': 0},
+          'rallies': [],
+        });
+        await events(tester);
+        expect(find.text('1 call awaiting review'), findsOneWidget);
+
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await events(tester);
+        await tester.ensureVisible(find.text('Confirm IN'));
+        await tester.tap(find.text('Confirm IN'));
+        await events(tester);
+        expect(socket.sent.last, {'type': 'override', 'line_call_id': 1, 'call': 'in'});
+        await tester.ensureVisible(find.text('Coach'));
+        await tester.tap(find.text('Coach'));
+        await events(tester);
+        expect(find.text('Next rally'), findsOneWidget);
+        expect(find.text('Score and stats'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.text('Stop'));
+        await events(tester);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(socket.sent.last['type'], 'stop');
+        expect(find.textContaining('Session saved to History'), findsOneWidget);
+        expect(find.text('Open results'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 1));
       });
-      await events(tester);
-      expect(find.text('IN PLAY'), findsOneWidget);
-      expect(find.text('Latency 42 ms'), findsOneWidget);
-      expect(find.text('Reduced quality'), findsOneWidget);
-      expect(find.text('UNCERTAIN'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-
-      await tester.ensureVisible(find.text('Confirm OUT'));
-      await tester.tap(find.text('Confirm OUT'));
-      await events(tester);
-      expect(socket.sent.last, {'type': 'override', 'line_call_id': 0, 'call': 'out'});
-
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await events(tester);
-      await tester.ensureVisible(find.text('Coach'));
-      await tester.tap(find.text('Coach'));
-      await events(tester);
-      expect(find.text('Next rally'), findsOneWidget);
-      expect(find.text('Score and stats'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-
-      await tester.tap(find.text('Stop'));
-      await events(tester);
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(socket.sent.last['type'], 'stop');
-      expect(find.textContaining('Session saved to History'), findsOneWidget);
-      expect(find.text('Open results'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
-    });
+    }
   }
 
   testWidgets('orientation change after calibration requires recalibration', (tester) async {
@@ -387,7 +405,7 @@ void main() {
     final sockets = await pumpLive(
       tester,
       onHello: (_) => {
-        ...startedEvent(),
+        ...startedEvent(frames: 44),
         'score': {'near': 7, 'far': 3, 'server': 'near', 'service_court': 'left'},
         'rallies': [
           {'index': 0, 'start_frame': 0, 'end_frame': 40, 'winner': 'near'},
@@ -408,6 +426,7 @@ void main() {
     expect(state.lastRally?.winner, 'near');
     expect(state.lastRally?.call, 'in');
     expect((state.rallyState, state.rallyStartFrame, state.strokesInRally), ('in_play', 41, 2));
+    expect(state.frameIndex, 43);
     sockets.single.emit({'type': 'hit', 'hit': _hit(2, 30)});
     sockets.single.emit({'type': 'hit', 'hit': _hit(1, 20)});
     sockets.single.emit({'type': 'stats', 'processed': 12});
@@ -509,6 +528,12 @@ void main() {
       find.text('1. Near player: Bent hitting arm at contact on 2 of 3 smashes'),
       findsOneWidget,
     );
+    final farFilter = find.widgetWithText(ChoiceChip, 'Far');
+    await tester.ensureVisible(farFilter);
+    await tester.tap(farFilter);
+    await events(tester);
+    expect(find.text('Waiting for enough footage to suggest a cue for Far.'), findsOneWidget);
+    expect(find.textContaining('Bent hitting arm'), findsNothing);
 
     await tester.ensureVisible(find.text('Referee'));
     await tester.tap(find.text('Referee'));
@@ -649,12 +674,12 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await events(tester);
     // The first attempt was refused; the screen keeps saying it is reconnecting.
-    expect(find.textContaining('reconnecting'), findsOneWidget);
+    expect(find.text('Reconnecting and refreshing the score…'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
     await tester.pump(const Duration(seconds: 2));
     await events(tester);
     expect(resumes, 2);
-    expect(find.textContaining('reconnecting'), findsNothing);
+    expect(find.text('Reconnecting and refreshing the score…'), findsNothing);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));

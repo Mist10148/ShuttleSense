@@ -184,6 +184,13 @@ def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
                 pass
             corrected = reply["score"]
             assert ws.receive_json()["rally_summary"]["call"] == "in"
+            ws.send_json({"type": "correct", "rally_index": call["rally_index"], "winner": None})
+            cleared = ws.receive_json()
+            assert cleared["rallies"][call["rally_index"]]["winner"] is None
+            assert ws.receive_json()["type"] == "coaching"
+            ws.send_json({"type": "undo"})
+            assert ws.receive_json()["score"] == corrected
+            assert ws.receive_json()["type"] == "coaching"
             ws.send_json({"type": "award", "winner": "far"})
             assert ws.receive_json()["score"]["far"] == corrected["far"] + 1
             assert ws.receive_json()["type"] == "coaching"

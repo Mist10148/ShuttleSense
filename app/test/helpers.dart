@@ -31,6 +31,7 @@ Future<List<String>> pumpScreen(
   Map<String, Object> prefs = const {},
   List<Override> overrides = const [],
   bool settle = true,
+  Brightness brightness = Brightness.light,
 }) async {
   setSize(tester, size);
   SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000', ...prefs});
@@ -55,7 +56,10 @@ Future<List<String>> pumpScreen(
         apiClientProvider.overrideWithValue(api ?? FakeApiClient()),
         ...overrides,
       ],
-      child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
+      child: MaterialApp.router(
+        theme: brightness == Brightness.dark ? AppTheme.dark() : AppTheme.light(),
+        routerConfig: router,
+      ),
     ),
   );
   if (settle) await tester.pumpAndSettle();
