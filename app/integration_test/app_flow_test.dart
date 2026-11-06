@@ -138,6 +138,8 @@ void main() {
       await pumpUntil(tester, find.textContaining('Cannot reach server'));
       await typeInto(tester, find.byType(TextField).first, server);
       await tester.testTextInput.receiveAction(TextInputAction.done); // Enter submits too
+      await pumpUntil(tester, find.text('Upload clip'));
+      await tapText(tester, 'Upload clip');
       await pumpUntil(tester, find.text('New analysis'));
 
       // 2. Pick and upload without calibration; 4. processing runs to the end.
