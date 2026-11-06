@@ -348,6 +348,7 @@ class _LiveView extends ConsumerStatefulWidget {
 
 class _LiveViewState extends ConsumerState<_LiveView> {
   bool _coach = false;
+  String? _coachPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +473,11 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       ),
     ];
     final details = _coach
-        ? LiveCoachPanel(state: state)
+        ? LiveCoachPanel(
+            state: state,
+            player: _coachPlayer,
+            onPlayerChanged: (player) => setState(() => _coachPlayer = player),
+          )
         : SectionCard(
             title: 'Rally history',
             child: record.rallies.isEmpty
@@ -490,12 +495,22 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     ];
     final analysis = [
       CourtMinimap(record: record, frameIndex: frameIndex),
-      SizedBox(
-        height: 220,
-        child: StrokeTimeline(
-          hits: state.hits,
-          currentHitId: state.hits.isEmpty ? null : state.hits.last.id,
-          onSeek: (_) {},
+      SectionCard(
+        title: 'Recent strokes',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (state.hits.isEmpty) const Text('Detected strokes appear here during play.'),
+            for (final hit in state.hits.reversed.take(5))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '${formatClock(hit.timeS)} · ${hit.player == 'near' ? 'Near' : 'Far'}'
+                  ' · ${kStrokeLabels[hit.stroke] ?? 'Unclassified'}',
+                ),
+              ),
+            const Text('Open the saved replay to jump to a stroke.'),
+          ],
         ),
       ),
     ];
@@ -569,28 +584,58 @@ class HitCallout extends StatelessWidget {
 /// Between-rally coaching (F21): what the last rally showed and the running top fixes,
 /// from the server's `coaching` events. Chat opens once the session is saved.
 class LiveCoachPanel extends StatelessWidget {
-  const LiveCoachPanel({super.key, required this.state});
+  const LiveCoachPanel({super.key, required this.state, this.player, this.onPlayerChanged});
 
   final LiveState state;
+  final String? player;
+  final ValueChanged<String?>? onPlayerChanged;
+
+  List<SessionNote> _topFixes(Coaching? coaching) {
+    if (coaching == null) return const [];
+    if (player == null) return coaching.topFixes.take(3).toList();
+    final notes = coaching.notes.where((note) => note.player == null || note.player == player);
+    final ranked = notes.toList()
+      ..sort((a, b) {
+        final impact = (b.count * b.severity).compareTo(a.count * a.severity);
+        if (impact != 0) return impact;
+        final frequency = (b.count / b.total).compareTo(a.count / a.total);
+        return frequency == 0 ? a.id.compareTo(b.id) : frequency;
+      });
+    return ranked.take(3).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final last = state.lastRally;
-    final coaching = state.coaching;
-    final top = coaching?.topFixes.take(3).toList() ?? const <SessionNote>[];
+    final top = _topFixes(state.coaching);
+    final side = player == 'near' ? 'Near' : 'Far';
     return SectionCard(
       title: 'Between-rally coaching',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (onPlayerChanged != null)
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: player == value,
+                    onSelected: (_) => onPlayerChanged!(value),
+                  ),
+              ],
+            ),
           Text('Next rally', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
             _nextCue(last) ??
                 (last == null
                     ? 'Notes appear here after each rally.'
-                    : 'Waiting for enough footage to suggest a cue.'),
+                    : player == null
+                    ? 'Waiting for enough footage to suggest a cue.'
+                    : 'Waiting for enough footage to suggest a cue for $side.'),
             style: theme.textTheme.titleMedium,
           ),
           if (top.isNotEmpty) ...[
@@ -627,6 +672,7 @@ class LiveCoachPanel extends StatelessWidget {
   String? _nextCue(RallySummary? rally) {
     if (rally == null) return null;
     for (final fault in rally.faults) {
+      if (player != null && fault.player != player) continue;
       final tip = fault.tip;
       if (tip == null || tip.trim().isEmpty) continue;
       final player = fault.player == 'near' ? 'Near' : 'Far';
