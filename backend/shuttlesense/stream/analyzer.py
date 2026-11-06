@@ -152,7 +152,6 @@ class StreamAnalyzer:
         return CourtPositions(near=near or None, far=far or None, shuttle=shuttle), speed
 
     def _frame_event(self, frame: Frame) -> Event:
-        start = self.open_rally_start
         return {
             "type": "frame",
             "frame": frame.frame,
@@ -161,6 +160,12 @@ class StreamAnalyzer:
             "players": _dump(frame.players),
             "court": _dump(frame.court_positions) if frame.court_positions else None,
             "speed_kmh": frame.shuttle_speed_kmh,
+            **self.rally_status(),
+        }
+
+    def rally_status(self) -> Event:
+        start = self.open_rally_start
+        return {
             "rally_state": self.state,
             "rally_start_frame": start,
             "strokes_in_rally": self._strokes_in_rally(start),

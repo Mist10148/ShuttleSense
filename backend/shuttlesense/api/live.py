@@ -325,6 +325,7 @@ def _snapshot(session: LiveSession) -> dict[str, Any]:
             session.analyzer.coaching_event(record.rallies[-1].index) if record.rallies else None
         )
         return {
+            **session.analyzer.rally_status(),
             "score": record.score.model_dump(mode="json") if record.score else None,
             "rallies": dump(record.rallies),
             "line_calls": dump(record.line_calls),

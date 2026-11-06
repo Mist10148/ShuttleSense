@@ -141,6 +141,20 @@ def test_live_override_and_correction_over_the_socket(tmp_path: Path) -> None:
         assert error["code"] == "not_found" and error["decision_id"] == 12
 
 
+def test_resume_restores_open_rally_before_another_frame(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            session_id = ws.receive_json()["session_id"]
+            frame = _send_frames(ws, 46)[-1]
+            assert frame["rally_state"] == "in_play"
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({"type": "resume", "session_id": session_id})
+            started = ws.receive_json()
+            for key in ("rally_state", "rally_start_frame", "strokes_in_rally"):
+                assert started[key] == frame[key]
+
+
 def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
     import cv2
 

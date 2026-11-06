@@ -537,6 +537,11 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
             (k, v) => MapEntry(k as String, v as bool),
           ),
           score: event['score'] == null ? null : Score.fromJson(event['score'] as Json),
+          rallyState: event['rally_state'] as String?,
+          rallyStartFrame: asInt(event['rally_start_frame']),
+          clearRallyStart:
+              event.containsKey('rally_start_frame') && event['rally_start_frame'] == null,
+          strokesInRally: asInt(event['strokes_in_rally']),
         ),
       );
       _seed(event);
