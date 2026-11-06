@@ -331,6 +331,37 @@ Open at the time of that review:
   memory. The APK contains the launcher and splash resources and uses debug signing.
   Phone and tablet installation and iOS startup remain open.
 
+### Courtside recovery and verification (Nov 6)
+
+- The live reconnect snapshot restores the server frame position, rally timer, shot count, and
+  review queue. On a missing referee acknowledgment, the app reconnects and refreshes the score
+  before enabling decisions again. Tests cover both a lost reply after an award and a command
+  that never reached the server.
+- Referee shows the oldest unresolved call and the number awaiting review above the scoring
+  controls. Coach can show cues and notes for Both, Near, or Far. The live stroke feed is
+  read-only. Saved sessions still open from History and support citation seeks.
+- In `backend/`, `ruff check .`, `ruff format --check .`, and `pytest -m "not gpu" -x -q`
+  passed (305 tests). An initial run concurrent with other verification hit three render
+  wait deadlines. The full retry passed.
+- In `app/`, `dart format --output=none --set-exit-if-changed lib test integration_test`,
+  `flutter analyze --no-pub`, and `flutter test --no-pub` passed (181 tests). Both roles
+  were exercised at 360, 800, and 1280 dp in light and dark themes at 200% text size.
+- `flutter build web --release` and `flutter build windows --release` passed. The Windows
+  release process started and responded. The web index, bootstrap, and app script returned
+  HTTP 200. The headless browser launch was blocked, and the desktop browser check stopped
+  before navigation because the tool could not identify the browser's current URL.
+- `flutter build apk --release` passed with Gradle's JVM heap set to 2 GB. `apksigner verify`
+  confirmed the APK uses the Android Debug certificate. Device startup remains open.
+- The Windows integration flow passed against a loopback fake backend and a synthetic MP4.
+  Run `flutter test --no-pub integration_test -d windows` with the `E2E_SERVER` and
+  `E2E_VIDEO` Dart defines. The test now selects Upload clip at the mode picker before
+  checking upload, processing, results, and History.
+- The paced synthetic benchmark measured 34.7 ms p95 frame round trip and 1.65 s p95 line-call
+  lag. [Commands and results](results/live_latency.md)
+- Local setup has CPU-only PyTorch, no ONNX Runtime, rtmlib or SciPy, and no model weights or
+  attached Android device. The real-camera, calibrated accuracy and model-backed latency
+  gates still need the team inputs listed below.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |

@@ -276,7 +276,8 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 **Steps**
 - [x] After each closed rally the server sends `coaching`: the session notes and top fixes so far (same `feedback/patterns.py` as the saved session) and a rally summary (length, strokes, peak speed, winner, call, form faults).
 - [x] Live Referee and Coach views share the score and session status. Coach leads with one cue
-  from the latest rally, then the top session notes and rally details.
+  from the latest rally, then the top session notes and rally details. Both, Near, and Far
+  filters let the coach focus on one side and keep shared notes visible.
 - [ ] Check on a device that the panel is readable between rallies at arm's length (phone and tablet).
 
 **Tests.** `test_live.py::test_started_snapshot_and_coaching_between_rallies`, `live_test.dart` referee and coach panels.
@@ -290,6 +291,9 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 
 **Steps**
 - [x] `started` carries `score`, `rallies`, `line_calls`, `hits` and `coaching`; the app seeds its view from it, so a start score shows at once and a resume restores what was missed.
+- [x] The snapshot also restores the current frame position, open rally, and stroke count
+  before the next camera frame. A timed-out referee command on an acknowledgment-capable
+  server triggers a snapshot refresh before the controls unlock.
 
 **Tests.** `test_live.py` resume and snapshot tests, `live_test.dart` "started restores the session so far".
 

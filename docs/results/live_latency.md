@@ -1,5 +1,15 @@
 # Live latency (T8.12)
 
+## Courtside recovery verification, November 6
+
+- Command from `backend/`: `python scripts/bench_live.py --fake --frames 420 --realtime --out <temp>/shuttlesense-nov6-live-latency.md`
+- Backend commit `2b0a5d2`, Windows 11, Python 3.13.3. The run used 420 synthetic 1280×720 frames paced at 30 fps, with other local verification running concurrently.
+- Frame round trip was 34.7 ms at p95. Server arrival to frame event was 30.2 ms at p95.
+- Measured p95 event lag was 1.61 s for hits (10 events), 1.65 s for line calls (3 events), and 1.65 s for rally closure (3 events). These are wall-clock measurements from the paced run.
+- This run used fake perception. Model-backed latency and line-call accuracy on labelled landings remain open.
+
+## Previous synthetic run
+
 - Run: 2026-11-05 15:41 UTC, commit `09b458a`
 - Command: `python scripts/bench_live.py --fake --frames 600`
 - Mode: fake perception (in-process); frames: 600; source: synthetic 1280x720 frames
