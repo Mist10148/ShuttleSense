@@ -674,15 +674,6 @@ class LiveCoachPanel extends StatelessWidget {
                     : 'Waiting for enough footage to suggest a cue for $side.'),
             style: theme.textTheme.titleMedium,
           ),
-          if (top.isNotEmpty) ...[
-            const Divider(height: 20),
-            Text('Focus so far', style: theme.textTheme.titleSmall),
-            for (final (i, note) in top.indexed)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('${i + 1}. ${note.text}'),
-              ),
-          ],
           if (last != null) ...[
             const Divider(height: 20),
             Text('Last rally', style: theme.textTheme.titleSmall),
@@ -698,8 +689,54 @@ class LiveCoachPanel extends StatelessWidget {
               ].join(' · '),
             ),
           ],
+          if (top.isNotEmpty) ...[
+            const Divider(height: 20),
+            Text('Focus so far', style: theme.textTheme.titleSmall),
+            for (final (i, note) in top.indexed)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('${i + 1}. ${note.text}'),
+              ),
+          ],
+          if (state.rallies.isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+              title: const Text('Recent completed rallies'),
+              children: [
+                for (final rally in state.rallies.reversed.take(3))
+                  Builder(builder: (context) => _recentRally(context, rally)),
+              ],
+            ),
           const SizedBox(height: 8),
           Text(kCoachingDisclaimer, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
+  Widget _recentRally(BuildContext context, Rally rally) {
+    final hits = state.hits.reversed
+        .skipWhile((hit) => hit.frame > rally.endFrame)
+        .takeWhile((hit) => hit.frame >= rally.startFrame);
+    String? cue;
+    for (final hit in hits) {
+      if (player != null && hit.player != player) continue;
+      cue = _formatCue(hit.player, hit.stroke, hit.tip);
+      if (cue != null) break;
+    }
+    final count = rally.strokeCount;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rally ${rally.index + 1} \u00b7 $count ${count == 1 ? 'stroke' : 'strokes'}',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          if (cue != null) Text(cue),
         ],
       ),
     );
@@ -709,14 +746,17 @@ class LiveCoachPanel extends StatelessWidget {
     if (rally == null) return null;
     for (final fault in rally.faults) {
       if (player != null && fault.player != player) continue;
-      final tip = fault.tip;
-      if (tip == null || tip.trim().isEmpty) continue;
-      final faultSide = fault.player == 'near' ? 'Near' : 'Far';
-      final stroke = fault.stroke;
-      final who = stroke == null ? faultSide : '$faultSide, ${kStrokeLabels[stroke] ?? stroke}';
-      return '$who: $tip';
+      final cue = _formatCue(fault.player, fault.stroke, fault.tip);
+      if (cue != null) return cue;
     }
     return null;
+  }
+
+  String? _formatCue(String player, String? stroke, String? tip) {
+    if (tip == null || tip.trim().isEmpty) return null;
+    final side = player == 'near' ? 'Near' : 'Far';
+    final who = stroke == null ? side : '$side, ${kStrokeLabels[stroke] ?? stroke}';
+    return '$who: ${tip.trim()}';
   }
 }
 
