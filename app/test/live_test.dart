@@ -166,6 +166,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(socket.frames, isNotEmpty);
 
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await events(tester);
         for (var i = 0; i < 3; i++) {
           socket.emit(frameEvent(i));
         }
@@ -198,9 +201,6 @@ void main() {
         await events(tester);
         expect(find.text('1 call awaiting review'), findsOneWidget);
 
-        tester.platformDispatcher.textScaleFactorTestValue = 2;
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await events(tester);
         await tester.ensureVisible(find.text('Confirm IN'));
         await tester.tap(find.text('Confirm IN'));
         await events(tester);
@@ -260,6 +260,60 @@ void main() {
     await events(tester);
     expect(find.text('Rally 2 \u00b7 0:04.0'), findsOneWidget);
     expect(find.text('Confirm OUT'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a lost review acknowledgment refreshes the queue and score together', (
+    tester,
+  ) async {
+    final first = lineCallEvent(id: 1, rally: 0, frame: 30);
+    final second = lineCallEvent(id: 2, rally: 1, frame: 60, call: 'in');
+    final sockets = await pumpLive(
+      tester,
+      size: laptop,
+      onHello: (hello) => hello['type'] == 'resume'
+          ? {
+              ...startedEvent(resumed: true, frames: 90),
+              'decision_ack': true,
+              'score': {'near': 1, 'far': 0},
+              'rallies': [],
+              'hits': [],
+              'line_calls': [
+                first['line_call'],
+                lineCallEvent(id: 2, rally: 1, frame: 60, call: 'in', override: 'in')['line_call'],
+              ],
+            }
+          : {...startedEvent(), 'decision_ack': true},
+    );
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    socket.emit(first);
+    socket.emit(second);
+    await events(tester);
+
+    await tester.tap(find.byKey(const Key('live-review-queue')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rally 2 \u00b7 0:04.0').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm IN'));
+    expect(socket.sent.last['line_call_id'], 2);
+    await tester.pump(const Duration(seconds: 5));
+    await events(tester);
+    expect(socket.closed, isTrue);
+    expect(find.text('Reconnecting and refreshing the score\u2026'), findsOneWidget);
+
+    await tester.pump(kReconnectDelays.first);
+    await events(tester);
+    expect(sockets.last.sent.single['type'], 'resume');
+    expect(find.text('1 call awaiting review'), findsOneWidget);
+    expect(find.text('Rally 1 \u00b7 0:02.0'), findsOneWidget);
+    expect(find.text('Confirm OUT'), findsOneWidget);
+    expect(find.text('Confirm IN'), findsNothing);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final state = container.read(liveControllerProvider);
+    expect(state.score!.near, 1);
+    expect(state.lineCalls.singleWhere((call) => call.id == 2).reviewed, isTrue);
     await tester.tap(find.text('Stop'));
     await tester.pump(const Duration(seconds: 1));
   });
@@ -339,13 +393,13 @@ void main() {
     await events(tester);
     await sockets.single.drop();
     await events(tester);
-    expect(find.text('Reconnecting and refreshing the score…'), findsOneWidget);
+    expect(find.text('Reconnecting and refreshing the score\u2026'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     await events(tester);
     await tester.pump(const Duration(milliseconds: 100));
     expect(sockets, hasLength(2));
     expect(sockets.last.sent.first, {'type': 'resume', 'session_id': 's1'});
-    expect(find.text('Reconnecting and refreshing the score…'), findsNothing);
+    expect(find.text('Reconnecting and refreshing the score\u2026'), findsNothing);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
@@ -605,6 +659,61 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('recent coach rallies stay filtered after switching roles', (tester) async {
+    final sockets = await pumpLive(tester, size: tablet);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    for (var i = 0; i < 4; i++) {
+      socket.emit({
+        'type': 'rally',
+        'state': 'between_rallies',
+        'rally': {'index': i, 'start_frame': i * 30, 'end_frame': i * 30 + 20, 'stroke_count': 2},
+      });
+    }
+    for (final player in ['near', 'far']) {
+      socket.emit({
+        'type': 'hit',
+        'hit': {
+          ..._hit(player == 'near' ? 1 : 2, 68),
+          'player': player,
+          'feedback': [
+            {'rule': 'extension', 'passed': false, 'tip': 'Earlier cue for $player'},
+          ],
+        },
+      });
+    }
+    await events(tester);
+    await tester.tap(find.text('Coach'));
+    await events(tester);
+
+    final far = find.widgetWithText(ChoiceChip, 'Far');
+    await tester.ensureVisible(far);
+    await tester.tap(far);
+    await events(tester);
+    await tester.ensureVisible(find.text('Referee'));
+    await tester.tap(find.text('Referee'));
+    await events(tester);
+    await tester.tap(find.text('Coach'));
+    await events(tester);
+    expect(tester.widget<ChoiceChip>(far).selected, isTrue);
+    expect(find.text('Far, Smash: Earlier cue for far'), findsNothing);
+
+    final recent = find.text('Recent completed rallies');
+    await tester.ensureVisible(recent);
+    await tester.tap(recent);
+    await tester.pumpAndSettle();
+    expect(find.text('Rally 4 \u00b7 2 strokes'), findsOneWidget);
+    expect(find.text('Rally 3 \u00b7 2 strokes'), findsOneWidget);
+    expect(find.text('Rally 2 \u00b7 2 strokes'), findsOneWidget);
+    expect(find.text('Rally 1 \u00b7 2 strokes'), findsNothing);
+    expect(find.text('Far, Smash: Earlier cue for far'), findsOneWidget);
+    expect(find.text('Near, Smash: Earlier cue for near'), findsNothing);
+    expect(find.text('Point Far'), findsNothing);
+
+    await tester.tap(find.text('Stop'));
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('an automatic score or late acknowledgment cannot release a pending decision', (
     tester,
   ) async {
@@ -716,12 +825,12 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await events(tester);
     // The first attempt was refused; the screen keeps saying it is reconnecting.
-    expect(find.text('Reconnecting and refreshing the score…'), findsOneWidget);
+    expect(find.text('Reconnecting and refreshing the score\u2026'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
     await tester.pump(const Duration(seconds: 2));
     await events(tester);
     expect(resumes, 2);
-    expect(find.text('Reconnecting and refreshing the score…'), findsNothing);
+    expect(find.text('Reconnecting and refreshing the score\u2026'), findsNothing);
     await tester.tap(find.text('Stop'));
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
