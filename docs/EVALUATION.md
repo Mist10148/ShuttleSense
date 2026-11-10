@@ -37,8 +37,8 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 
 | What | Result | Report |
 | --- | --- | --- |
-| Live pipeline overhead without models (fake perception, in-process, 600 frames) | p50 13.0 ms, p95 29.6 ms frame → event round trip; server side p95 25.9 ms; 61.6 fps one at a time | [results/live_latency.md](results/live_latency.md) |
-| Live event lag (same run) | Hits p50 19 / p95 21 frames after contact (0.7 s at 30 fps); line calls and rally ends p50 49 / p95 51 frames after landing (1.7 s) | [results/live_latency.md](results/live_latency.md) |
+| Live pipeline overhead with fake perception (420 frames paced at 30 fps) | p50 12.9 ms and p95 26.2 ms frame round trip, with p95 22.9 ms on the server | [results/live_latency.md](results/live_latency.md) |
+| Live event lag in the same run | p95 0.736 s for hits, 1.733 s for line calls and 1.734 s for rally ends | [results/live_latency.md](results/live_latency.md) |
 | Offline vs live on synthetic rallies | Identical hits (10), rallies (3), line calls (IN, OUT, UNCERTAIN) and score | `pytest tests/test_stream.py` |
 | Saved live replay after reconnect | Fake session with two missing capture slots, an uncertain call resolved, and a point awarded and undone. All coach citations seek to readable frames in the rendered MP4; the saved score matches the live decision. | `pytest tests/test_live.py -k saved_replay` |
 | Live latency with TrackNetV3 and pose on the RTX 4050 | **Not measured**: the weights are not installed yet. Run `scripts/bench_live.py --url ... --video <team clip>` against a server with `stages` both true | – |

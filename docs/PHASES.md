@@ -362,6 +362,23 @@ Open at the time of that review:
   attached Android device. The real-camera, calibrated accuracy and model-backed latency
   gates still need the team inputs listed below.
 
+### Courtside verification (Nov 10)
+
+- The fake live suite covers camera release on stop failures, referee queue selection and
+  recovery after a lost acknowledgment, and coach filter retention across roles. Flutter
+  analysis, Dart formatting and all 187 Flutter tests passed. The role layouts were exercised
+  at 360, 800 and 1280 dp in both themes at 200% text size.
+- Backend Ruff checks and all 305 non-GPU tests passed. The fake recovery test checks the
+  saved score, History entry and seeks to the coaching citation frames in the rendered MP4.
+- The web and Windows release builds passed. The Windows integration test connected to a
+  local fake backend, uploaded a synthetic clip, opened its results, and found it in History.
+- The Android release APK built with a 2 GB Gradle heap and passed signature verification
+  with the Android Debug certificate. Device startup remains open.
+- The paced synthetic run measured 26.2 ms p95 frame round trip and 1.733 s p95 line-call
+  lag. [Benchmark report](results/live_latency.md)
+- Start the remaining team checks with a consented real-camera session. Use its recording for
+  rally and landing labels and the model-backed latency run. [Camera checklist](phases/phase-8-live-coach.md#courtside-review-and-coaching-follow-up-on-nov-10)
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |

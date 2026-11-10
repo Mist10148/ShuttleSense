@@ -1,5 +1,26 @@
 # Live latency (T8.12)
 
+## Paced courtside benchmark, November 10
+
+- Command from `backend/` with the project venv active
+
+  ```powershell
+  python scripts/bench_live.py --fake --frames 420 --realtime --out (Join-Path $env:TEMP 'shuttlesense-nov10-live-latency.md')
+  ```
+
+- Commit `96e211c`, Windows 11, Python 3.13.3. The in-process server used 420 synthetic 1280 by 720 frames paced at 30 fps with fake perception.
+
+| Measure | p50 | p95 | Observations |
+| --- | --- | --- | --- |
+| Frame sent to frame event | 12.9 ms | 26.2 ms | 420 frames |
+| Server arrival to frame event | 9.3 ms | 22.9 ms | 420 frames |
+| Hit contact to hit event | 670.4 ms | 736.4 ms | 10 hits |
+| Landing to line-call event | 1704.6 ms | 1733.1 ms | 3 calls |
+| Rally end to rally event | 1704.8 ms | 1733.5 ms | 3 rally ends |
+
+The line-call lag includes the look-ahead and settling time. Model-backed latency and
+accuracy on labelled landings remain open.
+
 ## Courtside recovery verification, November 6
 
 - Command from `backend/`: `python scripts/bench_live.py --fake --frames 420 --realtime --out <temp>/shuttlesense-nov6-live-latency.md`

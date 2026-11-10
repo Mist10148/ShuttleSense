@@ -54,6 +54,25 @@ times across reconnects, and the server rejects backwards timestamps. This does 
 the fixed-fps recording timeline: dropped or irregular frames can still compress playback and
 analysis time. Preview-to-still alignment and the real-device checks also remain open.
 
+### Courtside review and coaching follow-up on Nov 10
+
+- Stop ends capture and releases the camera even if the save fails. The camera stays
+  available while reconnecting (T8.6, T8.9).
+- Referee defaults to the oldest uncertain call and can select another by rally and time.
+  It waits for the score acknowledgment before advancing and rebuilds the queue from the
+  server snapshot after reconnect (T8.3, T8.10, T8.14, T8.16).
+- Coach shows the next cue, latest rally and up to three session notes. Expand **Recent
+  completed rallies** for the last three rallies and available cues for the selected player (T8.15).
+- The paced fake benchmark measured 26.2 ms p95 frame round trip and 1.733 s p95
+  line-call lag (T8.12). [Benchmark report](../results/live_latency.md)
+
+For the team camera check, calibrate on a fixed camera with models enabled. Record a consented
+session with a near-line landing. Review the call, award and undo a point, switch to Coach and
+check the player filter, then force a reconnect and compare score and pending calls. Stop from
+either role, open the replay from History, and seek to a coaching citation. Use the clip to
+label rallies and landings, and record the device, model versions, and reproduction steps.
+The real-camera, model-backed latency, and labelled-accuracy gates remain open.
+
 ### Status on Oct 31
 
 Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app `flutter test`). A task stays ⬜ until its acceptance check is met:

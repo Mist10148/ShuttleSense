@@ -205,7 +205,7 @@ In the app, enter the backend address (for example `http://192.168.1.20:8000`) o
 1. Connect to the backend (laptop on the same Wi-Fi, or the Colab tunnel URL with its token).
 2. Choose **Upload clip** or **Go live** (the app remembers it; switch any time from the app bar or Settings).
 3. **Upload:** pick a rally video, tap the 4 court corners (or skip; court features turn off), choose overlays and start processing.
-4. **Live:** put the camera on a tripod, tap **Calibrate court** and the 4 corners on a still (or start without court), then **Go live**. Use **Referee** to review calls and correct the score, or **Coach** for a cue before the next rally. Both show the score and session status. **Stop** saves a replay to History with coaching notes and chat when configured.
+4. For **Live**, put the camera on a tripod, tap **Calibrate court** and the 4 corners on a still (or start without court), then **Go live**. In **Referee**, review the oldest uncertain call or select a different rally from the queue. In **Coach**, choose Both, Near, or Far for between-rally cues and expand **Recent completed rallies** to see the last three. Both views show the score and session status. **Stop** ends capture and saves a replay to History with coaching notes and chat when configured.
 5. Review the annotated video, minimap, stroke timeline, line calls and form tips. Confirm or override UNCERTAIN calls; the score follows.
 6. Open the **Coach** tab for the top 3 things to fix (tap a time to watch it), and **Ask your coach** questions about the session (needs a Claude API key on the backend).
 7. Share or download the MP4, JSON and CSV; delete the job from the server when done.
@@ -284,7 +284,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
 | Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured: no labelled landings yet (`scripts/eval_line_calls.py` is ready) |
 | Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps, models installed | ≤ 300 ms | Not measured: TrackNetV3 and pose weights are not installed on the team laptop yet |
-| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 29.6 ms round trip, 25.9 ms server side ([live_latency.md](docs/results/live_latency.md)) |
+| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 26.2 ms round trip, 22.9 ms server side in the paced synthetic run ([live_latency.md](docs/results/live_latency.md)) |
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
