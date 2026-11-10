@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -302,6 +303,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   StreamSubscription<Json>? _events;
   bool _streaming = false;
   bool _disposed = false;
+  Future<void>? _cameraRelease;
   int _nextFrame = 0;
   final Stopwatch _captureClock = Stopwatch();
   ({int width, int height})? _captureSize;
@@ -363,21 +365,42 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _clearImages();
     _clearDecision();
     _started = null;
+    final saved = _saved;
     _saved = null;
-    final events = _events, socket = _socket, source = _source;
+    if (saved != null && !saved.isCompleted) saved.complete(null);
+    final events = _events, socket = _socket;
     _events = null;
     _socket = null;
-    _source = null;
     // Cancelling stops delivery at once, but its future and the close (which waits for the
     // server's close handshake) may take long or never finish: do not block on either.
     if (events != null) unawaited(events.cancel());
     if (socket != null) unawaited(socket.close());
-    await source?.dispose();
+    await _releaseCamera();
+  }
+
+  Future<void> _releaseCamera() async {
+    final source = _source;
+    _source = null;
+    if (source == null) {
+      await _cameraRelease;
+      return;
+    }
+    _cameraRelease = Future<void>.sync(source.dispose).catchError((Object error) {
+      debugPrint('Could not release the live camera: $error');
+    });
+    try {
+      await _cameraRelease;
+    } finally {
+      _cameraRelease = null;
+    }
   }
 
   Future<void> openCamera() async {
-    await _teardown();
+    if (_disposed) return;
+    final cleanup = _teardown();
     final generation = _generation;
+    await cleanup;
+    if (_disposed || generation != _generation) return;
     _set(_fresh());
     final source = ref.read(frameSourceFactoryProvider)();
     try {
@@ -461,6 +484,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _captureOrientation = orientation;
     } on Object catch (e) {
       if (_disposed || generation != _generation) return;
+      unawaited(_releaseCamera());
       _set(state.copyWith(phase: LivePhase.error, error: 'Camera stopped: $e'));
       return;
     }
@@ -495,6 +519,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final socket = ref.read(liveSocketFactoryProvider)(api.liveUri());
     void fail(String message) {
       if (!quiet && !_disposed && generation == _generation) {
+        unawaited(_releaseCamera());
         _set(state.copyWith(phase: LivePhase.error, error: message));
       }
     }
@@ -519,8 +544,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _socket = socket;
     final started = _started = Completer<Json>();
     _events = socket.events.listen(_onEvent, onDone: _onClosed, onError: (_) => _onClosed());
-    socket.sendJson(hello);
     try {
+      socket.sendJson(hello);
       final event = await started.future.timeout(kStartTimeout);
       if (_disposed || generation != _generation) {
         return (started: null, refused: _Refused(null, 'cancelled'));
@@ -614,6 +639,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     while (current()) {
       final due = interval * (_nextFrame - first);
       if (clock.elapsed < due) await Future<void>.delayed(due - clock.elapsed);
+      if (!current()) return;
       final source = _source, socket = _socket;
       if (source == null || socket == null || state.phase != LivePhase.live) {
         // Paused (reconnecting): restart the pace from here, or a resume would send every
@@ -637,21 +663,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
       } on Object catch (e) {
         if (!current() || socket != _socket) continue;
-        _clearImages();
-        _clearDecision();
-        _streaming = false;
-        // Save what arrived so far, then let go of the socket so the server frees the GPU.
-        socket.sendJson({'type': 'stop'});
-        unawaited(_events?.cancel());
-        _events = null;
-        _socket = null;
-        unawaited(socket.close());
-        _set(
-          state.copyWith(
-            phase: LivePhase.error,
-            error: 'Camera stopped: $e. The session so far is saved to History.',
-          ),
-        );
+        await _stop(captureError: e);
       }
     }
   }
@@ -825,7 +837,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify(message);
       return;
     }
-    if (const {'bad_frame', 'bad_message', 'internal'}.contains(code)) return;
+    if (const {'bad_frame', 'bad_message'}.contains(code)) return;
+    if (state.phase == LivePhase.stopping) {
+      final saved = _saved;
+      if (saved != null && !saved.isCompleted) saved.completeError(StateError(message));
+      return;
+    }
+    if (code == 'internal') return;
     _streaming = false;
     _clearDecision();
     // Let go of the socket so the server detaches the session and frees the GPU.
@@ -834,6 +852,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     unawaited(_events?.cancel());
     _events = null;
     if (socket != null) unawaited(socket.close());
+    unawaited(_releaseCamera());
     _set(state.copyWith(phase: LivePhase.error, error: message));
   }
 
@@ -925,6 +944,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     }
     if (_disposed || generation != _generation) return;
     _streaming = false;
+    unawaited(_releaseCamera());
     _set(
       state.copyWith(
         phase: LivePhase.error,
@@ -960,36 +980,51 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   /// Stop streaming and wait for the server to save the session.
-  Future<void> stop() async {
+  Future<void> stop() => _stop();
+
+  Future<void> _stop({Object? captureError}) async {
     final socket = _socket;
-    if (socket == null) return;
+    if (socket == null || state.phase != LivePhase.live) return;
+    final generation = _generation;
     _streaming = false;
     _clearImages();
     _clearDecision();
+    final cameraReleased = _releaseCamera();
     _set(state.copyWith(phase: LivePhase.stopping));
     final saved = _saved = Completer<String?>();
-    socket.sendJson({'type': 'stop'});
+    String? jobId;
+    String? error;
     try {
+      socket.sendJson({'type': 'stop'});
       // Saving runs the final analysis pass, which takes longer on long sessions.
-      final jobId = await saved.future.timeout(const Duration(seconds: 90));
-      // The camera is not needed on the saved screen (and stays open under the results
-      // page otherwise); New session opens it again.
-      final source = _source;
-      _source = null;
-      await source?.dispose();
-      _set(state.copyWith(phase: LivePhase.saved, savedJobId: jobId));
+      jobId = await saved.future.timeout(const Duration(seconds: 90));
+      if (captureError != null) {
+        final outcome = jobId == null
+            ? 'No frames were saved.'
+            : 'The session so far is saved to History.';
+        error = 'Camera stopped: $captureError. $outcome';
+      }
     } on Object {
-      _set(
-        state.copyWith(
-          phase: LivePhase.error,
-          error:
-              'The server did not confirm the save. If frames arrived, the session should '
-              'still appear in History.',
-        ),
-      );
+      const outcome = 'The server did not confirm the save. Check History for the session.';
+      error = captureError == null ? outcome : 'Camera stopped: $captureError. $outcome';
+    } finally {
+      if (identical(_saved, saved)) _saved = null;
+      if (_socket == socket) {
+        _socket = null;
+        unawaited(_events?.cancel());
+        _events = null;
+        unawaited(socket.close());
+      }
     }
-    if (_socket == socket) _socket = null;
-    unawaited(socket.close());
+    await cameraReleased;
+    if (_disposed || generation != _generation) return;
+    _set(
+      state.copyWith(
+        phase: error == null ? LivePhase.saved : LivePhase.error,
+        savedJobId: jobId,
+        error: error,
+      ),
+    );
   }
 }
 

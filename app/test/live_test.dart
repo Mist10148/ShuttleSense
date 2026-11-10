@@ -342,6 +342,7 @@ void main() {
     // The session so far is saved and the connection let go, so the GPU is free again.
     expect(sockets.single.sent.last['type'], 'stop');
     expect(sockets.single.closed, isTrue);
+    expect(cameras.single.disposed, isTrue);
 
     await tester.tap(find.text('Try again'));
     await events(tester);
@@ -722,6 +723,28 @@ void main() {
     expect(liveFps(Duration.zero, 3), kLiveTargetFps);
     expect(liveFps(const Duration(seconds: 9), 3), 1.0); // a very slow camera
   });
+
+  for (final failure in ['send', 'disconnect', 'timeout']) {
+    testWidgets('stopping releases the camera on $failure', (tester) async {
+      final camera = FakeFrameSource();
+      final sockets = await pumpLive(tester, source: camera);
+      await startWithoutCourt(tester);
+      final socket = sockets.single..replyToStop = false;
+      if (failure == 'send') socket.stopError = StateError('socket closed');
+
+      await tester.tap(find.text('Stop'));
+      await events(tester);
+      expect(camera.disposed, isTrue);
+      if (failure == 'disconnect') await socket.drop();
+      if (failure == 'timeout') await tester.pump(const Duration(seconds: 91));
+      await events(tester);
+
+      expect(find.textContaining('did not confirm the save'), findsOneWidget);
+      expect(socket.closed, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
 
   testWidgets('a saved session releases the camera and can start a new one', (tester) async {
     final cameras = <FakeFrameSource>[];

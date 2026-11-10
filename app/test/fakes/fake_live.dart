@@ -63,6 +63,8 @@ class FakeLiveSocket implements LiveSocket {
   final frames = <Uint8List>[];
   final _events = StreamController<Json>.broadcast();
   bool closed = false;
+  bool replyToStop = true;
+  Object? stopError;
 
   @override
   Future<void> get ready => fail ? Future.error(Exception('refused')) : Future.value();
@@ -77,7 +79,8 @@ class FakeLiveSocket implements LiveSocket {
       final reply = onHello?.call(message);
       if (reply != null) scheduleMicrotask(() => emit(reply));
     }
-    if (message['type'] == 'stop') {
+    if (message['type'] == 'stop' && stopError != null) throw stopError!;
+    if (message['type'] == 'stop' && replyToStop) {
       scheduleMicrotask(
         () => emit({
           'type': 'saved',
