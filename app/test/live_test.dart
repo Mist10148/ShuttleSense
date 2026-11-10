@@ -223,6 +223,47 @@ void main() {
     }
   }
 
+  testWidgets('review a later call and advance only after its score acknowledgment', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    socket.emit(lineCallEvent(id: 3, rally: 2, frame: 120, call: 'in'));
+    socket.emit(lineCallEvent(id: 2, rally: 1, frame: 60));
+    await events(tester);
+
+    final queue = find.byKey(const Key('live-review-queue'));
+    expect(tester.widget<DropdownButton<int>>(queue).value, 2);
+    await tester.tap(queue);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rally 3 \u00b7 0:08.0').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Confirm IN'));
+    await tester.tap(find.text('Confirm IN'));
+    expect(socket.sent.last, {'type': 'override', 'line_call_id': 3, 'call': 'in'});
+    socket.emit({'type': 'error', 'code': 'not_found', 'detail': 'Try that call again'});
+    await events(tester);
+    expect(tester.widget<DropdownButton<int>>(queue).value, 3);
+    await tester.tap(find.text('Confirm IN'));
+    socket.emit(lineCallEvent(id: 3, rally: 2, frame: 120, call: 'in', override: 'in'));
+    await events(tester);
+    expect(find.text('IN'), findsOneWidget);
+    expect(find.text('Confirm OUT'), findsNothing);
+
+    socket.emit({
+      'type': 'score',
+      'score': {'near': 1, 'far': 0},
+      'rallies': [],
+    });
+    await events(tester);
+    expect(find.text('Rally 2 \u00b7 0:04.0'), findsOneWidget);
+    expect(find.text('Confirm OUT'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('orientation change after calibration requires recalibration', (tester) async {
     final source = FakeFrameSource();
     final sockets = await pumpLive(tester, size: laptop, source: source);

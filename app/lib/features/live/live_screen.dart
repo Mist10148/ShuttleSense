@@ -349,6 +349,9 @@ class _LiveView extends ConsumerStatefulWidget {
 class _LiveViewState extends ConsumerState<_LiveView> {
   bool _coach = false;
   String? _coachPlayer;
+  int? _reviewCallId;
+
+  String _reviewLabel(LineCall call) => 'Rally ${call.rallyIndex + 1} · ${formatClock(call.timeS)}';
 
   @override
   Widget build(BuildContext context) {
@@ -357,9 +360,23 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final record = state.record;
     final frameIndex = state.frameIndex;
     final lastRally = record.rallies.lastOrNull;
-    final call = bannerCall(record, frameIndex, prioritizeReview: true);
-    final pendingReviews = record.lineCalls.where((call) => call.needsReview).length;
     final decisionBusy = !controller.canDecide;
+    final pendingReviews = record.lineCalls.where((call) => call.needsReview).toList()
+      ..sort((a, b) {
+        final byFrame = a.frame.compareTo(b.frame);
+        return byFrame == 0 ? a.id.compareTo(b.id) : byFrame;
+      });
+    final selectedReview =
+        pendingReviews.where((call) => call.id == _reviewCallId).firstOrNull ??
+        pendingReviews.firstOrNull;
+    // The server sends the updated call just before the score acknowledgment. Keep the
+    // decision in view until the score arrives or reconnect refreshes the snapshot.
+    final confirmingReview = state.phase == LivePhase.live && decisionBusy
+        ? record.lineCalls
+              .where((call) => call.id == controller.pendingReviewId && call.reviewed)
+              .firstOrNull
+        : null;
+    final call = confirmingReview ?? selectedReview ?? bannerCall(record, frameIndex);
     final size = state.size;
     final image = controller.analyzedImage;
     final capture = controller.captureSize;
@@ -451,12 +468,31 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 : 'Waiting for the referee decision to be confirmed…',
           ),
         ),
-      if (!_coach && pendingReviews > 0)
-        Text('$pendingReviews ${pendingReviews == 1 ? 'call' : 'calls'} awaiting review'),
+      if (!_coach && pendingReviews.isNotEmpty)
+        Text(
+          '${pendingReviews.length} ${pendingReviews.length == 1 ? 'call' : 'calls'} awaiting review',
+        ),
+      if (!_coach && confirmingReview == null && selectedReview != null)
+        if (pendingReviews.length == 1)
+          Text(_reviewLabel(selectedReview))
+        else
+          DropdownButton<int>(
+            key: const Key('live-review-queue'),
+            isExpanded: true,
+            value: selectedReview.id,
+            onChanged: decisionBusy ? null : (id) => setState(() => _reviewCallId = id),
+            items: [
+              for (final review in pendingReviews)
+                DropdownMenuItem(
+                  value: review.id,
+                  child: Text(_reviewLabel(review), overflow: TextOverflow.ellipsis),
+                ),
+            ],
+          ),
       if (!_coach && call != null)
         LineCallBanner(
           call: call,
-          onDecide: (c) => controller.overrideCall(call.id, c),
+          onDecide: (decision) => controller.overrideCall(call.id, decision),
           busy: decisionBusy,
         ),
       Scoreboard(

@@ -156,13 +156,20 @@ Json frameEvent(int frame, {bool visible = true, String state = 'in_play'}) => {
   'latency_ms': 42.0,
 };
 
-Json lineCallEvent({String call = 'out', bool uncertain = true, int id = 0, String? override}) => {
+Json lineCallEvent({
+  String call = 'out',
+  bool uncertain = true,
+  int id = 0,
+  int rally = 0,
+  int frame = 1,
+  String? override,
+}) => {
   'type': 'line_call',
   'line_call': {
     'id': id,
-    'rally_index': 0,
-    'frame': 1,
-    'time_s': 0.067,
+    'rally_index': rally,
+    'frame': frame,
+    'time_s': frame / 15,
     'call': call,
     'landing_xy': [5.21, 10.5],
     'margin_cm': -3.0,

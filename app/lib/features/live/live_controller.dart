@@ -314,6 +314,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool _decisionAck = false;
   int _decisionSequence = 0;
   int? _pendingDecision;
+  int? _pendingReviewId;
   Timer? _decisionTimeout;
   Completer<String?>? _saved;
   Completer<Json>? _started;
@@ -865,6 +866,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool get canDecide =>
       state.phase == LivePhase.live && _socket != null && _pendingDecision == null;
 
+  int? get pendingReviewId => _pendingReviewId;
+
   bool _matchesDecision(Json event) =>
       _pendingDecision != null && (!_decisionAck || event['decision_id'] == _pendingDecision);
 
@@ -872,6 +875,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _decisionTimeout?.cancel();
     _decisionTimeout = null;
     _pendingDecision = null;
+    _pendingReviewId = null;
   }
 
   /// Send a decision, or say why it cannot be sent (no silent drop while reconnecting).
@@ -884,6 +888,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (_pendingDecision != null) return;
     final id = ++_decisionSequence;
     _pendingDecision = id;
+    _pendingReviewId = message['line_call_id'] as int?;
     _decisionTimeout = Timer(const Duration(seconds: 5), () {
       if (_decisionAck) {
         unawaited(_reconnect(_generation));
