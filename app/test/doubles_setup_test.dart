@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/shared/widgets/start_score_field.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
@@ -140,5 +141,18 @@ void main() {
     expect((await load(['1', 'far', 'doubles', 'far_1', 'near_2'])).firstReceiverId, 'near_2');
     expect((await load(['1', 'far', 'doubles', 'bogus', ''])).firstServerId, isNull);
     expect(await load(['x']), kDefaultMatchSetup);
+  });
+
+  testWidgets('the start score names pairs in doubles', (tester) async {
+    Widget field(bool doubles) => MaterialApp(
+      home: Scaffold(
+        body: StartScoreField(value: (near: 3, far: 2), doubles: doubles, onChanged: (_) {}),
+      ),
+    );
+    await tester.pumpWidget(field(true));
+    expect(find.text('Near pair'), findsOneWidget);
+    expect(find.text('Far pair'), findsOneWidget);
+    await tester.pumpWidget(field(false));
+    expect(find.text('Near player'), findsOneWidget);
   });
 }

@@ -183,6 +183,7 @@ class _ReadyView extends ConsumerWidget {
         const SizedBox(height: 8),
         StartScoreField(
           value: ref.watch(liveStartScoreProvider),
+          doubles: ref.watch(liveMatchSetupProvider).doubles,
           onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
         ),
         MatchSetupField(
@@ -940,5 +941,5 @@ class LiveOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LiveOverlayPainter old) =>
-      old.trail != trail || old.players != players || old.size != size;
+      old.trail != trail || old.players != players || old.size != size || old.colors != colors;
 }

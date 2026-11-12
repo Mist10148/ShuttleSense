@@ -174,6 +174,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 StartScoreField(
                   key: ObjectKey(file), // a new clip starts from 0-0 again
                   value: options.startScore,
+                  doubles: options.match.doubles,
                   onChanged: notifier.setStartScore,
                 ),
               if (options.calibrate && options.referee)

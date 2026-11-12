@@ -21,8 +21,15 @@ String? startScoreProblem(StartScore score) {
 /// "The game is already under way" switch with the near and far scores, for clips that begin
 /// mid-game (P3 referee). Reports null while off or while the score is a finished game.
 class StartScoreField extends StatefulWidget {
-  const StartScoreField({super.key, required this.value, required this.onChanged});
+  const StartScoreField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.doubles = false,
+  });
 
+  /// Doubles: the scores belong to pairs, not players.
+  final bool doubles;
   final StartScore? value;
   final ValueChanged<StartScore?> onChanged;
 
@@ -67,9 +74,17 @@ class _StartScoreFieldState extends State<StartScoreField> {
         if (_on) ...[
           Row(
             children: [
-              points('Near player', _score.near, (v) => _update(score: (near: v, far: _score.far))),
+              points(
+                widget.doubles ? 'Near pair' : 'Near player',
+                _score.near,
+                (v) => _update(score: (near: v, far: _score.far)),
+              ),
               const SizedBox(width: 12),
-              points('Far player', _score.far, (v) => _update(score: (near: _score.near, far: v))),
+              points(
+                widget.doubles ? 'Far pair' : 'Far player',
+                _score.far,
+                (v) => _update(score: (near: _score.near, far: v)),
+              ),
             ],
           ),
           if (problem != null)

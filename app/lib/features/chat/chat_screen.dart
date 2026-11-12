@@ -107,17 +107,28 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
+  final _scroll = ScrollController();
 
   @override
   void dispose() {
     _input.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   void _send([String? text]) {
+    // A question still being answered: keep what was typed instead of dropping it.
+    if (ref.read(chatControllerProvider(widget.jobId)).busy) return;
     final message = text ?? _input.text;
     _input.clear();
     ref.read(chatControllerProvider(widget.jobId).notifier).send(message);
+  }
+
+  /// Keep the newest message in view as questions are asked and the answer streams in.
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    });
   }
 
   void _seek(Moment m) {
@@ -130,6 +141,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final health = ref.watch(healthProvider).valueOrNull;
     final available = health?.chatAvailable ?? false;
     final state = ref.watch(chatControllerProvider(widget.jobId));
+    ref.listen(chatControllerProvider(widget.jobId), (_, _) => _scrollToEnd());
     final limit = health?.chatMaxMessages ?? 0;
     final atLimit = limit > 0 && state.questions >= limit;
     final theme = Theme.of(context);
@@ -158,6 +170,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     Expanded(
                       child: ListView(
+                        controller: _scroll,
                         padding: EdgeInsets.all(gutter),
                         children: [
                           if (state.messages.isEmpty && state.streaming == null) ...[
