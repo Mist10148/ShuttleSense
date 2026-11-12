@@ -527,6 +527,8 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final camera = [
       video,
       LiveStatusBar(state: state),
+      if (state.phase == LivePhase.live && controller.waitingForAnalysis)
+        const Text('Waiting for a fresh analysis overlay…'),
       if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
     ];
     final analysis = [

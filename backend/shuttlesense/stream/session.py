@@ -134,6 +134,7 @@ class LiveSession:
         self._last_players = Players()
         self._since_check: list[float] = []
         self._skipped_since_check = 0
+        self._last_checked_drops = 0
         self._anchor_ts: float | None = None
         self._anchor_slot = 0
         self._max_padding = math.floor(resume_window_s * self.fps)
@@ -271,8 +272,12 @@ class LiveSession:
         if len(self._since_check) < int(self.live["check_every"]):
             return []
         p95 = _percentile(self._since_check, 95)
-        total = len(self._since_check) + self._skipped_since_check
-        drop = self._skipped_since_check / total if total else 0.0
+        with self._drop_lock:
+            drops = self.stats.dropped - self._last_checked_drops
+            self._last_checked_drops = self.stats.dropped
+        missed = self._skipped_since_check + drops
+        total = len(self._since_check) + missed
+        drop = missed / total if total else 0.0
         self._since_check, self._skipped_since_check = [], 0
         budget = float(self.live["budget_ms"])
         old = self.level
@@ -287,7 +292,7 @@ class LiveSession:
             reason = (
                 f"processing p95 {p95:.0f} ms over the {budget:.0f} ms budget"
                 if p95 > budget
-                else f"{drop:.0%} of frames skipped"
+                else f"{drop:.0%} of frames skipped or dropped"
                 if drop > self.live["max_drop_rate"]
                 else "back within budget"
             )

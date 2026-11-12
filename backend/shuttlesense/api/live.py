@@ -17,6 +17,7 @@ import math
 import struct
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -344,10 +345,11 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
     session = entry.session
     queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
     max_waiting = int(session.live["max_queue_frames"])
-    waiting = 0  # frames in the queue; past max_waiting new ones are dropped
+    waiting = 0
+    tail: deque[tuple[bytes, float]] | None = None
 
     async def receive() -> None:
-        nonlocal waiting
+        nonlocal waiting, tail
         try:
             while True:
                 msg = await ws.receive()
@@ -356,10 +358,17 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                 if msg.get("bytes") is not None:
                     if waiting >= max_waiting:
                         session.drop()
-                        continue
+                        if not tail:
+                            continue  # a control separates these frames from the full batch
+                        tail.popleft()
+                        waiting -= 1
+                    if tail is None:
+                        tail = deque()
+                        queue.put_nowait(("frames", tail))
+                    tail.append((msg["bytes"], time.monotonic()))
                     waiting += 1
-                    await queue.put(("frame", (msg["bytes"], time.monotonic())))
                 elif msg.get("text") is not None:
+                    tail = None
                     import json
 
                     try:
@@ -377,11 +386,9 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
 
     receiver = asyncio.create_task(receive())
     stopped = False
-    pending: tuple[str, Any] | None = None
     try:
         while True:
-            kind, payload = pending or await queue.get()
-            pending = None
+            kind, payload = await queue.get()
             if kind == "closed":
                 break
             if kind == "bad":
@@ -394,15 +401,10 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
                 await _send(ws, await asyncio.to_thread(_control, session, payload))
                 continue
             # Only the newest waiting frame gets perception; older ones are recorded.
-            frames = [payload]
-            while not queue.empty():
-                nxt = queue.get_nowait()
-                if nxt[0] != "frame":
-                    pending = nxt  # handled next, before any frame that came after it
-                    break
-                frames.append(nxt[1])
-            waiting -= len(frames)
-            events = await asyncio.to_thread(_frames, session, frames)
+            if payload is tail:
+                tail = None
+            waiting -= len(payload)
+            events = await asyncio.to_thread(_frames, session, list(payload))
             await _send(ws, events)
     except _ClientGone:
         pass

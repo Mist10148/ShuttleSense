@@ -248,7 +248,7 @@ def test_queue_overflow_leaves_unobserved_slots_in_the_record(tmp_path: Path, mo
 
     def observe_drop(session):
         drop(session)
-        if session.stats.dropped == 4:
+        if session.stats.dropped == 5:
             overflowed.set()
 
     monkeypatch.setattr(live, "_frames", block_first_batch)
@@ -258,25 +258,32 @@ def test_queue_overflow_leaves_unobserved_slots_in_the_record(tmp_path: Path, mo
         with client.websocket_connect("/live") as ws:
             ws.send_json(START)
             ws.receive_json()
-            packets = [encode(f, i, i * 1000 / 30) for i, f in enumerate(blank_frames(8))]
+            packets = [encode(f, i, i * 1000 / 30) for i, f in enumerate(blank_frames(9))]
             ws.send_bytes(packets[0])
             try:
                 assert processing.wait(5)
                 for packet in packets[1:7]:
                     ws.send_bytes(packet)
+                ws.send_json({"type": "award", "winner": "near", "decision_id": 1})
+                ws.send_bytes(packets[7])  # cannot replace a frame across the award
                 assert overflowed.wait(5)
             finally:
                 release.set()
-            assert [ws.receive_json()["frame"] for _ in range(3)] == [0, 1, 2]
-            ws.send_bytes(packets[7])
-            assert ws.receive_json()["frame"] == 7
+            assert [ws.receive_json()["frame"] for _ in range(3)] == [0, 5, 6]
+            award = ws.receive_json()
+            assert (award["type"], award["decision_id"], award["score"]["near"]) == ("score", 1, 1)
+            assert award["score"]["corrections"][-1]["frame"] == 6
+            ws.send_bytes(packets[8])
+            while (frame := ws.receive_json())["type"] != "frame":
+                assert frame["type"] != "error"
+            assert frame["frame"] == 8
             ws.send_json({"type": "stop"})
             while (saved := ws.receive_json())["type"] != "saved":
                 pass
-            assert saved["stats"]["dropped"] == 4
+            assert saved["stats"]["dropped"] == 5
         record = client.get(f"/jobs/{saved['job_id']}/record").json()
-        assert record["num_frames"] == 8
-        for frame in record["frames"][3:7]:
+        assert record["num_frames"] == 9
+        for frame in record["frames"][1:5]:
             assert not frame["shuttle"]["visible"] and frame["shuttle_speed_kmh"] is None
 
 

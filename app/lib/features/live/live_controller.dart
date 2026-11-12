@@ -311,6 +311,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   DeviceOrientation? _captureOrientation;
   final _pendingImages = <int, Uint8List>{};
   Uint8List? _analyzedImage;
+  bool _waitingForAnalysis = true;
   bool _decisionAck = false;
   int _decisionSequence = 0;
   int? _pendingDecision;
@@ -327,6 +328,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   FrameSource? get source => _source;
   Uint8List? get analyzedImage => _analyzedImage;
+  bool get waitingForAnalysis => _waitingForAnalysis;
   ({int width, int height})? get captureSize => _captureSize;
 
   DeviceOrientation? _orientation(FrameSource source) =>
@@ -335,6 +337,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   void _clearImages() {
     _pendingImages.clear();
     _analyzedImage = null;
+    _waitingForAnalysis = true;
   }
 
   @override
@@ -750,7 +753,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   void _onFrame(Json e) {
     final clientFrame = asInt(e['client_frame']);
-    _analyzedImage = e['skipped'] == true ? null : _pendingImages[clientFrame];
+    final matchingImage = e['skipped'] == true ? null : _pendingImages[clientFrame];
+    _waitingForAnalysis = matchingImage == null;
+    if (matchingImage != null) _analyzedImage = matchingImage;
     if (clientFrame != null) _pendingImages.removeWhere((index, _) => index <= clientFrame);
     final court = e['court'] as Json?;
     final speed = asDouble(e['speed_kmh']);
@@ -792,8 +797,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final peak = state.peakSpeedKmh;
     _set(
       state.copyWith(
-        trail: trail,
-        players: players,
+        trail: matchingImage == null ? state.trail : trail,
+        players: matchingImage == null ? state.players : players,
         speedKmh: speed,
         peakSpeedKmh: speed != null && (peak == null || speed > peak) ? speed : peak,
         rallyState: e['rally_state'] as String?,
