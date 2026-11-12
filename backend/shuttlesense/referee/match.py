@@ -12,6 +12,16 @@ Everything is a pure function of the rally winners in order, so a correction or 
 line-call override re-derives the whole match. Undecided rallies (no winner) change
 nothing. One camera cannot tell who served, so `first_server` comes from the user; until
 it is known the server is the last rally winner.
+
+Doubles (Phase 9, T9.6), from the user's first server and first receiver slots:
+- the server serves from the court that matches their side's score (right on even) to the
+  player diagonally opposite, who stands in the same-named court;
+- the serving side wins the rally: the same server serves again, from the other court
+  (the partners swap courts);
+- the receiving side wins: they serve next and nobody moves; whoever of them stands in the
+  court that matches their new score serves.
+Who serves first in a later game is the winning side's choice, so the slots are unknown
+(None) from the second game on.
 """
 
 from __future__ import annotations
@@ -19,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from shuttlesense.schema import PlayerSide, Score, ScorePair
+from shuttlesense.schema import PlayerId, PlayerSide, Score, ScorePair, side_of
 
 INTERVAL_AT = 11
 OTHER: dict[PlayerSide, PlayerSide] = {"near": "far", "far": "near"}
@@ -31,6 +41,8 @@ class Step:
 
     game: int
     score_after: ScorePair | None
+    server_id: PlayerId | None = None  # doubles: who served and received this rally
+    receiver_id: PlayerId | None = None
 
 
 @dataclass
@@ -40,6 +52,41 @@ class MatchPlay:
     start: ScorePair = field(default_factory=ScorePair)
     steps: list[Step] = field(default_factory=list)
     score: Score = field(default_factory=Score)
+
+
+def _partner(slot: PlayerId) -> PlayerId:
+    return slot[:-1] + ("2" if slot.endswith("1") else "1")  # type: ignore[return-value]
+
+
+def _court(score: int) -> str:
+    return "right" if score % 2 == 0 else "left"
+
+
+class DoublesCourts:
+    """Which partner stands in each service court, per side (doubles service order)."""
+
+    def __init__(self, server: PlayerId, receiver: PlayerId, near: int, far: int) -> None:
+        serving = side_of(server)
+        court = _court(near if serving == "near" else far)
+        other = "left" if court == "right" else "right"
+        self.at: dict[str, dict[str, PlayerId]] = {
+            serving: {court: server, other: _partner(server)},
+            side_of(receiver): {court: receiver, other: _partner(receiver)},
+        }
+        self.serving: PlayerSide = serving
+
+    def pair(self, near: int, far: int) -> tuple[PlayerId, PlayerId]:
+        """(server, receiver) of the next rally at this score."""
+        court = _court(near if self.serving == "near" else far)
+        receiving: PlayerSide = "far" if self.serving == "near" else "near"
+        return self.at[self.serving][court], self.at[receiving][court]
+
+    def won(self, side: PlayerSide) -> None:
+        if side == self.serving:  # same server, other court: the partners swap
+            courts = self.at[side]
+            courts["right"], courts["left"] = courts["left"], courts["right"]
+        else:
+            self.serving = side  # nobody moves
 
 
 def _wins_game(near: int, far: int) -> PlayerSide | None:
@@ -54,12 +101,26 @@ def play(
     *,
     best_of: int = 1,
     first_server: PlayerSide | None = None,
+    first_server_id: PlayerId | None = None,
+    first_receiver_id: PlayerId | None = None,
 ) -> MatchPlay:
-    """Run the match over the rally winners and return each step and the final state."""
+    """Run the match over the rally winners and return each step and the final state.
+
+    With `first_server_id` and `first_receiver_id` (doubles, on opposite sides) every step
+    and the score also say who serves and receives.
+    """
     if best_of not in (1, 3):
         raise ValueError("best_of must be 1 or 3")
     start = start or ScorePair()
     near, far = start.near, start.far
+    courts = None
+    if first_server_id and first_receiver_id:
+        if side_of(first_server_id) == side_of(first_receiver_id):
+            raise ValueError("the first server and receiver must be on opposite sides")
+        first_server = first_server or side_of(first_server_id)
+        if side_of(first_server_id) != first_server:
+            raise ValueError("first_server_id must be on the first_server side")
+        courts = DoublesCourts(first_server_id, first_receiver_id, near, far)
     game, games = 1, []
     won: dict[PlayerSide, int] = {"near": 0, "far": 0}
     server = first_server
@@ -72,12 +133,15 @@ def play(
             steps.append(Step(game=game, score_after=None))
             continue
         interval = change_ends = False
+        ids = courts.pair(near, far) if courts else (None, None)
         if w is None:
-            steps.append(Step(game=game, score_after=ScorePair(near=near, far=far)))
+            steps.append(Step(game, ScorePair(near=near, far=far), *ids))
             continue
         near, far = (near + 1, far) if w == "near" else (near, far + 1)
         server = w
-        steps.append(Step(game=game, score_after=ScorePair(near=near, far=far)))
+        if courts:
+            courts.won(w)
+        steps.append(Step(game, ScorePair(near=near, far=far), *ids))
         if not reached_interval and max(near, far) == INTERVAL_AT:
             reached_interval = interval = True
             change_ends = best_of > 1 and game == best_of  # the deciding game
@@ -94,9 +158,11 @@ def play(
         game += 1
         near, far = 0, 0
         reached_interval = False
+        courts = None  # the game winners choose their server: unknown from here
         # The game winner serves first in the next game: server is already w.
 
-    score = Score(near=near, far=far, best_of=best_of, first_server=first_server, game=game)
+    score = Score(near=near, far=far, best_of=best_of, first_server=first_server, game=game,
+                  first_server_id=first_server_id, first_receiver_id=first_receiver_id)  # fmt: skip
     if match_winner is not None:
         # The match is over: the score shows the last game, games lists every game.
         last = games[-1]
@@ -107,6 +173,8 @@ def play(
     score.interval, score.change_ends = interval, change_ends
     if match_winner is None:
         score.server = server
+        if courts:
+            score.server_id, score.receiver_id = courts.pair(near, far)
         if server is not None:
             mine = near if server == "near" else far
             score.service_court = "right" if mine % 2 == 0 else "left"

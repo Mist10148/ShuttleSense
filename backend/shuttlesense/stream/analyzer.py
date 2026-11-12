@@ -33,6 +33,7 @@ from shuttlesense.schema import (
     CourtPositions,
     Frame,
     Player,
+    PlayerId,
     Players,
     PlayerSide,
     Rally,
@@ -68,6 +69,8 @@ class StreamAnalyzer:
         start_score: ScorePair | None = None,
         best_of: int = 1,
         first_server: PlayerSide | None = None,
+        first_server_id: PlayerId | None = None,
+        first_receiver_id: PlayerId | None = None,
         classify: Classifier | None = None,
         tick_every: int = 5,
         max_window_frames: int = 900,
@@ -83,7 +86,9 @@ class StreamAnalyzer:
         self.record = ClipRecord(
             clip_id=clip_id, mode="live", fps=fps, width=width, height=height, num_frames=0,
             court=court,
-            score=apply_rallies([], self.start, best_of=best_of, first_server=first_server),
+            score=apply_rallies([], self.start, best_of=best_of, first_server=first_server,
+                                first_server_id=first_server_id,
+                                first_receiver_id=first_receiver_id),
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})

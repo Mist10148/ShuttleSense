@@ -10,7 +10,15 @@ from typing import TYPE_CHECKING, Any
 from pydantic import TypeAdapter
 
 from shuttlesense.atomic import atomic_write_text
-from shuttlesense.schema import ClipRecord, PlayerSide, Rally, Score, ScoreCorrection, ScorePair
+from shuttlesense.schema import (
+    ClipRecord,
+    PlayerId,
+    PlayerSide,
+    Rally,
+    Score,
+    ScoreCorrection,
+    ScorePair,
+)
 
 if TYPE_CHECKING:
     from shuttlesense.referee.linecalls import LineCallOverrideIn
@@ -45,6 +53,8 @@ def apply_rallies(
     *,
     best_of: int = 1,
     first_server: PlayerSide | None = None,
+    first_server_id: PlayerId | None = None,
+    first_receiver_id: PlayerId | None = None,
     awards: Sequence[ScoreCorrection] = (),
 ) -> Score:
     """Set each rally's game and score_after from the winners and return the match score.
@@ -66,17 +76,25 @@ def apply_rallies(
         slots.append(rally)
     winners += [a.winner_after for a in pending]
     slots += [None] * len(pending)
-    result = play(winners, start, best_of=best_of, first_server=first_server)
+    result = play(winners, start, best_of=best_of, first_server=first_server,
+                  first_server_id=first_server_id, first_receiver_id=first_receiver_id)  # fmt: skip
     for rally, step in zip(slots, result.steps, strict=True):
         if rally is not None:
             rally.game, rally.score_after = step.game, step.score_after
+            rally.server_id, rally.receiver_id = step.server_id, step.receiver_id
     return result.score
 
 
 def match_config(config: dict[str, Any]) -> dict[str, Any]:
-    """best_of and first_server from a job's config (`match`, set like start_score)."""
+    """best_of, first_server and the doubles first server and receiver slots from a job's
+    config (`match`, set like start_score)."""
     match = config.get("match") or {}
-    return {"best_of": int(match.get("best_of", 1)), "first_server": match.get("first_server")}
+    return {
+        "best_of": int(match.get("best_of", 1)),
+        "first_server": match.get("first_server"),
+        "first_server_id": match.get("first_server_id"),
+        "first_receiver_id": match.get("first_receiver_id"),
+    }
 
 
 def load_corrections(out_dir: Path) -> list[ScoreCorrection]:
@@ -106,9 +124,57 @@ def apply_corrections(
             by_index[c.rally_index].winner = c.winner_after
     awards = [c for c in corrections if c.kind == "award" and c.winner_after is not None]
     final = apply_rallies(record.rallies, start, best_of=record.score.best_of,
-                          first_server=record.score.first_server, awards=awards)  # fmt: skip
+                          first_server=record.score.first_server,
+                          first_server_id=record.score.first_server_id,
+                          first_receiver_id=record.score.first_receiver_id,
+                          awards=awards)  # fmt: skip
     final.corrections = list(corrections)
     record.score = final
+    flag_service(record, start)
+
+
+def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
+    """Doubles: mark rallies whose serve does not match the derived service order (T9.6).
+
+    The order itself comes from the rally winners; this only asks the user to check a rally
+    when pose disagrees: the serve was credited to the other partner, or the server's feet
+    were not in the service court their side's score calls for. Nothing is changed.
+    """
+    from shuttlesense.schema import COURT_SIZE_M, side_of, slot_attr
+
+    width = (record.court.court_size_m if record.court else COURT_SIZE_M)[0]
+    score = start or ScorePair()
+    game = 1
+    for rally in record.rallies:
+        rally.review = None
+        if rally.game != game:
+            game, score = rally.game, ScorePair()
+        before = score
+        if rally.score_after is not None:
+            score = rally.score_after
+        if rally.server_id is None:
+            continue
+        serve = next((h for h in record.hits if h.rally_index == rally.index), None)
+        if serve is None:
+            continue
+        if serve.hitter is not None and serve.hitter != rally.server_id:
+            rally.review = f"The serve looks like {serve.hitter}'s; {rally.server_id} should serve"
+            continue
+        frame = record.frames[serve.frame] if serve.frame < len(record.frames) else None
+        pos = frame.court_positions if frame else None
+        xy = getattr(pos, slot_attr(rally.server_id), None) if pos else None
+        if xy is None:
+            continue
+        side = side_of(rally.server_id)
+        mine = before.near if side == "near" else before.far
+        expected = "right" if mine % 2 == 0 else "left"
+        # Facing the net, a near player's right is +x and a far player's right is -x.
+        on_right = (xy[0] > width / 2) == (side == "near")
+        if ("right" if on_right else "left") != expected:
+            rally.review = (
+                f"{rally.server_id} should serve from the {expected} court at "
+                f"{before.near}-{before.far}"
+            )
 
 
 def undo_last_correction(

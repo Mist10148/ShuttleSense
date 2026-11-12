@@ -190,6 +190,8 @@ class LiveManager:
             id=job_id, video_id=entry.video_id, status="running", current_stage="render",
             started_at=utcnow(), progress=0.9, mode="live", referee=True, start_score=start,
             best_of=session.request.best_of, first_server=session.request.first_server,
+            court=session.request.court, first_server_id=session.request.first_server_id,
+            first_receiver_id=session.request.first_receiver_id,
             court_corners_px=list(session.corners) if session.corners else None,
             overlays=list(OVERLAYS),
         )  # fmt: skip
@@ -260,9 +262,19 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     first_server = msg.get("first_server")
     if first_server not in (None, "near", "far"):
         raise ValueError("first_server must be near or far")
+    server_id, receiver_id = msg.get("first_server_id"), msg.get("first_receiver_id")
+    slots = (None, "near_1", "near_2", "far_1", "far_2")
+    if server_id not in slots or receiver_id not in slots:
+        raise ValueError("first_server_id and first_receiver_id must be player slots")
+    from shuttlesense.api.models import check_first_service
+
+    check_first_service(first_server, server_id, receiver_id)
+    if server_id and first_server is None:
+        first_server = server_id[:-2]
     return StartRequest(
         fps=fps, width=width, height=height, corners=corners, court=court, name=name,
         start_score=score, best_of=best_of, first_server=first_server,
+        first_server_id=server_id, first_receiver_id=receiver_id,
     )  # fmt: skip
 
 

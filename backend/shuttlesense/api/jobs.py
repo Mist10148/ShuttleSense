@@ -243,6 +243,9 @@ class JobManager:
         if job.start_score is not None:
             config["start_score"] = job.start_score.model_dump()
         config["match"] = {"best_of": job.best_of, "first_server": job.first_server}
+        if job.first_server_id:  # doubles; singles configs stay as they were
+            config["match"]["first_server_id"] = job.first_server_id
+            config["match"]["first_receiver_id"] = job.first_receiver_id
         config["mode"] = job.mode
         return config
 

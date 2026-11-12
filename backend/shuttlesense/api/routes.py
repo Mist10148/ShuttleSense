@@ -267,8 +267,10 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         referee=body.referee,
         start_score=body.start_score,
         best_of=body.best_of,
-        first_server=body.first_server,
+        first_server=body.first_server or (body.first_server_id or "")[:-2] or None,
         court=body.court,
+        first_server_id=body.first_server_id,
+        first_receiver_id=body.first_receiver_id,
     )
     try:
         return jobs.submit(job)

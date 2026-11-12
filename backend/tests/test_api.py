@@ -816,3 +816,23 @@ def test_doubles_job_reaches_the_record_and_the_cache(tmp_path: Path, tiny_video
     assert court_type({}) == "singles" and court_type(with_court({}, "doubles")) == "doubles"
     assert initial_key(tiny_video, {}) == initial_key(tiny_video, {"court": "singles"})
     assert initial_key(tiny_video, {}) != initial_key(tiny_video, with_court({}, "doubles"))
+
+
+def test_doubles_first_server_and_receiver_reach_the_score(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS, "court": "doubles",
+                "first_server_id": "far_2", "first_receiver_id": "near_2"}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert job["first_server"] == "far" and job["first_server_id"] == "far_2"
+        assert wait_for(client, job["id"])["status"] == "done"
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        assert record["rallies"][0]["server_id"] == "far_2"
+        assert record["rallies"][0]["receiver_id"] == "near_2"
+        # Near won: near serves next and nobody moved; near_1 stands in near's left (odd) court.
+        assert record["score"]["server_id"] == "near_1"
+        for bad in ({"first_receiver_id": None}, {"first_receiver_id": "far_1"},
+                    {"first_server": "near"}):  # fmt: skip
+            assert client.post("/jobs", json={**body, **bad}).status_code == 422

@@ -96,3 +96,71 @@ def test_awards_count_before_the_rally_they_precede() -> None:
 def test_best_of_must_be_1_or_3() -> None:
     with pytest.raises(ValueError):
         play([], best_of=2)
+
+
+# Doubles service order (T9.6) ---------------------------------------------------------------
+
+
+def test_doubles_service_order_follows_the_laws() -> None:
+    """Hand-worked: near_1 serves to far_1 at 0-0; see referee/match.py for the rules."""
+    m = play(["near", "far", "far", "near"], first_server_id="near_1", first_receiver_id="far_1")
+    assert [(s.server_id, s.receiver_id) for s in m.steps] == [
+        ("near_1", "far_1"),  # 0-0, right courts
+        ("near_1", "far_2"),  # near won: same server, now from the left
+        ("far_2", "near_1"),  # far won at 1-1: far_2 stands in far's left (odd) court
+        ("far_2", "near_2"),  # far won again: far_2 moves to the right
+    ]  # fmt: skip
+    # Near won at 2-2: nobody moves, near_2 stands in near's right (even) court.
+    assert (m.score.server_id, m.score.receiver_id) == ("near_2", "far_2")
+    assert m.score.server == "near" and m.score.service_court == "right"
+    assert (m.score.first_server_id, m.score.first_receiver_id) == ("near_1", "far_1")
+
+
+def test_doubles_service_order_from_a_start_score_and_undecided_rallies() -> None:
+    # At 3-0 near_1 serves from the left (odd), so far_1 receives in far's left court.
+    m = play([None, "near"], ScorePair(near=3, far=0), first_server_id="near_1",
+             first_receiver_id="far_1")  # fmt: skip
+    assert [(s.server_id, s.receiver_id) for s in m.steps] == [
+        ("near_1", "far_1"), ("near_1", "far_1"),
+    ]  # fmt: skip
+    # 4-0: near_1 serves again from the right, where far_2 stands.
+    assert (m.score.server_id, m.score.receiver_id) == ("near_1", "far_2")
+
+
+def test_doubles_slots_are_unknown_after_the_first_game() -> None:
+    m = play(["far"] * 21 + ["near"], best_of=3, first_server_id="far_1",
+             first_receiver_id="near_2")  # fmt: skip
+    assert m.steps[20].server_id is not None and m.steps[21].server_id is None
+    assert m.score.game == 2 and m.score.server_id is None
+
+
+def test_doubles_first_server_and_receiver_must_face_each_other() -> None:
+    with pytest.raises(ValueError):
+        play(["near"], first_server_id="near_1", first_receiver_id="near_2")
+    with pytest.raises(ValueError):
+        play(["near"], first_server="far", first_server_id="near_1", first_receiver_id="far_1")
+    # Without the slots nothing changes for singles.
+    assert play(["near"]).score.server_id is None
+
+
+def test_pose_cross_check_flags_but_never_changes_the_score() -> None:
+    from pathlib import Path
+
+    from shuttlesense.referee.scoring import apply_corrections
+    from shuttlesense.schema import load_record
+
+    path = Path(__file__).parent / "fixtures" / "golden_record_doubles.json"
+    record = load_record(path.read_text(encoding="utf-8"))
+    serve = record.hits[0]
+    width = record.court.court_size_m[0]
+    # near_1 serves at 0-0: from near's right court, which is +x for a near player.
+    record.frames[serve.frame].court_positions.near = (width * 0.75, 3.0)
+    apply_corrections(record, [])
+    assert record.rallies[0].server_id == "near_1" and record.rallies[0].review is None
+    record.frames[serve.frame].court_positions.near = (width * 0.25, 3.0)
+    apply_corrections(record, [])
+    assert "right court" in record.rallies[0].review
+    assert (record.score.near, record.score.far) == (1, 0)
+    serve.hitter = "near_2"
+    apply_corrections(record, [])
+    assert "near_2" in record.rallies[0].review

@@ -556,3 +556,21 @@ def test_start_rejects_loose_match_settings(change: dict) -> None:
     with pytest.raises(ValueError):
         _start_request({**START, **change})
     assert _start_request({**START, "best_of": 3}).best_of == 3
+
+
+def test_start_accepts_the_doubles_first_server_and_receiver() -> None:
+    from shuttlesense.api.live import _start_request
+
+    req = _start_request({**START, "court": "doubles", "first_server_id": "near_2",
+                          "first_receiver_id": "far_1"})  # fmt: skip
+    assert (req.first_server, req.first_server_id, req.first_receiver_id) == (
+        "near", "near_2", "far_1",
+    )  # fmt: skip
+    bad_starts = [
+        {"first_server_id": "near_2"},
+        {"first_server_id": "near_2", "first_receiver_id": "near_1"},
+        {"first_server_id": "x", "first_receiver_id": "far_1"},
+    ]
+    for bad in bad_starts:
+        with pytest.raises(ValueError):
+            _start_request({**START, **bad})

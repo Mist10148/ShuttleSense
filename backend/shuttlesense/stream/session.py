@@ -48,6 +48,8 @@ class StartRequest:
     name: str | None = None
     best_of: int = 1
     first_server: str | None = None
+    first_server_id: str | None = None  # doubles: who serves and receives first
+    first_receiver_id: str | None = None
 
 
 def normalized_size(width: int, height: int, target_height: int) -> tuple[int, int]:
@@ -122,6 +124,8 @@ class LiveSession:
             clip_id=session_id, fps=self.fps, width=self.width, height=self.height, court=court,
             config=self.config, device=device, start_score=request.start_score,
             best_of=request.best_of, first_server=request.first_server,
+            first_server_id=request.first_server_id,
+            first_receiver_id=request.first_receiver_id,
             classify=classify, tick_every=int(live["tick_every"]),
             max_window_frames=int(live["max_window_frames"]),
         )  # fmt: skip

@@ -179,6 +179,23 @@
             ],
             "title": "Finished At"
           },
+          "first_receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Receiver Id"
+          },
           "first_server": {
             "anyOf": [
               {
@@ -193,6 +210,23 @@
               }
             ],
             "title": "First Server"
+          },
+          "first_server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server Id"
           },
           "id": {
             "title": "Id",
@@ -337,6 +371,23 @@
             ],
             "title": "Court Corners Px"
           },
+          "first_receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Receiver Id"
+          },
           "first_server": {
             "anyOf": [
               {
@@ -351,6 +402,23 @@
               }
             ],
             "title": "First Server"
+          },
+          "first_server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server Id"
           },
           "overlays": {
             "anyOf": [

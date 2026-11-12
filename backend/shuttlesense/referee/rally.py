@@ -179,7 +179,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     from shuttlesense.analytics.stage import count_strokes
     from shuttlesense.court import image_to_court
     from shuttlesense.referee.linecalls import line_call_config, make_line_call
-    from shuttlesense.referee.scoring import apply_rallies, match_config
+    from shuttlesense.referee.scoring import apply_rallies, flag_service, match_config
     from shuttlesense.tracking import track_arrays
 
     if not record.hits:
@@ -228,6 +228,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     start = ScorePair(**ctx.config.get("start_score", {}) or {})
     match = match_config(ctx.config)
     record.score = apply_rallies(record.rallies, start, **match)
+    flag_service(record, start)
     record.rally_events = build_events(record)
     ctx.progress(1.0)
     return record

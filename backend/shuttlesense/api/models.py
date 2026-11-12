@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from shuttlesense.schema import (
     Call,
     CourtType,
     LineCall,
     Mode,
+    PlayerId,
     PlayerSide,
     Rally,
     Score,
@@ -62,6 +63,20 @@ class VideoInfoOut(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+def check_first_service(
+    first_server: str | None, server_id: str | None, receiver_id: str | None
+) -> None:
+    """Raise ValueError unless the doubles first server and receiver make sense together."""
+    if (server_id is None) != (receiver_id is None):
+        raise ValueError("first_server_id and first_receiver_id go together")
+    if server_id is None or receiver_id is None:
+        return
+    if server_id[:3] == receiver_id[:3]:
+        raise ValueError("the first server and receiver must be on opposite sides")
+    if first_server is not None and not server_id.startswith(first_server):
+        raise ValueError("first_server_id must be on the first_server side")
+
+
 class JobCreate(BaseModel):
     video_id: str
     court_corners_px: list[tuple[float, float]] | None = Field(
@@ -73,6 +88,14 @@ class JobCreate(BaseModel):
     best_of: Literal[1, 3] = 1  # games in the match
     first_server: PlayerSide | None = None  # who serves the first rally, if known
     court: CourtType = "singles"  # doubles: four players and the doubles lines (Phase 9)
+    # Doubles: who serves and receives the first rally (both or neither, opposite sides).
+    first_server_id: PlayerId | None = None
+    first_receiver_id: PlayerId | None = None
+
+    @model_validator(mode="after")
+    def _doubles_service(self) -> JobCreate:
+        check_first_service(self.first_server, self.first_server_id, self.first_receiver_id)
+        return self
 
 
 class RenderRequest(BaseModel):
@@ -147,4 +170,6 @@ class Job(BaseModel):
     best_of: Literal[1, 3] = 1
     first_server: PlayerSide | None = None
     court: CourtType = "singles"
+    first_server_id: PlayerId | None = None
+    first_receiver_id: PlayerId | None = None
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)
