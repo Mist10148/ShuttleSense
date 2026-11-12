@@ -26,7 +26,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 | [T4.7](#t47) | Stroke timeline synced with playback | M6 | 5 h | T4.6, T3.10 | ⬜ | [#55](https://github.com/Mist10148/ShuttleSense/issues/55) |
 | [T4.8](#t48) | History screen with delete | M6 | 3 h | T4.4 | ✅ | [#56](https://github.com/Mist10148/ShuttleSense/issues/56) |
 | [T4.9](#t49) | Error, empty, loading and offline states; theming | M6 | 4 h | T4.1–T4.8 | ⬜ | [#57](https://github.com/Mist10148/ShuttleSense/issues/57) |
-| [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ⬜ | [#58](https://github.com/Mist10148/ShuttleSense/issues/58) |
+| [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ✅ | [#58](https://github.com/Mist10148/ShuttleSense/issues/58) |
 | [T4.11](#t411) | Accessibility pass | M4 | 3 h | T4.9 | ⬜ | [#59](https://github.com/Mist10148/ShuttleSense/issues/59) |
 | [T4.12](#t412) | Widget tests with a fake API | M4 | 6 h | T4.4 | ✅ | [#60](https://github.com/Mist10148/ShuttleSense/issues/60) |
 | [T4.13](#t413) | App icon and splash screen | M4 | 2 h | — | ⬜ | [#61](https://github.com/Mist10148/ShuttleSense/issues/61) |
@@ -218,6 +218,9 @@ the app side. Issue #56 can be closed.
 - [x] Web: `manifest.json` name, theme colour `#2E7D4F`, description.
 
 **Acceptance criteria.** `flutter build apk --release`, `flutter build windows --release`, `flutter build web --release` succeed locally.
+
+**Verified (Nov 12).** All three release builds succeed on the team laptop (the APK is
+debug-signed until the release keystore exists, T7.6). Issue #58 can be closed.
 
 ---
 

@@ -11,7 +11,7 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | Pixel coordinates | Origin top-left of the **normalized** video frame (after io resizing), x right, y down, floats |
 | Court coordinates | Meters on the court plane. Origin at the near-left corner of the singles court, x across the court (0 to 5.18), y toward the far baseline (0 to 13.40) |
 | Frame index | 0-based index into the normalized video; time in seconds is `frame / fps`. `frames[]` holds **every** normalized frame (after fps downsampling), in order |
-| Players | Always `"near"` (closer to the camera, bottom of the image) or `"far"` |
+| Players | A side is always `"near"` (closer to the camera, bottom of the image) or `"far"`. In doubles (v1.2) each person also has a slot: `near_1`, `near_2`, `far_1`, `far_2`; `near_1`/`far_1` live in the `near`/`far` fields, partners in `near_2`/`far_2`. Slot 1 is the left one when play starts |
 | Missing values | `null`, never `-1` or `0`, except `shuttle.visible` which is `0` or `1` as in TrackNetV3 |
 | Confidences | Floats in [0, 1]. A keypoint with `score < 0.3` counts as missing: stages that read joints (hits, feedback, positions) ignore it |
 | Speeds | km/h, always estimates |
@@ -44,6 +44,23 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 6 | right shoulder | 15 | left ankle |
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
+
+## Schema v1.2 (doubles)
+
+v1.2 (Nov 12, [D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)) adds optional doubles fields only. Each is **left out of the JSON while it is empty**, so a singles record looks exactly like v1.1 apart from `schema_version`. `schema.migrate()` reads 1.0 and 1.1 records; the app accepts any `1.x`.
+
+| Where | Field | Meaning |
+| --- | --- | --- |
+| `frames[].players` | `near_2`, `far_2` | The partner on each side (same shape as `near` / `far`) |
+| `frames[].court_positions` | `near_2`, `far_2` | Their court positions |
+| `hits[]` | `hitter`, `hitter_confidence` | The slot who hit (`player` stays the side). Absent when the two partners were about as close to the shuttle |
+| `rallies[]` | `server_id`, `receiver_id` | Who served and received the rally (first game only; the game winners choose afterwards) |
+| `rallies[]` | `review` | Why the user should check the rally: pose disagrees with the derived service order. Never changes the score |
+| `score` | `first_server_id`, `first_receiver_id`, `server_id`, `receiver_id` | The user's first server and receiver, and who serves and receives next |
+| `summary.per_player` | `near_1` … `far_2` keys | Per partner, next to the `near` / `far` side totals |
+| `coaching.session_notes[]` | `player` | A slot for form notes in doubles; `rule: "formation"` notes (severity 0) say how often each pair played front and back or side by side |
+
+`line_calls[].court` is `"doubles"` for a doubles job; the doubles lines are the side alleys (0.46 m outside each singles sideline) and, for serves, the long service line 0.76 m inside the baseline. Court coordinates keep their origin at the singles corner, so alley points have `x < 0` or `x > 5.18`.
 
 ## Schema v1.1
 
@@ -160,7 +177,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
       "margin_cm": 28.0,                                       // signed distance to the nearest relevant line, + inside
       "confidence": 0.72,
       "uncertain": false,                                      // |margin| inside the uncertainty band
-      "court": "singles",                                      // "singles" | "doubles" lines
+      "court": "singles",                                      // "singles" | "doubles" lines (and players, v1.2)
       "override": null                                         // {"call": "out", "at": "...Z"} after the user confirms or overrides
     }
   ],

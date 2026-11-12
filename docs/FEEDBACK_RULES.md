@@ -23,7 +23,7 @@ The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hit
 | `lunge_knee_bend` | net shot, lift | Smallest hip–knee–ankle angle of either leg | ≤ `lunge_knee_deg` (140°) | Bend your front knee more in the lunge |
 | `racket_arm_forward` | net shot | How far the wrist is past the hip towards the net (up the image for the near player, down for the far player) | > 0 | Reach forward with the racket arm toward the net |
 | `wrist_below_shoulder` | lift | Wrist height below the racket-side shoulder | > 0 | Get under the shuttle: contact below the shoulder |
-| `contact_below_waist` | serve | Wrist height below the racket-side hip | > 0 | Serve from below the waist (singles service rule) |
+| `contact_below_waist` | serve | Wrist height below the racket-side hip | > 0 | Serve from below the waist (service rule; singles and doubles) |
 | `stable_feet` | serve | Largest ankle path length over the 5 frames before contact, in box heights | ≤ `serve_feet_motion` (0.1) | Keep both feet still until the shuttle is struck |
 
 ## Sources

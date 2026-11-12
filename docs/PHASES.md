@@ -408,6 +408,43 @@ Open at the time of that review:
   [courtside acceptance checklist](phases/phase-8-live-coach.md)
   to capture evidence for each device before marking those tasks complete.
 
+### Doubles and fix pass (Nov 12, later)
+
+- **Phase 9 code landed** ([plan](phases/phase-9-doubles.md), [D22](DECISIONS.md)):
+  - clip record 1.2 with optional doubles fields, which singles records leave out;
+  - `court` (and the doubles first server and receiver) on `POST /jobs` and the live start;
+  - a four-player tracker using court position and shirt colour;
+  - hits credited to one partner;
+  - the doubles service order, with a pose cross-check that flags rallies for review;
+  - per-partner stats, positions, notes and a formation note;
+  - live doubles, including the fake source;
+  - doubles overlays and lines;
+  - four players in the app;
+  - doubles labelling and `eval_doubles.py`.
+- **Done:** T9.1, T9.3, T9.6, T9.8, T9.10 and T9.11.
+- **Still open:** T9.2, T9.4, T9.5, T9.7, T9.9 and T9.12 need doubles footage, labels or a
+  model-backed latency run; T9.13 needs the measured limits.
+- **Bugs fixed, each with a regression test:**
+  - REST undo dropped line-call overrides, so the score differed from a re-render.
+  - Score edits checked the job status outside the job lock, so a re-render queued in
+    between could drop the edit.
+  - A live award during an open or settling rally counted that rally twice; it is now
+    refused with `rally_in_play`, which the app shows without ending the session.
+  - Live court positions were not clamped like offline ones.
+  - The live start message accepted `best_of: true` and a non-text session name.
+  - An upload failing outside the API left the screen stuck in "uploading".
+  - Both scoreboards (app and overlay) counted awarded points from frame 0, or not until the
+    end.
+- **Verified:**
+  - Ruff, 352 non-GPU backend tests, Dart formatting, Flutter analysis and 206 Flutter
+    tests pass.
+  - Web, Windows and Android release builds pass (the APK is debug-signed), so T4.10 is
+    done. T4.8 is done: its 404 acceptance is covered by `test_api.py`.
+- **Open rule questions (not changed):**
+  - An undecided rally clears the interval and change-of-ends flags of the rally before it
+    (`referee/match.py`), so the app's banner can disappear early.
+  - A one-game match never flags a change of ends at 11. Check the Laws, then decide.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |

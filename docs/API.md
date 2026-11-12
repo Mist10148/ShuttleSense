@@ -43,7 +43,7 @@ Liveness and capability check used by the connect screen.
 {
   "status": "ok",
   "version": "0.1.0",
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "device": "cuda",
   "auth_required": true,
   "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"],
@@ -108,6 +108,8 @@ Start processing.
 | `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative, already a finished game (e.g. 21–15) or above 29 |
 | `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of game 1 |
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
+| `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
+| `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game. `422` if only one is given, both are on one side, or the server is not on `first_server`'s side |
 
 Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 
@@ -145,7 +147,7 @@ Job object, polled by the processing screen every 1 to 2 s.
 }
 ```
 
-`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of` and `first_server` echo the options the job was created with, so the app can retry or re-render with the same settings.
+`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
@@ -201,7 +203,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Message | Format | Notes |
 | --- | --- | --- |
-| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of` and `first_server` as in `POST /jobs` |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ...}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs`. In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |

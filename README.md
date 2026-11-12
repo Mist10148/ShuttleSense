@@ -309,7 +309,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 
 ### Future work
 - Automatic court line detection (no taps)
-- Doubles support
+- Doubles accuracy: label doubles rallies and measure ID switches, hitter attribution and service order (T9.2, T9.12); a drive stroke class trained on doubles (T9.7)
 - On-device processing on phones and edge devices (live mode streams to the backend)
 - Multi-camera line calls
 - Fine-tuning on amateur footage from local courts
@@ -325,7 +325,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - **Live latency has two parts:** shuttle and player overlays have a provisional target of ≤ 300 ms. Hits and line calls also need look-ahead. In the synthetic benchmark, hits arrived roughly 0.7 s and line calls roughly 1.7 s after the event at a 30 fps camera rate. The model and device measurements are still open. When the backend falls behind it can skip perception or lower resolution.
 - **Live from a browser or Windows webcam is lower frame rate** than from a phone, which reduces tracking quality.
 - **Needs a backend:** phones and tablets do not run the models; they need the laptop backend on the same network or the Colab tunnel.
-- **Singles only** in this version.
+- **Doubles is new and unmeasured** ([Phase 9](docs/phases/phase-9-doubles.md)): four-player tracking, crediting a hit to one partner and the doubles service order work on synthetic and fixture data, but have not been measured on labelled doubles footage. From one camera behind the baseline the far partners often overlap; a hit the app cannot attribute is shown for the side. The stroke model learned from singles, so doubles form tips are given only on strokes it is sure of. The service order is followed for the first game only (the game winners then choose their server).
 
 ---
 

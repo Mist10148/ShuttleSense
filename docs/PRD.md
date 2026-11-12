@@ -1,6 +1,8 @@
 # ShuttleSense: Product Requirements Document
 
-Version 1.2 · Oct 31, 2026 · Owner: Mist (project lead)
+Version 1.3 · Nov 12, 2026 · Owner: Mist (project lead)
+
+> **Changes from v1.2:** **doubles** moves from a non-goal into scope ([D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)): four players tracked, each hit credited to a partner, the doubles service order followed and four players shown in the app. Singles behaviour is unchanged. Doubles accuracy is not measured yet; it needs labelled doubles footage.
 
 > **Changes from v1.1:** the user now picks **Upload** (offline, as before) or **Live** (camera feed processed while the rally is played). The referee layer is committed scope, not a stretch, and adds **automated in/out line calls** with a stated confidence and an uncertainty band. Session-level **coaching notes** and a **coach chat** grounded in the clip record are new. Live streaming and line calls were non-goals in v1.1; [D16–D20](DECISIONS.md) record the reversal.
 
@@ -47,7 +49,7 @@ ShuttleSense covers every one of these features and adds stroke classification a
 
 ### Non-goals (this version)
 
-- Doubles matches
+- Doubles accuracy claims before doubles footage is labelled and measured (T9.2, T9.12)
 - On-device inference; phones and tablets are clients, the GPU backend does the processing
 - Automatic court detection without user input
 - Official or certified line calls. With one consumer camera the calls are automated estimates with a confidence value and an uncertainty band, not Hawk-Eye-level officiating; the product never labels them "official" or "certified"
@@ -344,7 +346,7 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 
 ## Assumptions and constraints
 
-- Singles matches only, one static camera per video, court fully or mostly in frame.
+- Singles or doubles matches, one static camera per video, court fully or mostly in frame. In doubles the user names who serves and receives first.
 - Speed is a 2D court-plane approximation from one camera, so it underestimates true speed when the shuttle travels toward or away from the camera.
 - Line calls project the shuttle pixel at the landing frame onto the floor plane. At 720p and 30 fps the shuttle can move tens of centimetres between frames and the far baseline spans few pixels, so calls near a line are often UNCERTAIN. That is a property of one camera, not something to tune away.
 - Team of 6, 3 weeks, free-tier compute plus one laptop GPU.
@@ -369,7 +371,7 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 ## Future work
 
 - Automatic court line detection (F17)
-- Doubles support and player re-identification
+- Doubles: measured accuracy, a doubles-trained stroke model, and re-identification across games and end changes
 - On-device processing on phones and edge devices (live mode streams to the backend)
 - Multi-camera line calls for close-to-line accuracy
 - Fine-tuning on local amateur footage from Philippine courts

@@ -110,7 +110,7 @@ gh release create vX.Y.Z --title "ShuttleSense vX.Y.Z" --notes-file release-note
 - Android APK, Windows zip, web build zip. The backend runs from source (see docs/SETUP.md).
 
 ### Known limitations
-- Speed and in/out calls are estimates; singles only; camera angle matters (README Limitations).
+- Speed and in/out calls are estimates; camera angle matters; doubles tracking and hitter attribution are not yet measured (README Limitations).
 ```
 
 ## 7. After the release
