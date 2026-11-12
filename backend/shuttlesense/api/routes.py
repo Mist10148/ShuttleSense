@@ -503,6 +503,10 @@ async def chat(
         except ChatError as exc:
             error = {"type": "error", "status": exc.status, "detail": exc.detail}
             yield f"data: {json.dumps(error)}\n\n"
+        except (OSError, HTTPException) as exc:
+            # Saving failed (the job was deleted mid-answer): say so instead of just stopping.
+            error = {"type": "error", "status": 409, "detail": f"could not save the answer: {exc}"}
+            yield f"data: {json.dumps(error)}\n\n"
         finally:
             answering.pop(job_id, None)
 

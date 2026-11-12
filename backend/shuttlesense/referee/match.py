@@ -132,11 +132,12 @@ def play(
         if match_winner is not None:
             steps.append(Step(game=game, score_after=None))
             continue
-        interval = change_ends = False
         ids = courts.pair(near, far) if courts else (None, None)
         if w is None:
+            # No point played: an interval or change of ends still stands.
             steps.append(Step(game, ScorePair(near=near, far=far), *ids))
             continue
+        interval = change_ends = False
         near, far = (near + 1, far) if w == "near" else (near, far + 1)
         server = w
         if courts:
@@ -144,7 +145,8 @@ def play(
         steps.append(Step(game, ScorePair(near=near, far=far), *ids))
         if not reached_interval and max(near, far) == INTERVAL_AT:
             reached_interval = interval = True
-            change_ends = best_of > 1 and game == best_of  # the deciding game
+            # The deciding game, or a one-game match (BWF Laws 8.1.3 and Appendix 3).
+            change_ends = game == best_of
         if _wins_game(near, far) is None:
             continue
         games.append(ScorePair(near=near, far=far))

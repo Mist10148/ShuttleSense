@@ -154,7 +154,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
     "match_point": [],
     "match_winner": null,
     "interval": false,                                       // the last rally took the leader to 11
-    "change_ends": false                                     // after a game, and at 11 in the deciding game
+    "change_ends": false                                     // after a game, and at 11 in the deciding game or a one-game match
   },
 
   "summary": {                                                 // F13
@@ -236,7 +236,7 @@ Mapping from ShuttleSet's 18 annotated types plus "unknown" (task T3.3; `strokes
 | --- | --- | --- |
 | `record.json` | The full clip record above | pipeline |
 | `summary.json` | `{clip_id, fps, summary, score, rallies, rally_stats}` subset | analytics (F13) |
-| `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index` (UTF-8 with BOM) | analytics (F13) |
+| `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index,hitter` (UTF-8 with BOM; `hitter` is the doubles partner, empty in singles or when unsure) | analytics (F13) |
 | `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (UTF-8 with BOM) | analytics (F13) |
 | `annotated.mp4` | H.264, yuv420p, same fps and size as the normalized clip | render (F7) |
 | `tracking.csv` | `frame,visible,x,y,source` (TrackNetV3 format plus `source`: `net`, `interp` or empty) for debugging and evaluation | tracking (F2) |

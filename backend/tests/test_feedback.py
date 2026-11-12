@@ -130,3 +130,18 @@ def test_doubles_skips_feedback_on_unsure_strokes() -> None:
     singles.hits[1].confidence = 0.3
     run(singles, StageContext(video_path=None, out_dir=None, config={}))
     assert singles.hits[1].feedback  # singles is unchanged
+
+
+def test_doubles_gives_no_form_feedback_when_the_partner_is_unknown() -> None:
+    """Partners too close to tell: partner 1's pose must not be graded for the hit."""
+    from shuttlesense.config import with_court
+    from shuttlesense.fake import load_golden
+    from shuttlesense.feedback import run
+    from shuttlesense.stage import StageContext
+
+    record = load_golden("doubles")
+    assert record.hits[2].hitter is not None
+    record.hits[2].hitter = None
+    run(record, StageContext(video_path=None, out_dir=None, config=with_court({}, "doubles")))
+    assert record.hits[2].feedback == []
+    assert any(h.feedback for h in record.hits)

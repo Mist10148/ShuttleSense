@@ -163,3 +163,16 @@ def test_singles_summary_has_no_partner_keys() -> None:
     from shuttlesense.fake import load_golden
 
     assert set(build_summary(load_golden()).per_player) == {"near", "far"}
+
+
+def test_hits_csv_names_the_doubles_partner(tmp_path) -> None:
+    import csv
+
+    from shuttlesense.analytics.export import write_exports
+
+    record = _doubles_golden()
+    write_exports(record, tmp_path)
+    with open(tmp_path / "hits.csv", encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["hitter"] for r in rows] == [h.hitter or "" for h in record.hits]
+    assert any(r["hitter"] for r in rows)

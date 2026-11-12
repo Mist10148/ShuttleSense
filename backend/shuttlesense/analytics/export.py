@@ -21,6 +21,7 @@ HITS_CSV_COLUMNS = (
     "speed_kmh",
     "tip",
     "rally_index",
+    "hitter",
 )
 RALLIES_CSV_COLUMNS = (
     "index",
@@ -160,5 +161,6 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
                     "" if h.speed_kmh is None else f"{h.speed_kmh:.1f}",
                     tip,
                     "" if h.rally_index is None else h.rally_index,
+                    h.hitter or "",
                 ]
             )

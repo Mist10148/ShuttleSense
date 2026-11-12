@@ -164,3 +164,16 @@ def test_pose_cross_check_flags_but_never_changes_the_score() -> None:
     serve.hitter = "near_2"
     apply_corrections(record, [])
     assert "near_2" in record.rallies[0].review
+
+
+def test_an_undecided_rally_keeps_the_interval_showing() -> None:
+    score = play(["near"] * 11 + [None], best_of=3).score
+    assert score.interval  # no point was played since 11
+    assert play(["far"] * 21 + [None], best_of=3).score.change_ends
+    assert not play(["near"] * 11 + [None, "far"], best_of=3).score.interval
+
+
+def test_a_one_game_match_changes_ends_at_11() -> None:
+    score = play(["near"] * 11).score
+    assert score.interval and score.change_ends
+    assert not play(["near"] * 12).score.change_ends

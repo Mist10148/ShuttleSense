@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import ClipRecord, FeedbackItem, Hit, StrokeClass
+from shuttlesense.schema import ClipRecord, FeedbackItem, Hit, StrokeClass, is_doubles
 from shuttlesense.stage import StageContext
 
 NOSE = 0
@@ -289,7 +289,10 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     if court_type(ctx.config) == "doubles":
         # The stroke model learned from singles (T9.7): only coach on strokes it is sure of.
         cfg["min_stroke_confidence"] = cfg.get("min_stroke_confidence_doubles", 0.5)
+    doubles = is_doubles(record)
     for hit in record.hits:
-        hit.feedback = evaluate(record, hit, cfg)
+        # Doubles with the partners too close to tell: there is no one pose to grade.
+        unsure = doubles and hit.hitter is None
+        hit.feedback = [] if unsure else evaluate(record, hit, cfg)
     ctx.progress(1.0)
     return record
