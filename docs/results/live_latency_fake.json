@@ -1,0 +1,71 @@
+{
+  "frames": 300,
+  "stages": {
+    "tracking": false,
+    "pose": false,
+    "synthetic": true
+  },
+  "round_trip_ms": {
+    "p50": 15.7,
+    "p95": 36.7,
+    "p99": 44.2
+  },
+  "server_ms": {
+    "p50": 11.3,
+    "p95": 31.0,
+    "p99": 37.8
+  },
+  "throughput_fps": 30.0,
+  "event_lag": {
+    "hit": {
+      "count": 8,
+      "frames": {
+        "p50": 19.0,
+        "p95": 21.0,
+        "p99": 21.0
+      },
+      "ms": {
+        "p50": 684.8,
+        "p95": 740.4,
+        "p99": 741.9
+      }
+    },
+    "line_call": {
+      "count": 2,
+      "frames": {
+        "p50": 50.5,
+        "p95": 51.0,
+        "p99": 51.0
+      },
+      "ms": {
+        "p50": 1699.3,
+        "p95": 1733.7,
+        "p99": 1736.7
+      }
+    },
+    "rally": {
+      "count": 2,
+      "frames": {
+        "p50": 50.5,
+        "p95": 51.0,
+        "p99": 51.0
+      },
+      "ms": {
+        "p50": 1699.7,
+        "p95": 1734.0,
+        "p99": 1737.1
+      }
+    }
+  },
+  "fps": 30.0,
+  "events": {
+    "frame": 300,
+    "rally": 5,
+    "hit": 8,
+    "stats": 10,
+    "line_call": 2,
+    "score": 2,
+    "coaching": 2
+  },
+  "job_id": "fe05c8613ac5"
+}

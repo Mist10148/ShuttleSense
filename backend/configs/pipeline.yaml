@@ -106,4 +106,4 @@ live:
   scales: [1.0, 0.75, 0.5]     # perception input scale per quality level (0, 1, 2)
   max_fps: 30                  # a faster camera is thinned to this by capture time
   target_height: 720
-  max_queue_frames: 60         # frames waiting past this are dropped (bounded memory)
+  max_queue_frames: 60         # prefer recent frames within each control-delimited batch

@@ -214,20 +214,23 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Event | Payload |
 | --- | --- |
-| `started` | `session_id`, `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` and `rally_summary` (null before the first rally). After a resume this restores the session summary |
+| `started` | `session_id`, optional `job_id` (reserved replay ID, stable across resume), `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` and `rally_summary` (null before the first rally). After a resume this restores the session summary |
 | `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (boxes and keypoints), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
 | `hit` | `hit`: a clip-record hit (stroke, confidence, feedback, speed); sent about `hit_lag` frames after the contact |
 | `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
 | `line_call` | `line_call`: a clip-record line call (again after an override) |
 | `score` | `score` (with the match state: `game`, `games`, `games_won`, `server`, `service_court`, `game_point`, `match_point`, `match_winner`, `interval`, `change_ends`) and every `rallies[]` entry |
 | `coaching` | After each closed rally and referee decision: `coaching` (session notes and `top_fixes` so far, as in the record) and the latest `rally_summary`: `index`, `game`, `duration_s`, `strokes`, `peak_speed_kmh`, `winner`, `call`, `margin_cm`, `faults` (`hit_id`, `time_s`, `player`, `stroke`, `rule`, `tip` for each failed form rule) |
-| `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` every `check_every` processed frames. `dropped` frames never reach the record: captures in already-filled frame slots and frames beyond `live.max_queue_frames` are discarded |
+| `stats` | `received`, `processed`, `skipped`, `dropped`, `p50_ms`, `p95_ms`, `level`, `drop_rate` (skipped or discarded share) every `check_every` processed frames. At `live.max_queue_frames`, the oldest waiting capture in the current batch is discarded to admit the newest. A capture cannot replace one queued before a control message. Already-filled capture slots are also counted as dropped |
 | `error` with code `capture_gap` | A capture gap exceeded the resume window and was shortened in playback. The session continues |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
 | `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
-Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`.
+Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`. The reserved ID does not
+create a job on its own. If the client loses the `saved` reply, it can check
+`GET /jobs/{job_id}` for that ID; a 404 can mean saving is still in progress or no frames
+were saved. With older servers that omit the ID, check History.
 
 The `started` snapshot can also carry `rally_state`, `rally_start_frame`, and `strokes_in_rally`. These restore the active rally before the next camera frame.
 

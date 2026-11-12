@@ -73,6 +73,32 @@ either role, open the replay from History, and seek to a coaching citation. Use 
 label rallies and landings, and record the device, model versions, and reproduction steps.
 The real-camera, model-backed latency, and labelled-accuracy gates remain open.
 
+### Courtside acceptance (T8.6, T8.9–T8.12, T8.14–T8.16)
+
+Run one consented session on a tripod with a calibrated court and real tracking and pose.
+Repeat the camera and controls checks on a phone, tablet, Windows webcam, and supported browser
+as available. Record the commit, device, OS, camera and orientation, model versions, network,
+and outcome for each check.
+
+| Check | Evidence to capture |
+| --- | --- |
+| Camera alignment | Compare the preview, calibration still, and live overlay in portrait and landscape. Record crop or mirroring mismatches and verify rotation requires fresh calibration. |
+| Load and reconnect | Watch for a stale or reduced quality indicator. Interrupt the network, then compare the restored rally timer, queue and score. Compare elapsed time with replay time and check a citation seek. |
+| Referee | Review a near-line call on the map; confirm or override it, award and undo a point, and clear a winner. Check each acknowledged score. |
+| Coach | Read the cue at arm's length. Pin a recent cue, switch players and roles, and check the pin after reconnect. Verify a configured chat cites a saved moment. |
+| Save | Stop and open the replay from History. If the Stop reply is lost, verify the app only confirms the save when it finds that session's job. |
+
+For latency, replay a consented clip against the real server. From `backend/`:
+
+```text
+python scripts/bench_live.py --url ws://127.0.0.1:8000/live --video ../samples/rally01.mp4 --realtime --require-models
+```
+
+Pass the four calibrated corners with `--corners` to include line-call lag. Record server
+hardware separately if it differs from the replay machine. A model replay measures the
+WebSocket path, server processing and decision lag; it does not measure phone capture or
+display latency. Run the labelled landing and rally evaluations on the same consented clips.
+
 ### Status on Oct 31
 
 Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app `flutter test`). A task stays ⬜ until its acceptance check is met:

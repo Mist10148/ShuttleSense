@@ -379,6 +379,30 @@ Open at the time of that review:
 - Start the remaining team checks with a consented real-camera session. Use its recording for
   rally and landing labels and the model-backed latency run. [Camera checklist](phases/phase-8-live-coach.md#courtside-review-and-coaching-follow-up-on-nov-10)
 
+### Courtside reliability pass (Nov 12)
+
+- Live analysis now keeps fresher frames when the queue fills, without reordering referee
+  decisions. Skipped or discarded captures do not count as rally evidence, and the app
+  keeps the last matched image and overlay while waiting for fresh analysis.
+- Referee highlights the selected landing. Coach can pin a cue per player filter and keep
+  it across reconnects. If a Stop reply is lost, the app checks the reserved replay ID
+  before confirming a save.
+- Ruff, 310 non-GPU backend tests, Dart formatting, Flutter analysis, and all 191 Flutter
+  tests passed. Role layouts were checked at 360, 800, and 1280 dp, both themes, at 200%
+  text size. Windows integration passed for upload and for live play through the real
+  WebSocket using a substitute camera and fake perception. The live flow exercised
+  Referee and Coach, call review, award and undo, reconnect, History, and replay.
+- Web, Windows, and Android release builds passed. The web index, bootstrap, and app
+  script served HTTP 200 locally. The Windows release reached startup idle. The Android
+  APK passed signature verification with the Android Debug certificate; device
+  installation and distribution signing remain open.
+- The 300-frame paced [synthetic benchmark](results/live_latency_fake.md) reported p95
+  36.7 ms round trip, 31.0 ms on the server, and 1.73 s line-call lag (two decisions).
+  This checks the WebSocket and analysis path without tracking or pose models.
+- The real-camera, device, model, and release gates remain open. Use the
+  [courtside acceptance checklist](phases/phase-8-live-coach.md)
+  to capture evidence for each device before marking those tasks complete.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |
