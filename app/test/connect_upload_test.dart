@@ -256,6 +256,17 @@ void main() {
       expect(find.text('Upload and analyze'), findsOneWidget);
     });
 
+    testWidgets('an upload that fails outside the API can be retried', (tester) async {
+      final (api, _) = await pickVideo(tester);
+      api.uploadError = StateError('file is gone');
+      await startUpload(tester);
+      api.uploadGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('The upload failed. Try again.'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Upload and analyze'), findsOneWidget);
+    });
+
     testWidgets('leaving the screen cancels the upload', (tester) async {
       final (api, _) = await pickVideo(tester);
       await startUpload(tester);

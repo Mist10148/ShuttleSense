@@ -125,8 +125,8 @@ class FakeApiClient extends ApiClient {
   /// While set, uploads report half the bytes sent and wait for it (or a cancel).
   Completer<void>? uploadGate;
 
-  /// Thrown by uploadVideo once the gate opens.
-  ApiException? uploadError;
+  /// Thrown by uploadVideo once the gate opens (any error, like a file that cannot be read).
+  Object? uploadError;
 
   /// The cancel token of the last upload.
   CancelToken? uploadCancel;

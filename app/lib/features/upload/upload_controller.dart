@@ -223,6 +223,11 @@ class UploadNotifier extends Notifier<UploadState> {
       // A cancel the user asked for is not an error.
       _set(state.copyWith(error: cancel.isCancelled ? null : e.message));
       return null;
+    } on Object catch (_) {
+      // Anything else (say the file could not be read) must not leave the screen stuck
+      // in "uploading": clear the progress and keep the file for a retry.
+      _set(state.copyWith(error: cancel.isCancelled ? null : 'The upload failed. Try again.'));
+      return null;
     } finally {
       if (identical(_cancel, cancel)) _cancel = null;
     }
