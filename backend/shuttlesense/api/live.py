@@ -48,6 +48,7 @@ class SessionGone(Exception):
 class _Entry:
     session: LiveSession
     video_id: str
+    job_id: str
     attached: bool = True
     expiry: asyncio.Task | None = None
 
@@ -77,7 +78,7 @@ class LiveManager:
         except Exception:
             jobs.gpu.release()
             raise
-        entry = _Entry(session=session, video_id=video_id)
+        entry = _Entry(session=session, video_id=video_id, job_id=new_id())
         self.entries[session.id] = entry
         return entry
 
@@ -178,7 +179,7 @@ class LiveManager:
             fps=record.fps, width=record.width, height=record.height,
             num_frames=record.num_frames, duration_s=round(record.num_frames / record.fps, 3),
         ))  # fmt: skip
-        job_id = new_id()
+        job_id = entry.job_id
         record.clip_id = job_id
         record.source_name = f"{name}.mp4"
         start = session.request.start_score
@@ -301,7 +302,8 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
     session = entry.session
     try:
         await ws.send_json({
-            "type": "started", "session_id": session.id, "resumed": first["type"] == "resume",
+            "type": "started", "session_id": session.id, "job_id": entry.job_id,
+            "resumed": first["type"] == "resume",
             "fps": session.fps, "width": session.width, "height": session.height,
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],

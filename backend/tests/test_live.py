@@ -93,6 +93,8 @@ def test_live_session_streams_events_and_saves_a_job(tmp_path: Path) -> None:
             while (e := ws.receive_json())["type"] != "saved":
                 tail.append(e)
             saved = e
+        assert saved["job_id"] == started["job_id"]
+        assert client.get(f"/jobs/{started['job_id']}").status_code == 200
         kinds = {e["type"] for e in events + tail}
         assert {"frame", "hit", "rally", "line_call", "score", "stats"} <= kinds
         frame = next(e for e in events if e["type"] == "frame" and e["shuttle"]["visible"])

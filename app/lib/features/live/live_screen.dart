@@ -115,6 +115,16 @@ class _ErrorView extends StatelessWidget {
               icon: const Icon(Icons.refresh),
               label: const Text('Try again'),
             ),
+            if (state.savedJobId case final String id)
+              TextButton(
+                onPressed: () => context.go(Routes.job(id)),
+                child: const Text('Open results'),
+              )
+            else if (state.sessionId != null)
+              TextButton(
+                onPressed: () => context.go(Routes.history),
+                child: const Text('Open History'),
+              ),
           ],
         ),
       ),

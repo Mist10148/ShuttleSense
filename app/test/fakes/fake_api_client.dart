@@ -167,8 +167,13 @@ class FakeApiClient extends ApiClient {
   Future<List<Job>> listJobs({int limit = 50}) => _answer('listJobs', () => List.of(jobs));
 
   @override
-  Future<Job> getJob(String jobId) =>
-      _answer('getJob $jobId', () => jobs.firstWhere((j) => j.id == jobId));
+  Future<Job> getJob(String jobId) => _answer(
+    'getJob $jobId',
+    () => jobs.firstWhere(
+      (j) => j.id == jobId,
+      orElse: () => throw ApiException('job not found', statusCode: 404),
+    ),
+  );
 
   @override
   Future<Job> createJob({

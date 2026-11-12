@@ -318,6 +318,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   int? _pendingReviewId;
   Timer? _decisionTimeout;
   Completer<String?>? _saved;
+  String? _expectedJobId;
   Completer<Json>? _started;
 
   /// Bumped by [_teardown]; loops and reconnects of an older session stop when it changes.
@@ -369,6 +370,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _clearImages();
     _clearDecision();
     _started = null;
+    _expectedJobId = null;
     final saved = _saved;
     _saved = null;
     if (saved != null && !saved.isCompleted) saved.complete(null);
@@ -555,6 +557,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         return (started: null, refused: _Refused(null, 'cancelled'));
       }
       final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
+      _expectedJobId = event['job_id'] as String?;
       _seed(event);
       _set(
         state.copyWith(
@@ -1004,19 +1007,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final saved = _saved = Completer<String?>();
     String? jobId;
     String? error;
+    var unconfirmed = false;
     try {
       socket.sendJson({'type': 'stop'});
       // Saving runs the final analysis pass, which takes longer on long sessions.
       jobId = await saved.future.timeout(const Duration(seconds: 90));
-      if (captureError != null) {
-        final outcome = jobId == null
-            ? 'No frames were saved.'
-            : 'The session so far is saved to History.';
-        error = 'Camera stopped: $captureError. $outcome';
-      }
     } on Object {
-      const outcome = 'The server did not confirm the save. Check History for the session.';
-      error = captureError == null ? outcome : 'Camera stopped: $captureError. $outcome';
+      unconfirmed = true;
     } finally {
       if (identical(_saved, saved)) _saved = null;
       if (_socket == socket) {
@@ -1025,6 +1022,18 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         _events = null;
         unawaited(socket.close());
       }
+    }
+    if (_expectedJobId case final String id when unconfirmed) {
+      jobId = await _findSavedJob(id, generation);
+    }
+    if (unconfirmed && jobId == null) {
+      error = 'The server did not confirm the save. Check History for the session.';
+    }
+    if (captureError != null) {
+      final outcome =
+          error ??
+          (jobId == null ? 'No frames were saved.' : 'The session so far is saved to History.');
+      error = 'Camera stopped: $captureError. $outcome';
     }
     await cameraReleased;
     if (_disposed || generation != _generation) return;
@@ -1035,6 +1044,26 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         error: error,
       ),
     );
+  }
+
+  Future<String?> _findSavedJob(String id, int generation) async {
+    if (_disposed || generation != _generation) return null;
+    final api = ref.read(apiClientProvider);
+    for (final delay in [
+      Duration.zero,
+      const Duration(milliseconds: 500),
+      const Duration(seconds: 1),
+    ]) {
+      if (delay != Duration.zero) await Future<void>.delayed(delay);
+      if (_disposed || generation != _generation) return null;
+      try {
+        final job = await api.getJob(id).timeout(const Duration(seconds: 2));
+        if (job.id == id && job.mode == 'live') return id;
+      } on Exception {
+        // The job may still be saving, or the HTTP connection may be recovering too.
+      }
+    }
+    return null;
   }
 }
 

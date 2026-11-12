@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/app_mode.dart';
+import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
+import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/live/frame_source.dart';
 import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
@@ -32,6 +34,7 @@ Future<List<FakeLiveSocket>> pumpLive(
   WidgetTester tester, {
   Size size = phone,
   FakeFrameSource? source,
+  FakeApiClient? api,
   bool unreachable = false,
   Brightness brightness = Brightness.light,
   Map<String, dynamic>? Function(Map<String, dynamic> hello)? onHello,
@@ -41,6 +44,7 @@ Future<List<FakeLiveSocket>> pumpLive(
     tester,
     const LiveScreen(),
     size: size,
+    api: api,
     brightness: brightness,
     prefs: {'ui.mode': 'live'},
     overrides: [
@@ -893,6 +897,42 @@ void main() {
       expect(socket.closed, isTrue);
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 1));
+    });
+  }
+
+  for (final outcome in ['present', 'absent', 'offline then present']) {
+    testWidgets('lost save reply: $outcome', (tester) async {
+      final api = FakeApiClient(
+        jobs: [
+          if (outcome != 'absent')
+            Job.fromJson({...jobJson(id: 'reserved', status: 'running'), 'mode': 'live'}),
+        ],
+      );
+      final sockets = await pumpLive(
+        tester,
+        api: api,
+        onHello: (_) => {...startedEvent(), 'job_id': 'reserved'},
+      );
+      await startWithoutCourt(tester);
+      final socket = sockets.single..replyToStop = false;
+      if (outcome == 'offline then present') api.failWith = ApiException('offline');
+      await tester.tap(find.text('Stop'));
+      await events(tester);
+      await socket.drop();
+      await events(tester);
+      expect(api.calls.where((call) => call == 'getJob reserved'), hasLength(1));
+      api.failWith = null;
+      await tester.pump(const Duration(milliseconds: 500));
+      await events(tester);
+      await tester.pump(const Duration(seconds: 1));
+      await events(tester);
+
+      if (outcome == 'absent') {
+        expect(api.calls.where((call) => call == 'getJob reserved'), hasLength(3));
+        expect(find.text('Open History'), findsOneWidget);
+      } else {
+        expect(find.text('Open results'), findsOneWidget);
+      }
     });
   }
 
