@@ -339,3 +339,15 @@ def test_live_positions_are_clamped_like_offline() -> None:
     width, length = record.court.court_size_m
     x, y = a.record.frames[0].court_positions.shuttle
     assert -1.0 <= x <= width + 1.0 and -1.0 <= y <= length + 1.0
+
+
+def test_live_projects_doubles_partners() -> None:
+    from shuttlesense.fake import load_golden
+
+    record = load_golden("doubles")
+    a = StreamAnalyzer(clip_id="live", fps=record.fps, width=record.width, height=record.height,
+                       court=record.court, config=CONFIG)  # fmt: skip
+    f = record.frames[10]
+    a.add_frame(f.shuttle, f.players)
+    pos = a.record.frames[0].court_positions
+    assert pos.near_2 is not None and pos.far_2 is not None

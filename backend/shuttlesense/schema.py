@@ -296,6 +296,11 @@ class ClipRecord(BaseModel):
     chat: Chat | None = None
 
 
+def is_doubles(record: ClipRecord) -> bool:
+    """Whether the record tracks partners (a doubles match with four player slots)."""
+    return any(f.players.near_2 or f.players.far_2 for f in record.frames)
+
+
 def migrate(data: dict[str, Any]) -> dict[str, Any]:
     """Upgrade an older record dict to SCHEMA_VERSION in place and return it.
 

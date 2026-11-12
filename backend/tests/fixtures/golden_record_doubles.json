@@ -25297,6 +25297,32 @@
      "clear": 1
     },
     "peak_speed_kmh": 118.0
+   },
+   "near_1": {
+    "hits": 1,
+    "stroke_counts": {
+     "serve": 1
+    },
+    "peak_speed_kmh": 62.0
+   },
+   "near_2": {
+    "hits": 1,
+    "stroke_counts": {
+     "smash": 1
+    },
+    "peak_speed_kmh": 241.0
+   },
+   "far_1": {
+    "hits": 1,
+    "stroke_counts": {
+     "clear": 1
+    },
+    "peak_speed_kmh": 118.0
+   },
+   "far_2": {
+    "hits": 0,
+    "stroke_counts": {},
+    "peak_speed_kmh": null
    }
   }
  },
@@ -25392,11 +25418,11 @@
  "coaching": {
   "session_notes": [
    {
-    "id": "elbow_extension:far",
+    "id": "elbow_extension:far_1",
     "rule": "elbow_extension",
-    "player": "far",
+    "player": "far_1",
     "stroke": "clear",
-    "text": "Far player: Bent hitting arm at contact on 1 of 1 clears",
+    "text": "Far player 1: Bent hitting arm at contact on 1 of 1 clears",
     "count": 1,
     "total": 1,
     "severity": 1.0,
@@ -25409,11 +25435,28 @@
     ]
    },
    {
-    "id": "elbow_extension:near",
+    "id": "stable_feet:near_1",
+    "rule": "stable_feet",
+    "player": "near_1",
+    "stroke": "serve",
+    "text": "Near player 1: Feet moving during the serve on 1 of 1 serves",
+    "count": 1,
+    "total": 1,
+    "severity": 1.5,
+    "moments": [
+     {
+      "frame": 5,
+      "time_s": 0.167,
+      "hit_id": 0
+     }
+    ]
+   },
+   {
+    "id": "elbow_extension:near_2",
     "rule": "elbow_extension",
-    "player": "near",
+    "player": "near_2",
     "stroke": "smash",
-    "text": "Near player: Bent hitting arm at contact on 1 of 1 smashes",
+    "text": "Near player 2: Bent hitting arm at contact on 1 of 1 smashes",
     "count": 1,
     "total": 1,
     "severity": 1.0,
@@ -25426,27 +25469,32 @@
     ]
    },
    {
-    "id": "stable_feet:near",
-    "rule": "stable_feet",
+    "id": "formation:near",
+    "rule": "formation",
     "player": "near",
-    "stroke": "serve",
-    "text": "Near player: Feet moving during the serve on 1 of 1 serves",
-    "count": 1,
+    "stroke": null,
+    "text": "Near pair: front and back (attack) in 0 of 1 rallies, side by side (defence) in 1",
+    "count": 0,
     "total": 1,
-    "severity": 1.5,
-    "moments": [
-     {
-      "frame": 5,
-      "time_s": 0.167,
-      "hit_id": 0
-     }
-    ]
+    "severity": 0.0,
+    "moments": []
+   },
+   {
+    "id": "formation:far",
+    "rule": "formation",
+    "player": "far",
+    "stroke": null,
+    "text": "Far pair: front and back (attack) in 0 of 1 rallies, side by side (defence) in 1",
+    "count": 0,
+    "total": 1,
+    "severity": 0.0,
+    "moments": []
    }
   ],
   "top_fixes": [
-   "stable_feet:near",
-   "elbow_extension:far",
-   "elbow_extension:near"
+   "stable_feet:near_1",
+   "elbow_extension:far_1",
+   "elbow_extension:near_2"
   ]
  },
  "chat": null

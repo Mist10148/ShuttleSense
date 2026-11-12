@@ -161,13 +161,14 @@ class StreamAnalyzer:
             return to_court(player_point(p, min_score), PLAYER_MARGIN_M) if p else None
 
         near, far = player(frame.players.near), player(frame.players.far)
+        partners = {"near_2": player(frame.players.near_2), "far_2": player(frame.players.far_2)}
         s = frame.shuttle
         shuttle = to_court((s.x, s.y), SHUTTLE_MARGIN_M) if s is not None and s.visible else None
         self._recent_shuttle.append(shuttle if shuttle is not None else (np.nan, np.nan))
         kmh = speeds_kmh(np.array(self._recent_shuttle, dtype=float), self.record.fps or 30.0,
                          self.speed_smoothing)  # fmt: skip
         speed = None if not len(kmh) or np.isnan(kmh[-1]) else round(float(kmh[-1]), 1)
-        return CourtPositions(near=near, far=far, shuttle=shuttle), speed
+        return CourtPositions(near=near, far=far, shuttle=shuttle, **partners), speed
 
     def _frame_event(self, frame: Frame) -> Event:
         return {

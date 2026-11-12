@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from shuttlesense.atomic import atomic_open, atomic_write_text
-from shuttlesense.schema import ClipRecord, PlayerSummary, Summary
+from shuttlesense.schema import PLAYER_IDS, ClipRecord, PlayerSummary, Summary, is_doubles
 
 HITS_CSV_COLUMNS = (
     "id",
@@ -52,13 +52,19 @@ def build_summary(record: ClipRecord) -> Summary:
         stroke_counts=dict(Counter(h.stroke for h in record.hits if h.stroke)),
         peak_speed_kmh=_peak([h.speed_kmh for h in record.hits]),
     )
-    for side in ("near", "far"):
-        hits = [h for h in record.hits if h.player == side]
-        summary.per_player[side] = PlayerSummary(
+
+    def player(hits: list) -> PlayerSummary:
+        return PlayerSummary(
             hits=len(hits),
             stroke_counts=dict(Counter(h.stroke for h in hits if h.stroke)),
             peak_speed_kmh=_peak([h.speed_kmh for h in hits]),
         )
+
+    for side in ("near", "far"):
+        summary.per_player[side] = player([h for h in record.hits if h.player == side])
+    if is_doubles(record):  # each partner too; hits with an unknown hitter count for the side
+        for slot in PLAYER_IDS:
+            summary.per_player[slot] = player([h for h in record.hits if h.hitter == slot])
     return summary
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from shuttlesense.schema import ClipRecord, Coaching, Hit, Moment, PlayerSide, SessionNote
+from shuttlesense.schema import ClipRecord, Coaching, Hit, Moment, SessionNote
 
 PATTERN_DEFAULTS: dict[str, Any] = {
     "min_count": 2,  # a pattern needs at least this many faulty strokes
@@ -47,7 +47,15 @@ PLURALS = {
     "serve": "serves",
 }
 
-SIDE = {"near": "Near player", "far": "Far player"}
+SIDE = {
+    "near": "Near player",
+    "far": "Far player",
+    "near_1": "Near player 1",
+    "near_2": "Near player 2",
+    "far_1": "Far player 1",
+    "far_2": "Far player 2",
+}
+PAIR = {"near": "Near pair", "far": "Far pair"}
 
 
 def pattern_config(feedback_cfg: dict[str, Any] | None) -> dict[str, Any]:
@@ -67,13 +75,15 @@ def _moments(hits: list[Hit], limit: int) -> list[Moment]:
 
 def form_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
     """One note per player and rule that failed often enough."""
-    checked: dict[tuple[PlayerSide, str], list[Hit]] = defaultdict(list)
-    failed: dict[tuple[PlayerSide, str], list[Hit]] = defaultdict(list)
+    # In doubles a note is about the partner who hit (the side when the hitter is unknown).
+    checked: dict[tuple[str, str], list[Hit]] = defaultdict(list)
+    failed: dict[tuple[str, str], list[Hit]] = defaultdict(list)
     for hit in record.hits:
+        who = hit.hitter or hit.player
         for item in hit.feedback:
-            checked[(hit.player, item.rule)].append(hit)
+            checked[(who, item.rule)].append(hit)
             if not item.passed:
-                failed[(hit.player, item.rule)].append(hit)
+                failed[(who, item.rule)].append(hit)
     notes = []
     for (side, rule), bad in sorted(failed.items()):
         total = len(checked[(side, rule)])
@@ -100,19 +110,20 @@ def form_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
 
 def out_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
     """Rallies a player lost by hitting the last shot out (from the line calls)."""
-    ended: dict[PlayerSide, list[tuple[Hit, Moment]]] = defaultdict(list)
-    out: dict[PlayerSide, list[Moment]] = defaultdict(list)
+    ended: dict[str, list[tuple[Hit, Moment]]] = defaultdict(list)
+    out: dict[str, list[Moment]] = defaultdict(list)
     for call in record.line_calls:
         hits = [h for h in record.hits if h.rally_index == call.rally_index]
         if not hits:
             continue
         last = hits[-1]
         moment = Moment(frame=call.frame, time_s=call.time_s, hit_id=last.id)
-        ended[last.player].append((last, moment))
+        who = last.hitter or last.player
+        ended[who].append((last, moment))
         if call.effective_call == "out":
-            out[last.player].append(moment)
+            out[who].append(moment)
     notes = []
-    for side in ("near", "far"):
+    for side in sorted(ended, key=list(SIDE).index):
         bad, total = out.get(side, []), len(ended.get(side, []))
         if not bad or len(bad) < cfg["min_count"] or len(bad) / total < cfg["min_rate"]:
             continue
@@ -132,9 +143,55 @@ def out_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
     return notes
 
 
+def formation_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
+    """Doubles: how each pair stood during its rallies (not a fault; severity 0).
+
+    Front and back (one partner nearer the net) is the attacking formation, side by side
+    the defensive one. A rally counts for the formation the pair held in most of its frames
+    with both partners on court.
+    """
+    from shuttlesense.schema import is_doubles
+
+    if not is_doubles(record) or not record.rallies:
+        return []
+    notes = []
+    for side in ("near", "far"):
+        front_back = counted = 0
+        for rally in record.rallies:
+            votes = []
+            for f in record.frames[rally.start_frame : rally.end_frame + 1]:
+                pos = f.court_positions
+                a = getattr(pos, side, None) if pos else None
+                b = getattr(pos, f"{side}_2", None) if pos else None
+                if a is not None and b is not None:
+                    votes.append(abs(a[1] - b[1]) > abs(a[0] - b[0]))
+            if votes:
+                counted += 1
+                front_back += sum(votes) * 2 > len(votes)
+        if not counted:
+            continue
+        notes.append(
+            SessionNote(
+                id=f"formation:{side}",
+                rule="formation",
+                player=side,
+                text=f"{PAIR[side]}: front and back (attack) in {front_back} of {counted} "
+                f"rallies, side by side (defence) in {counted - front_back}",
+                count=front_back,
+                total=counted,
+                severity=0.0,
+            )
+        )
+    return notes
+
+
 def build_coaching(record: ClipRecord, feedback_cfg: dict[str, Any] | None = None) -> Coaching:
-    """All notes, and the top fixes ranked by faulty strokes x severity, then by rate."""
+    """All notes, and the top fixes ranked by faulty strokes x severity, then by rate.
+
+    Formation notes describe doubles play and are never top fixes.
+    """
     cfg = pattern_config(feedback_cfg)
-    notes = form_notes(record, cfg) + out_notes(record, cfg)
-    ranked = sorted(notes, key=lambda n: (-n.count * n.severity, -n.count / n.total, n.id))
+    faults = form_notes(record, cfg) + out_notes(record, cfg)
+    notes = faults + formation_notes(record, cfg)
+    ranked = sorted(faults, key=lambda n: (-n.count * n.severity, -n.count / n.total, n.id))
     return Coaching(session_notes=notes, top_fixes=[n.id for n in ranked[: cfg["top_fixes"]]])

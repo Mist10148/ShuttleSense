@@ -64,25 +64,28 @@ def project_positions(
     shuttle_margin_m: float = SHUTTLE_MARGIN_M,
     min_keypoint_score: float = MIN_KEYPOINT_SCORE,
 ) -> dict[str, np.ndarray]:
-    """(N, 2) court positions per key ("near", "far", "shuttle"); NaN where unknown."""
+    """(N, 2) court positions per key ("near", "far", "shuttle", and "near_2", "far_2" in
+    doubles); NaN where unknown."""
     from shuttlesense.court import image_to_court
+    from shuttlesense.schema import is_doubles
 
     n = len(record.frames)
-    out = {k: np.full((n, 2), np.nan) for k in ("near", "far", "shuttle")}
+    players = ("near", "far", "near_2", "far_2") if is_doubles(record) else ("near", "far")
+    out = {k: np.full((n, 2), np.nan) for k in (*players, "shuttle")}
     if record.court is None or n == 0:
         return out
     h = np.asarray(record.court.homography)
     width, length = record.court.court_size_m
     for i, f in enumerate(record.frames):
-        for side in ("near", "far"):
+        for side in players:
             p = getattr(f.players, side)
             if p is not None:
                 out[side][i] = player_point(p, min_keypoint_score)
         s = f.shuttle
         if s is not None and s.visible and s.x is not None and s.y is not None:
             out["shuttle"][i] = s.x, s.y
-    for key, margin in (("near", player_margin_m), ("far", player_margin_m),
-                        ("shuttle", shuttle_margin_m)):  # fmt: skip
+    margins = [(key, player_margin_m) for key in players] + [("shuttle", shuttle_margin_m)]
+    for key, margin in margins:
         px = out[key]
         valid = ~np.isnan(px).any(axis=1)
         if valid.any():
@@ -110,4 +113,7 @@ def apply_positions(record: ClipRecord, positions: dict[str, np.ndarray]) -> Cli
             far=point(positions["far"], i),
             shuttle=point(positions["shuttle"], i),
         )
+        if "near_2" in positions:
+            f.court_positions.near_2 = point(positions["near_2"], i)
+            f.court_positions.far_2 = point(positions["far_2"], i)
     return record

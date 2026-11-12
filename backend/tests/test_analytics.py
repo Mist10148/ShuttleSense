@@ -112,3 +112,54 @@ def test_glitch_frame_does_not_leak_into_neighbours() -> None:
     kmh = speeds_kmh(xy, fps=30, smooth=3)
     assert np.isnan(kmh[5])
     assert np.nanmax(kmh) == pytest.approx(108.0)
+
+
+# Doubles (T9.8) ------------------------------------------------------------------------------
+
+
+def _doubles_golden():
+    from pathlib import Path
+
+    from shuttlesense.schema import load_record
+
+    path = Path(__file__).parent / "fixtures" / "golden_record_doubles.json"
+    return load_record(path.read_text(encoding="utf-8"))
+
+
+def test_doubles_summary_counts_each_partner() -> None:
+    from shuttlesense.analytics.export import build_summary
+
+    summary = build_summary(_doubles_golden())
+    assert summary.per_player["near"].hits == 2 and summary.per_player["far"].hits == 1
+    assert summary.per_player["near_1"].hits == 1 and summary.per_player["near_2"].hits == 1
+    assert summary.per_player["far_1"].hits == 1 and summary.per_player["far_2"].hits == 0
+
+
+def test_doubles_positions_cover_both_partners() -> None:
+    from shuttlesense.analytics.positions import apply_positions, project_positions
+
+    record = _doubles_golden()
+    positions = project_positions(record)
+    assert set(positions) == {"near", "far", "near_2", "far_2", "shuttle"}
+    apply_positions(record, positions)
+    assert record.frames[10].court_positions.near_2 is not None
+    assert record.frames[10].court_positions.far_2 is not None
+
+
+def test_doubles_notes_name_the_partner_and_the_formation() -> None:
+    from shuttlesense.feedback import build_coaching
+
+    coaching = build_coaching(_doubles_golden(), {"patterns": {"min_count": 1}})
+    ids = {n.id for n in coaching.session_notes}
+    assert "elbow_extension:near_2" in ids and "elbow_extension:far_1" in ids
+    formation = [n for n in coaching.session_notes if n.rule == "formation"]
+    assert {n.player for n in formation} == {"near", "far"}
+    assert all(n.severity == 0 and n.id not in coaching.top_fixes for n in formation)
+    assert formation[0].text.startswith("Near pair: ")
+
+
+def test_singles_summary_has_no_partner_keys() -> None:
+    from shuttlesense.analytics.export import build_summary
+    from shuttlesense.fake import load_golden
+
+    assert set(build_summary(load_golden()).per_player) == {"near", "far"}
