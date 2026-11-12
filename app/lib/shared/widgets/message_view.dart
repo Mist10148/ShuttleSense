@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/tokens.dart';
+
 /// Centered icon + message (+ optional action) for empty, error and placeholder states.
 class MessageView extends StatelessWidget {
   const MessageView({
@@ -26,12 +28,26 @@ class MessageView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
+            // The icon sits in a soft disc so empty and error states look deliberate.
+            Container(
+              padding: const EdgeInsets.all(Spacing.lg),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: Spacing.lg),
             Text(message, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
             if (detail != null) ...[
               const SizedBox(height: 4),
-              Text(detail!, style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
+              Text(
+                detail!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
             if (action != null) ...[const SizedBox(height: 16), action!],
           ],

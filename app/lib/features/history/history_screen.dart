@@ -133,12 +133,21 @@ class _JobTile extends ConsumerWidget {
         return _delete(context, ref, choice);
       },
       child: ListTile(
-        leading: Icon(switch (job.status) {
-          JobStatus.done => Icons.check_circle_outline,
-          JobStatus.failed => Icons.error_outline,
-          JobStatus.cancelled => Icons.cancel_outlined,
-          _ => Icons.hourglass_top,
-        }, semanticLabel: job.status.name),
+        leading: Icon(
+          switch (job.status) {
+            JobStatus.done => Icons.check_circle_outline,
+            JobStatus.failed => Icons.error_outline,
+            JobStatus.cancelled => Icons.cancel_outlined,
+            _ => Icons.hourglass_top,
+          },
+          semanticLabel: job.status.name,
+          // Colour backs up the icon shape: finished, failed, or still neutral.
+          color: switch (job.status) {
+            JobStatus.done => Theme.of(context).colorScheme.primary,
+            JobStatus.failed => Theme.of(context).colorScheme.error,
+            _ => Theme.of(context).colorScheme.onSurfaceVariant,
+          },
+        ),
         title: Text(title, overflow: TextOverflow.ellipsis),
         subtitle: Text('${job.isLive ? 'Live · ' : ''}$when · ${job.status.name} · ${job.id}'),
         onTap: () {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/tokens.dart';
+
 /// Titled card used for result panels (minimap, scoreboard, timeline, …).
 class SectionCard extends StatelessWidget {
   const SectionCard({super.key, required this.title, required this.child, this.trailing});
@@ -12,7 +14,7 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card.outlined(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(Spacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -23,7 +25,7 @@ class SectionCard extends StatelessWidget {
                 ?trailing,
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.md),
             child,
           ],
         ),

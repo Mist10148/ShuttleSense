@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_mode.dart';
 import '../../core/router/app_router.dart';
+import '../../core/theme/tokens.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 
@@ -77,8 +78,9 @@ class ModeCard extends StatelessWidget {
       selected: selected,
       child: Card(
         clipBehavior: Clip.antiAlias,
+        color: selected ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           side: BorderSide(
             color: selected ? scheme.primary : scheme.outlineVariant,
             width: selected ? 2 : 1,
@@ -90,7 +92,18 @@ class ModeCard extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(icon, size: 40, color: onTap == null ? scheme.outline : scheme.primary),
+                Container(
+                  padding: const EdgeInsets.all(Spacing.md),
+                  decoration: BoxDecoration(
+                    color: onTap == null ? scheme.surfaceContainerHighest : scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 32,
+                    color: onTap == null ? scheme.outline : scheme.onPrimaryContainer,
+                  ),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -101,7 +114,22 @@ class ModeCard extends StatelessWidget {
                       Text(description),
                       if (selected) ...[
                         const SizedBox(height: 8),
-                        Text('Last used', style: TextStyle(color: scheme.primary)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Spacing.sm,
+                            vertical: Spacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(Radii.sm),
+                          ),
+                          child: Text(
+                            'Last used',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelMedium?.copyWith(color: scheme.onPrimary),
+                          ),
+                        ),
                       ],
                     ],
                   ),
