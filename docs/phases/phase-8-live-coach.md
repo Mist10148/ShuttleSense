@@ -43,7 +43,7 @@ singles or doubles calls, score corrections and coaching. Skipped perception fra
 as unobserved when detecting a rally end; prolonged skipping can delay a decision and still
 miss hits. Capture-time-based playback and portrait camera alignment remain open, as do the
 real-camera, device, accuracy and latency checks in the task cards below. Doubles partners and
-individual service order are not tracked, and 2D pose does not establish serve height.
+individual service order came later in [Phase 9](phase-9-doubles.md); 2D pose does not establish serve height.
 
 ### Live decision and clock follow-up on Nov 5
 
@@ -270,7 +270,7 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 **Owner:** M4 + M2 · **Priority:** P3 · **Area:** data · **Refs:** Success metrics
 
 **Steps**
-- [ ] Landing labels: ShuttleSet landing positions converted to court metres where the court is calibrated, plus team phone clips labelled with `scripts/label_landings.py`.
+- [ ] Landing labels: ShuttleSet landing positions converted to court metres where the court is calibrated, plus team phone clips labelled with `scripts/label_landings.py`. (The conversion is in `eval_line_calls.py --gt-format shuttleset` since Nov 13; the team clips are still to label.)
 - [x] `scripts/eval_line_calls.py`: precision/recall for IN and OUT, false-call rate for landings within 20 cm of a line, share of UNCERTAIN calls.
 - [x] `scripts/bench_live.py`: frame-to-event latency p50/p95 and event lag per event type; fake run in `docs/results/live_latency.md` (Nov 3).
 - [ ] The same with TrackNetV3 and pose on the team GPU.

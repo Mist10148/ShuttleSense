@@ -58,7 +58,7 @@ v1.2 (Nov 12, [D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)) adds op
 | `rallies[]` | `review` | Why the user should check the rally: pose disagrees with the derived service order. Never changes the score |
 | `score` | `first_server_id`, `first_receiver_id`, `server_id`, `receiver_id` | The user's first server and receiver, and who serves and receives next |
 | `summary.per_player` | `near_1` … `far_2` keys | Per partner, next to the `near` / `far` side totals |
-| `coaching.session_notes[]` | `player` | A slot for form notes in doubles; `rule: "formation"` notes (severity 0) say how often each pair played front and back or side by side |
+| `coaching.session_notes[]` | `player` | A slot for form and out notes in doubles, or the side when the partners were too close to tell who hit; `rule: "formation"` notes (severity 0) say how often each pair played front and back or side by side |
 
 `line_calls[].court` is `"doubles"` for a doubles job; the doubles lines are the side alleys (0.46 m outside each singles sideline) and, for serves, the long service line 0.76 m inside the baseline. Court coordinates keep their origin at the singles corner, so alley points have `x < 0` or `x > 5.18`.
 
@@ -68,7 +68,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
 ```jsonc
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "clip_id": "match03_rally12",          // unique per processed clip
   "mode": "upload",                       // v1.1: "upload" | "live" (a saved live session)
   "source_name": "rally12.mp4",          // original file name, informational

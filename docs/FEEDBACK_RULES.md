@@ -4,6 +4,9 @@ The feedback stage (F8, `backend/shuttlesense/feedback/rules.py`) checks the hit
 
 > **Heuristic guidance, not professional coaching.** The rules use 2D keypoints from one camera, so angles are approximate and depend on where the camera stands. Tips are suggestions to try, never injury or medical advice.
 
+In doubles, a hit whose partner could not be told apart (`hitter` is empty) gets no form
+feedback: there is no single pose to grade.
+
 ## How a rule is evaluated
 
 - **Pose window.** The hitter's 17 COCO keypoints from 6 frames before to 6 frames after the hit. Contact rules use the best value in the hit frame ± `window_frames` (default 2), because the hit frame itself can be off by a frame or two.

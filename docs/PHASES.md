@@ -440,10 +440,40 @@ Open at the time of that review:
     tests pass.
   - Web, Windows and Android release builds pass (the APK is debug-signed), so T4.10 is
     done. T4.8 is done: its 404 acceptance is covered by `test_api.py`.
-- **Open rule questions (not changed):**
-  - An undecided rally clears the interval and change-of-ends flags of the rally before it
-    (`referee/match.py`), so the app's banner can disappear early.
-  - A one-game match never flags a change of ends at 11. Check the Laws, then decide.
+- **Rule questions, settled on Nov 13:**
+  - An undecided rally no longer clears the interval and change-of-ends flags of the rally
+    before it.
+  - A one-game match now flags a change of ends at 11, as the BWF Laws say for a match of
+    one game (Laws 8.1.3 and the other-scoring-systems appendix).
+
+### Doubles coach and redesign pass (Nov 13)
+
+- **Live coach panel in doubles:** the Near / Far filter matched notes tagged exactly
+  `near` or `far`, so partner notes (`near_1` … `far_2`) were hidden. It now matches on the
+  side, keeps formation notes out of the focus list, and cues name the partner.
+- **Coach chat in doubles:** the digest explains the partner ids, credits each hit to its
+  partner and says who served and received each rally. Live rally summaries and rally
+  events carry `hitter`.
+- **Bugs fixed, each with a test:**
+  - A doubles hit with an unknown partner had partner 1's pose graded; it now gets no form
+    feedback.
+  - `hits.csv` had no partner column; it now has `hitter`.
+  - A chat answer that could not be saved ended the stream silently; it now sends an error
+    event.
+  - The chat box dropped a typed question when one was still being answered, and the list
+    did not follow new messages.
+  - The start score field said "player" in doubles.
+- **App redesign:** design tokens and line-call colours that meet 4.5:1 in light and dark;
+  the live screen split into widgets; a larger score with one point button per side; the
+  next-rally cue set large in the coach view; consistent cards, empty states and mode
+  cards. The principles are in the PRD under "Design principles".
+- **T8.12:** ShuttleSet landing pixels are projected to court metres through the record's
+  homography in `eval_line_calls.py`.
+- **Not done:** the `drive` class (T9.7) changes the trained class list, so it waits for
+  the doubles labels and a training run. The redesign was checked by widget tests and a web
+  build, not on a phone or tablet.
+- **Verification:** backend `ruff` and `pytest -m "not gpu"` pass (358 tests); app
+  `flutter analyze` and 210 widget tests pass.
 
 ### Remaining phase work by dependency
 

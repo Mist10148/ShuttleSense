@@ -10,7 +10,7 @@ Version 1.3 · Nov 12, 2026 · Owner: Mist (project lead)
 
 ## Overview
 
-ShuttleSense is a computer vision system that turns a single video of a badminton singles rally into coaching and match insights: where the shuttle went, which stroke each player hit, how their form looked, and how the rally played out on court. It is built in 3 weeks by a team of 6 BSCS students using pretrained models and the expert-annotated ShuttleSet dataset.
+ShuttleSense is a computer vision system that turns a single video of a badminton rally (singles or doubles) into coaching and match insights: where the shuttle went, which stroke each player hit, how their form looked, and how the rally played out on court. It is built in 3 weeks by a team of 6 BSCS students using pretrained models and the expert-annotated ShuttleSet dataset.
 
 **Full title:** ShuttleSense: A Computer Vision Framework for Badminton Stroke Classification, Shuttlecock Tracking, and Match Analysis Using Deep Convolutional Neural Networks and Pose Estimation
 
@@ -38,7 +38,7 @@ ShuttleSense covers every one of these features and adds stroke classification a
 
 ### Goals
 
-1. Track the shuttlecock frame by frame in singles match video and draw its trajectory.
+1. Track the shuttlecock frame by frame in match video and draw its trajectory.
 2. Classify each stroke into 6 classes: smash, clear, drop, net shot, lift, serve.
 3. Give per-stroke form feedback from pose angles (elbow height, arm extension, contact height).
 4. Map players and shuttle onto a top-down court view with estimated shuttle speed.
@@ -153,7 +153,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 | FR-18 (F18) | After connecting, the user chooses Upload clip or Go live; the choice is remembered | The picker appears after connect; the last choice is preselected after a restart |
 | FR-19 (F19) | The app streams camera frames over a WebSocket; the backend runs the same stage code frame by frame and returns shuttle, players, rally state, hits, strokes, speed, line calls and score as events. When it falls behind it drops frames or lowers resolution and says so | Runs end to end against the fake live source in CI; provisional overlay latency and event lag are measured and reported in [Evaluation](EVALUATION.md); a live session is saved as a normal clip record and appears in History |
 | FR-20 (F20) | At each landing, project the shuttle to the court plane and call IN or OUT against the singles (or doubles) lines; calls inside an uncertainty band set from homography and tracking error are UNCERTAIN; the user can confirm or override and the score follows | Each call carries `margin_cm`, `confidence` and `uncertain`; an override is logged and re-scores; precision/recall and near-line false-call rate are reported only once measured on labelled landings |
-| FR-21 (F21) | Deterministic pattern notes per session ("late split-step on 4 of 6 net shots") and a top-3 fix list, each linked to the timeline moments that show it | Same record gives the same notes; every note links to at least one moment; thresholds live in `pipeline.yaml` |
+| FR-21 (F21) | Deterministic pattern notes per session ("bent hitting arm on 4 of 6 smashes") and a top-3 fix list, each linked to the timeline moments that show it | Same record gives the same notes; every note links to at least one moment; thresholds live in `pipeline.yaml` |
 | FR-22 (F22) | Coach chat answers questions from the clip record only, says when the data does not show something, cites moments the app turns into seek chips, refuses injury diagnosis, and is disabled with an explanation when no API key is configured | Citations always point at real frames; no key → chat disabled, notes still work; per-session message limit enforced |
 
 ## Non-functional requirements
@@ -239,13 +239,33 @@ Versions, licenses and rationale for every choice are in [TECH_STACK.md](TECH_ST
 
 1. Start the backend on the laptop (or run the Colab notebook) and note its URL.
 2. Open the app on a phone, tablet, laptop or browser and connect to that URL.
-3. Record a singles rally with a phone on a tripod, ideally elevated and behind the baseline, or pick a broadcast clip.
+3. Record a rally (singles or doubles) with a phone on a tripod, ideally elevated and behind the baseline, or pick a broadcast clip.
 4. Choose **Upload clip** and pick the video, or **Go live** and point the camera at the court (live mode skips steps 6 and 7 and processes while you play).
 5. Tap the 4 court corners on the first frame (skippable; P2 features turn off without it).
 6. Choose overlays: trail, skeletons, hit markers, stroke labels, court, speed, scoreboard.
 7. Start processing and watch progress per stage.
 8. Review the annotated playback, minimap, stroke timeline, line calls and form tips; confirm or override uncertain calls; read the session summary and ask the coach chat questions.
 9. Download or share the annotated MP4 and the JSON/CSV summary; optionally delete the job from the server.
+
+### Design principles
+
+A look at courtside scoring and racket-sport analysis apps (Nov 13) set these rules for the
+app's screens:
+
+- **The score is the largest thing on the referee view,** with one large point button per
+  side under it. Scoring apps are used at a glance and with one hand.
+- **The app says who serves and from which court** instead of leaving it to the umpire.
+- **Every automated call can be corrected,** during play and afterwards. Missing score
+  correction is a common complaint about automated scoring.
+- **Line calls keep one colour each** (in, out, uncertain) in light and dark, with text
+  that meets 4.5:1 on them.
+- **The coach view shows one cue at a time, set large,** so it can be read at arm's length
+  between rallies; the detail sits below it.
+- **Colour always says who:** each player or doubles partner keeps the same colour in the
+  video, minimap, timeline, chart and coaching notes.
+
+Spacing, corner radii, the touch-target size and the line-call colours are tokens in
+`app/lib/core/theme/tokens.dart`.
 
 ### Screen layout
 
