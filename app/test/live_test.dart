@@ -13,6 +13,7 @@ import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
 import 'package:shuttlesense_app/features/live/live_socket.dart';
 import 'package:shuttlesense_app/features/mode/mode_screen.dart';
+import 'package:shuttlesense_app/features/results/widgets/court_minimap.dart';
 import 'package:shuttlesense_app/features/results/widgets/status_strip.dart';
 
 import 'fakes/fake_api_client.dart';
@@ -238,7 +239,9 @@ void main() {
     await events(tester);
 
     final queue = find.byKey(const Key('live-review-queue'));
+    int? highlighted() => tester.widget<CourtMinimap>(find.byType(CourtMinimap)).reviewCall?.id;
     expect(tester.widget<DropdownButton<int>>(queue).value, 2);
+    expect(highlighted(), 2);
     await tester.tap(queue);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rally 3 \u00b7 0:08.0').last);
@@ -254,6 +257,7 @@ void main() {
     socket.emit(lineCallEvent(id: 3, rally: 2, frame: 120, call: 'in', override: 'in'));
     await events(tester);
     expect(find.text('IN'), findsOneWidget);
+    expect(highlighted(), 3);
     expect(find.text('Confirm OUT'), findsNothing);
 
     socket.emit({
@@ -263,6 +267,7 @@ void main() {
     });
     await events(tester);
     expect(find.text('Rally 2 \u00b7 0:04.0'), findsOneWidget);
+    expect(highlighted(), 2);
     expect(find.text('Confirm OUT'), findsOneWidget);
     await tester.tap(find.text('Stop'));
     await tester.pump(const Duration(seconds: 1));

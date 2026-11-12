@@ -386,7 +386,8 @@ class _LiveViewState extends ConsumerState<_LiveView> {
               .where((call) => call.id == controller.pendingReviewId && call.reviewed)
               .firstOrNull
         : null;
-    final call = confirmingReview ?? selectedReview ?? bannerCall(record, frameIndex);
+    final review = confirmingReview ?? selectedReview;
+    final call = review ?? bannerCall(record, frameIndex);
     final size = state.size;
     final image = controller.analyzedImage;
     final capture = controller.captureSize;
@@ -499,6 +500,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 ),
             ],
           ),
+      if (!_coach && confirmingReview != null) Text(_reviewLabel(confirmingReview)),
       if (!_coach && call != null)
         LineCallBanner(
           call: call,
@@ -542,7 +544,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
     ];
     final analysis = [
-      CourtMinimap(record: record, frameIndex: frameIndex),
+      CourtMinimap(record: record, frameIndex: frameIndex, reviewCall: _coach ? null : review),
       SectionCard(
         title: 'Recent strokes',
         child: Column(

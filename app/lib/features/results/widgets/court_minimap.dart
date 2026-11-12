@@ -23,10 +23,11 @@ const int kHeatRebuildFrames = 30;
 /// the landing of every line call so far (F20: green in, red out, amber still uncertain).
 /// The Heatmap toggle (T5.5) shades where each player stood over the whole clip.
 class CourtMinimap extends StatefulWidget {
-  const CourtMinimap({super.key, required this.record, required this.frameIndex});
+  const CourtMinimap({super.key, required this.record, required this.frameIndex, this.reviewCall});
 
   final ClipRecord record;
   final int frameIndex;
+  final LineCall? reviewCall;
 
   @override
   State<CourtMinimap> createState() => _CourtMinimapState();
@@ -67,7 +68,12 @@ class _CourtMinimapState extends State<CourtMinimap> {
           : null,
       child: calibrated
           ? Semantics(
-              label: [minimapLabel(record, frameIndex), ?heat?.describe()].join(' '),
+              label: [
+                minimapLabel(record, frameIndex),
+                if (widget.reviewCall case final call?)
+                  'Highlighted landing for rally ${call.rallyIndex + 1}.',
+                ?heat?.describe(),
+              ].join(' '),
               child: AspectRatio(
                 aspectRatio: kCourtWidthM / kCourtLengthM,
                 child: CustomPaint(
@@ -78,6 +84,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
                     surface: Theme.of(context).colorScheme.surfaceContainerHighest,
                     players: PlayerColors.of(context),
                     heat: heat,
+                    reviewLanding: widget.reviewCall?.landing,
                   ),
                 ),
               ),
@@ -161,6 +168,7 @@ class CourtPainter extends CustomPainter {
     required this.trail,
     required this.hitMarks,
     this.landings = const [],
+    this.reviewLanding,
     required this.lines,
     required this.surface,
     required this.players,
@@ -175,6 +183,7 @@ class CourtPainter extends CustomPainter {
     required Color surface,
     required PlayerColors players,
     HeatGrid? heat,
+    CourtPoint? reviewLanding,
   }) {
     final trail = <CourtPoint>[
       for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
@@ -199,6 +208,7 @@ class CourtPainter extends CustomPainter {
       trail: trail,
       hitMarks: marks,
       landings: landings,
+      reviewLanding: reviewLanding,
       lines: lines,
       surface: surface,
       players: players,
@@ -213,6 +223,7 @@ class CourtPainter extends CustomPainter {
 
   /// (landing point, called in, waiting for review), oldest first.
   final List<(CourtPoint, bool, bool)> landings;
+  final CourtPoint? reviewLanding;
   final Color lines;
   final Color surface;
   final PlayerColors players;
@@ -320,12 +331,26 @@ class CourtPainter extends CustomPainter {
     }
 
     final f = frame;
-    if (f == null) return;
-    if (f.nearPos != null) {
-      canvas.drawCircle(toCanvas(f.nearPos!), 7, Paint()..color = players.near);
+    if (f?.nearPos case final near?) {
+      canvas.drawCircle(toCanvas(near), 7, Paint()..color = players.near);
     }
-    if (f.farPos != null) {
-      canvas.drawCircle(toCanvas(f.farPos!), 7, Paint()..color = players.far);
+    if (f?.farPos case final far?) {
+      canvas.drawCircle(toCanvas(far), 7, Paint()..color = players.far);
+    }
+    if (reviewLanding case final landing?) {
+      final p = toCanvas(landing);
+      // Keep an outside landing visible at the corresponding court edge.
+      final o = Offset(p.dx.clamp(0, size.width).toDouble(), p.dy.clamp(0, size.height).toDouble());
+      canvas.drawCircle(o, 9, Paint()..color = surface);
+      canvas.drawCircle(o, 6, Paint()..color = Colors.amber.shade700);
+      canvas.drawCircle(
+        o,
+        9,
+        Paint()
+          ..color = lines
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke,
+      );
     }
   }
 
@@ -333,6 +358,7 @@ class CourtPainter extends CustomPainter {
   @override
   bool shouldRepaint(CourtPainter old) =>
       old.frameIndex != frameIndex ||
+      old.reviewLanding != reviewLanding ||
       old.frame != frame ||
       old.lines != lines ||
       old.surface != surface ||
