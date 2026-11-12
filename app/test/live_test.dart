@@ -127,7 +127,7 @@ void main() {
   });
 
   for (final portrait in [true, false]) {
-    testWidgets('fits only the matching capture (portrait: $portrait)', (tester) async {
+    testWidgets('fits the last matching capture (portrait: $portrait)', (tester) async {
       final source = FakeFrameSource();
       if (portrait) {
         source.width = 720;
@@ -143,10 +143,12 @@ void main() {
       expect(still, findsOneWidget);
       final size = tester.getSize(still);
       expect(size.aspectRatio, closeTo(source.width / source.height, 0.001));
+      final matched = tester.widget<Image>(still).key;
       socket.emit({...frameEvent(1), 'client_frame': 999});
       await events(tester);
-      expect(still, findsNothing);
-      expect(find.byKey(const Key('camera-preview')), findsOneWidget);
+      expect(tester.widget<Image>(still).key, matched);
+      expect(tester.getSize(still).aspectRatio, closeTo(source.width / source.height, 0.001));
+      expect(find.textContaining('Waiting for a fresh analysis overlay'), findsOneWidget);
       await tester.tap(find.text('Stop'));
       await events(tester);
       await tester.pump(const Duration(seconds: 1));
