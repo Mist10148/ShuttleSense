@@ -116,8 +116,11 @@ class JobManager:
         """Queue a finished job again with new overlays. The pipeline reuses its stage cache
         in the job folder, so only io and render actually run.
 
-        Returns None if the job is gone. Raises JobBusy if it is queued or running."""
-        with self._lock:
+        Returns None if the job is gone. Raises JobBusy if it is queued or running.
+
+        Holds the job's edit lock while queueing, so a score edit in progress saves its
+        corrections first and the new run reads them; edits re-check the status under it."""
+        with self.job_lock(job_id), self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None

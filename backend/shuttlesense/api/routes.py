@@ -352,11 +352,10 @@ def rerender(job_id: str, body: RenderRequest, request: Request, jobs: JobsDep) 
 def correct_score(
     job_id: str, body: ScoreCorrectionIn, storage: StorageDep, jobs: JobsDep
 ) -> ScoreUpdate:
-    job = _job_or_404(jobs, job_id)
-    if job.status != "done":  # a re-render is about to rewrite record.json
-        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    _require_done(jobs, job_id)
     path = _output_or_404(storage, jobs, job_id, "record")
     with jobs.job_lock(job_id):  # read-modify-write of record.json
+        job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
         if record.score is None or not record.rallies:
             raise HTTPException(status_code=409, detail="referee stage did not run for this job")
@@ -376,10 +375,17 @@ def correct_score(
 
 
 def _score_record(storage: Storage, jobs: JobManager, job_id: str) -> tuple[Job, Path]:
-    job = _job_or_404(jobs, job_id)
-    if job.status != "done":  # a re-render is about to rewrite record.json
-        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    job = _require_done(jobs, job_id)
     return job, _output_or_404(storage, jobs, job_id, "record")
+
+
+def _require_done(jobs: JobManager, job_id: str) -> Job:
+    """409 unless the job has finished. Call it again under `jobs.job_lock(job_id)`: a
+    re-render queued between the first check and the lock would rewrite record.json."""
+    job = _job_or_404(jobs, job_id)
+    if job.status != "done":
+        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    return job
 
 
 def _save_score(record: ClipRecord, storage: Storage, jobs: JobManager, job_id: str) -> None:
@@ -396,6 +402,7 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
     """Add a point for a rally the referee layer missed; it counts from `frame` on."""
     job, path = _score_record(storage, jobs, job_id)
     with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
         if record.score is None:
             raise HTTPException(status_code=409, detail="referee stage did not run for this job")
@@ -413,6 +420,7 @@ def undo_score(job_id: str, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
     """Take back the newest score correction or award."""
     job, path = _score_record(storage, jobs, job_id)
     with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
         overrides = load_overrides(storage.job_dir(job_id))
         if not undo_last_correction(record, job.start_score, overrides):
@@ -426,12 +434,11 @@ def override_line_call(
     job_id: str, call_id: int, body: LineCallOverrideBody, storage: StorageDep, jobs: JobsDep
 ) -> LineCallUpdate:
     """Confirm or override an automated call; the rally winner and score follow."""
-    job = _job_or_404(jobs, job_id)
-    if job.status != "done":
-        raise HTTPException(status_code=409, detail="wait until the job has finished")
+    _require_done(jobs, job_id)
     path = _output_or_404(storage, jobs, job_id, "record")
     job_dir = storage.job_dir(job_id)
     with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
         call = next((c for c in record.line_calls if c.id == call_id), None)
         if call is None or record.score is None:

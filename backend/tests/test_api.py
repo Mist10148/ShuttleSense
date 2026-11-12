@@ -664,6 +664,25 @@ def test_undo_keeps_line_call_overrides_like_a_rerender(tmp_path: Path, tiny_vid
         assert rerendered["rallies"][0]["winner"] == "far"
 
 
+def test_rerender_waits_for_a_score_edit_in_progress(tmp_path: Path, tiny_video: Path) -> None:
+    """A re-render cannot be queued while a score edit holds the job's lock."""
+    import threading
+
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        jobs = client.app.state.jobs
+        lock = jobs.job_lock(job_id)
+        lock.acquire()
+        worker = threading.Thread(target=jobs.rerender, args=(job_id, ["trail"]))
+        worker.start()
+        worker.join(timeout=0.3)
+        assert worker.is_alive() and jobs.get(job_id).status == "done"
+        lock.release()
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+        assert wait_for(client, job_id)["status"] == "done"
+
+
 def test_job_match_settings_reach_the_record(tmp_path: Path, tiny_video: Path) -> None:
     with make_client(tmp_path, fake_pipeline=True) as client:
         vid = upload(client, tiny_video).json()["id"]
