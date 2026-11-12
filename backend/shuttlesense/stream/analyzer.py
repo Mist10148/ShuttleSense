@@ -32,6 +32,7 @@ from shuttlesense.schema import (
     Court,
     CourtPositions,
     Frame,
+    Player,
     Players,
     PlayerSide,
     Rally,
@@ -47,6 +48,10 @@ Classifier = Callable[[ClipRecord, int], None]  # (window record, window start f
 
 def _dump(model: Any) -> Any:
     return model.model_dump(mode="json")
+
+
+class RallyInPlay(RuntimeError):
+    """A score change that has to wait until the open rally is decided."""
 
 
 class StreamAnalyzer:
@@ -124,32 +129,40 @@ class StreamAnalyzer:
 
     def _project(self, frame: Frame) -> tuple[CourtPositions | None, float | None]:
         """Court positions and speed for one frame, from the same helpers as analytics."""
-        from shuttlesense.analytics.positions import player_point
+        from shuttlesense.analytics.positions import (
+            PLAYER_MARGIN_M,
+            SHUTTLE_MARGIN_M,
+            clamp_to_court,
+            player_point,
+        )
         from shuttlesense.analytics.speed import speeds_kmh
         from shuttlesense.court import image_to_court
 
         if self.record.court is None:
             return None, None
         h = np.asarray(self.record.court.homography)
+        size = self.record.court.court_size_m
 
-        def to_court(px: tuple[float, float]) -> tuple[float, float] | None:
+        def to_court(px: tuple[float, float], margin: float) -> tuple[float, float] | None:
             point = image_to_court(h, np.array([px]))[0]
-            return (
-                (round(float(point[0]), 3), round(float(point[1]), 3))
-                if np.isfinite(point).all()
-                else None
-            )
+            if not np.isfinite(point).all():
+                return None
+            point = clamp_to_court(point, size, margin)  # as offline (analytics/positions.py)
+            return round(float(point[0]), 3), round(float(point[1]), 3)
 
         min_score = self.min_keypoint_score
-        near = frame.players.near and to_court(player_point(frame.players.near, min_score))
-        far = frame.players.far and to_court(player_point(frame.players.far, min_score))
+
+        def player(p: Player | None) -> tuple[float, float] | None:
+            return to_court(player_point(p, min_score), PLAYER_MARGIN_M) if p else None
+
+        near, far = player(frame.players.near), player(frame.players.far)
         s = frame.shuttle
-        shuttle = to_court((s.x, s.y)) if s is not None and s.visible else None
+        shuttle = to_court((s.x, s.y), SHUTTLE_MARGIN_M) if s is not None and s.visible else None
         self._recent_shuttle.append(shuttle if shuttle is not None else (np.nan, np.nan))
         kmh = speeds_kmh(np.array(self._recent_shuttle, dtype=float), self.record.fps or 30.0,
                          self.speed_smoothing)  # fmt: skip
         speed = None if not len(kmh) or np.isnan(kmh[-1]) else round(float(kmh[-1]), 1)
-        return CourtPositions(near=near or None, far=far or None, shuttle=shuttle), speed
+        return CourtPositions(near=near, far=far, shuttle=shuttle), speed
 
     def _frame_event(self, frame: Frame) -> Event:
         return {
@@ -414,7 +427,13 @@ class StreamAnalyzer:
         return [self._score_event(), self._latest_coaching_event()]
 
     def award(self, winner: PlayerSide) -> list[Event]:
-        """A point for a rally the referee layer missed, counted after the rallies so far."""
+        """A point for a rally the referee layer missed, counted after the rallies so far.
+
+        Raises RallyInPlay while a rally is open or still settling: that rally would be
+        committed after the award with its own winner and count twice.
+        """
+        if self.state == "in_play":
+            raise RallyInPlay("wait until the rally has ended")
         self.corrections.append(ScoreCorrection(
             rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
             at=datetime.now(UTC), kind="award", frame=max(0, len(self.record.frames) - 1),

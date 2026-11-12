@@ -41,12 +41,27 @@ def smooth_nan(values: np.ndarray, window: int) -> np.ndarray:
     return out
 
 
+# Projections are clamped to the court plus a margin, so a homography far from the court
+# (feet off the calibrated plane, a shuttle high in the air) cannot spike speeds.
+PLAYER_MARGIN_M = 2.0
+SHUTTLE_MARGIN_M = 1.0
+
+
+def clamp_to_court(point: np.ndarray, size: tuple[float, float], margin: float) -> np.ndarray:
+    """Clamp (..., 2) court points to the court expanded by `margin` meters."""
+    width, length = size
+    out = np.array(point, dtype=float)
+    out[..., 0] = np.clip(out[..., 0], -margin, width + margin)
+    out[..., 1] = np.clip(out[..., 1], -margin, length + margin)
+    return out
+
+
 def project_positions(
     record: ClipRecord,
     *,
     smooth: int = 5,
-    player_margin_m: float = 2.0,
-    shuttle_margin_m: float = 1.0,
+    player_margin_m: float = PLAYER_MARGIN_M,
+    shuttle_margin_m: float = SHUTTLE_MARGIN_M,
     min_keypoint_score: float = MIN_KEYPOINT_SCORE,
 ) -> dict[str, np.ndarray]:
     """(N, 2) court positions per key ("near", "far", "shuttle"); NaN where unknown."""
@@ -71,9 +86,7 @@ def project_positions(
         px = out[key]
         valid = ~np.isnan(px).any(axis=1)
         if valid.any():
-            px[valid] = image_to_court(h, px[valid])
-            px[valid, 0] = np.clip(px[valid, 0], -margin, width + margin)
-            px[valid, 1] = np.clip(px[valid, 1], -margin, length + margin)
+            px[valid] = clamp_to_court(image_to_court(h, px[valid]), (width, length), margin)
         if key != "shuttle":  # the shuttle is smoothed by the speed estimate instead
             out[key] = smooth_nan(px, smooth)
     return out

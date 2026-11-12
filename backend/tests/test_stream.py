@@ -311,3 +311,31 @@ def test_session_degrades_when_over_budget(tmp_path) -> None:
     record = session.finish()
     assert record.num_frames == 26 and session.stats.skipped == 1
     assert (tmp_path / "rec.mp4").stat().st_size > 0
+
+
+def test_award_waits_until_the_open_rally_is_decided() -> None:
+    from shuttlesense.stream.analyzer import RallyInPlay
+
+    record, _ = synthetic_record()
+    a = StreamAnalyzer(clip_id="live", fps=record.fps, width=record.width, height=record.height,
+                       court=record.court, config=CONFIG)  # fmt: skip
+    for f in record.frames:
+        a.add_frame(f.shuttle, f.players)
+        if a.state == "in_play":
+            break
+    with pytest.raises(RallyInPlay):
+        a.award("near")
+    assert not a.corrections
+
+
+def test_live_positions_are_clamped_like_offline() -> None:
+    from shuttlesense.schema import Shuttle
+
+    record, _ = synthetic_record()
+    a = StreamAnalyzer(clip_id="live", fps=record.fps, width=record.width, height=record.height,
+                       court=record.court, config=CONFIG)  # fmt: skip
+    # A shuttle far above the top of the frame projects far behind the far baseline.
+    a.add_frame(Shuttle(x=record.width / 2, y=-5000.0, visible=1), record.frames[0].players)
+    width, length = record.court.court_size_m
+    x, y = a.record.frames[0].court_positions.shuttle
+    assert -1.0 <= x <= width + 1.0 and -1.0 <= y <= length + 1.0

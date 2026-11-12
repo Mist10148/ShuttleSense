@@ -193,12 +193,9 @@ def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
             ws.send_json({"type": "undo"})
             assert ws.receive_json()["score"] == corrected
             assert ws.receive_json()["type"] == "coaching"
+            # The replay is in its next rally now: an award would count that rally twice.
             ws.send_json({"type": "award", "winner": "far"})
-            assert ws.receive_json()["score"]["far"] == corrected["far"] + 1
-            assert ws.receive_json()["type"] == "coaching"
-            ws.send_json({"type": "undo"})
-            assert ws.receive_json()["score"] == corrected
-            assert ws.receive_json()["type"] == "coaching"
+            assert ws.receive_json()["code"] == "rally_in_play"
             ws.send_json({"type": "stop"})
             while (event := ws.receive_json())["type"] != "saved":
                 pass
@@ -547,3 +544,15 @@ def test_live_waits_for_a_running_job(tmp_path: Path) -> None:
                 assert ws.receive_json()["code"] == "busy"
         finally:
             client.app.state.jobs.gpu.release()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"best_of": True}, {"best_of": 1.0}, {"best_of": 2}, {"name": 7}, {"name": "x" * 101}],
+)
+def test_start_rejects_loose_match_settings(change: dict) -> None:
+    from shuttlesense.api.live import _start_request
+
+    with pytest.raises(ValueError):
+        _start_request({**START, **change})
+    assert _start_request({**START, "best_of": 3}).best_of == 3

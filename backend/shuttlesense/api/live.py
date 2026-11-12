@@ -26,6 +26,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from shuttlesense.api.models import Job, VideoInfoOut, utcnow
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.schema import ScorePair
+from shuttlesense.stream.analyzer import RallyInPlay
 from shuttlesense.stream.session import LiveSession, StartRequest
 
 log = logging.getLogger(__name__)
@@ -226,6 +227,9 @@ class LiveManager:
                 log.exception("saving live session %s at shutdown failed", entry.session.id)
 
 
+MAX_NAME_LENGTH = 100  # the session name becomes the source name in History
+
+
 def _start_request(msg: dict[str, Any]) -> StartRequest:
     fps, width, height = float(msg["fps"]), int(msg["width"]), int(msg["height"])
     if not (1 <= fps <= 240 and 16 <= width <= 7680 and 16 <= height <= 4320):
@@ -246,13 +250,16 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     if court not in ("singles", "doubles"):
         raise ValueError("court must be singles or doubles")
     best_of = msg.get("best_of", 1)
-    if best_of not in (1, 3):
+    if type(best_of) is not int or best_of not in (1, 3):  # not true or 1.0
         raise ValueError("best_of must be 1 or 3")
+    name = msg.get("name")
+    if name is not None and (not isinstance(name, str) or len(name) > MAX_NAME_LENGTH):
+        raise ValueError(f"name must be text of at most {MAX_NAME_LENGTH} characters")
     first_server = msg.get("first_server")
     if first_server not in (None, "near", "far"):
         raise ValueError("first_server must be near or far")
     return StartRequest(
-        fps=fps, width=width, height=height, corners=corners, court=court, name=msg.get("name"),
+        fps=fps, width=width, height=height, corners=corners, court=court, name=name,
         start_score=score, best_of=best_of, first_server=first_server,
     )  # fmt: skip
 
@@ -493,6 +500,8 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             return session.award(msg["winner"])
         if msg.get("type") == "undo":
             return session.undo()
+    except RallyInPlay as exc:
+        return [{"type": "error", "code": "rally_in_play", "detail": str(exc)}]
     except (KeyError, TypeError, ValueError):
         detail = "nothing to undo" if msg.get("type") == "undo" else "no such line call or rally"
         return [{"type": "error", "code": "not_found", "detail": detail}]
