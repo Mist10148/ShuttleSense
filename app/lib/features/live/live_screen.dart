@@ -249,7 +249,7 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
                             ? 'All 4 corners set. Drag to adjust, then go live.'
                             : 'The corners cross over. Drag them into order.')
                       : 'Tap the ${kCornerNames[next]} corner of the singles court '
-                            '(${next + 1} of 4).',
+                            '(${next + 1} of 4), also for doubles.',
                 ),
               ),
               IconButton(

@@ -1,5 +1,6 @@
 import 'health.dart';
 import 'json.dart';
+import 'match_setup.dart';
 
 enum JobStatus {
   queued,
@@ -78,6 +79,9 @@ class Job {
     this.bestOf = 1,
     this.firstServer,
     this.mode = 'upload',
+    this.court = 'singles',
+    this.firstServerId,
+    this.firstReceiverId,
   });
 
   final String id;
@@ -104,6 +108,11 @@ class Job {
   /// upload, or live for a saved live session.
   final String mode;
 
+  /// singles or doubles, and in doubles who served and received first (Phase 9).
+  final String court;
+  final String? firstServerId;
+  final String? firstReceiverId;
+
   bool get isLive => mode == 'live';
 
   /// Time spent running so far (or in total once finished).
@@ -129,6 +138,9 @@ class Job {
     startScore: startScore,
     bestOf: bestOf,
     firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
   );
 
   factory Job.fromJson(Json j) => Job(
@@ -154,6 +166,9 @@ class Job {
     bestOf: asInt(j['best_of']) ?? 1,
     firstServer: j['first_server'] as String?,
     mode: j['mode'] as String? ?? 'upload',
+    court: j['court'] as String? ?? 'singles',
+    firstServerId: j['first_server_id'] as String?,
+    firstReceiverId: j['first_receiver_id'] as String?,
   );
 }
 
@@ -166,6 +181,9 @@ class JobOptions {
     this.startScore,
     this.bestOf = 1,
     this.firstServer,
+    this.court = 'singles',
+    this.firstServerId,
+    this.firstReceiverId,
   });
 
   final Set<String> overlays;
@@ -179,6 +197,20 @@ class JobOptions {
   final int bestOf;
   final String? firstServer;
 
+  /// singles or doubles (four players tracked, doubles lines), and the doubles first server
+  /// and receiver slots (Phase 9).
+  final String court;
+  final String? firstServerId;
+  final String? firstReceiverId;
+
+  MatchSetup get match => MatchSetup(
+    bestOf: bestOf,
+    firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
+  );
+
   JobOptions copyWith({Set<String>? overlays, bool? referee, bool? calibrate}) => JobOptions(
     overlays: overlays ?? this.overlays,
     referee: referee ?? this.referee,
@@ -186,6 +218,9 @@ class JobOptions {
     startScore: startScore,
     bestOf: bestOf,
     firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
   );
 
   JobOptions withStartScore(({int near, int far})? score) => JobOptions(
@@ -195,15 +230,21 @@ class JobOptions {
     startScore: score,
     bestOf: bestOf,
     firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
   );
 
-  JobOptions withMatch({required int bestOf, String? firstServer}) => JobOptions(
+  JobOptions withMatch(MatchSetup match) => JobOptions(
     overlays: overlays,
     referee: referee,
     calibrate: calibrate,
     startScore: startScore,
-    bestOf: bestOf,
-    firstServer: firstServer,
+    bestOf: match.bestOf,
+    firstServer: match.firstServer,
+    court: match.court,
+    firstServerId: match.firstServerId,
+    firstReceiverId: match.firstReceiverId,
   );
 
   /// What to send to the server: no referee without calibration, no start score without the

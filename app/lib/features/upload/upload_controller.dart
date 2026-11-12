@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../core/config/server_config.dart';
 import '../../data/api_client.dart';
 import '../../data/models/job.dart';
+import '../../data/models/match_setup.dart';
 import '../../data/repositories/analysis_repository.dart';
 
 /// Above this the app warns before uploading (the server's default limit is 1024 MB).
@@ -43,6 +44,9 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   static const _refereeKey = 'options.referee';
   static const _bestOfKey = 'options.best_of';
   static const _firstServerKey = 'options.first_server';
+  static const _courtKey = 'options.court';
+  static const _firstServerIdKey = 'options.first_server_id';
+  static const _firstReceiverIdKey = 'options.first_receiver_id';
 
   @override
   JobOptions build() {
@@ -56,6 +60,9 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
       referee: prefs.getBool(_refereeKey) ?? false,
       bestOf: prefs.getInt(_bestOfKey) == 3 ? 3 : 1,
       firstServer: prefs.getString(_firstServerKey),
+      court: prefs.getString(_courtKey) == 'doubles' ? 'doubles' : 'singles',
+      firstServerId: prefs.getString(_firstServerIdKey),
+      firstReceiverId: prefs.getString(_firstReceiverIdKey),
     );
   }
 
@@ -72,13 +79,18 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   }
 
   /// Remembered: a team usually records the same kind of match.
-  Future<void> setMatch({required int bestOf, String? firstServer}) async {
-    state = state.withMatch(bestOf: bestOf, firstServer: firstServer);
+  Future<void> setMatch(MatchSetup match) async {
+    state = state.withMatch(match);
     final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setInt(_bestOfKey, bestOf);
-    firstServer == null
-        ? await prefs.remove(_firstServerKey)
-        : await prefs.setString(_firstServerKey, firstServer);
+    await prefs.setInt(_bestOfKey, match.bestOf);
+    await prefs.setString(_courtKey, match.court);
+    for (final (key, value) in [
+      (_firstServerKey, match.firstServer),
+      (_firstServerIdKey, match.firstServerId),
+      (_firstReceiverIdKey, match.firstReceiverId),
+    ]) {
+      value == null ? await prefs.remove(key) : await prefs.setString(key, value);
+    }
   }
 
   /// For a clip that begins mid-game; not remembered, it belongs to one clip.

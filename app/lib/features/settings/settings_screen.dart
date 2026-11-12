@@ -116,8 +116,8 @@ class SettingsScreen extends ConsumerWidget {
         const SectionCard(
           title: 'About',
           child: Text(
-            'ShuttleSense analyzes badminton singles rallies: shuttle tracking, pose, stroke '
-            'classification and court analytics. Speed, in/out and score are estimates; '
+            'ShuttleSense analyzes badminton singles and doubles rallies: shuttle tracking, pose, '
+            'stroke classification and court analytics. Speed, in/out and score are estimates; '
             '$kLineCallNote $kCoachingDisclaimer',
           ),
         ),

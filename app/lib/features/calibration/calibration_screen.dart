@@ -119,7 +119,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                                 : 'The corners cross over. Drag them so they go around the '
                                       'court in order: near left, near right, far right, far left.')
                           : 'Tap the ${kCornerNames[next]} corner of the singles court '
-                                '(${next + 1} of 4). Pinch or scroll to zoom.',
+                                '(${next + 1} of 4), also for doubles. Pinch or scroll to zoom.',
                       style: next == null && !convex
                           ? TextStyle(color: theme.colorScheme.error)
                           : null,

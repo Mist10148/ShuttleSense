@@ -111,8 +111,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Singles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. Best results '
-                'from a phone on a tripod, elevated and behind the baseline.',
+                'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
+                'Best results from a phone on a tripod, elevated and behind the baseline.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -178,12 +178,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 ),
               if (options.calibrate && options.referee)
                 MatchSetupField(
-                  value: (
-                    bestOf: options.bestOf,
-                    firstServer: options.firstServer,
-                    court: 'singles',
-                  ),
-                  onChanged: (m) => notifier.setMatch(bestOf: m.bestOf, firstServer: m.firstServer),
+                  value: options.match,
+                  onChanged: notifier.setMatch,
+                  showCourt: true,
                 ),
               const SizedBox(height: 8),
               Text('Overlays', style: theme.textTheme.labelLarge),

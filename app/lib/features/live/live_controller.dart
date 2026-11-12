@@ -512,8 +512,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
             ],
       'start_score': startScore == null ? null : {'near': startScore.near, 'far': startScore.far},
       'court': match.court,
-      'best_of': match.bestOf,
-      'first_server': match.firstServer,
+      ...match.toJson(),
     });
     if (connected.started == null || _disposed || generation != _generation) return;
     _beginStreaming();
@@ -1089,11 +1088,16 @@ class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
   @override
   MatchSetup build() {
     final saved = ref.read(sharedPreferencesProvider).getStringList(_key);
-    if (saved == null || saved.length != 3) return kDefaultMatchSetup;
-    return (
+    // 3 items before doubles service order (Phase 9), 5 since.
+    if (saved == null || (saved.length != 3 && saved.length != 5)) return kDefaultMatchSetup;
+    const slots = {'near_1', 'near_2', 'far_1', 'far_2'};
+    String? slot(int i) => saved.length > i && slots.contains(saved[i]) ? saved[i] : null;
+    return MatchSetup(
       bestOf: saved[0] == '3' ? 3 : 1,
       firstServer: const {'near', 'far'}.contains(saved[1]) ? saved[1] : null,
       court: saved[2] == 'doubles' ? 'doubles' : 'singles',
+      firstServerId: slot(3),
+      firstReceiverId: slot(4),
     );
   }
 
@@ -1103,6 +1107,8 @@ class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
       '${setup.bestOf}',
       setup.firstServer ?? '',
       setup.court,
+      setup.firstServerId ?? '',
+      setup.firstReceiverId ?? '',
     ]);
   }
 }

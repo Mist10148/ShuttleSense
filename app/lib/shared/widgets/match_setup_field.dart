@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Match settings for the referee layer (D21): one game or the best of three, and who
-/// serves first (one camera cannot tell; unknown until a rally is won). [court] is only
-/// offered for live sessions, where it picks the lines line calls use.
-typedef MatchSetup = ({int bestOf, String? firstServer, String court});
+import '../../data/models/match_setup.dart';
 
-const MatchSetup kDefaultMatchSetup = (bestOf: 1, firstServer: null, court: 'singles');
+export '../../data/models/match_setup.dart';
 
+/// The match settings form (best of, first server, court, doubles service order).
 class MatchSetupField extends StatelessWidget {
   const MatchSetupField({
     super.key,
@@ -21,7 +19,8 @@ class MatchSetupField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = Theme.of(context).textTheme.labelLarge;
+    final theme = Theme.of(context);
+    final label = theme.textTheme.labelLarge;
     Widget row(String title, Widget control) => Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Wrap(
@@ -34,6 +33,26 @@ class MatchSetupField extends StatelessWidget {
         ],
       ),
     );
+    final server = value.firstServer;
+    final receiverSide = server == 'near' ? 'far' : 'near';
+    String sideName(String side) => side == 'near' ? 'Near' : 'Far';
+    Widget partner({
+      required String side,
+      required String? selected,
+      required ValueChanged<String?> onSelected,
+    }) => DropdownButton<String?>(
+      value: selected,
+      hint: const Text('Not sure'),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Not sure')),
+        for (final n in const [1, 2])
+          DropdownMenuItem<String?>(
+            value: '${side}_$n',
+            child: Text('${sideName(side)} player $n'),
+          ),
+      ],
+      onChanged: onSelected,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -45,8 +64,7 @@ class MatchSetupField extends StatelessWidget {
               ButtonSegment(value: 3, label: Text('Best of 3')),
             ],
             selected: {value.bestOf},
-            onSelectionChanged: (s) =>
-                onChanged((bestOf: s.first, firstServer: value.firstServer, court: value.court)),
+            onSelectionChanged: (s) => onChanged(value.withBestOf(s.first)),
           ),
         ),
         row(
@@ -57,12 +75,9 @@ class MatchSetupField extends StatelessWidget {
               ButtonSegment(value: 'near', label: Text('Near')),
               ButtonSegment(value: 'far', label: Text('Far')),
             ],
-            selected: {value.firstServer ?? ''},
-            onSelectionChanged: (s) => onChanged((
-              bestOf: value.bestOf,
-              firstServer: s.first.isEmpty ? null : s.first,
-              court: value.court,
-            )),
+            selected: {server ?? ''},
+            onSelectionChanged: (s) =>
+                onChanged(value.withFirstServer(s.first.isEmpty ? null : s.first)),
           ),
         ),
         if (showCourt)
@@ -74,10 +89,37 @@ class MatchSetupField extends StatelessWidget {
                 ButtonSegment(value: 'doubles', label: Text('Doubles')),
               ],
               selected: {value.court},
-              onSelectionChanged: (s) =>
-                  onChanged((bestOf: value.bestOf, firstServer: value.firstServer, court: s.first)),
+              onSelectionChanged: (s) => onChanged(value.withCourt(s.first)),
             ),
           ),
+        if (showCourt && value.doubles && server != null) ...[
+          row(
+            'Serves first',
+            partner(
+              side: server,
+              selected: value.firstServerId,
+              onSelected: (id) =>
+                  onChanged(value.withService(serverId: id, receiverId: value.firstReceiverId)),
+            ),
+          ),
+          row(
+            'Receives first',
+            partner(
+              side: receiverSide,
+              selected: value.firstReceiverId,
+              onSelected: (id) =>
+                  onChanged(value.withService(serverId: value.firstServerId, receiverId: id)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Player 1 is the one on the left when play starts. With both set, the app '
+              'follows who serves and receives each rally.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
       ],
     );
   }
