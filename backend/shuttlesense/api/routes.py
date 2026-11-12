@@ -414,7 +414,8 @@ def undo_score(job_id: str, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
     job, path = _score_record(storage, jobs, job_id)
     with jobs.job_lock(job_id):
         record = load_record(path.read_text(encoding="utf-8"))
-        if not undo_last_correction(record, job.start_score):
+        overrides = load_overrides(storage.job_dir(job_id))
+        if not undo_last_correction(record, job.start_score, overrides):
             raise HTTPException(status_code=404, detail="no score change to undo")
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)

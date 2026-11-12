@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
 
 from shuttlesense.atomic import atomic_write_text
 from shuttlesense.schema import ClipRecord, PlayerSide, Rally, Score, ScoreCorrection, ScorePair
+
+if TYPE_CHECKING:
+    from shuttlesense.referee.linecalls import LineCallOverrideIn
 
 # Score corrections live next to record.json, so a re-render (which rebuilds the record from
 # the stage cache) can apply them again.
@@ -108,10 +111,16 @@ def apply_corrections(
     record.score = final
 
 
-def undo_last_correction(record: ClipRecord, start: ScorePair | None = None) -> bool:
+def undo_last_correction(
+    record: ClipRecord,
+    start: ScorePair | None = None,
+    overrides: Sequence[LineCallOverrideIn] = (),
+) -> bool:
     """Take back the newest correction or award and re-score; False when there is none.
 
-    A rally's winner goes back to what it was before that correction.
+    A rally's winner goes back to what it was before that correction. Line-call overrides
+    saved since then are applied again, as a re-render would (D10), so undo and re-render
+    agree on the score.
     """
     if record.score is None or not record.score.corrections:
         return False
@@ -120,6 +129,10 @@ def undo_last_correction(record: ClipRecord, start: ScorePair | None = None) -> 
         rally = next((r for r in record.rallies if r.index == last.rally_index), None)
         if rally is not None:
             rally.winner = last.winner_before
+    if overrides:
+        from shuttlesense.referee.linecalls import apply_overrides
+
+        apply_overrides(record, list(overrides))
     apply_corrections(record, rest, start)
     return True
 

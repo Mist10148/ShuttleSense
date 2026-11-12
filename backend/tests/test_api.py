@@ -646,6 +646,24 @@ def test_award_and_undo_over_rest(tmp_path: Path, tiny_video: Path) -> None:
         assert client.post(f"/jobs/{job_id}/score/undo").status_code == 404
 
 
+def test_undo_keeps_line_call_overrides_like_a_rerender(tmp_path: Path, tiny_video: Path) -> None:
+    """Correction, then override, then undo: the score must equal what a re-render gives."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        call = client.get(f"/jobs/{job_id}/record").json()["line_calls"][0]
+        client.patch(f"/jobs/{job_id}/score", json={"rally_index": 0, "winner": None})
+        res = client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "out"})
+        assert res.json()["rallies"][0]["winner"] is None  # the correction still wins
+        undone = client.post(f"/jobs/{job_id}/score/undo").json()
+        assert undone["rallies"][0]["winner"] == "far"  # the override decides again
+        client.post(f"/jobs/{job_id}/render", json={"overlays": ["trail"]})
+        assert wait_for(client, job_id)["status"] == "done"
+        rerendered = client.get(f"/jobs/{job_id}/record").json()
+        assert rerendered["score"]["near"] == undone["score"]["near"]
+        assert rerendered["score"]["far"] == undone["score"]["far"]
+        assert rerendered["rallies"][0]["winner"] == "far"
+
+
 def test_job_match_settings_reach_the_record(tmp_path: Path, tiny_video: Path) -> None:
     with make_client(tmp_path, fake_pipeline=True) as client:
         vid = upload(client, tiny_video).json()["id"]
