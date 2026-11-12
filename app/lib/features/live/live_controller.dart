@@ -312,6 +312,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   final _pendingImages = <int, Uint8List>{};
   Uint8List? _analyzedImage;
   bool _waitingForAnalysis = true;
+  Duration? _lastAnalysisAt;
   bool _decisionAck = false;
   int _decisionSequence = 0;
   int? _pendingDecision;
@@ -329,7 +330,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   FrameSource? get source => _source;
   Uint8List? get analyzedImage => _analyzedImage;
-  bool get waitingForAnalysis => _waitingForAnalysis;
+  bool get waitingForAnalysis =>
+      _waitingForAnalysis ||
+      _captureClock.elapsed - (_lastAnalysisAt ?? Duration.zero) >
+          const Duration(milliseconds: 750);
   ({int width, int height})? get captureSize => _captureSize;
 
   DeviceOrientation? _orientation(FrameSource source) =>
@@ -339,6 +343,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _pendingImages.clear();
     _analyzedImage = null;
     _waitingForAnalysis = true;
+    _lastAnalysisAt = null;
   }
 
   @override
@@ -758,7 +763,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final clientFrame = asInt(e['client_frame']);
     final matchingImage = e['skipped'] == true ? null : _pendingImages[clientFrame];
     _waitingForAnalysis = matchingImage == null;
-    if (matchingImage != null) _analyzedImage = matchingImage;
+    if (matchingImage != null) {
+      _analyzedImage = matchingImage;
+      _lastAnalysisAt = _captureClock.elapsed;
+    }
     if (clientFrame != null) _pendingImages.removeWhere((index, _) => index <= clientFrame);
     final court = e['court'] as Json?;
     final speed = asDouble(e['speed_kmh']);

@@ -228,6 +228,40 @@ void main() {
     }
   }
 
+  testWidgets('a skipped frame keeps the last matched camera overlay', (tester) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final controller = container.read(liveControllerProvider.notifier);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(socket.frames, isNotEmpty);
+    socket.emit(frameEvent(0));
+    await events(tester);
+    final image = controller.analyzedImage;
+    expect(image, isNotNull);
+    expect(controller.waitingForAnalysis, isFalse);
+
+    socket.emit({...frameEvent(1), 'skipped': true, 'players': <String, dynamic>{}});
+    await events(tester);
+    expect(controller.analyzedImage, same(image));
+    expect(container.read(liveControllerProvider).players.keys, ['near']);
+    expect(controller.waitingForAnalysis, isTrue);
+    for (var i = 0; i < 10 && socket.frames.length < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final packet = socket.frames.last;
+    final index = ByteData.sublistView(packet).getUint32(0, Endian.little);
+    expect(index, greaterThan(1));
+    socket.emit({...frameEvent(index), 'players': <String, dynamic>{}});
+    await events(tester);
+    expect(controller.analyzedImage, isNot(same(image)));
+    expect(container.read(liveControllerProvider).players, isEmpty);
+    expect(controller.waitingForAnalysis, isFalse);
+    await tester.tap(find.text('Stop'));
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('review a later call and advance only after its score acknowledgment', (
     tester,
   ) async {
