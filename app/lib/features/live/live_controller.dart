@@ -828,6 +828,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final message = switch (code) {
       'busy' => 'The server is busy with a job or another live session. Try again when it is done.',
       'unauthorized' => 'Wrong or missing access token',
+      'rally_in_play' => 'Wait until the rally has ended, then award the point',
       _ => e['detail'] as String? ?? 'Live error',
     };
     final starting = _started;
@@ -837,7 +838,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     if (_matchesDecision(e) &&
-        (_decisionAck || const {'not_found', 'bad_message'}.contains(code))) {
+        (_decisionAck || const {'not_found', 'bad_message', 'rally_in_play'}.contains(code))) {
       _clearDecision();
       _notify(message);
       return;
@@ -850,7 +851,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify(e['detail'] as String? ?? 'The server did not find that rally or call');
       return;
     }
-    if (code == 'capture_gap') {
+    if (code == 'capture_gap' || code == 'rally_in_play') {
+      // rally_in_play: an award while a rally is open would count that rally twice.
       _notify(message);
       return;
     }

@@ -499,6 +499,19 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('an award refused during a rally does not end the session', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    sockets.single.emit({'type': 'error', 'code': 'rally_in_play', 'detail': 'wait'});
+    await events(tester);
+    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('Wait until the rally has ended, then award the point'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('an override the server cannot find does not end the session', (tester) async {
     final sockets = await pumpLive(tester);
     await startWithoutCourt(tester);
