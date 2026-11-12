@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 9 phases (0–8) and **112 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112).
+The 3-week build is split into 10 phases (0–9) and **125 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112; Phase 9 has no milestone or issues yet).
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -13,6 +13,7 @@ The 3-week build is split into 9 phases (0–8) and **112 tasks**. This page is 
 | 6 | [P3 referee](phases/phase-6-referee.md) | Nov 16 – Nov 18 | 7 | Rally state + scoreboard with correction on team footage |
 | 7 | [Freeze, evaluation, release](phases/phase-7-release.md) | Nov 18 – Nov 20 | 14 | `v1.0.0` release, README results, demo delivered |
 | 8 | [Live mode, line calls and coaching](phases/phase-8-live-coach.md) | Nov 9 – Nov 18 | 16 | Upload and Live both end in a results view with line calls, coaching notes and chat; live runs against the fake source in CI |
+| 9 | [Doubles support](phases/phase-9-doubles.md) | Nov 12 – after release | 13 | Doubles code on `main` with the singles path unchanged; ID switches, hitter attribution and service order measured on labelled doubles clips |
 
 **Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · **feature freeze Wed Nov 18** · final demo Fri Nov 20. Since PRD v1.2 the referee layer is committed scope; the old P3 go/no-go on Nov 16 is gone ([D17](DECISIONS.md)).
 
@@ -74,6 +75,8 @@ gantt
     Feature freeze                 :milestone, crit, 2026-11-18, 0d
     Phase 7 eval + release         :p7, 2026-11-18, 3d
     Final demo                     :milestone, crit, 2026-11-20, 0d
+    section After release
+    Phase 9 doubles                :p9, 2026-11-12, 21d
 ```
 
 Shift every date together if the start moves.
@@ -95,6 +98,8 @@ flowchart LR
     P8 --> P7
     P5 --> P7[Phase 7<br/>freeze + release]
     P6 --> P7
+    P8 --> P9[Phase 9<br/>doubles]
+    P6 --> P9
 ```
 
 Phases overlap on purpose: the app (Phase 4) is built against the stub and fake pipelines (T1.10) while models are still being trained.
@@ -131,7 +136,7 @@ Overload plan:
 - **M2:** if Phase 2 runs late, M1 takes T5.3 court outline and T5.14 minimap overlay.
 - If more is needed, apply the cut lines below. Re-check this table at every phase gate.
 
-Phase 8 (about 70 h, see its file) is not in the table above yet: most of its code landed with the scope change on Oct 31, and what remains is evaluation (M4), device checks (M6) and tuning (M3). Re-balance at the Nov 13 gate.
+Phase 8 (about 70 h, see its file) and Phase 9 (about 150 h, mostly after the release) are not in the table above yet: most of its code landed with the scope change on Oct 31, and what remains is evaluation (M4), device checks (M6) and tuning (M3). Re-balance at the Nov 13 gate.
 
 ## Cut lines
 
@@ -263,11 +268,27 @@ Fixes found in the same review:
 
 Open at the time of that review:
 
-- The doubles service order and partners: the tracker follows one player per side.
+- The doubles service order and partners: the tracker follows one player per side (planned in [Phase 9](phases/phase-9-doubles.md)).
 - The live timeline uses the announced fps, not capture time.
 - Under load, skipped frames can limit hit detection and delay a rally decision.
 - On a portrait camera the overlay can be letterboxed against the preview.
 - The 1.15 m serve height rule cannot be measured from 2D pose.
+
+### Live reliability follow-up (Nov 4)
+
+- Saved live jobs now re-render the saved analysis instead of running perception again. This
+  preserves doubles line calls, score corrections and coaching data, including overrides.
+- Frames skipped by live perception no longer count as evidence that the shuttle was lost or
+  stationary. This is conservative: sustained skipping can delay a rally decision, and hits
+  occurring in skipped frames can still be missed.
+- Doubles partners and service order are not tracked (planned in [Phase 9](phases/phase-9-doubles.md)); a single 2D camera cannot verify the
+  1.15 m service-height rule. Line calls, speed and coaching remain estimates.
+- Local environment check: the base stack is present, but PyTorch is CPU-only; ONNX Runtime,
+  rtmlib, SciPy, model weights and sample footage are absent. Model-backed and real-footage
+  evaluations therefore remain open.
+- Verification: backend Ruff checks passed; the non-GPU suite passed 292 tests, and the
+  additional skipped-frame window test passed separately. Flutter analysis and formatting
+  checks passed, as did all 169 Flutter tests.
 
 ### Completion follow-up (Nov 5)
 
@@ -289,22 +310,6 @@ Open at the time of that review:
   train/evaluate on the prescribed splits (T3.3, T3.5–T3.9); perform platform, real-camera,
   line-call and latency checks (T1.8, T7.4, T8.6, T8.12, T8.14–T8.15); then complete the
   release audit, artifacts, demo and team review (T7.2–T7.14).
-
-### Live reliability follow-up (Nov 4)
-
-- Saved live jobs now re-render the saved analysis instead of running perception again. This
-  preserves doubles line calls, score corrections and coaching data, including overrides.
-- Frames skipped by live perception no longer count as evidence that the shuttle was lost or
-  stationary. This is conservative: sustained skipping can delay a rally decision, and hits
-  occurring in skipped frames can still be missed.
-- Doubles partners and service order are not tracked; a single 2D camera cannot verify the
-  1.15 m service-height rule. Line calls, speed and coaching remain estimates.
-- Local environment check: the base stack is present, but PyTorch is CPU-only; ONNX Runtime,
-  rtmlib, SciPy, model weights and sample footage are absent. Model-backed and real-footage
-  evaluations therefore remain open.
-- Verification: backend Ruff checks passed; the non-GPU suite passed 292 tests, and the
-  additional skipped-frame window test passed separately. Flutter analysis and formatting
-  checks passed, as did all 169 Flutter tests.
 
 ### Live workflow and startup pass (Nov 5)
 
@@ -411,9 +416,10 @@ Open at the time of that review:
 | T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.14 | M2–M5 | Install weights, agree on labels, extract features and train on the documented splits. Report tracking, hits, strokes, ablation and timings. |
 | T4.1–T4.13, T5.1, T5.12–T5.13 | M4, M6, M2 | Verify target devices in both themes and at 200% text size, sign off on the artwork, and publish the calibrated speed check on team clips. |
 | T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15 | M1–M4, M6 | Label rallies and landings, measure model latency and accuracy, and verify camera, chat and courtside controls. Save commands, metrics and the device checklist. |
+| T9.1–T9.13 | M1–M6 | Doubles ([Phase 9](phases/phase-9-doubles.md)): code tasks land first; record and label doubles rallies (T9.2), then measure ID switches, hitter attribution and service order (T9.12). |
 | T7.1–T7.14 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
-Verified on Nov 3:
+Verified on Nov 3 (an earlier pass, kept for the record):
 - Backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (291 tests).
 - App `flutter analyze`, `dart format` and `flutter test` pass (169 tests).
 - `flutter build web --release` passes. The Windows and APK builds were not re-run.
@@ -423,11 +429,12 @@ Verified on Nov 3:
 - **GitHub:**
   - Projects board (`gh auth refresh -s project` is interactive).
   - Branch protection for `main` (T0.7), once direct pushes to `main` stop.
-  - Done on Nov 2: the Phase 8 milestone, `phase-8` label and issues #97–#108 (✅ ones closed); the issues of ✅ tasks closed; squash-only merges and auto-delete branches.
+  - Done on Nov 2: the Phase 8 milestone, `phase-8` label and issues #97–#108 (#109–#112 added on Nov 3) (✅ ones closed); the issues of ✅ tasks closed; squash-only merges and auto-delete branches.
 - **Tags:** `schema-v1.0` and `api-v1.0`, after the T1.1 / T1.2 reviews.
 - **Weights and data:**
   - HF repo and Drive folder (T0.9), with links in SETUP.md.
   - Upload the TrackNetV3 weights and fill `CHECKSUMS` (T1.4).
+  - The laptop venv (Nov 12) also lacks torchvision (so the Keypoint R-CNN pose fallback cannot run), scikit-learn and huggingface_hub. The ShuttleSet annotations are already local in `backend/data/shuttleset/` (m01–m44).
 - **ML stack and benchmarks:**
   - Install CUDA torch, onnxruntime-gpu and rtmlib, and record the versions (T1.6).
   - Run the Colab tunnel (T1.7).
@@ -460,4 +467,5 @@ Verified on Nov 3:
 | [5](phases/phase-5-analysis.md) | T5.1 Calibration UI · T5.2 Homography stage · T5.3 Court overlay · T5.4 Court positions · T5.5 App minimap · T5.6 Speed · T5.7 Stroke counter · T5.8 Feedback rules · T5.9 Tips in app · T5.10 Exports · T5.11 Downloads + chart · T5.12 Re-render · T5.13 Speed sanity · T5.14 Minimap overlay |
 | [6](phases/phase-6-referee.md) | T6.1 Rally state · T6.2 Landing in/out · T6.3 Scoring · T6.4 Correction API · T6.5 App scoreboard · T6.6 Score overlays · T6.7 Rally evaluation |
 | [8](phases/phase-8-live-coach.md) | T8.1 Scope docs · T8.2 Schema 1.1 · T8.3 Line calls · T8.4 Session notes · T8.5 Incremental stages · T8.6 Live socket · T8.7 Fake live source · T8.8 Coach chat API · T8.9 App mode + live · T8.10 App calls + summary · T8.11 App chat · T8.12 Line-call + latency eval · T8.13 Match play · T8.14 Award + undo · T8.15 Live coaching · T8.16 Live snapshot |
+| [9](phases/phase-9-doubles.md) | T9.1 Record v1.2 · T9.2 Doubles clips + labels · T9.3 Four-player tracker · T9.4 Appearance cue · T9.5 Hitter attribution · T9.6 Service order · T9.7 Doubles strokes · T9.8 Doubles feedback + analytics · T9.9 Live doubles · T9.10 Court choice in upload · T9.11 App four players · T9.12 Doubles evaluation · T9.13 Doubles docs |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |

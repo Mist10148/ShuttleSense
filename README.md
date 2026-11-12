@@ -294,7 +294,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 
 ## Roadmap
 
-Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task is also a GitHub issue under its phase milestone.
+Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task in Phases 0–8 is also a GitHub issue under its phase milestone.
 
 - [ ] **Phase 0 (Oct 29 – Nov 1):** repo structure, docs, backend and app skeletons, CI are in place; team setup, shared assets and the phase gate remain
 - [ ] **Phase 1 (Nov 2 – 3):** freeze data format and API, TrackNetV3 + pose running, app connects on all platforms
@@ -305,6 +305,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - [ ] **Phase 6 (Nov 16 – 18):** referee layer
 - [ ] **Phase 8 (Nov 9 – 18):** live mode, line calls, session coaching notes, coach chat
 - [ ] **Phase 7 (Nov 18 – 20):** feature freeze, evaluation, release builds, final demo
+- [ ] **Phase 9 (from Nov 12):** doubles support: four-player tracking, hitter attribution, doubles service order, four players in the app ([plan](docs/phases/phase-9-doubles.md))
 
 ### Future work
 - Automatic court line detection (no taps)
