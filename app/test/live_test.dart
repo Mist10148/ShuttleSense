@@ -593,6 +593,88 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('coach panel in doubles: side filter keeps partner notes and cues name the partner', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    await tester.tap(find.text('Coach'));
+    await events(tester);
+    Map<String, dynamic> note(String id, String player, String text, double severity) => {
+      'id': id,
+      'rule': id.split(':').first,
+      'player': player,
+      'text': text,
+      'count': 2,
+      'total': 3,
+      'severity': severity,
+    };
+    socket.emit(frameEvent(0));
+    socket.emit({
+      'type': 'hit',
+      'hit': {..._hit(0, 0), 'hitter': 'near_2'},
+    });
+    socket.emit({
+      'type': 'coaching',
+      'coaching': {
+        'session_notes': [
+          note('elbow_extension:near_2', 'near_2', 'Near player 2: Bent hitting arm', 1.0),
+          note('contact_height:near_1', 'near_1', 'Near player 1: Low contact point', 1.0),
+          note('recovery:far_1', 'far_1', 'Far player 1: Slow recovery', 1.0),
+          note('formation:near', 'near', 'Near pair: Mostly side by side', 0.0),
+        ],
+        'top_fixes': ['elbow_extension:near_2', 'contact_height:near_1', 'recovery:far_1'],
+      },
+      'rally_summary': {
+        'index': 0,
+        'strokes': 3,
+        'faults': [
+          {
+            'hit_id': 0,
+            'player': 'near',
+            'stroke': 'smash',
+            'rule': 'elbow_extension',
+            'tip': 'Extend your hitting arm fully at contact.',
+          },
+          {
+            'hit_id': 9,
+            'player': 'far',
+            'hitter': 'far_1',
+            'stroke': 'clear',
+            'rule': 'recovery',
+            'tip': 'Recover to base sooner.',
+          },
+        ],
+      },
+    });
+    await events(tester);
+    // The partner comes from the fault's hit when the event carries only the side.
+    expect(find.text('Near 2, Smash: Extend your hitting arm fully at contact.'), findsOneWidget);
+
+    final nearFilter = find.widgetWithText(ChoiceChip, 'Near');
+    await tester.ensureVisible(nearFilter);
+    await tester.tap(nearFilter);
+    await events(tester);
+    expect(find.text('1. Near player 1: Low contact point'), findsOneWidget);
+    expect(find.text('2. Near player 2: Bent hitting arm'), findsOneWidget);
+    expect(find.textContaining('Slow recovery'), findsNothing);
+    expect(find.textContaining('side by side'), findsNothing);
+
+    final farFilter = find.widgetWithText(ChoiceChip, 'Far');
+    await tester.ensureVisible(farFilter);
+    await tester.tap(farFilter);
+    await events(tester);
+    expect(find.text('1. Far player 1: Slow recovery'), findsOneWidget);
+    expect(find.textContaining('Bent hitting arm'), findsNothing);
+    expect(find.text('Far 1, Clear: Recover to base sooner.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Stop'));
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('referee and coach panels: match setup, award, undo, callout, coaching', (
     tester,
   ) async {

@@ -47,7 +47,9 @@ class RallySummary {
   final String? call;
 
   /// Form rules that failed in this rally: the tip to show and the stroke it was on.
-  final List<({int hitId, String player, String? stroke, String? tip})> faults;
+  /// Failed form rules in the rally. `player` is the side; `hitter` is the doubles partner
+  /// when the server knows it.
+  final List<({int hitId, String player, String? hitter, String? stroke, String? tip})> faults;
 
   factory RallySummary.fromJson(Json j) => RallySummary(
     index: asInt(j['index'])!,
@@ -62,6 +64,7 @@ class RallySummary {
         (
           hitId: asInt(f['hit_id']) ?? 0,
           player: f['player'] as String? ?? 'near',
+          hitter: f['hitter'] as String?,
           stroke: f['stroke'] as String?,
           tip: f['tip'] as String?,
         ),

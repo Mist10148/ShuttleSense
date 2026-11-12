@@ -9,6 +9,9 @@ String playerLabel(String who) {
   return who.endsWith('_1') || who.endsWith('_2') ? '$side ${who.substring(who.length - 1)}' : side;
 }
 
+/// The side (near or far) of a side or a doubles slot (near_2 -> near).
+String sideOf(String who) => who.startsWith('near') ? 'near' : 'far';
+
 /// Dart mirror of the parts of the clip record the app displays.
 /// Source of truth: backend/shuttlesense/schema.py and docs/DATA_FORMAT.md.
 class ClipRecord {
@@ -702,7 +705,7 @@ class SessionNote {
   final String id;
   final String rule;
 
-  /// near or far.
+  /// near or far; in doubles the partner (near_1 ... far_2) when the hitter is known.
   final String? player;
   final String? stroke;
   final String text;

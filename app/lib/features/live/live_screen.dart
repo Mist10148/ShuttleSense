@@ -673,7 +673,11 @@ class LiveCoachPanel extends StatelessWidget {
   List<SessionNote> _topFixes(Coaching? coaching) {
     if (coaching == null) return const [];
     if (player == null) return coaching.topFixes.take(3).toList();
-    final notes = coaching.notes.where((note) => note.player == null || note.player == player);
+    // Doubles notes carry the partner (near_2), so match on the side. Formation notes have
+    // no severity and are not faults; the server keeps them out of its top fixes too.
+    final notes = coaching.notes.where(
+      (note) => note.severity > 0 && (note.player == null || sideOf(note.player!) == player),
+    );
     final ranked = notes.toList()
       ..sort((a, b) {
         final impact = (b.count * b.severity).compareTo(a.count * a.severity);
@@ -782,7 +786,7 @@ class LiveCoachPanel extends StatelessWidget {
     String? cue;
     for (final hit in hits) {
       if (player != null && hit.player != player) continue;
-      cue = _formatCue(hit.player, hit.stroke, hit.tip);
+      cue = _formatCue(hit.who, hit.stroke, hit.tip);
       if (cue != null) break;
     }
     final count = rally.strokeCount;
@@ -808,17 +812,28 @@ class LiveCoachPanel extends StatelessWidget {
     if (rally == null) return null;
     for (final fault in rally.faults) {
       if (player != null && fault.player != player) continue;
-      final cue = _formatCue(fault.player, fault.stroke, fault.tip);
+      final cue = _formatCue(_faultWho(fault), fault.stroke, fault.tip);
       if (cue != null) return cue;
     }
     return null;
   }
 
-  String? _formatCue(String player, String? stroke, String? tip) {
+  /// The doubles partner behind a fault when known (from the event, else from its hit),
+  /// otherwise the side.
+  String _faultWho(({int hitId, String player, String? hitter, String? stroke, String? tip}) f) {
+    if (f.hitter != null) return f.hitter!;
+    for (final hit in state.hits.reversed) {
+      if (hit.id == f.hitId) return hit.who;
+    }
+    return f.player;
+  }
+
+  /// "Near 2, Smash: tip" for a side or a doubles partner.
+  String? _formatCue(String who, String? stroke, String? tip) {
     if (tip == null || tip.trim().isEmpty) return null;
-    final side = player == 'near' ? 'Near' : 'Far';
-    final who = stroke == null ? side : '$side, ${kStrokeLabels[stroke] ?? stroke}';
-    return '$who: ${tip.trim()}';
+    final name = playerLabel(who);
+    final label = stroke == null ? name : '$name, ${kStrokeLabels[stroke] ?? stroke}';
+    return '$label: ${tip.trim()}';
   }
 }
 
