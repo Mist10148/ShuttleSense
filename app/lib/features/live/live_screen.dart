@@ -360,6 +360,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
   bool _coach = false;
   String? _coachPlayer;
   int? _reviewCallId;
+  final _practiceCues = <String?, ({String text, int rally})>{};
 
   String _reviewLabel(LineCall call) => 'Rally ${call.rallyIndex + 1} · ${formatClock(call.timeS)}';
 
@@ -524,6 +525,14 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         ? LiveCoachPanel(
             state: state,
             player: _coachPlayer,
+            practiceCue: _practiceCues[_coachPlayer],
+            onPracticeCueChanged: (cue) => setState(() {
+              if (cue == null) {
+                _practiceCues.remove(_coachPlayer);
+              } else {
+                _practiceCues[_coachPlayer] = cue;
+              }
+            }),
             onPlayerChanged: (player) => setState(() => _coachPlayer = player),
           )
         : SectionCard(
@@ -634,11 +643,32 @@ class HitCallout extends StatelessWidget {
 /// Between-rally coaching (F21): what the last rally showed and the running top fixes,
 /// from the server's `coaching` events. Chat opens once the session is saved.
 class LiveCoachPanel extends StatelessWidget {
-  const LiveCoachPanel({super.key, required this.state, this.player, this.onPlayerChanged});
+  const LiveCoachPanel({
+    super.key,
+    required this.state,
+    this.player,
+    this.onPlayerChanged,
+    this.practiceCue,
+    this.onPracticeCueChanged,
+  });
 
   final LiveState state;
   final String? player;
   final ValueChanged<String?>? onPlayerChanged;
+  final ({String text, int rally})? practiceCue;
+  final ValueChanged<({String text, int rally})?>? onPracticeCueChanged;
+
+  Widget _pinButton(String text, int rally) {
+    final cue = (text: text, rally: rally);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: cue == practiceCue ? null : () => onPracticeCueChanged?.call(cue),
+        icon: const Icon(Icons.push_pin_outlined),
+        label: Text(cue == practiceCue ? 'Pinned' : 'Pin cue'),
+      ),
+    );
+  }
 
   List<SessionNote> _topFixes(Coaching? coaching) {
     if (coaching == null) return const [];
@@ -658,6 +688,7 @@ class LiveCoachPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final last = state.lastRally;
+    final nextCue = _nextCue(last);
     final top = _topFixes(state.coaching);
     final side = player == 'near' ? 'Near' : 'Far';
     return SectionCard(
@@ -677,10 +708,22 @@ class LiveCoachPanel extends StatelessWidget {
                   ),
               ],
             ),
+          if (practiceCue case final cue?) ...[
+            Text('Pinned practice cue · Rally ${cue.rally + 1}', style: theme.textTheme.titleSmall),
+            Text(cue.text, style: theme.textTheme.titleMedium),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => onPracticeCueChanged?.call(null),
+                child: const Text('Clear pin'),
+              ),
+            ),
+            const Divider(height: 20),
+          ],
           Text('Next rally', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
-            _nextCue(last) ??
+            nextCue ??
                 (last == null
                     ? 'Notes appear here after each rally.'
                     : player == null
@@ -688,6 +731,8 @@ class LiveCoachPanel extends StatelessWidget {
                     : 'Waiting for enough footage to suggest a cue for $side.'),
             style: theme.textTheme.titleMedium,
           ),
+          if (last != null && nextCue != null && onPracticeCueChanged != null)
+            _pinButton(nextCue, last.index),
           if (last != null) ...[
             const Divider(height: 20),
             Text('Last rally', style: theme.textTheme.titleSmall),
@@ -750,7 +795,10 @@ class LiveCoachPanel extends StatelessWidget {
             'Rally ${rally.index + 1} \u00b7 $count ${count == 1 ? 'stroke' : 'strokes'}',
             style: Theme.of(context).textTheme.titleSmall,
           ),
-          if (cue != null) Text(cue),
+          if (cue != null) ...[
+            Text(cue),
+            if (onPracticeCueChanged != null) _pinButton(cue, rally.index),
+          ],
         ],
       ),
     );
