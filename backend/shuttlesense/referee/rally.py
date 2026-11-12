@@ -161,7 +161,8 @@ def build_events(record: ClipRecord) -> list[RallyEvent]:
     for r in record.rallies:
         add(r.start_frame, "rally_start", r.index)
     for h in record.hits:
-        add(h.frame, "hit", h.rally_index, hit_id=h.id, player=h.player, stroke=h.stroke)
+        data = {"hitter": h.hitter} if h.hitter else {}
+        add(h.frame, "hit", h.rally_index, hit_id=h.id, player=h.player, stroke=h.stroke, **data)
     for r in record.rallies:
         call = calls.get(r.index)
         if call is not None:

@@ -298,6 +298,7 @@ def test_started_snapshot_and_coaching_between_rallies(tmp_path: Path) -> None:
         summary = coaching["rally_summary"]
         assert summary["index"] == 0 and summary["strokes"] >= 1 and summary["duration_s"] > 0
         assert summary["call"] in ("in", "out") and isinstance(summary["faults"], list)
+        assert all("hitter" in f for f in summary["faults"])
         assert "top_fixes" in coaching["coaching"]
         ws.send_json({"type": "stop"})
         while ws.receive_json()["type"] != "saved":

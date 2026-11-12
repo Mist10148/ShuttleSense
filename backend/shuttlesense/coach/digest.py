@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from shuttlesense.schema import ClipRecord, Hit, Moment
+from shuttlesense.schema import ClipRecord, Hit, Moment, is_doubles
 
 
 @dataclass
@@ -25,7 +25,7 @@ def _t(seconds: float) -> str:
 
 
 def _hit_line(h: Hit) -> str:
-    parts = [f"{_t(h.time_s)} hit {h.id} by {h.player}"]
+    parts = [f"{_t(h.time_s)} hit {h.id} by {h.hitter or h.player}"]
     if h.stroke:
         conf = f" ({h.confidence:.0%})" if h.confidence is not None else ""
         parts.append(f"{h.stroke}{conf}")
@@ -55,6 +55,12 @@ def _rally_lines(record: ClipRecord) -> list[str]:
         )
         if r.score_after is not None:
             line += f", score after {r.score_after.near}-{r.score_after.far} (near-far)"
+        if r.server_id is not None:
+            line += f", served by {r.server_id}"
+            if r.receiver_id is not None:
+                line += f" to {r.receiver_id}"
+        if r.review:
+            line += f"; service check: {r.review}"
         call = calls.get(r.index)
         if call is not None:
             line += (
@@ -93,13 +99,25 @@ def _rally_summaries(record: ClipRecord) -> list[str]:
     return out
 
 
+def _players_line(record: ClipRecord) -> str:
+    if not is_doubles(record):
+        return "Players are 'near' (closer to the camera) and 'far'."
+    return (
+        "Doubles: the sides are 'near' (closer to the camera) and 'far'. Each side has two "
+        "partners: near_1 and near_2, far_1 and far_2. Lines for 'near' and 'far' are the "
+        "pair's totals; a hit credited to 'near' or 'far' alone means the two partners were "
+        "too close to tell which one hit."
+    )
+
+
 def build_digest(record: ClipRecord, max_chars: int = 24000) -> Digest:
     fps = record.fps or 30.0
     duration = record.num_frames / fps
     head = [
         f"Session: {record.mode}, {duration:.1f} s at {fps:g} fps, "
         f"court calibrated: {'yes' if record.court else 'no'}.",
-        "Players are 'near' (closer to the camera) and 'far'. Speeds are 2D estimates. "
+        _players_line(record),
+        "Speeds are 2D estimates. "
         "Line calls are automated estimates from one camera, not official calls.",
     ]
     if record.summary is not None:

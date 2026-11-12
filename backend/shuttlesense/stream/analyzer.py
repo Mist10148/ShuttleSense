@@ -360,6 +360,7 @@ class StreamAnalyzer:
                     "hit_id": h.id,
                     "time_s": h.time_s,
                     "player": h.player,
+                    "hitter": h.hitter,
                     "stroke": h.stroke,
                     "rule": f.rule,
                     "tip": f.tip,

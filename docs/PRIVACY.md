@@ -19,7 +19,7 @@ When you send a chat message, the backend sends Anthropic:
 | Sent | Not sent |
 | --- | --- |
 | Your question and the earlier messages of that chat | Video, frames, images or thumbnails |
-| A text digest of the clip record: per-hit time, player side (near/far), stroke, confidence, estimated speed, form rule results; per-rally length, winner, score and line call (in/out, margin, confidence); session notes and summary counts | Keypoints, raw shuttle tracks, court corners |
+| A text digest of the clip record: per-hit time, player side (near/far) and in doubles the partner slot (`near_1` to `far_2`), stroke, confidence, estimated speed, form rule results; per-rally length, winner, score, in doubles who served and received, and line call (in/out, margin, confidence); session notes and summary counts | Keypoints, raw shuttle tracks, court corners |
 | Clip duration and frame rate | File names, server address, token, IP of the phone |
 
 The digest is capped in size (`SHUTTLESENSE_CHAT_MAX_DIGEST_CHARS`); long sessions are summarized per rally. The model is `claude-opus-5-5` unless the backend owner sets `SHUTTLESENSE_CHAT_MODEL`; if it declines a request, the API's server-side fallback may answer with another Claude model. The exact text is built by `backend/shuttlesense/coach/digest.py`.

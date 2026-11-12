@@ -68,6 +68,19 @@ def test_digest_lists_data_and_moments_but_no_pixels() -> None:
     assert build_digest(record).text == digest.text  # deterministic, so it caches
 
 
+def test_digest_explains_doubles_partners() -> None:
+    record = load_golden()
+    assert "Each side has two partners" not in build_digest(record).text
+    frame = next(f for f in record.frames if f.players.near is not None)
+    frame.players.near_2 = frame.players.near.model_copy(deep=True)
+    record.hits[2].hitter = "near_2"
+    record.rallies[0].server_id, record.rallies[0].receiver_id = "near_1", "far_2"
+    text = build_digest(record).text
+    assert "near_1 and near_2, far_1 and far_2" in text
+    assert "t=1.5s hit 2 by near_2 | smash" in text
+    assert "served by near_1 to far_2" in text
+
+
 def test_long_sessions_are_shortened_per_rally() -> None:
     digest = build_digest(load_golden(), max_chars=900)
     assert digest.shortened and len(digest.text) <= 900
