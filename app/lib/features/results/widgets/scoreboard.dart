@@ -81,18 +81,24 @@ class Scoreboard extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _Side(
-                    label: 'Near',
-                    points: score.near,
-                    color: colors.near,
-                    serving: server == 'near',
+                  Expanded(
+                    child: _Side(
+                      label: 'Near',
+                      points: score.near,
+                      color: colors.near,
+                      serving: server == 'near',
+                      large: live,
+                    ),
                   ),
                   Text(':', style: theme.textTheme.headlineMedium),
-                  _Side(
-                    label: 'Far',
-                    points: score.far,
-                    color: colors.far,
-                    serving: server == 'far',
+                  Expanded(
+                    child: _Side(
+                      label: 'Far',
+                      points: score.far,
+                      color: colors.far,
+                      serving: server == 'far',
+                      large: live,
+                    ),
                   ),
                 ],
               ),
@@ -107,19 +113,32 @@ class Scoreboard extends StatelessWidget {
             if (atEnd) _MatchState(score: total),
             if (onAward != null || onUndo != null) ...[
               const SizedBox(height: 8),
+              // One large button per side, in the side's colour, under its score.
+              if (onAward != null)
+                Row(
+                  children: [
+                    for (final side in ['near', 'far']) ...[
+                      if (side == 'far') const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 56),
+                            backgroundColor: colors.forSide(side).withValues(alpha: 0.16),
+                            foregroundColor: theme.colorScheme.onSurface,
+                          ),
+                          onPressed: busy || total.matchOver ? null : () => onAward!(side),
+                          icon: Icon(Icons.add, size: 20, color: colors.forSide(side)),
+                          label: Text(side == 'near' ? 'Point Near' : 'Point Far'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final side in ['near', 'far'])
-                    OutlinedButton.icon(
-                      onPressed: onAward == null || busy || total.matchOver
-                          ? null
-                          : () => onAward!(side),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(side == 'near' ? 'Point Near' : 'Point Far'),
-                    ),
                   TextButton.icon(
                     onPressed: onUndo == null || busy || total.corrections.isEmpty ? null : onUndo,
                     icon: const Icon(Icons.undo, size: 18),
@@ -338,6 +357,7 @@ class _Side extends StatelessWidget {
     required this.points,
     required this.color,
     this.serving = false,
+    this.large = false,
   });
 
   final String label;
@@ -345,21 +365,39 @@ class _Side extends StatelessWidget {
   final Color color;
   final bool serving;
 
+  /// Live: larger numerals, readable from across the court.
+  final bool large;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (serving) ...[Icon(Icons.circle, size: 10, color: color), const SizedBox(width: 4)],
-            Text(
-              label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
-            ),
-          ],
+        // Scales down rather than overflowing in a narrow column or at large text sizes.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (serving) ...[
+                Icon(Icons.sports_tennis, size: 16, color: color),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         ),
-        Text('$points', style: Theme.of(context).textTheme.displaySmall),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '$points',
+            style: large
+                ? Theme.of(context).textTheme.displayLarge
+                : Theme.of(context).textTheme.displaySmall,
+          ),
+        ),
       ],
     );
   }
