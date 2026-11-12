@@ -4,11 +4,14 @@
 //   SHUTTLESENSE_FAKE_PIPELINE=1 uvicorn shuttlesense.api.main:app --port 8000   (backend/)
 //   flutter test integration_test -d windows \
 //     --dart-define=E2E_SERVER=http://127.0.0.1:8000 \
-//     --dart-define=E2E_VIDEO=C:/path/to/rally.mp4
+//     --dart-define=E2E_VIDEO=C:/path/to/rally.mp4 \
+//     --dart-define=E2E_FRAME=C:/path/to/640x360.jpg
 //
 // On a phone use the laptop's LAN address and a video path on the phone. The file picker is
 // replaced so the run needs no clicks; everything else (HTTP, polling, routing, playback) is
-// the shipped code. Without the two defines the test is skipped.
+// the shipped code. The live test substitutes the 640x360 JPEG for camera capture.
+// Each test is skipped unless its fixture path and the backend URL are supplied.
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -21,9 +24,36 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/app.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/features/live/frame_source.dart';
+import 'package:shuttlesense_app/features/live/live_controller.dart';
+import 'package:shuttlesense_app/features/live/live_screen.dart';
+import 'package:shuttlesense_app/features/live/live_socket.dart';
 
 const server = String.fromEnvironment('E2E_SERVER');
 const videoPath = String.fromEnvironment('E2E_VIDEO');
+const framePath = String.fromEnvironment('E2E_FRAME');
+
+/// Substitute camera captures only; the app still streams the images over its real socket.
+class ReplayCamera implements FrameSource {
+  ReplayCamera(this.jpeg);
+
+  final Uint8List jpeg;
+
+  @override
+  String get label => 'Test camera';
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<CapturedFrame> capture() async => (jpeg: jpeg, width: 640, height: 360);
+
+  @override
+  Widget preview() => const ColoredBox(color: Colors.black);
+
+  @override
+  Future<void> dispose() async {}
+}
 
 /// A video on this device's disk, as the picker would return it.
 final class LocalFile extends PlatformFile {
@@ -80,10 +110,24 @@ Future<void> pumpUntil(
   Finder finder, {
   Duration timeout = const Duration(seconds: 90),
 }) async {
+  await pumpUntilCondition(
+    tester,
+    () => finder.evaluate().isNotEmpty,
+    finder.toString(),
+    timeout: timeout,
+  );
+}
+
+Future<void> pumpUntilCondition(
+  WidgetTester tester,
+  bool Function() ready,
+  String description, {
+  Duration timeout = const Duration(seconds: 90),
+}) async {
   final end = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(end)) {
     await tester.pump(const Duration(milliseconds: 200));
-    if (finder.evaluate().isNotEmpty) return;
+    if (ready()) return;
   }
   final shown = find
       .byType(Text)
@@ -91,7 +135,7 @@ Future<void> pumpUntil(
       .map((e) => (e.widget as Text).data)
       .whereType<String>()
       .join(' | ');
-  fail('timed out waiting for $finder; on screen: $shown');
+  fail('timed out waiting for $description; on screen: $shown');
 }
 
 /// Focuses [field] with a tap first: on a desktop window a second enterText otherwise goes
@@ -157,5 +201,96 @@ void main() {
       await pumpUntil(tester, find.text(LocalFile(video).name));
     },
     skip: server.isEmpty || videoPath.isEmpty,
+  );
+  testWidgets(
+    'live referee and coach recover over WebSocket and open the saved replay from History',
+    (tester) async {
+      MediaKit.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final jpeg = File(framePath).readAsBytesSync();
+      final sockets = <ChannelLiveSocket>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            frameSourceFactoryProvider.overrideWithValue(() => ReplayCamera(jpeg)),
+            liveSocketFactoryProvider.overrideWithValue((uri) {
+              final socket = ChannelLiveSocket(uri);
+              sockets.add(socket);
+              return socket;
+            }),
+          ],
+          child: const ShuttleSenseApp(),
+        ),
+      );
+
+      await pumpUntil(tester, find.text('Connect to server'));
+      await typeInto(tester, find.byType(TextField).first, server);
+      await tapText(tester, 'Connect');
+      await pumpUntil(tester, find.text('Go live'));
+      await tapText(tester, 'Go live');
+      await pumpUntil(tester, find.text('Start without court'));
+      await tapText(tester, 'Start without court'); // fake server supplies its own calibrated court
+      await pumpUntil(tester, find.text('Referee'));
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+      LiveState live() => container.read(liveControllerProvider);
+      final controller = container.read(liveControllerProvider.notifier);
+      await tapText(tester, 'Coach');
+      await pumpUntil(tester, find.text('Between-rally coaching'));
+      await pumpUntilCondition(tester, () => live().lastRally != null, 'a completed rally');
+      await tapText(tester, 'Referee');
+      await pumpUntilCondition(
+        tester,
+        () => live().lineCalls.any((call) => call.needsReview),
+        'an uncertain landing',
+      );
+      final call = live().lineCalls.firstWhere((call) => call.needsReview);
+      await tapText(tester, 'Confirm ${call.call.toUpperCase()}');
+      await pumpUntilCondition(
+        tester,
+        () => controller.canDecide && live().lineCalls.any((c) => c.id == call.id && c.reviewed),
+        'acknowledged line call',
+      );
+      final corrections = live().score?.corrections.length ?? 0;
+      await tapText(tester, 'Point Near');
+      await pumpUntilCondition(
+        tester,
+        () => controller.canDecide && live().score?.corrections.length == corrections + 1,
+        'acknowledged manual point',
+      );
+
+      final id = live().sessionId;
+      unawaited(sockets.single.close());
+      await pumpUntilCondition(
+        tester,
+        () => sockets.length > 1 && live().phase == LivePhase.live,
+        'resumed WebSocket session',
+      );
+      expect(live().sessionId, id);
+      expect(live().score?.corrections.length, corrections + 1);
+      expect(live().lineCalls.singleWhere((c) => c.id == call.id).reviewed, isTrue);
+      await tapText(tester, 'Undo');
+      await pumpUntilCondition(
+        tester,
+        () => controller.canDecide && (live().score?.corrections.length ?? 0) == corrections,
+        'acknowledged undo',
+      );
+
+      await tapText(tester, 'Stop');
+      await pumpUntil(tester, find.text('Open results'));
+      final saved = live().savedJobId!;
+      await tapText(tester, 'History');
+      final row = find.byKey(ValueKey(saved));
+      await pumpUntil(tester, row);
+      expect(find.descendant(of: row, matching: find.textContaining('Live · ')), findsOneWidget);
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await tester.pump();
+      await pumpUntil(tester, find.text('Serve'));
+      expect(find.text('Smash'), findsWidgets);
+    },
+    skip: server.isEmpty || framePath.isEmpty,
   );
 }
