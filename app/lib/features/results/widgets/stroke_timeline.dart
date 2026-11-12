@@ -164,7 +164,11 @@ class _HitRow extends StatelessWidget {
           child: Text(
             // N / F, or N1 / N2 / F1 / F2 for a doubles partner.
             playerLabel(hit.who).replaceAll(RegExp('[a-z ]'), ''),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(
+              color: onColor(colors.forPlayer(hit.who)),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         title: Text(hit.uncertain ? '$stroke ?' : stroke),

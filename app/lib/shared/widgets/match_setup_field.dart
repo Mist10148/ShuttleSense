@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/models/clip_record.dart';
 import '../../data/models/match_setup.dart';
 
 export '../../data/models/match_setup.dart';
@@ -35,7 +36,7 @@ class MatchSetupField extends StatelessWidget {
     );
     final server = value.firstServer;
     final receiverSide = server == 'near' ? 'far' : 'near';
-    String sideName(String side) => side == 'near' ? 'Near' : 'Far';
+    String sideName(String side) => playerLabel(side);
     Widget partner({
       required String side,
       required String? selected,

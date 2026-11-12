@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/tokens.dart';
 import '../../../data/models/clip_record.dart';
 
 /// How long after a landing its banner stays up.
@@ -37,11 +38,8 @@ class LineCallBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final review = call.needsReview;
-    final color = review
-        ? Colors.amber.shade800
-        : call.isIn
-        ? Colors.green.shade700
-        : Colors.red.shade700;
+    final color = StatusColors.of(context).forCall(isIn: call.isIn, review: review);
+    final onCall = onColor(color);
     final word = review ? 'UNCERTAIN' : (call.isIn ? 'IN' : 'OUT');
     final margin = call.marginCm.abs().round();
     final side = call.marginCm >= 0 ? 'inside' : 'outside';
@@ -68,13 +66,13 @@ class LineCallBanner extends StatelessWidget {
                 child: Text(
                   word,
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
+                    color: onCall,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
               ExcludeSemantics(
-                child: Text(detail, style: const TextStyle(color: Colors.white)),
+                child: Text(detail, style: TextStyle(color: onCall)),
               ),
               if (onDecide != null)
                 for (final c in ['in', 'out'])

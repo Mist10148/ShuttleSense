@@ -202,7 +202,7 @@ class _MatchState extends StatelessWidget {
 
   final Score score;
 
-  static String _name(String side) => side == 'near' ? 'Near' : 'Far';
+  static String _name(String side) => playerLabel(side);
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +315,7 @@ class _RallyRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 4),
               child: ChoiceChip(
-                label: Text(side == 'near' ? 'Near' : 'Far'),
+                label: Text(playerLabel(side)),
                 selected: rally.winner == side,
                 tooltip: rally.winner == side
                     ? 'Rally ${rally.index + 1} won by the $side player; tap to clear'

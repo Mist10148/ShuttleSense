@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'tokens.dart';
+
+export 'tokens.dart';
+
 /// Colors used for the players everywhere (skeletons, minimap, timeline). In doubles the
 /// partners ([near2], [far2]) are a second colour of their side's family (Phase 9).
 @immutable
@@ -73,19 +77,69 @@ abstract final class AppTheme {
     far2: Color(0xFFBCAAA4),
   );
 
-  static ThemeData light() => _build(Brightness.light, playerColorsLight);
+  static ThemeData light() => _build(Brightness.light, playerColorsLight, StatusColors.light);
 
-  static ThemeData dark() => _build(Brightness.dark, playerColorsDark);
+  static ThemeData dark() => _build(Brightness.dark, playerColorsDark, StatusColors.dark);
 
-  static ThemeData _build(Brightness brightness, PlayerColors players) {
+  static ThemeData _build(Brightness brightness, PlayerColors players, StatusColors status) {
     final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    const heading = TextStyle(fontWeight: FontWeight.w600);
+    // Scores and clocks: digits of equal width, so numbers do not shift as they change.
+    const figures = TextStyle(
+      fontWeight: FontWeight.w700,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    final button = ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(Size(64, kMinTouchTarget)),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md)),
+      ),
+    );
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      extensions: [players],
+      extensions: [players, status],
       visualDensity: VisualDensity.adaptivePlatformDensity,
-      cardTheme: const CardThemeData(margin: EdgeInsets.zero),
-      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+      textTheme: const TextTheme(
+        displayLarge: figures,
+        displayMedium: figures,
+        displaySmall: figures,
+        headlineMedium: heading,
+        headlineSmall: heading,
+        titleLarge: heading,
+        titleMedium: heading,
+        titleSmall: heading,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        scrolledUnderElevation: 1,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      // Every card is flat with a hairline border, so panels read as one family.
+      cardTheme: CardThemeData(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.lg),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(style: button),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: button),
+      chipTheme: ChipThemeData(
+        side: BorderSide(color: scheme.outlineVariant),
+        shape: const StadiumBorder(),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.md)),
+      ),
+      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+      dividerTheme: DividerThemeData(color: scheme.outlineVariant),
     );
   }
 }

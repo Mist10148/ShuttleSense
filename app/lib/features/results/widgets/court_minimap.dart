@@ -89,6 +89,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
                     lines: Theme.of(context).colorScheme.outline,
                     surface: Theme.of(context).colorScheme.surfaceContainerHighest,
                     players: PlayerColors.of(context),
+                    status: StatusColors.of(context),
                     heat: heat,
                     reviewLanding: widget.reviewCall?.landing,
                   ),
@@ -188,6 +189,7 @@ class CourtPainter extends CustomPainter {
     required this.lines,
     required this.surface,
     required this.players,
+    this.status = StatusColors.light,
     this.heat,
     this.doubles = false,
   });
@@ -199,6 +201,7 @@ class CourtPainter extends CustomPainter {
     required Color lines,
     required Color surface,
     required PlayerColors players,
+    StatusColors status = StatusColors.light,
     HeatGrid? heat,
     CourtPoint? reviewLanding,
   }) {
@@ -228,6 +231,7 @@ class CourtPainter extends CustomPainter {
       lines: lines,
       surface: surface,
       players: players,
+      status: status,
       heat: heat,
       doubles: record.isDoubles,
     );
@@ -243,6 +247,7 @@ class CourtPainter extends CustomPainter {
   final CourtPoint? reviewLanding;
   final Color lines;
   final Color surface;
+  final StatusColors status;
   final PlayerColors players;
 
   /// Shaded under everything else when the heatmap is on.
@@ -308,11 +313,7 @@ class CourtPainter extends CustomPainter {
 
     for (var i = 0; i < landings.length; i++) {
       final (p, isIn, review) = landings[i];
-      final color = review
-          ? Colors.amber.shade700
-          : isIn
-          ? Colors.green.shade600
-          : Colors.red.shade600;
+      final color = status.forCall(isIn: isIn, review: review);
       final latest = i == landings.length - 1;
       final o = toCanvas((
         x: p.x.clamp(-0.5 - alley, kCourtWidthM + alley + 0.5),
@@ -383,7 +384,7 @@ class CourtPainter extends CustomPainter {
       // Keep an outside landing visible at the corresponding court edge.
       final o = Offset(p.dx.clamp(0, size.width).toDouble(), p.dy.clamp(0, size.height).toDouble());
       canvas.drawCircle(o, 9, Paint()..color = surface);
-      canvas.drawCircle(o, 6, Paint()..color = Colors.amber.shade700);
+      canvas.drawCircle(o, 6, Paint()..color = status.uncertain);
       canvas.drawCircle(
         o,
         9,
@@ -404,6 +405,7 @@ class CourtPainter extends CustomPainter {
       old.lines != lines ||
       old.surface != surface ||
       old.players != players ||
+      old.status != status ||
       old.heat != heat ||
       old.doubles != doubles ||
       old.trail.length != trail.length ||

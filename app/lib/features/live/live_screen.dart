@@ -59,7 +59,10 @@ class LiveScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
                 onPressed: state.phase == LivePhase.live ? controller.stop : null,
                 icon: const Icon(Icons.stop),
                 label: const Text('Stop'),
@@ -695,7 +698,7 @@ class LiveCoachPanel extends StatelessWidget {
     final last = state.lastRally;
     final nextCue = _nextCue(last);
     final top = _topFixes(state.coaching);
-    final side = player == 'near' ? 'Near' : 'Far';
+    final side = player == null ? '' : playerLabel(player!);
     return SectionCard(
       title: 'Between-rally coaching',
       child: Column(
@@ -749,7 +752,7 @@ class LiveCoachPanel extends StatelessWidget {
                 if (last.durationS != null) '${last.durationS!.toStringAsFixed(1)} s',
                 if (last.peakSpeedKmh != null) 'peak ${last.peakSpeedKmh!.round()} km/h (est.)',
                 if (last.call != null) 'landed ${last.call}',
-                if (last.winner != null) '${last.winner == 'near' ? 'Near' : 'Far'} won',
+                if (last.winner != null) '${playerLabel(last.winner!)} won',
               ].join(' · '),
             ),
           ],
