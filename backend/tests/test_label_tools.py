@@ -59,7 +59,7 @@ def test_clip_labels_keep_other_tools_columns(tmp_path: Path) -> None:
     labels.save(out)
     rows = load_script("eval_line_calls").read_labels(out)
     assert rows[0]["landing"] == (2.10, 10.05) and rows[0]["call"] == "in"
-    assert out.read_text(encoding="utf-8").splitlines()[2] == "3.000,near,serve,,,,,,"
+    assert out.read_text(encoding="utf-8").splitlines()[2] == "3.000,near,serve,,,,,,,,"
 
 
 def test_landing_labels_round_trip_into_eval_line_calls(tmp_path: Path) -> None:

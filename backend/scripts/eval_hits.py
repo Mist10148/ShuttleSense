@@ -87,7 +87,8 @@ def read_hit_labels(path: Path, fps: float, step: int = 1, offset: int = 0) -> l
             else:
                 continue
             player = row.get("player", "").lower()
-            hits.append((frame, player if player in SIDES else ""))
+            side = player.split("_")[0]  # a doubles slot (near_2) counts for its side here
+            hits.append((frame, side if side in SIDES else ""))
     return sorted(hits)
 
 

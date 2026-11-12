@@ -10,6 +10,8 @@ Keys
     left / right     one frame back / forward (also , and .)
     [ / ]            one second back / forward
     n / f            the player who hits next is near / far (shown on screen)
+    a / b            doubles: the next hitter is player 1 / 2 of that side (1 = the one
+                     on the left when play starts, as the app numbers them)
     1-6              hit at this frame by that player: 1 smash, 2 clear, 3 drop,
                      4 net shot, 5 lift, 6 serve
     h                hit at this frame with no stroke class
@@ -20,10 +22,13 @@ Keys
     s                save
     q or Esc         save and quit
 
-The output is the label file read by eval_phone.py, eval_hits.py and eval_rallies.py (UTF-8,
-header row): hit rows fill time_s, player, stroke; rally rows fill start_s, end_s, winner,
-in_out. An existing file is loaded first, so labelling can resume; columns this tool does not
-edit (such as landing_x_m / landing_y_m from label_landings.py) are kept as they are.
+The output is the label file read by eval_phone.py, eval_hits.py, eval_rallies.py and
+eval_doubles.py (UTF-8, header row): hit rows fill time_s, player, stroke; rally rows fill
+start_s, end_s, winner, in_out, and in doubles server and receiver. In doubles a hit's player
+is a slot (near_1, near_2, far_1, far_2); a rally's server is the slot of its first hit and its
+receiver the slot of its second (the receiver always returns the serve). An existing file
+is loaded first, so labelling can resume; columns this tool does not edit
+(such as landing_x_m / landing_y_m from label_landings.py) are kept as they are.
 """
 
 from __future__ import annotations
@@ -33,7 +38,9 @@ import csv
 from dataclasses import dataclass, field
 from pathlib import Path
 
-COLUMNS = ("time_s", "player", "stroke", "start_s", "end_s", "winner", "in_out")
+COLUMNS = ("time_s", "player", "stroke", "start_s", "end_s", "winner", "in_out", "server",
+           "receiver")  # fmt: skip
+SLOTS = ("near_1", "near_2", "far_1", "far_2")
 STROKE_KEYS = {"1": "smash", "2": "clear", "3": "drop", "4": "net_shot", "5": "lift", "6": "serve"}
 
 
@@ -55,12 +62,16 @@ class ClipLabels:
         if key in ("n", "f"):
             self.player = "near" if key == "n" else "far"
             return f"next hitter: {self.player}"
+        if key in ("a", "b"):
+            side = self.player.split("_")[0]
+            self.player = f"{side}_{1 if key == 'a' else 2}"
+            return f"next hitter: {self.player}"
         if key in STROKE_KEYS or key == "h":
             stroke = STROKE_KEYS.get(key, "")
             self.hits.append({"time_s": t, "player": self.player, "stroke": stroke})
             self._order.append("hit")
-            # Singles: the other player hits next.
-            self.player = "far" if self.player == "near" else "near"
+            # The other side hits next (in doubles, either partner: press a / b).
+            self.player = "far" if self.player.startswith("near") else "near"
             return f"hit {t:.3f}s {stroke or '(no class)'}"
         if key == "r":
             if self.rally_start is None:
@@ -98,14 +109,28 @@ class ClipLabels:
                 "time_s": f"{h['time_s']:.3f}", "player": h["player"], "stroke": h["stroke"],
             })  # fmt: skip
         for r in sorted(self.rallies, key=lambda r: r["start_s"]):
+            server, receiver = self.service(r)
             out.append({
                 **{c: r.get(c, "") for c in self.extra},
                 "start_s": f"{r['start_s']:.3f}",
                 "end_s": f"{r['end_s']:.3f}",
                 "winner": r["winner"],
                 "in_out": r["in_out"],
+                "server": server,
+                "receiver": receiver,
             })  # fmt: skip
         return out
+
+    def service(self, rally: dict) -> tuple[str, str]:
+        """Doubles (server, receiver) of a rally: the slots of its first two hits; empty
+        when those hits name a side only (singles, or the partner was not marked)."""
+        hits = sorted(
+            (h for h in self.hits if rally["start_s"] <= h["time_s"] <= rally["end_s"]),
+            key=lambda h: h["time_s"],
+        )
+        slots = [h["player"] if h["player"] in SLOTS else "" for h in hits[:2]]
+        slots += [""] * (2 - len(slots))
+        return slots[0], slots[1]
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

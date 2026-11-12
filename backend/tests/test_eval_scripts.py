@@ -297,3 +297,35 @@ def test_shuttleset_lose_reason_gives_labels(tmp_path: Path) -> None:
     assert [(r["start_s"], r["end_s"], r["call"]) for r in rallies] == [
         (1.0, 3.0, "out"), (10.0, 12.0, None), (20.0, 20.0, "in"),
     ]  # fmt: skip
+
+
+def test_eval_doubles_scores_hitters_service_and_slot_jumps(tmp_path: Path) -> None:
+    """T9.12 on the doubles golden record with labels written by label_clip.py."""
+    import argparse
+
+    from shuttlesense.fake import load_golden
+
+    label_clip = load_script("label_clip")
+    eval_doubles = load_script("eval_doubles")
+    record = load_golden("doubles")
+    fps = record.fps
+    labels = label_clip.ClipLabels()
+    # Hits at the golden frames 5 (near_1), 25 (far_1), 45: labelled near_1, so the record's
+    # near_2 is wrong there.
+    for frame, keys in ((5, "na6"), (25, "fa2"), (45, "na1")):
+        for key in keys[:-1]:
+            labels.handle_key(key, frame / fps)
+        labels.handle_key(keys[-1], frame / fps)
+    labels.handle_key("r", 0.0)
+    labels.handle_key("r", 55 / fps)
+    out = tmp_path / "doubles.csv"
+    labels.save(out)
+    rows = out.read_text(encoding="utf-8").splitlines()
+    assert rows[0].endswith(",server,receiver") and rows[-1].endswith(",near_1,far_1")
+    args = argparse.Namespace(tolerance=3, rally_tolerance=1.0, max_step_m=1.5)
+    result = eval_doubles.evaluate(record, out, args)
+    assert result["matched_hits"] == 3 and result["hitter_named"] == 3
+    assert result["hitter_accuracy"] == 2 / 3 and result["hitter_unknown_rate"] == 0
+    assert result["matched_rallies"] == 1 and result["service_accuracy"] == 1.0
+    assert result["slot_steps"] > 0 and result["slot_jumps"] == 0
+    assert "| golden_doubles | 3 | 66.7% |" in eval_doubles.markdown([result])
