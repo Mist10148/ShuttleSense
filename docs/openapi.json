@@ -615,6 +615,34 @@
               }
             ]
           },
+          "receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receiver Id"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review"
+          },
           "score_after": {
             "anyOf": [
               {
@@ -624,6 +652,23 @@
                 "type": "null"
               }
             ]
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
           },
           "start_frame": {
             "title": "Start Frame",
@@ -699,6 +744,23 @@
             "title": "Far",
             "type": "integer"
           },
+          "first_receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Receiver Id"
+          },
           "first_server": {
             "anyOf": [
               {
@@ -713,6 +775,23 @@
               }
             ],
             "title": "First Server"
+          },
+          "first_server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Server Id"
           },
           "game": {
             "default": 1,
@@ -776,6 +855,23 @@
             "title": "Near",
             "type": "integer"
           },
+          "receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receiver Id"
+          },
           "server": {
             "anyOf": [
               {
@@ -790,6 +886,23 @@
               }
             ],
             "title": "Server"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
           },
           "service_court": {
             "anyOf": [

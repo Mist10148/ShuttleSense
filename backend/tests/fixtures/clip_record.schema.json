@@ -190,6 +190,28 @@
           "default": null,
           "title": "Far"
         },
+        "far_2": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Far 2"
+        },
         "near": {
           "anyOf": [
             {
@@ -211,6 +233,28 @@
           ],
           "default": null,
           "title": "Near"
+        },
+        "near_2": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Near 2"
         },
         "shuttle": {
           "anyOf": [
@@ -395,6 +439,36 @@
         "frame": {
           "title": "Frame",
           "type": "integer"
+        },
+        "hitter": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hitter"
+        },
+        "hitter_confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hitter Confidence"
         },
         "id": {
           "title": "Id",
@@ -743,7 +817,29 @@
           ],
           "default": null
         },
+        "far_2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Player"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "near": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Player"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "near_2": {
           "anyOf": [
             {
               "$ref": "#/$defs/Player"
@@ -784,6 +880,36 @@
           ],
           "default": null
         },
+        "receiver_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receiver Id"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review"
+        },
         "score_after": {
           "anyOf": [
             {
@@ -794,6 +920,24 @@
             }
           ],
           "default": null
+        },
+        "server_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Server Id"
         },
         "start_frame": {
           "title": "Start Frame",
@@ -901,6 +1045,24 @@
           "title": "Far",
           "type": "integer"
         },
+        "first_receiver_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Receiver Id"
+        },
         "first_server": {
           "anyOf": [
             {
@@ -916,6 +1078,24 @@
           ],
           "default": null,
           "title": "First Server"
+        },
+        "first_server_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Server Id"
         },
         "game": {
           "default": 1,
@@ -980,6 +1160,24 @@
           "title": "Near",
           "type": "integer"
         },
+        "receiver_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receiver Id"
+        },
         "server": {
           "anyOf": [
             {
@@ -995,6 +1193,24 @@
           ],
           "default": null,
           "title": "Server"
+        },
+        "server_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Server Id"
         },
         "service_court": {
           "anyOf": [
@@ -1132,6 +1348,15 @@
               "type": "string"
             },
             {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
               "type": "null"
             }
           ],
@@ -1242,12 +1467,6 @@
         "per_player": {
           "additionalProperties": {
             "$ref": "#/$defs/PlayerSummary"
-          },
-          "propertyNames": {
-            "enum": [
-              "near",
-              "far"
-            ]
           },
           "title": "Per Player",
           "type": "object"
@@ -1374,7 +1593,7 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "1.1",
+      "default": "1.2",
       "title": "Schema Version",
       "type": "string"
     },

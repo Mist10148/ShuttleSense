@@ -416,4 +416,29 @@ void main() {
     });
     expect(health.schemaMatches, isTrue);
   });
+
+  test('a doubles record (1.2) parses partners, hitters and the service order', () {
+    final doubles = ClipRecord.fromJson(
+      jsonDecode(File('test/fixtures/golden_record_doubles.json').readAsStringSync())
+          as Map<String, dynamic>,
+    );
+    expect(doubles.frames.every((f) => f.near2Pos != null && f.far2Pos != null), isTrue);
+    expect(doubles.frames.first.positionOf('near_2'), doubles.frames.first.near2Pos);
+    expect(doubles.frames.first.positionOf('far'), doubles.frames.first.farPos);
+    expect(doubles.hits.map((h) => h.hitter), ['near_1', 'far_1', 'near_2']);
+    expect(doubles.hits.last.who, 'near_2');
+    expect(doubles.hits.last.player, 'near');
+    expect(doubles.score!.firstServerId, 'near_1');
+    expect(doubles.score!.firstReceiverId, 'far_1');
+    expect((doubles.score!.serverId, doubles.score!.receiverId), ('near_1', 'far_2'));
+    expect(doubles.rallies.single.serverId, 'near_1');
+    expect(doubles.lineCalls.single.court, 'doubles');
+    // Singles records have none of it.
+    final singles = ClipRecord.fromJson(
+      jsonDecode(File('test/fixtures/golden_record.json').readAsStringSync())
+          as Map<String, dynamic>,
+    );
+    expect(singles.hits.every((h) => h.hitter == null && h.who == h.player), isTrue);
+    expect(singles.score!.serverId, isNull);
+  });
 }

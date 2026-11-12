@@ -1,4 +1,4 @@
-"""Clip record schema v1.1 — the shared per-clip data format.
+"""Clip record schema v1.2 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -11,9 +11,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 PlayerSide = Literal["near", "far"]
+# Doubles (v1.2, D22): one slot per person. near_1/far_1 live in the near/far fields that
+# singles already uses; a slot follows the person, not a half of the court.
+PlayerId = Literal["near_1", "near_2", "far_1", "far_2"]
+PLAYER_IDS: tuple[PlayerId, ...] = ("near_1", "near_2", "far_1", "far_2")
 StrokeClass = Literal["smash", "clear", "drop", "net_shot", "lift", "serve"]
 RallyState = Literal["in_play", "between_rallies"]
 Mode = Literal["upload", "live"]
@@ -31,6 +35,27 @@ COURT_SIZE_M: tuple[float, float] = (5.18, 13.40)
 Point = tuple[float, float]
 
 
+def slot_attr(player: PlayerId | PlayerSide) -> str:
+    """The Players / CourtPositions field of a slot: near_1 -> near, near_2 -> near_2."""
+    return player[:-2] if player.endswith("_1") else player
+
+
+def side_of(player: PlayerId | PlayerSide) -> PlayerSide:
+    """The team side of a slot (near_2 -> near)."""
+    return "near" if player.startswith("near") else "far"
+
+
+def slot_id(attr: str) -> PlayerId:
+    """The slot of a Players field: near -> near_1, far_2 -> far_2."""
+    return attr if attr.endswith("_2") else f"{attr}_1"  # type: ignore[return-value]
+
+
+def _omit_none() -> Any:
+    """An optional v1.2 field left out of the JSON while it is None, so records that do not
+    use it (every singles record) serialize exactly as before."""
+    return Field(default=None, exclude_if=lambda v: v is None)
+
+
 class Shuttle(BaseModel):
     x: float | None = None
     y: float | None = None
@@ -46,12 +71,19 @@ class Player(BaseModel):
 class Players(BaseModel):
     near: Player | None = None
     far: Player | None = None
+    near_2: Player | None = _omit_none()  # doubles partners (v1.2)
+    far_2: Player | None = _omit_none()
+
+    def slots(self) -> dict[PlayerId, Player | None]:
+        return {pid: getattr(self, slot_attr(pid)) for pid in PLAYER_IDS}
 
 
 class CourtPositions(BaseModel):
     near: Point | None = None
     far: Point | None = None
     shuttle: Point | None = None
+    near_2: Point | None = _omit_none()  # doubles partners (v1.2)
+    far_2: Point | None = _omit_none()
 
 
 class Frame(BaseModel):
@@ -80,13 +112,20 @@ class Hit(BaseModel):
     id: int
     frame: int
     time_s: float
-    player: PlayerSide
+    player: PlayerSide  # the side; in doubles `hitter` says which partner
     stroke: StrokeClass | None = None
     confidence: float | None = None
     class_probs: dict[StrokeClass, float] | None = None
     speed_kmh: float | None = None
     feedback: list[FeedbackItem] = Field(default_factory=list)
     rally_index: int | None = None
+    hitter: PlayerId | None = _omit_none()  # doubles (v1.2); None: singles or unsure
+    hitter_confidence: float | None = _omit_none()
+
+    @property
+    def player_attr(self) -> str:
+        """Players field of whoever hit: the hitter's slot in doubles, else the side."""
+        return slot_attr(self.hitter) if self.hitter else self.player
 
 
 class Landing(BaseModel):
@@ -110,6 +149,9 @@ class Rally(BaseModel):
     winner: PlayerSide | None = None
     score_after: ScorePair | None = None  # score of its game after it (None: match over)
     game: int = 1  # 1-based game of the match this rally was played in
+    server_id: PlayerId | None = _omit_none()  # doubles (v1.2): server and receiver
+    receiver_id: PlayerId | None = _omit_none()
+    review: str | None = _omit_none()  # why the user should check this rally
 
 
 class ScoreCorrection(BaseModel):
@@ -143,6 +185,11 @@ class Score(ScorePair):
     match_winner: PlayerSide | None = None
     interval: bool = False  # the last rally took the leader to 11: 60 s interval
     change_ends: bool = False  # after a game, and at 11 in the deciding game
+    # Doubles (v1.2): the user names who serves and receives first; the rest follows.
+    first_server_id: PlayerId | None = _omit_none()
+    first_receiver_id: PlayerId | None = _omit_none()
+    server_id: PlayerId | None = _omit_none()  # who serves the next rally
+    receiver_id: PlayerId | None = _omit_none()
 
 
 class Moment(BaseModel):
@@ -189,7 +236,7 @@ class RallyEvent(BaseModel):
 class SessionNote(BaseModel):
     id: str
     rule: str
-    player: PlayerSide | None = None
+    player: PlayerSide | PlayerId | None = None  # a slot in doubles
     stroke: StrokeClass | None = None  # set when the rule was checked on one stroke class
     text: str
     count: int  # strokes that showed the pattern
@@ -224,7 +271,8 @@ class Summary(BaseModel):
     total_hits: int = 0
     stroke_counts: dict[StrokeClass, int] = Field(default_factory=dict)
     peak_speed_kmh: float | None = None
-    per_player: dict[PlayerSide, PlayerSummary] = Field(default_factory=dict)
+    # Keyed by side in singles and by slot in doubles.
+    per_player: dict[PlayerSide | PlayerId, PlayerSummary] = Field(default_factory=dict)
 
 
 class ClipRecord(BaseModel):
@@ -252,7 +300,8 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
     """Upgrade an older record dict to SCHEMA_VERSION in place and return it.
 
     1.0 -> 1.1 only adds optional fields; the defaults fill them, and line calls and rally
-    events are derived from the rallies so old jobs show calls in the app.
+    events are derived from the rallies so old jobs show calls in the app. 1.1 -> 1.2 adds
+    optional doubles fields only.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:
@@ -261,7 +310,7 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"cannot migrate clip record {version} to {SCHEMA_VERSION}")
     data["schema_version"] = SCHEMA_VERSION
     data.setdefault("mode", "upload")
-    if not data.get("line_calls") and data.get("rallies"):
+    if version == "1.0" and not data.get("line_calls") and data.get("rallies"):
         from shuttlesense.referee import build_events, derive_from_rallies
 
         record = ClipRecord.model_validate(data)

@@ -1,5 +1,8 @@
 """Regenerate golden_record.json: python tests/fixtures/make_golden_record.py (task T1.10).
 
+`--doubles` writes golden_record_doubles.json instead (T9.1): the same rally with a partner
+on each side, the hitter slot on every hit and the doubles service order.
+
 A hand-shaped 60-frame, 1280x720 @ 30 fps rally with plausible (not real) values: a serve by
 the near player, a clear by the far player and a smash by the near player that lands in.
 The same file is copied to app/test/fixtures/ for the Flutter tests.
@@ -35,6 +38,7 @@ from shuttlesense.schema import (
 
 HERE = Path(__file__).resolve().parent
 APP_FIXTURE = HERE.parents[2] / "app" / "test" / "fixtures" / "golden_record.json"
+APP_DOUBLES_FIXTURE = APP_FIXTURE.with_name("golden_record_doubles.json")
 
 FPS = 30.0
 WIDTH, HEIGHT = 1280, 720
@@ -174,13 +178,53 @@ def _probs(stroke: str, conf: float) -> dict[str, float]:
     return {c: (conf if c == stroke else rest) for c in STROKE_CLASSES}
 
 
+def build_doubles() -> ClipRecord:
+    """The golden rally as doubles: near_2 and far_2 stand beside near_1 and far_1.
+
+    near_1 serves from the right court to far_1 (both named by the user), near_1 and near_2
+    share the near side's hits, and the near side wins. Serving side won, so near_1 serves
+    again from the left court; far did not move, so far_2 (in far's left court) receives.
+    """
+    record = build()
+    record.clip_id, record.source_name = "golden_doubles", "golden_doubles.mp4"
+    h = np.asarray(record.court.homography)
+    for i, f in enumerate(record.frames):
+        near_2 = player(380 + 40 * np.sin(i / 9), 600.0, 240.0, 0.9)
+        far_2 = player(780 - 30 * np.sin(i / 11), 240.0, 116.0, 0.85)
+        f.players.near_2, f.players.far_2 = near_2, far_2
+        feet = np.array([[near_2.bbox[0] + near_2.bbox[2] / 2, 600.0],
+                         [far_2.bbox[0] + far_2.bbox[2] / 2, 240.0]])  # fmt: skip
+        court = image_to_court(h, feet)
+        f.court_positions.near_2 = tuple(round(float(v), 2) for v in court[0])
+        f.court_positions.far_2 = tuple(round(float(v), 2) for v in court[1])
+    for hit, (slot, conf) in zip(
+        record.hits, [("near_1", 0.93), ("far_1", 0.71), ("near_2", 0.88)], strict=True
+    ):
+        hit.hitter, hit.hitter_confidence = slot, conf
+    rally = record.rallies[0]
+    rally.server_id, rally.receiver_id = "near_1", "far_1"
+    record.score.first_server = "near"
+    record.score.first_server_id, record.score.first_receiver_id = "near_1", "far_1"
+    record.score.server_id, record.score.receiver_id = "near_1", "far_2"
+    for line_call in record.line_calls:
+        line_call.court = "doubles"
+    record.summary = build_summary(record)
+    record.coaching = build_coaching(record, {"patterns": {"min_count": 1}})
+    return record
+
+
 def main() -> None:
-    data = build().model_dump(mode="json")
+    import sys
+
+    doubles = "--doubles" in sys.argv[1:]
+    name = "golden_record_doubles.json" if doubles else "golden_record.json"
+    data = (build_doubles() if doubles else build()).model_dump(mode="json")
     text = json.dumps(data, indent=1) + "\n"
-    (HERE / "golden_record.json").write_text(text, encoding="utf-8", newline="\n")
-    APP_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(HERE / "golden_record.json", APP_FIXTURE)
-    print(f"wrote {HERE / 'golden_record.json'} and {APP_FIXTURE}")
+    (HERE / name).write_text(text, encoding="utf-8", newline="\n")
+    app = APP_DOUBLES_FIXTURE if doubles else APP_FIXTURE
+    app.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(HERE / name, app)
+    print(f"wrote {HERE / name} and {app}")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from snapshots import assert_matches_snapshot
 from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord, load_record, migrate
 
 EXAMPLE = {
-    "schema_version": "1.1",
+    "schema_version": "1.2",
     "clip_id": "match03_rally12",
     "mode": "live",
     "source_name": "rally12.mp4",
@@ -178,3 +178,51 @@ def test_golden_record_valid() -> None:
         len(p.keypoints) == 17 for f in record.frames for p in (f.players.near, f.players.far)
     )
     assert record.court is not None and record.summary.total_hits == 3
+
+
+def test_migrate_1_1_record_adds_nothing() -> None:
+    old = json.loads(json.dumps(EXAMPLE))
+    old["schema_version"] = "1.1"
+    old["line_calls"] = []  # 1.1 records keep the calls they have; only 1.0 derives them
+    record = load_record(json.dumps(old))
+    assert record.schema_version == SCHEMA_VERSION == "1.2"
+    assert record.line_calls == []
+
+
+def test_singles_records_serialize_without_doubles_fields() -> None:
+    """v1.2 fields are left out while empty, so singles output is the same as in v1.1."""
+    from shuttlesense.fake import load_golden
+
+    text = load_golden().model_dump_json()
+    for key in ("near_2", "far_2", "hitter", "server_id", "receiver_id", "first_server_id",
+                "first_receiver_id", "review"):  # fmt: skip
+        assert f'"{key}"' not in text
+
+
+def test_player_slots() -> None:
+    from shuttlesense.schema import Hit, Player, Players, side_of, slot_attr, slot_id
+
+    assert [slot_attr(p) for p in ("near_1", "near_2", "far_1", "far_2", "near")] == [
+        "near", "near_2", "far", "far_2", "near",
+    ]  # fmt: skip
+    assert side_of("far_2") == "far" and slot_id("near") == "near_1" and slot_id("far_2") == "far_2"
+    p = Player(bbox=(0, 0, 1, 1))
+    players = Players(near=p, far_2=p)
+    assert players.slots() == {"near_1": p, "near_2": None, "far_1": None, "far_2": p}
+    assert players.model_dump(mode="json")["far_2"]["bbox"] == [0, 0, 1, 1]
+    hit = Hit(id=0, frame=0, time_s=0, player="far", hitter="far_2", hitter_confidence=0.8)
+    assert (
+        hit.player_attr == "far_2"
+        and Hit(id=0, frame=0, time_s=0, player="far").player_attr == "far"
+    )
+    assert Hit.model_validate_json(hit.model_dump_json()) == hit
+
+
+def test_doubles_golden_record_valid() -> None:
+    path = Path(__file__).parent / "fixtures" / "golden_record_doubles.json"
+    record = load_record(path.read_text(encoding="utf-8"))
+    assert all(len(f.players.slots()) == 4 and all(f.players.slots().values())
+               for f in record.frames)  # fmt: skip
+    assert [h.hitter for h in record.hits] == ["near_1", "far_1", "near_2"]
+    assert record.score.server_id == "near_1" and record.score.receiver_id == "far_2"
+    assert record.rallies[0].server_id == "near_1" and record.line_calls[0].court == "doubles"

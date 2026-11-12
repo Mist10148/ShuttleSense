@@ -198,18 +198,32 @@ class FrameInfo {
     this.shuttlePos,
     this.shuttleSpeedKmh,
     this.rallyState,
+    this.near2Pos,
+    this.far2Pos,
   });
 
   final int frame;
 
-  /// Court-plane positions in meters (null without calibration).
+  /// Court-plane positions in meters (null without calibration). In doubles nearPos and
+  /// farPos are near_1 and far_1, and their partners are [near2Pos] and [far2Pos].
   final CourtPoint? nearPos;
   final CourtPoint? farPos;
+  final CourtPoint? near2Pos;
+  final CourtPoint? far2Pos;
   final CourtPoint? shuttlePos;
   final double? shuttleSpeedKmh;
 
   /// in_play or between_rallies.
   final String? rallyState;
+
+  /// Court position of a player slot (near_1, near_2, far_1, far_2) or side (near, far).
+  CourtPoint? positionOf(String player) => switch (player) {
+    'near' || 'near_1' => nearPos,
+    'far' || 'far_1' => farPos,
+    'near_2' => near2Pos,
+    'far_2' => far2Pos,
+    _ => null,
+  };
 
   factory FrameInfo.fromJson(Json j) {
     final pos = j['court_positions'] as Json?;
@@ -217,6 +231,8 @@ class FrameInfo {
       frame: asInt(j['frame'])!,
       nearPos: asPoint(pos?['near']),
       farPos: asPoint(pos?['far']),
+      near2Pos: asPoint(pos?['near_2']),
+      far2Pos: asPoint(pos?['far_2']),
       shuttlePos: asPoint(pos?['shuttle']),
       shuttleSpeedKmh: asDouble(j['shuttle_speed_kmh']),
       rallyState: j['rally_state'] as String?,
@@ -236,6 +252,8 @@ class Hit {
     this.feedback = const [],
     this.classProbs = const {},
     this.rallyIndex,
+    this.hitter,
+    this.hitterConfidence,
   });
 
   final int id;
@@ -252,6 +270,14 @@ class Hit {
   final List<FeedbackItem> feedback;
   final Map<String, double> classProbs;
   final int? rallyIndex;
+
+  /// Doubles: which partner hit (near_1, near_2, far_1, far_2); null in singles or when the
+  /// two partners were too close to tell.
+  final String? hitter;
+  final double? hitterConfidence;
+
+  /// The slot who hit in doubles, else the side.
+  String get who => hitter ?? player;
 
   /// First failed-rule tip from the form feedback, if any.
   String? get tip {
@@ -280,6 +306,8 @@ class Hit {
         (k, v) => MapEntry(k as String, (v as num).toDouble()),
       ),
       rallyIndex: asInt(j['rally_index']),
+      hitter: j['hitter'] as String?,
+      hitterConfidence: asDouble(j['hitter_confidence']),
     );
   }
 }
@@ -375,6 +403,10 @@ class Score extends ScorePair {
     this.matchWinner,
     this.interval = false,
     this.changeEnds = false,
+    this.firstServerId,
+    this.firstReceiverId,
+    this.serverId,
+    this.receiverId,
   });
 
   final List<ScoreCorrection> corrections;
@@ -399,6 +431,13 @@ class Score extends ScorePair {
   /// Players change ends now: after a game, and at 11 in the deciding game.
   final bool changeEnds;
 
+  /// Doubles: the slots who served and received first (set by the user), and who serves
+  /// and receives the next rally.
+  final String? firstServerId;
+  final String? firstReceiverId;
+  final String? serverId;
+  final String? receiverId;
+
   bool get matchOver => matchWinner != null;
 
   factory Score.fromJson(Json j) => Score(
@@ -419,6 +458,10 @@ class Score extends ScorePair {
     matchWinner: j['match_winner'] as String?,
     interval: j['interval'] as bool? ?? false,
     changeEnds: j['change_ends'] as bool? ?? false,
+    firstServerId: j['first_server_id'] as String?,
+    firstReceiverId: j['first_receiver_id'] as String?,
+    serverId: j['server_id'] as String?,
+    receiverId: j['receiver_id'] as String?,
   );
 }
 
@@ -456,6 +499,9 @@ class Rally {
     this.winner,
     this.scoreAfter,
     this.game = 1,
+    this.serverId,
+    this.receiverId,
+    this.review,
   });
 
   final int index;
@@ -471,6 +517,13 @@ class Rally {
   /// 1-based game of the match the rally was played in.
   final int game;
 
+  /// Doubles: who served and received this rally.
+  final String? serverId;
+  final String? receiverId;
+
+  /// Why the user should check this rally (e.g. the server stood in the wrong court).
+  final String? review;
+
   factory Rally.fromJson(Json j) => Rally(
     index: asInt(j['index'])!,
     startFrame: asInt(j['start_frame'])!,
@@ -480,6 +533,9 @@ class Rally {
     winner: j['winner'] as String?,
     scoreAfter: j['score_after'] == null ? null : ScorePair.fromJson(j['score_after'] as Json),
     game: asInt(j['game']) ?? 1,
+    serverId: j['server_id'] as String?,
+    receiverId: j['receiver_id'] as String?,
+    review: j['review'] as String?,
   );
 }
 
@@ -719,7 +775,7 @@ class Summary {
   final Map<String, int> strokeCounts;
   final double? peakSpeedKmh;
 
-  /// Keyed by near / far.
+  /// Keyed by near / far, or by slot (near_1 ... far_2) in doubles.
   final Map<String, PlayerSummary> perPlayer;
 
   factory Summary.fromJson(Json j) => Summary(
