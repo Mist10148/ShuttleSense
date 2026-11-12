@@ -12,6 +12,9 @@ def bgr(hex_color: str) -> tuple[int, int, int]:
 
 NEAR = bgr("#1565C0")
 FAR = bgr("#E65100")
+# Doubles partners: a lighter shade of their side's colour (app_theme.dart PlayerColors).
+NEAR_2 = bgr("#42A5F5")
+FAR_2 = bgr("#FFA726")
 SHUTTLE = bgr("#C6A700")
 COURT = bgr("#FFFFFF")
 TEXT = bgr("#FFFFFF")
@@ -23,7 +26,7 @@ UNCERTAIN = bgr("#9E9E9E")
 UNCERTAIN_CALL = bgr("#FBC02D")  # landing marker for close in/out calls
 MINIMAP_BG = bgr("#2E7D4F")  # app seed colour
 
-PLAYER_COLORS = {"near": NEAR, "far": FAR}
+PLAYER_COLORS = {"near": NEAR, "far": FAR, "near_2": NEAR_2, "far_2": FAR_2}
 
 FONT = 0  # cv2.FONT_HERSHEY_SIMPLEX
 MIN_KEYPOINT_SCORE = 0.3

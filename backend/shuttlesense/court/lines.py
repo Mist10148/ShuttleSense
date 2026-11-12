@@ -13,12 +13,16 @@ SHORT_SERVICE_FROM_NET_M = 1.98
 Segment = tuple[Point, Point]
 
 
-def court_lines(size: Point = COURT_SIZE_M) -> dict[str, list[Segment]]:
-    """Named groups of line segments: outline, net, short service lines, centre lines."""
+def court_lines(size: Point = COURT_SIZE_M, court: str = "singles") -> dict[str, list[Segment]]:
+    """Named groups of line segments: outline, net, short service lines, centre lines.
+
+    For a doubles court also the side alleys (`doubles_sides`) and the doubles long service
+    lines (`doubles_long_service`); those lie outside 0..width, by the alley width.
+    """
     w, length = size
     net = length / 2
     near_ss, far_ss = net - SHORT_SERVICE_FROM_NET_M, net + SHORT_SERVICE_FROM_NET_M
-    return {
+    lines = {
         "outline": [
             ((0.0, 0.0), (w, 0.0)),
             ((w, 0.0), (w, length)),
@@ -29,6 +33,17 @@ def court_lines(size: Point = COURT_SIZE_M) -> dict[str, list[Segment]]:
         "short_service": [((0.0, near_ss), (w, near_ss)), ((0.0, far_ss), (w, far_ss))],
         "centre": [((w / 2, 0.0), (w / 2, near_ss)), ((w / 2, far_ss), (w / 2, length))],
     }
+    if court == "doubles":
+        a, back = DOUBLES_SIDE_ALLEY_M, DOUBLES_LONG_SERVICE_M
+        lines["doubles_sides"] = [
+            ((-a, 0.0), (-a, length)),
+            ((w + a, 0.0), (w + a, length)),
+            *(((-a, y), (0.0, y)) for y in (0.0, near_ss, net, far_ss, length)),
+            *(((w, y), (w + a, y)) for y in (0.0, near_ss, net, far_ss, length)),
+        ]
+        lines["doubles_long_service"] = [((-a, back), (w + a, back)),
+                                         ((-a, length - back), (w + a, length - back))]  # fmt: skip
+    return lines
 
 
 # Doubles adds 0.46 m outside each singles sideline; its long service line sits 0.76 m inside

@@ -73,11 +73,31 @@ def draw_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, dst=img)
 
 
+def court_type_of(record: ClipRecord) -> str:
+    """ "doubles" for a record with partners or doubles line calls, else "singles"."""
+    from shuttlesense.schema import is_doubles
+
+    if is_doubles(record) or any(c.court == "doubles" for c in record.line_calls):
+        return "doubles"
+    return "singles"
+
+
+def _player_labels(record: ClipRecord) -> tuple[tuple[str, str], ...]:
+    """(Players field, label) for every player drawn: Near / Far, or the four slots."""
+    from shuttlesense.schema import is_doubles
+
+    if not is_doubles(record):
+        return (("near", "Near"), ("far", "Far"))
+    return (("near", "Near 1"), ("near_2", "Near 2"), ("far", "Far 1"), ("far_2", "Far 2"))
+
+
 def draw_boxes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
     import cv2
 
     thick = max(1, int(round(2 * state.scale)))
-    for side, label in (("near", "Near"), ("far", "Far")):
+    if "labels" not in state.cache:
+        state.cache["labels"] = _player_labels(record)
+    for side, label in state.cache["labels"]:
         p = getattr(record.frames[i].players, side)
         if p is None:
             continue
@@ -92,7 +112,7 @@ def draw_pose(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
     import cv2
 
     thick = max(1, int(round(2 * state.scale)))
-    for side in ("near", "far"):
+    for side in ("near", "far", "near_2", "far_2"):
         p = getattr(record.frames[i].players, side)
         if p is None or len(p.keypoints) < 17:
             continue
@@ -156,7 +176,7 @@ def draw_hits(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
         return
     t = (i - hit.frame) / max(duration, 1)
     radius = int((12 + 30 * t) * state.scale)
-    color = style.PLAYER_COLORS[hit.player]
+    color = style.PLAYER_COLORS[hit.player_attr]
     cv2.circle(img, _pt(*anchor), radius, style.HIT, max(1, int(3 * (1 - t) * state.scale) + 1),
                cv2.LINE_AA)  # fmt: skip
     _label(img, "HIT", _pt(anchor[0] + 14 * state.scale, anchor[1] - 14 * state.scale), color,
@@ -175,7 +195,8 @@ def draw_strokes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
     text = hit.stroke.replace("_", " ").capitalize()
     if hit.confidence is not None:
         text += f" {hit.confidence:.0%}"
-    _label(img, text, _pt(x, y - 24 * state.scale), style.PLAYER_COLORS[hit.player], state.scale)
+    _label(img, text, _pt(x, y - 24 * state.scale), style.PLAYER_COLORS[hit.player_attr],
+           state.scale)  # fmt: skip
 
 
 def court_segments_px(record: ClipRecord, state: RenderState) -> list[tuple]:
@@ -186,7 +207,8 @@ def court_segments_px(record: ClipRecord, state: RenderState) -> list[tuple]:
         segments = []
         if record.court is not None:
             h = np.asarray(record.court.homography)
-            for group in court_lines(record.court.court_size_m).values():
+            court = court_type_of(record)
+            for group in court_lines(record.court.court_size_m, court).values():
                 for a, b in group:
                     pa, pb = court_to_image(h, np.array([a, b]))
                     segments.append((_pt(*pa), _pt(*pb)))
@@ -195,7 +217,7 @@ def court_segments_px(record: ClipRecord, state: RenderState) -> list[tuple]:
 
 
 def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
-    """Semi-transparent singles court lines projected from court meters."""
+    """Semi-transparent court lines (singles, or doubles with its alleys) from court meters."""
     import cv2
 
     segments = court_segments_px(record, state)
@@ -253,14 +275,19 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
     pos = record.frames[i].court_positions
     if record.court is None or pos is None:
         return
-    size = record.court.court_size_m
+    from shuttlesense.court.lines import DOUBLES_SIDE_ALLEY_M
+
+    court = court_type_of(record)
+    lines_size = record.court.court_size_m
+    alley = DOUBLES_SIDE_ALLEY_M if court == "doubles" else 0.0
+    size = (lines_size[0] + 2 * alley, lines_size[1])  # the panel shows the doubles alleys
     corner = state.stage("render").get("minimap_corner", "top-right")
     x, y, w, h = minimap_rect(img.shape, size, corner)
 
     def to_px(p: tuple[float, float]) -> tuple[int, int]:
         # Court y grows toward the far baseline: draw the near side at the bottom, like the app.
         # Points off the court (players behind the baseline) are pinned to the panel edge.
-        px = min(max(int(x + p[0] / size[0] * w), x + radius + 1), x + w - radius - 2)
+        px = min(max(int(x + (p[0] + alley) / size[0] * w), x + radius + 1), x + w - radius - 2)
         py = min(max(int(y + h - p[1] / size[1] * h), y + radius + 1), y + h - radius - 2)
         return px, py
 
@@ -268,10 +295,12 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
     panel = img.copy()
     cv2.rectangle(panel, (x, y), (x + w - 1, y + h - 1), style.MINIMAP_BG, -1)
     cv2.addWeighted(panel, 0.75, img, 0.25, 0, dst=img)
-    for group in court_lines(size).values():
+    for group in court_lines(lines_size, court).values():
         for a, b in group:
             cv2.line(img, to_px(a), to_px(b), style.COURT, 1, cv2.LINE_AA)
-    for key, color in (("near", style.NEAR), ("far", style.FAR), ("shuttle", style.SHUTTLE)):
+    dots = (("near", style.NEAR), ("far", style.FAR), ("near_2", style.NEAR_2),
+            ("far_2", style.FAR_2), ("shuttle", style.SHUTTLE))  # fmt: skip
+    for key, color in dots:
         p = getattr(pos, key)
         if p is not None:
             r = radius if key != "shuttle" else max(2, radius - 1)
@@ -279,20 +308,34 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
 
 
 def score_at(record: ClipRecord, i: int) -> tuple[int, int] | None:
-    """Score after the last rally that ended at or before frame i (None without a referee)."""
+    """Score at frame i: after the last rally that ended by then, plus the points awarded
+    since (an award counts from its frame on). None without a referee. Same as the app's
+    ClipRecord.scoreAt."""
     if record.score is None:
         return None
-    near, far = record.score.near, record.score.far  # no counted rally: the start score
-    first = next((r.score_after for r in record.rallies if r.score_after is not None), None)
-    if first is not None and record.rallies:
-        # Back out the first rally to find the starting score.
-        r0 = record.rallies[0]
-        near = first.near - (1 if r0.winner == "near" else 0)
-        far = first.far - (1 if r0.winner == "far" else 0)
+    awards = [c for c in record.score.corrections if c.kind == "award" and c.winner_after]
+
+    def shift(score: tuple[int, int], winner: str | None, by: int) -> tuple[int, int]:
+        near, far = score
+        return (max(0, near + (by if winner == "near" else 0)),
+                max(0, far + (by if winner == "far" else 0)))  # fmt: skip
+
+    # Awards placed before rally k count in its score_after; the start score has none.
+    current = (record.score.near, record.score.far)  # no counted rally: start + every award
+    first = next((r for r in record.rallies if r.score_after is not None), None)
+    if first is not None:
+        current = shift((first.score_after.near, first.score_after.far), first.winner, -1)
+    for a in awards:
+        if first is None or a.rally_index <= first.index:
+            current = shift(current, a.winner_after, -1)
+    last = None
     for r in record.rallies:
         if r.end_frame <= i and r.score_after is not None:
-            near, far = r.score_after.near, r.score_after.far
-    return near, far
+            current, last = (r.score_after.near, r.score_after.far), r.index
+    for a in awards:
+        if (last is None or a.rally_index > last) and (a.frame or 0) <= i:
+            current = shift(current, a.winner_after, 1)
+    return current
 
 
 def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:

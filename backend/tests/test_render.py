@@ -202,3 +202,54 @@ def test_score_layer_updates_after_rally() -> None:
     blank = np.zeros((90, 160, 3), np.uint8)
     draw_score(blank, record, 15, RenderState())
     assert not blank.any()
+
+
+def test_score_layer_counts_awards_from_their_frame() -> None:
+    from datetime import UTC, datetime
+
+    from shuttlesense.render.overlays import score_at
+    from shuttlesense.schema import ClipRecord, Frame, Rally, Score, ScoreCorrection, ScorePair
+
+    def award(index: int, winner: str, frame: int) -> ScoreCorrection:
+        return ScoreCorrection(rally_index=index, winner_before=None, winner_after=winner,
+                               at=datetime.now(UTC), kind="award", frame=frame)  # fmt: skip
+
+    record = ClipRecord(
+        clip_id="c", fps=10, width=160, height=90, num_frames=80,
+        frames=[Frame(frame=i) for i in range(80)],
+        rallies=[Rally(index=0, start_frame=40, end_frame=50, winner="near",
+                       score_after=ScorePair(near=1, far=1))],
+        score=Score(near=2, far=1, corrections=[award(0, "far", 30), award(1, "near", 70)]),
+    )  # fmt: skip
+    assert score_at(record, 10) == (0, 0)
+    assert score_at(record, 35) == (0, 1)
+    assert score_at(record, 55) == (1, 1)
+    assert score_at(record, 75) == (2, 1)
+
+
+def test_doubles_court_lines_and_partner_colours() -> None:
+    from shuttlesense.court import court_lines
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render import style
+    from shuttlesense.render.overlays import _player_labels, court_type_of
+
+    singles = court_lines()
+    doubles = court_lines(court="doubles")
+    assert set(singles) < set(doubles)
+    assert min(p[0] for seg in doubles["doubles_sides"] for p in seg) == -0.46
+    assert len(style.PLAYER_COLORS) == 4 and style.PLAYER_COLORS["near_2"] != style.NEAR
+    record = load_golden("doubles")
+    assert court_type_of(record) == "doubles" and court_type_of(load_golden()) == "singles"
+    assert [label for _, label in _player_labels(record)] == ["Near 1", "Near 2", "Far 1", "Far 2"]
+
+
+def test_doubles_render_draws_every_layer(tmp_path) -> None:
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import RenderState, draw_boxes, draw_minimap, draw_pose
+
+    record = load_golden("doubles")
+    img = np.zeros((record.height, record.width, 3), np.uint8)
+    state = RenderState()
+    for layer in (draw_boxes, draw_pose, draw_minimap):
+        layer(img, record, 10, state)
+    assert img.any()
