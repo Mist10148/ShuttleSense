@@ -6,7 +6,7 @@
 > feature freeze, under one rule: the singles path stays behaviourally identical. Every
 > existing test passes, and singles records serialize as before because new fields are left
 > out when empty. Accuracy work (T9.2, T9.12 numbers, T9.7 training) needs doubles footage
-> and continues after `v1.0.0`. No milestone or GitHub issues yet (Issue column `—`).
+> and continues after `v1.0.0`. Milestone "Phase 9 — Doubles support", issues #113–#125.
 
 | | |
 | --- | --- |
@@ -66,19 +66,19 @@ class Hit(BaseModel):
 
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| [T9.1](#t91) | Decision record and clip record v1.2 | M1 | 4 h | — | ✅ | — |
-| [T9.2](#t92) | Record and label doubles clips | M4 | 12 h | — | ⬜ | — |
-| [T9.3](#t93) | Four-player filter and per-side tracker | M2 | 16 h | T9.1 | ✅ | — |
-| [T9.4](#t94) | Appearance cue for partner identity | M2 | 10 h | T9.3 | ⬜ | — |
-| [T9.5](#t95) | Hitter attribution within a side | M5 | 8 h | T9.3 | ⬜ | — |
-| [T9.6](#t96) | Doubles service order and receiver | M3 + M1 | 8 h | T9.1 | ✅ | — |
-| [T9.7](#t97) | Strokes in doubles: drive class and confidence | M5 | 16 h | T9.2 | ⬜ | — |
-| [T9.8](#t98) | Doubles feedback rules and per-player analytics | M3 | 8 h | T9.5 | ✅ | — |
-| [T9.9](#t99) | Live mode with four players | M1 + M2 | 10 h | T9.3, T9.5 | ⬜ | — |
-| [T9.10](#t910) | Court choice in upload (app and API), doubles match setup | M6 + M1 | 7 h | T9.6 | ✅ | — |
-| [T9.11](#t911) | App: four players in overlays, minimap, stats | M6 + M4 | 12 h | T9.1, T9.8 | ✅ | — |
-| [T9.12](#t912) | Doubles evaluation scripts and report | M4 | 10 h | T9.2–T9.6 | ⬜ | — |
-| [T9.13](#t913) | Docs: PRD, README, API, data format | M1 | 4 h | T9.12 | ⬜ | — |
+| [T9.1](#t91) | Decision record and clip record v1.2 | M1 | 4 h | — | ✅ | #113 |
+| [T9.2](#t92) | Record and label doubles clips | M4 | 12 h | — | ⬜ | #114 |
+| [T9.3](#t93) | Four-player filter and per-side tracker | M2 | 16 h | T9.1 | ✅ | #115 |
+| [T9.4](#t94) | Appearance cue for partner identity | M2 | 10 h | T9.3 | ⬜ | #116 |
+| [T9.5](#t95) | Hitter attribution within a side | M5 | 8 h | T9.3 | ⬜ | #117 |
+| [T9.6](#t96) | Doubles service order and receiver | M3 + M1 | 8 h | T9.1 | ✅ | #118 |
+| [T9.7](#t97) | Strokes in doubles: drive class and confidence | M5 | 16 h | T9.2 | ⬜ | #119 |
+| [T9.8](#t98) | Doubles feedback rules and per-player analytics | M3 | 8 h | T9.5 | ✅ | #120 |
+| [T9.9](#t99) | Live mode with four players | M1 + M2 | 10 h | T9.3, T9.5 | ⬜ | #121 |
+| [T9.10](#t910) | Court choice in upload (app and API), doubles match setup | M6 + M1 | 7 h | T9.6 | ✅ | #122 |
+| [T9.11](#t911) | App: four players in overlays, minimap, stats | M6 + M4 | 12 h | T9.1, T9.8 | ✅ | #123 |
+| [T9.12](#t912) | Doubles evaluation scripts and report | M4 | 10 h | T9.2–T9.6 | ⬜ | #124 |
+| [T9.13](#t913) | Docs: PRD, README, API, data format | M1 | 4 h | T9.12 | ⬜ | #125 |
 
 **Critical path:** T9.1 → T9.3 → T9.4 → T9.5 → T9.12. T9.2 (data) starts on day 1 because
 everything measurable waits on it. T9.6 and T9.10 can run in parallel with tracking.
@@ -323,7 +323,7 @@ No target is promised before the first measurement.
 - [x] README: replace "Singles only" in Limitations with the actual doubles limits; drop
       "Doubles support" from Future work.
 - [x] `docs/API.md`, `docs/DATA_FORMAT.md`: schema 1.2 fields.
-- [ ] `PHASES.md`: add Phase 9 with its milestone and issues.
+- [x] `PHASES.md`: add Phase 9 with its milestone and issues (#113–#125, Nov 13).
 
 ## Risks across the phase
 
