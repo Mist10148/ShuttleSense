@@ -227,7 +227,9 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 **Steps**
 - [x] List every Python and Dart dependency with its license (`pip-licenses`, `flutter pub deps` + pub.dev); confirm none is AGPL/GPL-incompatible with MIT; add a "Third-party licenses" table to TECH_STACK.md.
 - [x] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
-- [ ] Confirm the backend deletes uploads on `DELETE` and that the demo server's storage is wiped after the demo.
+- [x] Confirm the backend deletes uploads on `DELETE`: `backend/tests/test_api.py::test_full_round_trip`, `test_video_deleted_during_its_job_is_removed_when_the_job_stops` and `test_storage_sweeps_leftovers_of_interrupted_deletes` (Nov 12).
+- [ ] Wipe the demo server's storage after the demo.
+- [ ] Record the licences of the bundled media_kit libmpv/FFmpeg native libraries and scan the GPU ML venv (open in TECH_STACK.md).
 
 **Acceptance criteria.** Audit table merged; no media in the repo.
 

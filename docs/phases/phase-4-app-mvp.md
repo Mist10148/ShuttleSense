@@ -24,7 +24,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 | [T4.5](#t45) | Results layout for compact / medium / expanded | M6 | 6 h | T4.4 | ⬜ | [#53](https://github.com/Mist10148/ShuttleSense/issues/53) |
 | [T4.6](#t46) | Video player with auth, controls, fullscreen | M6 | 6 h | T4.5, T2.7 | ⬜ | [#54](https://github.com/Mist10148/ShuttleSense/issues/54) |
 | [T4.7](#t47) | Stroke timeline synced with playback | M6 | 5 h | T4.6, T3.10 | ⬜ | [#55](https://github.com/Mist10148/ShuttleSense/issues/55) |
-| [T4.8](#t48) | History screen with delete | M6 | 3 h | T4.4 | ⬜ | [#56](https://github.com/Mist10148/ShuttleSense/issues/56) |
+| [T4.8](#t48) | History screen with delete | M6 | 3 h | T4.4 | ✅ | [#56](https://github.com/Mist10148/ShuttleSense/issues/56) |
 | [T4.9](#t49) | Error, empty, loading and offline states; theming | M6 | 4 h | T4.1–T4.8 | ⬜ | [#57](https://github.com/Mist10148/ShuttleSense/issues/57) |
 | [T4.10](#t410) | Platform configuration for release builds | M6 | 3 h | — | ⬜ | [#58](https://github.com/Mist10148/ShuttleSense/issues/58) |
 | [T4.11](#t411) | Accessibility pass | M4 | 3 h | T4.9 | ⬜ | [#59](https://github.com/Mist10148/ShuttleSense/issues/59) |
@@ -183,6 +183,10 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 **Tests.** `test/history_test.dart`: list renders; delete calls the API and refreshes.
 
 **Acceptance criteria.** Deleted jobs disappear from the server (`GET /jobs/{id}` → 404).
+
+**Verified (Nov 12).** `backend/tests/test_api.py::test_full_round_trip` deletes a job and gets
+404 for it, then deletes its video and gets 404 for that too; `test/history_test.dart` covers
+the app side. Issue #56 can be closed.
 
 ---
 

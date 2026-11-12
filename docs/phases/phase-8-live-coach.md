@@ -73,7 +73,7 @@ either role, open the replay from History, and seek to a coaching citation. Use 
 label rallies and landings, and record the device, model versions, and reproduction steps.
 The real-camera, model-backed latency, and labelled-accuracy gates remain open.
 
-### Courtside acceptance (T8.6, T8.9–T8.12, T8.14–T8.16)
+### Courtside acceptance (T8.6, T8.9–T8.12, T8.14–T8.15)
 
 Run one consented session on a tripod with a calibrated court and real tracking and pose.
 Repeat the camera and controls checks on a phone, tablet, Windows webcam, and supported browser

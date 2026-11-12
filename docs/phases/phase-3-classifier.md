@@ -243,7 +243,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 
 **Steps**
 - [x] Script `scripts/dataset_stats.py`: counts per class, per split, per player; excluded strokes; clip extraction failures.
-- [ ] Write `docs/results/dataset.md` with the tables; flag classes with < 500 training samples for M5 (weighting/augmentation).
+- [ ] Write `docs/results/dataset.md` with the tables; flag classes with < 500 training samples for M5 (weighting/augmentation). (Partly done: the annotation-level tables are in `docs/results/dataset.md`; the clip-level counts wait for clip extraction, T3.1/T3.2.)
 
 **Acceptance criteria.** Report merged before full training starts.
 

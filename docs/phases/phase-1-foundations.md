@@ -63,7 +63,7 @@
 **Goal.** The app team can build every screen against a contract that will not move.
 
 **Steps**
-- [ ] Walk through [API.md](../API.md) with M6 endpoint by endpoint against `ApiClient` in `app/lib/data/api_client.dart`; list mismatches.
+- [x] Walk through [API.md](../API.md) with M6 endpoint by endpoint against `ApiClient` in `app/lib/data/api_client.dart`; list mismatches. (Nov 12 audit: endpoints, bodies and live protocol fields match between `routes.py`, `api_client.dart` and API.md; the Phase 9 fields `court`, `first_server_id` and `first_receiver_id` were added to all three together. M6 still has to review before the tag.)
 - [x] Decide on `GET /health.stages` semantics (only stages whose dependencies and weights are installed) and implement it in `routes.py::health` using a new `pipeline.available_stages()` that tries the lazy imports and checks weight files.
 - [x] Export the OpenAPI document: `python -c "import json; from shuttlesense.api.main import app; print(json.dumps(app.openapi(), indent=2))" > docs/openapi.json`.
 - [x] Add `tests/test_api.py::test_openapi_snapshot` comparing `app.openapi()` with `docs/openapi.json`.
