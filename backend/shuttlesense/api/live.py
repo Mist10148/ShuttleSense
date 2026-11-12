@@ -101,7 +101,7 @@ class LiveManager:
             from shuttlesense.stream.synthetic import CORNERS, HEIGHT, WIDTH, synthetic_record
             from shuttlesense.stream.synthetic import planned_strokes as planned
 
-            record, truth = synthetic_record()
+            record, truth = synthetic_record(doubles=request.court == "doubles")
             perception = ReplayPerception(record, size)
             corners = [(x * size[0] / WIDTH, y * size[1] / HEIGHT) for x, y in CORNERS]
             classify = planned_classifier(planned(truth), period=len(record.frames))

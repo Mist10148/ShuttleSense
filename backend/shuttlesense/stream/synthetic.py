@@ -61,8 +61,13 @@ def _player(foot: np.ndarray, height: float, wrist: np.ndarray) -> Player:
     return Player(bbox=(x, y, w, height), keypoints=[tuple(map(float, k)) for k in kps], score=0.9)
 
 
-def synthetic_record(plan: tuple[PlannedRally, ...] = DEFAULT_PLAN) -> tuple[ClipRecord, dict]:
+def synthetic_record(
+    plan: tuple[PlannedRally, ...] = DEFAULT_PLAN, *, doubles: bool = False
+) -> tuple[ClipRecord, dict]:
     """(record with shuttle and players per frame, truth) for the planned rallies.
+
+    With `doubles`, a partner stands on each side away from the shuttle's path, so every
+    planned hit belongs to near_1 or far_1.
 
     truth holds the planned hit frames with their players and strokes, and the landing frame
     of each rally.
@@ -70,9 +75,10 @@ def synthetic_record(plan: tuple[PlannedRally, ...] = DEFAULT_PLAN) -> tuple[Cli
     from shuttlesense.court import court_to_image
 
     h = _homography()
-    feet_m = {"near": np.array([[2.6, 2.0]]), "far": np.array([[2.6, 11.4]])}
+    feet_m = {"near": np.array([[2.6, 2.0]]), "far": np.array([[2.6, 11.4]]),
+              "near_2": np.array([[0.8, 4.6]]), "far_2": np.array([[4.4, 8.8]])}  # fmt: skip
     feet_px = {side: court_to_image(h, m)[0] for side, m in feet_m.items()}
-    heights = {"near": 260.0, "far": 120.0}
+    heights = {"near": 260.0, "far": 120.0, "near_2": 220.0, "far_2": 140.0}
     wrist_px = {s: feet_px[s] + np.array([0.3 * heights[s], -0.8 * heights[s]]) for s in feet_px}
 
     track: list[np.ndarray | None] = [None] * LEAD_FRAMES
@@ -108,6 +114,9 @@ def synthetic_record(plan: tuple[PlannedRally, ...] = DEFAULT_PLAN) -> tuple[Cli
             near=_player(feet_px["near"], heights["near"], wrist_px["near"]),
             far=_player(feet_px["far"], heights["far"], wrist_px["far"]),
         )
+        if doubles:
+            for slot in ("near_2", "far_2"):
+                setattr(players, slot, _player(feet_px[slot], heights[slot], wrist_px[slot]))
         shuttle = (
             Shuttle()
             if pos is None

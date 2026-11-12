@@ -574,3 +574,26 @@ def test_start_accepts_the_doubles_first_server_and_receiver() -> None:
     for bad in bad_starts:
         with pytest.raises(ValueError):
             _start_request({**START, **bad})
+
+
+def test_fake_doubles_session_streams_four_players(tmp_path: Path) -> None:
+    """T9.9: four players, partner hitters and the doubles service order over the socket."""
+    with make_client(tmp_path) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json({**START, "court": "doubles", "first_server_id": "near_1",
+                          "first_receiver_id": "far_1"})  # fmt: skip
+            started = ws.receive_json()
+            assert started["score"]["server_id"] == "near_1"
+            events = _send_frames(ws, 240)
+            ws.send_json({"type": "stop"})
+            while (e := ws.receive_json())["type"] != "saved":
+                events.append(e)
+        frame = next(e for e in events if e["type"] == "frame")
+        assert {"near", "far", "near_2", "far_2"} <= set(frame["players"])
+        hits = [e["hit"] for e in events if e["type"] == "hit"]
+        assert hits and {h["hitter"] for h in hits} <= {"near_1", "far_1"}
+        job = _wait_done(client, e["job_id"])
+        assert job["court"] == "doubles" and job["first_server_id"] == "near_1"
+        record = client.get(f"/jobs/{e['job_id']}/record").json()
+        assert record["rallies"][0]["server_id"] == "near_1"
+        assert "near_1" in record["summary"]["per_player"]
