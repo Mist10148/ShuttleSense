@@ -564,7 +564,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
-                  '${formatClock(hit.timeS)} · ${hit.player == 'near' ? 'Near' : 'Far'}'
+                  '${formatClock(hit.timeS)} · ${playerLabel(hit.who)}'
                   ' · ${kStrokeLabels[hit.stroke] ?? 'Unclassified'}',
                 ),
               ),
@@ -618,14 +618,14 @@ class HitCallout extends StatelessWidget {
     final colors = PlayerColors.of(context);
     final stroke = kStrokeLabels[hit.stroke] ?? 'Hit';
     final speed = hit.speedKmh == null ? '' : ' · ${hit.speedKmh!.round()} km/h (est.)';
-    final side = hit.player == 'near' ? 'Near' : 'Far';
+    final side = playerLabel(hit.who);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Semantics(
         liveRegion: true,
         child: Row(
           children: [
-            Icon(Icons.bolt, color: colors.forSide(hit.player), size: 20),
+            Icon(Icons.bolt, color: colors.forPlayer(hit.who), size: 20),
             const SizedBox(width: 4),
             Flexible(
               child: Text(
@@ -908,7 +908,7 @@ class LiveOverlayPainter extends CustomPainter {
       canvas.drawRect(
         Rect.fromLTWH(b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy),
         Paint()
-          ..color = colors.forSide(side)
+          ..color = colors.forPlayer(side)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );

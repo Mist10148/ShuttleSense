@@ -140,7 +140,7 @@ class _HitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = PlayerColors.of(context);
     final stroke = kStrokeLabels[hit.stroke] ?? 'Unclassified';
-    final player = hit.player == 'near' ? 'Near' : 'Far';
+    final player = playerLabel(hit.who);
     final details = [
       if (hit.confidence != null) '${(hit.confidence! * 100).round()}%',
       if (hit.speedKmh != null) '~${hit.speedKmh!.round()} km/h (est.)',
@@ -160,9 +160,10 @@ class _HitRow extends StatelessWidget {
         onLongPress: () => showHitDetails(context, hit),
         leading: CircleAvatar(
           radius: 14,
-          backgroundColor: colors.forSide(hit.player),
+          backgroundColor: colors.forPlayer(hit.who),
           child: Text(
-            hit.player == 'near' ? 'N' : 'F',
+            // N / F, or N1 / N2 / F1 / F2 for a doubles partner.
+            playerLabel(hit.who).replaceAll(RegExp('[a-z ]'), ''),
             style: const TextStyle(color: Colors.white, fontSize: 12),
           ),
         ),
@@ -211,7 +212,7 @@ class _HitDetails extends StatelessWidget {
         children: [
           Text(
             '${kStrokeLabels[hit.stroke] ?? 'Unclassified'} · '
-            '${hit.player == 'near' ? 'Near' : 'Far'} player · ${formatClock(hit.timeS)}',
+            '${playerLabel(hit.who)} player · ${formatClock(hit.timeS)}',
             style: theme.textTheme.titleMedium,
           ),
           if (hit.uncertain)

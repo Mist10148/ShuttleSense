@@ -3,6 +3,12 @@ import 'json.dart';
 
 typedef CourtPoint = ({double x, double y});
 
+/// Display name of a side (near, far) or a doubles slot (near_1 -> Near 1, far_2 -> Far 2).
+String playerLabel(String who) {
+  final side = who.startsWith('near') ? 'Near' : 'Far';
+  return who.endsWith('_1') || who.endsWith('_2') ? '$side ${who.substring(who.length - 1)}' : side;
+}
+
 /// Dart mirror of the parts of the clip record the app displays.
 /// Source of truth: backend/shuttlesense/schema.py and docs/DATA_FORMAT.md.
 class ClipRecord {
@@ -83,6 +89,12 @@ class ClipRecord {
     }
     return last;
   }
+
+  /// A doubles record: partners tracked, a partner credited with a hit, or doubles calls.
+  bool get isDoubles =>
+      lineCalls.any((c) => c.court == 'doubles') ||
+      hits.any((h) => h.hitter != null) ||
+      frames.any((f) => f.near2Pos != null || f.far2Pos != null);
 
   /// The rally containing [frameIndex], if any.
   Rally? rallyAt(int frameIndex) {

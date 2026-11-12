@@ -10,6 +10,11 @@ const double kCourtWidthM = 5.18;
 const double kCourtLengthM = 13.40;
 const double kShortServiceFromNetM = 1.98;
 
+/// Doubles lines (Phase 9): side alleys outside the singles sidelines, and the doubles
+/// long service line inside each baseline.
+const double kDoublesAlleyM = 0.46;
+const double kDoublesLongServiceM = 0.76;
+
 /// Shuttle positions kept in the fading trail.
 const int kTrailLength = 15;
 
@@ -75,7 +80,8 @@ class _CourtMinimapState extends State<CourtMinimap> {
                 ?heat?.describe(),
               ].join(' '),
               child: AspectRatio(
-                aspectRatio: kCourtWidthM / kCourtLengthM,
+                aspectRatio:
+                    (kCourtWidthM + (record.isDoubles ? 2 * kDoublesAlleyM : 0)) / kCourtLengthM,
                 child: CustomPaint(
                   painter: CourtPainter.fromRecord(
                     record,
@@ -108,6 +114,11 @@ String minimapLabel(ClipRecord record, int frameIndex) {
   String at(String who, CourtPoint? p) => p == null
       ? '$who not seen'
       : '$who at ${p.x.toStringAsFixed(1)} m across, ${p.y.toStringAsFixed(1)} m up the court';
+  if (record.isDoubles) {
+    return 'Top-down doubles court. ${at('Near player 1', f.nearPos)}. '
+        '${at('Near player 2', f.near2Pos)}. ${at('Far player 1', f.farPos)}. '
+        '${at('Far player 2', f.far2Pos)}. ${at('Shuttle', f.shuttlePos)}.';
+  }
   return 'Top-down court. ${at('Near player', f.nearPos)}. ${at('Far player', f.farPos)}. '
       '${at('Shuttle', f.shuttlePos)}.';
 }
@@ -118,21 +129,24 @@ class HeatGrid {
   HeatGrid._(this.near, this.far, this.nearMax, this.farMax);
 
   static const double margin = 1.0;
-  static final int cols = ((kCourtWidthM + 2 * margin) / kHeatCellM).ceil();
+  static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
   static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
 
   factory HeatGrid.fromRecord(ClipRecord record) {
     final near = List.filled(cols * rows, 0), far = List.filled(cols * rows, 0);
     void add(List<int> grid, CourtPoint? p) {
       if (p == null) return;
-      final c = ((p.x + margin) / kHeatCellM).floor();
+      final c = ((p.x + margin + kDoublesAlleyM) / kHeatCellM).floor();
       final r = ((p.y + margin) / kHeatCellM).floor();
       if (c >= 0 && c < cols && r >= 0 && r < rows) grid[r * cols + c]++;
     }
 
     for (final f in record.frames) {
+      // A side's heat covers both partners in doubles.
       add(near, f.nearPos);
+      add(near, f.near2Pos);
       add(far, f.farPos);
+      add(far, f.far2Pos);
     }
     int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
     return HeatGrid._(near, far, max(near), max(far));
@@ -143,8 +157,10 @@ class HeatGrid {
   final int nearMax, farMax;
 
   /// Near-left corner of a cell in court meters.
-  static CourtPoint cellOrigin(int index) =>
-      (x: (index % cols) * kHeatCellM - margin, y: (index ~/ cols) * kHeatCellM - margin);
+  static CourtPoint cellOrigin(int index) => (
+    x: (index % cols) * kHeatCellM - margin - kDoublesAlleyM,
+    y: (index ~/ cols) * kHeatCellM - margin,
+  );
 
   /// Where each player stood most, for screen readers.
   String describe() {
@@ -173,6 +189,7 @@ class CourtPainter extends CustomPainter {
     required this.surface,
     required this.players,
     this.heat,
+    this.doubles = false,
   });
 
   /// Collects the current frame, the trail and the hitters' positions in this rally.
@@ -191,12 +208,11 @@ class CourtPainter extends CustomPainter {
     ];
     final rally = record.rallyAt(frameIndex);
     final start = rally?.startFrame ?? 0;
+    // Each hit is marked where the player who made it stood (the partner, in doubles).
     final marks = <(String, CourtPoint)>[
       for (final h in record.hits)
         if (h.frame >= start && h.frame <= frameIndex)
-          if ((h.player == 'near' ? record.frame(h.frame)?.nearPos : record.frame(h.frame)?.farPos)
-              case final p?)
-            (h.player, p),
+          if (record.frame(h.frame)?.positionOf(h.who) case final p?) (h.who, p),
     ];
     final landings = [
       for (final c in record.lineCalls)
@@ -213,6 +229,7 @@ class CourtPainter extends CustomPainter {
       surface: surface,
       players: players,
       heat: heat,
+      doubles: record.isDoubles,
     );
   }
 
@@ -231,12 +248,18 @@ class CourtPainter extends CustomPainter {
   /// Shaded under everything else when the heatmap is on.
   final HeatGrid? heat;
 
+  /// Draws the doubles alleys and long service lines, and both partners.
+  final bool doubles;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / kCourtWidthM;
+    final alley = doubles ? kDoublesAlleyM : 0.0;
+    final sx = size.width / (kCourtWidthM + 2 * alley);
     final sy = size.height / kCourtLengthM;
-    // Court y grows toward the far baseline; draw the near side at the bottom.
-    Offset toCanvas(CourtPoint p) => Offset(p.x * sx, size.height - p.y * sy);
+    // Court y grows toward the far baseline; draw the near side at the bottom. x is from the
+    // singles sideline, so the doubles alley lies left of 0.
+    Offset toCanvas(CourtPoint p) => Offset((p.x + alley) * sx, size.height - p.y * sy);
+    final left = alley * sx, right = (alley + kCourtWidthM) * sx;
 
     canvas.drawRect(Offset.zero & size, Paint()..color = surface);
     final h = heat;
@@ -261,20 +284,25 @@ class CourtPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawRect(Offset.zero & size, line);
+    if (doubles) {
+      // Singles sidelines inside the doubles outline, and the doubles long service lines.
+      canvas.drawLine(Offset(left, 0), Offset(left, size.height), line);
+      canvas.drawLine(Offset(right, 0), Offset(right, size.height), line);
+      for (final y in [kDoublesLongServiceM * sy, size.height - kDoublesLongServiceM * sy]) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+      }
+    }
     final netY = size.height / 2;
     canvas.drawLine(Offset(0, netY), Offset(size.width, netY), line..strokeWidth = 2.5);
     line.strokeWidth = 1;
     for (final dy in [-kShortServiceFromNetM * sy, kShortServiceFromNetM * sy]) {
       canvas.drawLine(Offset(0, netY + dy), Offset(size.width, netY + dy), line);
     }
+    final centre = (left + right) / 2;
+    canvas.drawLine(Offset(centre, 0), Offset(centre, netY - kShortServiceFromNetM * sy), line);
     canvas.drawLine(
-      Offset(size.width / 2, 0),
-      Offset(size.width / 2, netY - kShortServiceFromNetM * sy),
-      line,
-    );
-    canvas.drawLine(
-      Offset(size.width / 2, netY + kShortServiceFromNetM * sy),
-      Offset(size.width / 2, size.height),
+      Offset(centre, netY + kShortServiceFromNetM * sy),
+      Offset(centre, size.height),
       line,
     );
 
@@ -287,7 +315,7 @@ class CourtPainter extends CustomPainter {
           : Colors.red.shade600;
       final latest = i == landings.length - 1;
       final o = toCanvas((
-        x: p.x.clamp(-0.5, kCourtWidthM + 0.5),
+        x: p.x.clamp(-0.5 - alley, kCourtWidthM + alley + 0.5),
         y: p.y.clamp(-0.5, kCourtLengthM + 0.5),
       ));
       canvas.drawCircle(
@@ -299,8 +327,8 @@ class CourtPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
     }
-    for (final (side, p) in hitMarks) {
-      final c = side == 'near' ? players.near : players.far;
+    for (final (who, p) in hitMarks) {
+      final c = players.forPlayer(who);
       final mark = Paint()
         ..color = c
         ..style = PaintingStyle.stroke
@@ -337,6 +365,19 @@ class CourtPainter extends CustomPainter {
     if (f?.farPos case final far?) {
       canvas.drawCircle(toCanvas(far), 7, Paint()..color = players.far);
     }
+    // Doubles partners: their own colour, with a ring so they differ by shape too.
+    for (final (p, color) in [(f?.near2Pos, players.near2), (f?.far2Pos, players.far2)]) {
+      if (p == null) continue;
+      canvas.drawCircle(toCanvas(p), 6, Paint()..color = color);
+      canvas.drawCircle(
+        toCanvas(p),
+        8,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
     if (reviewLanding case final landing?) {
       final p = toCanvas(landing);
       // Keep an outside landing visible at the corresponding court edge.
@@ -364,6 +405,7 @@ class CourtPainter extends CustomPainter {
       old.surface != surface ||
       old.players != players ||
       old.heat != heat ||
+      old.doubles != doubles ||
       old.trail.length != trail.length ||
       old.hitMarks.length != hitMarks.length ||
       !listEquals(old.landings, landings);

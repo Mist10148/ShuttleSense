@@ -73,8 +73,9 @@ class Scoreboard extends StatelessWidget {
               label: [
                 'Score: near ${score.near}, far ${score.far}',
                 if (server != null)
-                  '${server == 'near' ? 'Near' : 'Far'} serves from the '
-                      '${total.serviceCourt} court',
+                  '${playerLabel(total.serverId ?? server)} serves from the '
+                      '${total.serviceCourt} court'
+                      '${total.receiverId == null ? '' : ' to ${playerLabel(total.receiverId!)}'}',
               ].join('. '),
               excludeSemantics: true,
               child: Row(
@@ -96,6 +97,13 @@ class Scoreboard extends StatelessWidget {
                 ],
               ),
             ),
+            // Doubles: who serves and receives, named (Phase 9).
+            if (server != null && total.serverId != null && total.receiverId != null)
+              Text(
+                '${playerLabel(total.serverId!)} serves to ${playerLabel(total.receiverId!)}',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
             if (atEnd) _MatchState(score: total),
             if (onAward != null || onUndo != null) ...[
               const SizedBox(height: 8),

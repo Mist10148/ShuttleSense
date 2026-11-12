@@ -777,6 +777,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       frame: frame,
       nearPos: asPoint(court?['near']),
       farPos: asPoint(court?['far']),
+      near2Pos: asPoint(court?['near_2']),
+      far2Pos: asPoint(court?['far_2']),
       shuttlePos: asPoint(court?['shuttle']),
       shuttleSpeedKmh: speed,
       rallyState: e['rally_state'] as String?,
@@ -793,7 +795,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       trail = trail.sublist(1);
     }
     final players = <String, LivePlayer>{};
-    for (final side in ['near', 'far']) {
+    for (final side in ['near', 'far', 'near_2', 'far_2']) {
       final p = (e['players'] as Json?)?[side] as Json?;
       if (p == null) continue;
       players[side] = (
