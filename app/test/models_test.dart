@@ -182,6 +182,42 @@ void main() {
     );
     expect(late.scoreAt(22), const ScorePair(near: 10, far: 12));
     expect(late.scoreAt(55), const ScorePair(near: 11, far: 12));
+    // Awarded points count from their frame on, before and after the scored rallies.
+    final awarded = golden.copyWith(
+      rallies: [
+        const Rally(
+          index: 0,
+          startFrame: 40,
+          endFrame: 50,
+          winner: 'near',
+          scoreAfter: ScorePair(near: 1, far: 1),
+        ),
+      ],
+      score: const Score(
+        near: 2,
+        far: 1,
+        corrections: [
+          ScoreCorrection(rallyIndex: 0, winnerAfter: 'far', kind: 'award', frame: 30),
+          ScoreCorrection(rallyIndex: 1, winnerAfter: 'near', kind: 'award', frame: 70),
+        ],
+      ),
+    );
+    expect(awarded.scoreAt(10), const ScorePair(near: 0, far: 0));
+    expect(awarded.scoreAt(35), const ScorePair(near: 0, far: 1));
+    expect(awarded.scoreAt(55), const ScorePair(near: 1, far: 1));
+    expect(awarded.scoreAt(75), const ScorePair(near: 2, far: 1));
+    final onlyAwards = golden.copyWith(
+      rallies: const [],
+      score: const Score(
+        near: 1,
+        far: 0,
+        corrections: [
+          ScoreCorrection(rallyIndex: 0, winnerAfter: 'near', kind: 'award', frame: 30),
+        ],
+      ),
+    );
+    expect(onlyAwards.scoreAt(10), const ScorePair(near: 0, far: 0));
+    expect(onlyAwards.scoreAt(40), const ScorePair(near: 1, far: 0));
     expect(golden.strokesSoFar(30), 2);
     expect(golden.rallyAt(57), isNull);
   });

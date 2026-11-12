@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'json.dart';
 
 typedef CourtPoint = ({double x, double y});
@@ -91,23 +92,40 @@ class ClipRecord {
     return null;
   }
 
-  /// Score shown at [frameIndex]: after the last rally that ended at or before it.
-  /// Before the first scored rally ends this is the starting score. Null without a referee.
+  /// Score shown at [frameIndex]: after the last rally that ended at or before it, plus the
+  /// points awarded since (an award counts from its frame on). Before the first scored rally
+  /// ends this is the starting score. Null without a referee.
   ScorePair? scoreAt(int frameIndex) {
     final total = score;
     if (total == null) return null;
+    final awards = total.corrections.where((c) => c.isAward && c.winnerAfter != null).toList();
+    ScorePair shift(ScorePair s, String? winner, int by) => ScorePair(
+      near: max(0, s.near + (winner == 'near' ? by : 0)),
+      far: max(0, s.far + (winner == 'far' ? by : 0)),
+    );
     final first = rallies.where((r) => r.scoreAfter != null).firstOrNull;
+    // Awards placed before rally k count in rally k's score_after; the start score has none.
     // No scored rally (none detected, or the start score is already a finished game): the
-    // score never moved from the start score, which is then the final one.
+    // final score is the start score plus every award.
     var current = ScorePair(near: total.near, far: total.far);
+    var counted = (int rallyIndex) => true; // awards already in `current`
     if (first != null) {
-      current = ScorePair(
-        near: first.scoreAfter!.near - (first.winner == 'near' ? 1 : 0),
-        far: first.scoreAfter!.far - (first.winner == 'far' ? 1 : 0),
-      );
+      current = shift(first.scoreAfter!, first.winner, -1);
+      counted = (i) => i <= first.index;
     }
+    for (final a in awards.where((a) => counted(a.rallyIndex))) {
+      current = shift(current, a.winnerAfter, -1);
+    }
+    int? last;
     for (final r in rallies) {
-      if (r.endFrame <= frameIndex && r.scoreAfter != null) current = r.scoreAfter!;
+      if (r.endFrame <= frameIndex && r.scoreAfter != null) {
+        current = r.scoreAfter!;
+        last = r.index;
+      }
+    }
+    for (final a in awards) {
+      final after = last == null ? true : a.rallyIndex > last;
+      if (after && (a.frame ?? 0) <= frameIndex) current = shift(current, a.winnerAfter, 1);
     }
     return current;
   }
