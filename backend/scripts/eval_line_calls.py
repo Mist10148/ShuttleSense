@@ -15,6 +15,10 @@ Ground truth, either:
   stroke of each rally gives its end time, and lose_reason gives the label. Only the
   reasons that say where the shuttle landed are used (see SHUTTLESET_CALLS); net faults and
   the rest are skipped. Check the mapping against the CSVs you downloaded before reporting.
+  Its landing_x, landing_y are pixels in the match video (--annotation-size, 1280x720 by
+  default). When the paired record has a calibrated court and was made from the same
+  framing, they are projected to court meters with the record's homography and used as the
+  labelled landing; without a court they are left out.
 
 A labelled rally is matched to a predicted rally as in eval_rallies.py. On matched rallies
 with both a label and a call:
@@ -35,10 +39,14 @@ import argparse
 import csv
 import importlib.util
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from shuttlesense.config import BACKEND_DIR
+from shuttlesense.court.homography import image_to_court
 from shuttlesense.court.lines import play_bounds
 from shuttlesense.referee.linecalls import bounds_for, signed_margin
 from shuttlesense.schema import load_record
@@ -81,8 +89,34 @@ def read_labels(path: Path) -> list[dict[str, Any]]:
     return sorted(out, key=lambda r: r["start_s"])
 
 
-def read_shuttleset(path: Path, fps: float) -> list[dict[str, Any]]:
-    """One label per rally from a ShuttleSet set CSV (start/end from its stroke frames)."""
+ToCourt = Callable[[float, float], tuple[float, float]]
+
+
+def court_mapper(pred: Path, annotation_size: tuple[int, int] = (1280, 720)) -> ToCourt | None:
+    """Annotation pixels -> court meters through the record's homography; None without a
+    calibrated court. The record must show the same framing as the annotated video; a
+    different resolution is scaled."""
+    record = load_record(pred.read_text(encoding="utf-8"))
+    if record.court is None or not record.width or not record.height:
+        return None
+    h = np.asarray(record.court.homography, dtype=float)
+    sx, sy = record.width / annotation_size[0], record.height / annotation_size[1]
+
+    def to_court(x: float, y: float) -> tuple[float, float]:
+        mx, my = image_to_court(h, np.array([[x * sx, y * sy]]))[0]
+        return round(float(mx), 3), round(float(my), 3)
+
+    return to_court
+
+
+def read_shuttleset(
+    path: Path, fps: float, to_court: ToCourt | None = None
+) -> list[dict[str, Any]]:
+    """One label per rally from a ShuttleSet set CSV (start/end from its stroke frames).
+
+    With `to_court`, the landing pixel of the stroke that ended the rally becomes the
+    labelled landing in court meters.
+    """
     rallies: dict[int, dict[str, Any]] = {}
     for r in _rows(path):
         if not r.get("rally") or not r.get("frame_num"):
@@ -94,6 +128,8 @@ def read_shuttleset(path: Path, fps: float) -> list[dict[str, Any]]:
         reason = r.get("lose_reason", "")
         if reason in SHUTTLESET_CALLS:
             rally["call"] = SHUTTLESET_CALLS[reason]
+            if to_court and r.get("landing_x") and r.get("landing_y"):
+                rally["landing"] = to_court(float(r["landing_x"]), float(r["landing_y"]))
     return [rallies[k] for k in sorted(rallies)]
 
 
@@ -229,6 +265,11 @@ def main() -> None:
     parser.add_argument("--gt", type=Path, action="append", required=True)
     parser.add_argument("--gt-format", choices=["labels", "shuttleset"], default="labels")
     parser.add_argument("--fps", type=float, default=30.0, help="ShuttleSet video fps")
+    parser.add_argument(
+        "--annotation-size",
+        default="1280x720",
+        help="ShuttleSet: frame size the landing pixels were annotated on",
+    )
     parser.add_argument("--tolerance", type=float, default=1.0, help="seconds")
     parser.add_argument("--near-line-cm", type=float, default=20.0)
     parser.add_argument("--out", type=Path, default=RESULTS_DIR / "line_calls.md")
@@ -237,7 +278,11 @@ def main() -> None:
         raise SystemExit("give one --gt per --pred")
     clips = {}
     for pred, gt in zip(args.pred, args.gt, strict=True):
-        truth = read_shuttleset(gt, args.fps) if args.gt_format == "shuttleset" else read_labels(gt)
+        if args.gt_format == "shuttleset":
+            width, height = (int(v) for v in args.annotation_size.lower().split("x"))
+            truth = read_shuttleset(gt, args.fps, court_mapper(pred, (width, height)))
+        else:
+            truth = read_labels(gt)
         name, n = gt.stem, 2
         while name in clips:  # two label files with the same name in different folders
             name, n = f"{gt.stem} ({n})", n + 1

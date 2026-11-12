@@ -299,6 +299,33 @@ def test_shuttleset_lose_reason_gives_labels(tmp_path: Path) -> None:
     ]  # fmt: skip
 
 
+def test_shuttleset_landing_pixels_become_court_meters(tmp_path: Path) -> None:
+    """T8.12: with a calibrated record the landing pixel is projected onto the court."""
+    import numpy as np
+
+    from shuttlesense.court.homography import court_to_image
+    from shuttlesense.fake import load_golden
+
+    eval_line_calls = load_script("eval_line_calls")
+    record = load_golden()
+    assert record.court is not None
+    pred = tmp_path / "record.json"
+    pred.write_text(record.model_dump_json(), encoding="utf-8")
+    # A landing 3 m across and 1 m up the court, annotated on a frame twice the record's size.
+    px = court_to_image(np.asarray(record.court.homography), np.array([[3.0, 1.0]]))[0]
+    size = (record.width * 2, record.height * 2)
+    gt = write_csv(tmp_path / "set1.csv",
+                   ["rally", "ball_round", "frame_num", "landing_x", "landing_y", "lose_reason"],
+                   [[1, 1, 30, 10, 10, ""], [1, 2, 90, px[0] * 2, px[1] * 2, "出界"]])  # fmt: skip
+    mapper = eval_line_calls.court_mapper(pred, size)
+    landing = eval_line_calls.read_shuttleset(gt, 30, mapper)[0]["landing"]
+    assert landing == pytest.approx((3.0, 1.0), abs=0.01)
+    assert eval_line_calls.read_shuttleset(gt, 30)[0]["landing"] is None
+    record.court = None
+    pred.write_text(record.model_dump_json(), encoding="utf-8")
+    assert eval_line_calls.court_mapper(pred) is None
+
+
 def test_eval_doubles_scores_hitters_service_and_slot_jumps(tmp_path: Path) -> None:
     """T9.12 on the doubles golden record with labels written by label_clip.py."""
     import argparse
