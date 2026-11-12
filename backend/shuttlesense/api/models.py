@@ -7,7 +7,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from shuttlesense.schema import Call, LineCall, Mode, PlayerSide, Rally, Score, ScorePair
+from shuttlesense.schema import (
+    Call,
+    CourtType,
+    LineCall,
+    Mode,
+    PlayerSide,
+    Rally,
+    Score,
+    ScorePair,
+)
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
@@ -63,6 +72,7 @@ class JobCreate(BaseModel):
     start_score: ScorePair | None = None  # for clips that start mid-game
     best_of: Literal[1, 3] = 1  # games in the match
     first_server: PlayerSide | None = None  # who serves the first rally, if known
+    court: CourtType = "singles"  # doubles: four players and the doubles lines (Phase 9)
 
 
 class RenderRequest(BaseModel):
@@ -136,4 +146,5 @@ class Job(BaseModel):
     start_score: ScorePair | None = None
     best_of: Literal[1, 3] = 1
     first_server: PlayerSide | None = None
+    court: CourtType = "singles"
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)

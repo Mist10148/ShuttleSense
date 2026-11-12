@@ -20,6 +20,25 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
+def court_type(config: dict[str, Any]) -> str:
+    """ "singles" or "doubles": the job's court, else stages.referee.line_call.court."""
+    court = config.get("court")
+    if court is None:
+        referee = (config.get("stages") or {}).get("referee") or {}
+        court = (referee.get("line_call") or {}).get("court", "singles")
+    return "doubles" if court == "doubles" else "singles"
+
+
+def with_court(config: dict[str, Any], court: str) -> dict[str, Any]:
+    """A copy of `config` for a singles or doubles match: the top-level `court` key that pose,
+    hits and match play read, and the line-call court of the referee stage."""
+    stages = dict(config.get("stages") or {})
+    referee = dict(stages.get("referee") or {})
+    referee["line_call"] = {**(referee.get("line_call") or {}), "court": court}
+    stages["referee"] = referee
+    return {**config, "court": court, "stages": stages}
+
+
 def detect_device(preferred: str | None = None) -> str:
     """'cuda' if requested/available, else 'cpu'. Torch is optional."""
     if preferred in ("cpu", "cuda"):

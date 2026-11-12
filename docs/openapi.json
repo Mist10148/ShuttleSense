@@ -107,6 +107,15 @@
             "title": "Best Of",
             "type": "integer"
           },
+          "court": {
+            "default": "singles",
+            "enum": [
+              "singles",
+              "doubles"
+            ],
+            "title": "Court",
+            "type": "string"
+          },
           "court_corners_px": {
             "anyOf": [
               {
@@ -292,6 +301,15 @@
             ],
             "title": "Best Of",
             "type": "integer"
+          },
+          "court": {
+            "default": "singles",
+            "enum": [
+              "singles",
+              "doubles"
+            ],
+            "title": "Court",
+            "type": "string"
           },
           "court_corners_px": {
             "anyOf": [

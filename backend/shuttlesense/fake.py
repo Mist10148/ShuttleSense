@@ -16,10 +16,13 @@ from shuttlesense.pipeline import STAGE_NAMES, StageEvent
 from shuttlesense.schema import ClipRecord, Court, ScorePair, load_record
 
 GOLDEN_RECORD = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "golden_record.json"
+GOLDEN_DOUBLES = GOLDEN_RECORD.with_name("golden_record_doubles.json")
 
 
-def load_golden() -> ClipRecord:
-    return load_record(GOLDEN_RECORD.read_text(encoding="utf-8"))
+def load_golden(court: str = "singles") -> ClipRecord:
+    """The golden record, or its doubles version (four players, hitters, service order)."""
+    path = GOLDEN_DOUBLES if court == "doubles" else GOLDEN_RECORD
+    return load_record(path.read_text(encoding="utf-8"))
 
 
 def _scale_xy(x: float | None, y: float | None, sx: float, sy: float):
@@ -46,7 +49,7 @@ def scale_record(
         f.frame = i
         if f.shuttle and f.shuttle.visible:
             f.shuttle.x, f.shuttle.y = _scale_xy(f.shuttle.x, f.shuttle.y, sx, sy)
-        for p in (f.players.near, f.players.far):
+        for p in f.players.slots().values():
             if p is None:
                 continue
             bx, by, bw, bh = p.bbox
@@ -98,8 +101,10 @@ def fake_pipeline(
         target_height=io_cfg.get("target_height", 720),
         max_fps=io_cfg.get("max_fps", 30),
     )
+    from shuttlesense.config import court_type
+
     record = scale_record(
-        load_golden(),
+        load_golden(court_type(config or {})),
         fps=reader.fps,
         width=reader.width,
         height=reader.height,

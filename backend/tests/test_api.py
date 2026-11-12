@@ -795,3 +795,24 @@ def test_storage_sweeps_leftovers_of_interrupted_deletes(tmp_path: Path) -> None
     Storage(root)  # server restart
     assert kept_video.exists() and kept_job.exists()
     assert not gone_video.exists() and not gone_job.exists()
+
+
+def test_doubles_job_reaches_the_record_and_the_cache(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.cache import initial_key
+    from shuttlesense.config import court_type, with_court
+
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS,
+                "court": "doubles"}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert job["court"] == "doubles"
+        assert wait_for(client, job["id"])["status"] == "done"
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        assert record["frames"][0]["players"]["near_2"] is not None
+        assert record["hits"][0]["hitter"] == "near_1"
+        assert client.post("/jobs", json={**body, "court": "mixed"}).status_code == 422
+    # Singles cache keys stay as they were; doubles gets its own.
+    assert court_type({}) == "singles" and court_type(with_court({}, "doubles")) == "doubles"
+    assert initial_key(tiny_video, {}) == initial_key(tiny_video, {"court": "singles"})
+    assert initial_key(tiny_video, {}) != initial_key(tiny_video, with_court({}, "doubles"))

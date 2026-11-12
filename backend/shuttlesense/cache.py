@@ -65,6 +65,10 @@ def initial_key(video_path: Path, config: dict[str, Any]) -> str:
         "format": CACHE_FORMAT,
         "corners": config.get("court_corners_px"),
     }
+    from shuttlesense.config import court_type
+
+    if court_type(config) == "doubles":  # four players from pose on; singles keys unchanged
+        payload["court"] = "doubles"
     return _sha1(payload)
 
 

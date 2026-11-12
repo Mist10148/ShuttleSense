@@ -237,7 +237,9 @@ class JobManager:
 
     def job_config(self, job: Job) -> dict[str, Any]:
         """Pipeline config plus this job's own inputs."""
-        config = dict(self.config)
+        from shuttlesense.config import with_court
+
+        config = with_court(self.config, job.court) if job.court == "doubles" else dict(self.config)
         if job.start_score is not None:
             config["start_score"] = job.start_score.model_dump()
         config["match"] = {"best_of": job.best_of, "first_server": job.first_server}

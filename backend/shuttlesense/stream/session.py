@@ -115,11 +115,9 @@ class LiveSession:
             )
             court = Court(corners_px=tuple(court_corners), court_size_m=size,
                           homography=compute_homography(court_corners, size).tolist())  # fmt: skip
-        stages = dict(config.get("stages", {}))
-        referee_cfg = dict(stages.get("referee", {}))
-        referee_cfg["line_call"] = {**(referee_cfg.get("line_call") or {}), "court": request.court}
-        stages["referee"] = referee_cfg
-        self.config = {**config, "stages": stages}
+        from shuttlesense.config import with_court
+
+        self.config = with_court(config, request.court)
         self.analyzer = StreamAnalyzer(
             clip_id=session_id, fps=self.fps, width=self.width, height=self.height, court=court,
             config=self.config, device=device, start_score=request.start_score,

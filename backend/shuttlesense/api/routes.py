@@ -268,6 +268,7 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         start_score=body.start_score,
         best_of=body.best_of,
         first_server=body.first_server,
+        court=body.court,
     )
     try:
         return jobs.submit(job)
