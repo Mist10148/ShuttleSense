@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import numpy as np
 
@@ -40,7 +42,7 @@ class _WebsocketsConn:
         self.ws.send(data)
 
     def receive_json(self) -> dict:
-        return json.loads(self.ws.recv())
+        return json.loads(self.ws.recv(timeout=90))
 
     def close(self) -> None:
         self.ws.close()
@@ -55,6 +57,7 @@ def run(
     height: int,
     corners: list | None = None,
     realtime: bool = False,
+    require_models: bool = False,
 ) -> dict[str, Any]:
     """Drive one session; return latency percentiles and event counts."""
     from shuttlesense.stream.fake_source import encode
@@ -64,6 +67,10 @@ def run(
     started = conn.receive_json()
     if started["type"] != "started":
         raise RuntimeError(f"server refused the session: {started}")
+    if require_models and not model_backed(started["stages"]):
+        conn.send_json({"type": "stop"})
+        conn.receive_json()
+        raise ValueError("strict model benchmark needs real tracking and pose")
     # The server caps the rate (live.max_fps); send only the frames it keeps, stamped with
     # their video time, so every sent frame gets its frame event back.
     step = fps / float(started["fps"])
@@ -74,9 +81,12 @@ def run(
     t0, wall0 = time.perf_counter(), time.time() * 1000
     kept = -1
     for i, frame in enumerate(frames):
-        if int(i / step) == kept:
+        # Match the server's nearest-slot rule, including halfway ties. Flooring
+        # here sends duplicates into the same slot at non-integer rate ratios.
+        slot = math.ceil(i / step - 0.5 - 1e-9)
+        if slot == kept:
             continue
-        kept = int(i / step)
+        kept = slot
         if realtime:
             delay = t0 + i / fps - time.perf_counter()
             if delay > 0:
@@ -107,6 +117,8 @@ def run(
     conn.send_json({"type": "stop"})
     while (event := conn.receive_json())["type"] != "saved":
         counts[event["type"]] = counts.get(event["type"], 0) + 1
+    if require_models and not server_ms:
+        raise ValueError("strict model benchmark received no analyzed frame samples")
     return {
         "frames": len(latencies),
         "stages": started["stages"],
@@ -121,6 +133,20 @@ def run(
         "events": counts,
         "job_id": event["job_id"],
     }
+
+
+def model_backed(stages: dict) -> bool:
+    return not stages.get("synthetic") and all(
+        stages.get(stage) is True for stage in ("tracking", "pose")
+    )
+
+
+def _with_token(url: str, token: str | None) -> str:
+    if token is None:
+        return url
+    parts = urlsplit(url)
+    query = [(key, value) for key, value in parse_qsl(parts.query) if key != "token"]
+    return parts._replace(query=urlencode([*query, ("token", token)])).geturl()
 
 
 def _event_frame(event: dict) -> int | None:
@@ -179,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--realtime", action="store_true", help="pace frames at --fps")
     parser.add_argument("--in-process", action="store_true", help="start the API in-process")
     parser.add_argument("--fake", action="store_true", help="with --in-process: fake perception")
+    parser.add_argument("--require-models", action="store_true")
     parser.add_argument("--json", type=Path, help="also write the results here")
     args = parser.parse_args(argv)
 
@@ -200,14 +227,16 @@ def main(argv: list[str] | None = None) -> int:
             with TestClient(create_app(settings)) as client:
                 with client.websocket_connect("/live") as ws:
                     result = run(ws, frames, fps=fps, width=width, height=height,
-                                 corners=corners, realtime=args.realtime)  # fmt: skip
+                                 corners=corners, realtime=args.realtime,
+                                 require_models=args.require_models)  # fmt: skip
                 _wait_rendered(client, result["job_id"])
     else:
-        url = args.url + (f"?token={args.token}" if args.token else "")
+        url = _with_token(args.url, args.token)
         conn = _WebsocketsConn(url)
         try:
             result = run(conn, frames, fps=fps, width=width, height=height,
-                         corners=corners, realtime=args.realtime)  # fmt: skip
+                         corners=corners, realtime=args.realtime,
+                         require_models=args.require_models)  # fmt: skip
         finally:
             conn.close()
     text = json.dumps(result, indent=2)

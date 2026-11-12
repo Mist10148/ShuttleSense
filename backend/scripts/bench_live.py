@@ -18,10 +18,11 @@ import argparse
 import json
 import platform
 import subprocess
-import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from shuttlesense import live_replay
 from shuttlesense.config import BACKEND_DIR, load_config
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
@@ -50,14 +51,21 @@ def _commit() -> str:
 def to_markdown(result: dict, args: argparse.Namespace, command: str) -> str:
     budget = load_config().get("live", {}).get("budget_ms", 300)
     rt, srv = result["round_trip_ms"], result["server_ms"]
-    mode = "fake perception (in-process)" if args.fake else f"server {args.url}"
+    synthetic = args.fake or result["stages"].get("synthetic")
+    mode = (
+        "fake perception (in-process)"
+        if args.fake
+        else "fake perception (remote)"
+        if synthetic
+        else "remote server (address omitted)"
+    )
     lines = [
         "# Live latency (T8.12)",
         "",
         f"- Run: {datetime.now(UTC):%Y-%m-%d %H:%M} UTC, commit `{_commit()}`",
         f"- Command: `{command}`",
         f"- Mode: {mode}; frames: {result['frames']}; source: "
-        f"{args.video.name if args.video else 'synthetic 1280x720 frames'}",
+        f"{'video file (path omitted)' if args.video else 'synthetic 1280x720 frames'}",
         f"- Machine: {platform.platform()}, Python {platform.python_version()}, GPU: {_gpu()}",
         f"- Models on the server: {json.dumps(result['stages'])}",
         "",
@@ -95,18 +103,37 @@ def to_markdown(result: dict, args: argparse.Namespace, command: str) -> str:
                 f"| {ms.get('p50', '–')} | {ms.get('p95', '–')} |"
             )
         lines.append("")
-    if args.fake:
+    if synthetic:
         lines.append(
             "Fake perception replays synthetic rallies instead of running TrackNetV3 and pose, "
             "so these numbers are the overhead of everything around the models. They are not "
             "the GPU latency."
         )
-    elif not (result["stages"].get("tracking") and result["stages"].get("pose")):
+    elif not live_replay.model_backed(result["stages"]):
         lines.append(
             "Some models were not installed on the server, so this run does not show the "
             "full perception cost."
         )
     return "\n".join(lines) + "\n"
+
+
+def report_command(args: argparse.Namespace) -> str:
+    """Build the reproducibility line from public settings, never from raw argv."""
+    options = ["--fake"] if args.fake else ["--url", "<live-url>"]
+    options += ["--frames", str(args.frames)]
+    if args.token:
+        options += ["--token", "<token>"]
+    if args.video:
+        options += ["--video", "<input-video>"]
+    if args.corners:
+        options += ["--corners", args.corners]
+    if args.realtime:
+        options.append("--realtime")
+    if args.require_models:
+        options.append("--require-models")
+    if args.out:
+        options += ["--out", "<report-path>"]
+    return "python scripts/bench_live.py " + " ".join(options)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -118,12 +145,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--frames", type=int, default=300)
     parser.add_argument("--corners")
     parser.add_argument("--realtime", action="store_true")
-    parser.add_argument("--out", type=Path, default=RESULTS_DIR / "live_latency.md")
+    parser.add_argument(
+        "--require-models", action="store_true", help="require real tracking and pose"
+    )
+    parser.add_argument("--out", type=Path, help="report path (defaults by measurement mode)")
     args = parser.parse_args(argv)
+    if args.fake and args.require_models:
+        parser.error("--fake and --require-models cannot be combined")
 
-    from shuttlesense import live_replay
-
-    replay = ["--frames", str(args.frames), "--json", str(args.out.with_suffix(".json"))]
+    replay = ["--frames", str(args.frames)]
     if args.fake:
         replay += ["--in-process", "--fake"]
     else:
@@ -134,12 +164,28 @@ def main(argv: list[str] | None = None) -> None:
         replay += ["--corners", args.corners]
     if args.realtime:
         replay.append("--realtime")
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    live_replay.main(replay)
-    result = json.loads(args.out.with_suffix(".json").read_text(encoding="utf-8"))
-    command = "python scripts/bench_live.py " + " ".join(sys.argv[1:] if argv is None else argv)
-    markdown = to_markdown(result, args, command)
-    args.out.write_text(markdown, encoding="utf-8")
+    if args.require_models:
+        replay.append("--require-models")
+    with tempfile.TemporaryDirectory() as tmp:
+        raw = Path(tmp) / "result.json"
+        try:
+            live_replay.main([*replay, "--json", str(raw)])
+        except ValueError as exc:
+            parser.error(str(exc))
+        raw_text = raw.read_text(encoding="utf-8")
+    result = json.loads(raw_text)
+    stages = result["stages"]
+    if args.fake or stages.get("synthetic"):
+        suffix = "_fake"
+    elif live_replay.model_backed(stages) and result["server_ms"]:
+        suffix = "_models"
+    else:
+        suffix = "_unverified"
+    out = args.out or RESULTS_DIR / f"live_latency{suffix}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    markdown = to_markdown(result, args, report_command(args))
+    out.with_suffix(".json").write_text(raw_text, encoding="utf-8")
+    out.write_text(markdown, encoding="utf-8")
     print(markdown)
 
 
