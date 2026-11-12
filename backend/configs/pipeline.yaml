@@ -36,6 +36,8 @@ stages:
     smoothing_window: 5
     min_keypoint_score: 0.3     # joints below this count as missing
     hold_frames: 5              # keep a lost player's last box this many frames
+    appearance_weight: 2.0      # doubles: shirt-colour distance, in meters of court distance
+    partners_close_m: 0.6       # doubles: partners this close are told apart by shirt only
 
   court:
     enabled: true

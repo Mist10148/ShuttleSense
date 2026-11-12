@@ -120,7 +120,13 @@ def _keypoint_rcnn_detector(device: str):
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill frames[].players with near/far boxes and smoothed COCO-17 keypoints."""
-    from shuttlesense.pose.tracking import PlayerTracker, filter_players, smooth_keypoints
+    from shuttlesense.config import court_type
+    from shuttlesense.pose.tracking import (
+        filter_players,
+        make_tracker,
+        smooth_keypoints,
+        track_players,
+    )
 
     if ctx.reader is None:
         raise StageSkipped("no frames (io stage did not run)")
@@ -138,23 +144,28 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             corners = [[x * sx, y * sy] for x, y in corners]
         homography = compute_homography(corners, court_size)
 
-    tracker = PlayerTracker(hold_frames=cfg.get("hold_frames", 5))
+    court = court_type(ctx.config)
+    tracker = make_tracker(cfg, court)
     min_score = cfg.get("min_person_score", 0.4)
     total = max(len(ctx.reader), 1)
     for i, frame in ctx.reader:
         people = [p for p in detect(frame) if p.score >= min_score]
         people = filter_players(
-            people, frame_height=record.height, homography=homography, court_size=court_size
+            people,
+            frame_height=record.height,
+            homography=homography,
+            court_size=court_size,
+            max_players=8 if court == "doubles" else 2,  # the tracker keeps two per side
         )
-        near, far = tracker.update(people)
-        record.frames[i].players.near = near
-        record.frames[i].players.far = far
+        record.frames[i].players = track_players(
+            tracker, people, frame_height=record.height, homography=homography, frame=frame
+        )
         if i % 25 == 0:
             ctx.progress(i / total)
 
     window = cfg.get("smoothing_window", 5)
     min_kp = cfg.get("min_keypoint_score", 0.3)
-    for side in ("near", "far"):
+    for side in ("near", "far", "near_2", "far_2"):
         players = [getattr(f.players, side) for f in record.frames]
         smoothed = smooth_keypoints(
             [p.keypoints if p else None for p in players], window=window, min_score=min_kp

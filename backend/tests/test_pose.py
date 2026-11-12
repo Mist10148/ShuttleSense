@@ -152,3 +152,109 @@ def test_unknown_pose_backend_skips_the_stage() -> None:
 
     with pytest.raises(StageSkipped):
         estimator.load_detector("openpose", "balanced", "cpu")
+
+
+# Doubles (T9.3, T9.4) ------------------------------------------------------------------------
+
+
+def _court_box(h, x_m: float, y_m: float, height: float = 150) -> Player:
+    from shuttlesense.court import court_to_image
+
+    fx, fy = court_to_image(h, np.array([[x_m, y_m]]))[0]
+    return box(float(fx), float(fy), w=height * 0.4, h=height)
+
+
+def test_doubles_tracker_keeps_partner_slots_when_they_cross() -> None:
+    from shuttlesense.pose.tracking import DoublesTracker
+
+    h = compute_homography(CORNERS)
+    tracker = DoublesTracker()
+    first = [_court_box(h, 1.5, 3.0), _court_box(h, 3.7, 3.0), _court_box(h, 1.5, 10.0),
+             _court_box(h, 3.7, 10.0)]  # fmt: skip
+    slots = tracker.update(first, frame_height=720, homography=h)
+    assert slots["near_1"] is first[0] and slots["near_2"] is first[1]  # left is _1
+    assert slots["far_1"] is first[2] and slots["far_2"] is first[3]
+    # The near partners swap sides in small steps (front/back rotation).
+    for t in range(1, 11):
+        a = _court_box(h, 1.5 + 0.22 * t, 3.0 + 0.1 * t)
+        b = _court_box(h, 3.7 - 0.22 * t, 3.0 - 0.1 * t)
+        far = [_court_box(h, 1.5, 10.0), _court_box(h, 3.7, 10.0)]
+        slots = tracker.update([b, *far, a], frame_height=720, homography=h)
+        assert slots["near_1"] is a and slots["near_2"] is b
+        assert slots["far_1"] is far[0]
+
+
+def test_doubles_tracker_never_moves_a_slot_across_the_net() -> None:
+    from shuttlesense.pose.tracking import DoublesTracker
+
+    h = compute_homography(CORNERS)
+    tracker = DoublesTracker(hold_frames=1)
+    tracker.update([_court_box(h, 2.0, 3.0), _court_box(h, 2.0, 10.0)], frame_height=720,
+                   homography=h)  # fmt: skip
+    # Only far players are seen: the near slot holds, then empties; it is never filled from far.
+    for _ in range(3):
+        slots = tracker.update([_court_box(h, 2.0, 10.0), _court_box(h, 3.5, 9.0)],
+                               frame_height=720, homography=h)  # fmt: skip
+    assert slots["near_1"] is None and slots["near_2"] is None
+    assert slots["far_1"] is not None and slots["far_2"] is not None
+
+
+def test_doubles_tracker_holds_a_hidden_partner() -> None:
+    from shuttlesense.pose.tracking import DoublesTracker
+
+    h = compute_homography(CORNERS)
+    tracker = DoublesTracker(hold_frames=4, hold_decay=0.5)
+    a, b = _court_box(h, 1.5, 3.0), _court_box(h, 3.7, 3.0)
+    tracker.update([a, b], frame_height=720, homography=h)
+    for _ in range(4):
+        slots = tracker.update([_court_box(h, 3.7, 3.0)], frame_height=720, homography=h)
+    assert slots["near_1"] is not None and slots["near_1"].score < a.score
+    assert slots["near_2"].bbox == b.bbox
+
+
+def test_shirt_colour_keeps_partners_apart_when_they_overlap() -> None:
+    """Position alone would swap the partners here; their shirts keep the slots."""
+    from shuttlesense.pose.tracking import DoublesTracker
+
+    h = compute_homography(CORNERS)
+    frame = np.zeros((720, 1280, 3), np.uint8)
+
+    def paint(p: Player, bgr: tuple[int, int, int]) -> None:
+        x, y, w, hh = (int(v) for v in p.bbox)
+        frame[y : y + hh, x : x + w] = bgr
+
+    tracker = DoublesTracker(close_m=0.8)
+    red, blue = _court_box(h, 2.3, 3.0), _court_box(h, 2.9, 3.0)
+    for _ in range(5):  # learn the shirts while the partners stand apart
+        frame[:] = 0
+        paint(red, (0, 0, 255))
+        paint(blue, (255, 0, 0))
+        slots = tracker.update([red, blue], frame_height=720, homography=h, frame=frame)
+    assert slots["near_1"] is red
+    # They pass each other: red is now where blue was, and the other way round.
+    red2, blue2 = _court_box(h, 2.8, 3.0), _court_box(h, 2.4, 3.0)
+    frame[:] = 0
+    paint(red2, (0, 0, 255))
+    paint(blue2, (255, 0, 0))
+    slots = tracker.update([blue2, red2], frame_height=720, homography=h, frame=frame)
+    assert slots["near_1"] is red2 and slots["near_2"] is blue2
+
+
+def test_doubles_tracker_without_a_court_splits_by_image_height() -> None:
+    from shuttlesense.pose.tracking import DoublesTracker
+
+    tracker = DoublesTracker()
+    people = [box(400, 650), box(800, 640), box(500, 300), box(760, 310)]
+    slots = tracker.update(people, frame_height=720)
+    assert {id(slots["near_1"]), id(slots["near_2"])} == {id(people[0]), id(people[1])}
+    assert {id(slots["far_1"]), id(slots["far_2"])} == {id(people[2]), id(people[3])}
+
+
+def test_make_tracker_follows_the_court() -> None:
+    from shuttlesense.pose.tracking import DoublesTracker, make_tracker, track_players
+
+    assert isinstance(make_tracker({}, "singles"), PlayerTracker)
+    tracker = make_tracker({"appearance_weight": 1.0}, "doubles")
+    assert isinstance(tracker, DoublesTracker) and tracker.appearance_weight == 1.0
+    players = track_players(tracker, [box(500, 600), box(700, 300)], frame_height=720)
+    assert players.near is not None and players.far is not None and players.near_2 is None

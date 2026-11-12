@@ -106,11 +106,13 @@ class LiveManager:
             corners = [(x * size[0] / WIDTH, y * size[1] / HEIGHT) for x, y in CORNERS]
             classify = planned_classifier(planned(truth), period=len(record.frames))
         else:
+            from shuttlesense.config import with_court
             from shuttlesense.stream.perception import ModelPerception
 
             perception = ModelPerception(
-                config, self.state.jobs.device, size, corners, int(live["background_frames"])
-            )
+                with_court(config, request.court), self.state.jobs.device, size, corners,
+                int(live["background_frames"]),
+            )  # fmt: skip
         return LiveSession(
             session_id=session_id, request=request, config=config, perception=perception,
             court_corners=corners, recording=recording, device=self.state.jobs.device,

@@ -44,6 +44,8 @@ def _scale_person(p: Player, sx: float, sy: float) -> Player:
 class ModelPerception:
     """TrackNetV3 + pose on live frames; a part whose weights or packages are missing is off."""
 
+    court = "singles"  # set from the session config when pose loads
+
     def __init__(
         self,
         config: dict[str, Any],
@@ -83,8 +85,9 @@ class ModelPerception:
     def _init_pose(
         self, cfg: dict[str, Any], court_cfg: dict[str, Any], corners: Sequence | None
     ) -> None:
+        from shuttlesense.config import court_type
         from shuttlesense.pose.estimator import load_detector
-        from shuttlesense.pose.tracking import PlayerTracker
+        from shuttlesense.pose.tracking import make_tracker
         from shuttlesense.schema import COURT_SIZE_M
         from shuttlesense.stage import StageSkipped
 
@@ -96,7 +99,8 @@ class ModelPerception:
         except StageSkipped:
             return
         self.min_person_score = cfg.get("min_person_score", 0.4)
-        self.tracker = PlayerTracker(hold_frames=cfg.get("hold_frames", 5))
+        self.court = court_type(self.config)
+        self.tracker = make_tracker(cfg, self.court)
         self.court_size = tuple(court_cfg.get("court_size_m", COURT_SIZE_M))
         self.homography = None
         if corners:
@@ -132,7 +136,7 @@ class ModelPerception:
     def _players(self, frame: np.ndarray) -> Players:
         if self.detect is None:
             return Players()
-        from shuttlesense.pose.tracking import filter_players
+        from shuttlesense.pose.tracking import filter_players, track_players
 
         people = [p for p in self.detect(frame) if p.score >= self.min_person_score]
         sx, sy = self.size[0] / frame.shape[1], self.size[1] / frame.shape[0]
@@ -143,9 +147,12 @@ class ModelPerception:
             frame_height=self.size[1],
             homography=self.homography,
             court_size=self.court_size,
+            max_players=8 if self.court == "doubles" else 2,
         )
-        near, far = self.tracker.update(people)
-        return Players(near=near, far=far)
+        # Boxes are in session pixels; the shirt colours are read from this (smaller) frame.
+        return track_players(self.tracker, people, frame_height=self.size[1],
+                             homography=self.homography, frame=frame,
+                             image_scale=(1 / sx, 1 / sy))  # fmt: skip
 
 
 class ReplayPerception:
@@ -171,7 +178,7 @@ class ReplayPerception:
             else Shuttle()
         )
         players = Players()
-        for side in ("near", "far"):
+        for side in ("near", "far", "near_2", "far_2"):
             p = getattr(f.players, side)
             if p is not None:
                 x, y, w, h = p.bbox
