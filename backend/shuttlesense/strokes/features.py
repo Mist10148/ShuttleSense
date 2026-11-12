@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from shuttlesense.schema import NUM_KEYPOINTS, ClipRecord, PlayerSide
+from shuttlesense.schema import NUM_KEYPOINTS, ClipRecord
 
 POSE_FEATURES = NUM_KEYPOINTS * 2
 SHUTTLE_FEATURES = 5
@@ -41,7 +41,7 @@ def pose_vector(
 def build_window(
     record: ClipRecord,
     hit_frame: int,
-    player: PlayerSide,
+    player: str,  # a Players field: near / far, or a doubles partner (near_2 / far_2)
     window: int = 32,
     use_trajectory: bool = True,
 ) -> np.ndarray:

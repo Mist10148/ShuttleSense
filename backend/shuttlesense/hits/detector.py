@@ -2,6 +2,9 @@
 
 A hit is a frame where the shuttle's direction changes sharply while it is within
 `max_wrist_distance_px` of a player's wrist. Thresholds live in configs/pipeline.yaml.
+
+In doubles a side's wrists are both partners' wrists, so the side is found as in singles;
+`attribute_hitters` then credits the hit to the partner whose wrist was closer (T9.5).
 """
 
 from __future__ import annotations
@@ -10,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import ClipRecord, Hit, PlayerSide
+from shuttlesense.schema import ClipRecord, Hit, PlayerId, PlayerSide, slot_attr
 from shuttlesense.stage import StageContext
 
 LEFT_WRIST, RIGHT_WRIST = 9, 10
@@ -42,7 +45,7 @@ def vertical_flips(xy: np.ndarray) -> list[int]:
 
 
 def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
-    """Closest confident wrist to `point`; wrists is (2, 3) [x, y, score] or None."""
+    """Closest confident wrist to `point`; wrists is (N, 3) [x, y, score] or None."""
     if wrists is None:
         return float("inf")
     good = wrists[wrists[:, 2] >= MIN_KEYPOINT_SCORE]
@@ -119,16 +122,74 @@ def detect_hits(
     return [(frame, side) for _d, frame, side in alternating]
 
 
-def wrist_arrays(record: ClipRecord, side: PlayerSide) -> list[np.ndarray | None]:
-    """Per frame, the (2, 3) wrist keypoints of one player, or None."""
+def _wrists(p) -> np.ndarray | None:
+    if p is None or len(p.keypoints) <= RIGHT_WRIST:
+        return None
+    return np.array([p.keypoints[LEFT_WRIST], p.keypoints[RIGHT_WRIST]], float)
+
+
+def wrist_arrays(record: ClipRecord, side: str) -> list[np.ndarray | None]:
+    """Per frame, the wrist keypoints [x, y, score] of a side, or None.
+
+    `side` is near / far (with the partner's wrists too in doubles: (4, 3)) or one slot's
+    Players field (near_2, ...: (2, 3)).
+    """
     out: list[np.ndarray | None] = []
     for f in record.frames:
-        p = getattr(f.players, side)
-        if p is None or len(p.keypoints) <= RIGHT_WRIST:
-            out.append(None)
-        else:
-            out.append(np.array([p.keypoints[LEFT_WRIST], p.keypoints[RIGHT_WRIST]], float))
+        arrays = [_wrists(getattr(f.players, side))]
+        if side in ("near", "far"):
+            arrays.append(_wrists(getattr(f.players, f"{side}_2")))
+        found = [a for a in arrays if a is not None]
+        out.append(np.concatenate(found) if found else None)
     return out
+
+
+def attribute_hitters(record: ClipRecord, cfg: dict[str, Any]) -> None:
+    """Doubles: credit each hit to one partner (Hit.hitter, hitter_confidence).
+
+    Within `hitter_window_frames` of the hit, each partner's closest confident wrist to the
+    shuttle is measured; the closer partner hit it. When the two distances are within
+    `ambiguous_px` (at 720p) of each other, or neither partner was seen, the hitter is left
+    None and the app shows the team. The confidence grows with the gap between the two.
+    Records without partners (singles) are left as they are.
+    """
+    if not any(f.players.near_2 or f.players.far_2 for f in record.frames):
+        return
+    from shuttlesense.tracking import track_arrays
+
+    xy, visible = track_arrays(record)
+    scale = float(cfg.get("scale", 1.0))
+    window = int(cfg.get("hitter_window_frames", 3))
+    ambiguous = float(cfg.get("ambiguous_px", 25)) * scale
+    for hit in record.hits:
+        slots: tuple[PlayerId, PlayerId] = (f"{hit.player}_1", f"{hit.player}_2")  # type: ignore[assignment]
+        dist = {}
+        for slot in slots:
+            best = float("inf")
+            for i in range(
+                max(0, hit.frame - window), min(len(record.frames), hit.frame + window + 1)
+            ):
+                if not visible[i]:
+                    continue
+                best = min(
+                    best,
+                    _wrist_distance(
+                        xy[i], _wrists(getattr(record.frames[i].players, slot_attr(slot)))
+                    ),
+                )
+            dist[slot] = best
+        a, b = slots
+        da, db = dist[a], dist[b]
+        if not np.isfinite(min(da, db)):
+            hit.hitter, hit.hitter_confidence = None, None
+            continue
+        if np.isfinite(max(da, db)) and abs(da - db) < ambiguous:
+            hit.hitter, hit.hitter_confidence = None, None
+            continue
+        closer, near_d, far_d = (a, da, db) if da <= db else (b, db, da)
+        gap = 1.0 if not np.isfinite(far_d) else (far_d - near_d) / max(far_d + near_d, 1e-6)
+        hit.hitter = closer
+        hit.hitter_confidence = round(min(0.99, 0.5 + 0.5 * gap), 2)
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
@@ -146,5 +207,6 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         Hit(id=i, frame=frame, time_s=round(frame / fps, 3), player=side)
         for i, (frame, side) in enumerate(hits)
     ]
+    attribute_hitters(record, cfg)
     ctx.progress(1.0)
     return record

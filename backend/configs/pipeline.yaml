@@ -49,6 +49,8 @@ stages:
     max_wrist_distance_px: 120  # at 720p
     min_frames_between_hits: 8
     rally_break_frames: 30      # shuttle unseen this long = new rally, same hitter allowed
+    hitter_window_frames: 3     # doubles: frames either side of a hit to find the partner
+    ambiguous_px: 25            # doubles: wrists this close (720p) = hitter left unknown
     marker_duration_s: 0.5
 
   strokes:

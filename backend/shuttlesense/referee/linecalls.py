@@ -127,7 +127,7 @@ def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Boun
         serve = hits[0]
         frame = record.frames[serve.frame] if serve.frame < len(record.frames) else None
         pos = frame.court_positions if frame else None
-        server = getattr(pos, serve.player, None) if pos else None
+        server = getattr(pos, serve.player_attr, None) if pos else None
         if server is not None:
             return service_bounds(serve.player, server[0], court, size), True
     return play_bounds(court, size), False

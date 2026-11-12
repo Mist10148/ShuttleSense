@@ -227,7 +227,11 @@ def hit_pose(record: ClipRecord, hit: Hit, cfg: dict[str, float], span: int = 6)
     frames: list[np.ndarray | None] = []
     heights = []
     for i in range(hit.frame - span, hit.frame + span + 1):
-        p = getattr(record.frames[i].players, hit.player) if 0 <= i < len(record.frames) else None
+        p = (
+            getattr(record.frames[i].players, hit.player_attr)
+            if 0 <= i < len(record.frames)
+            else None
+        )
         if p is None or len(p.keypoints) < 17:
             frames.append(None)
             continue

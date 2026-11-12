@@ -151,7 +151,7 @@ def draw_hits(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
     duration = state.stage("hits").get("marker_duration_s", 0.5) * (record.fps or 30)
     if hit is None or i - hit.frame > duration:
         return
-    anchor = _hitter_anchor(record, hit.frame, hit.player)
+    anchor = _hitter_anchor(record, hit.frame, hit.player_attr)
     if anchor is None:
         return
     t = (i - hit.frame) / max(duration, 1)
@@ -168,7 +168,7 @@ def draw_strokes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
     hit = _last_hit_before(record, i)
     if hit is None or hit.stroke is None:
         return
-    p = getattr(record.frames[i].players, hit.player)
+    p = getattr(record.frames[i].players, hit.player_attr)
     if p is None:
         return
     x, y, _w, _h = p.bbox

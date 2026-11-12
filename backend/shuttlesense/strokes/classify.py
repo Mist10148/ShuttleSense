@@ -65,7 +65,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     else:
         use_traj = cfg.get("use_trajectory", True)
     classes = ckpt.get("classes", list(STROKE_CLASSES))
-    x = np.stack([build_window(record, h.frame, h.player, window, use_traj) for h in record.hits])
+    x = np.stack(
+        [build_window(record, h.frame, h.player_attr, window, use_traj) for h in record.hits]
+    )
 
     import torch
 
