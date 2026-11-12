@@ -61,6 +61,7 @@ stages:
 
   feedback:
     enabled: true               # rules: docs/FEEDBACK_RULES.md
+    min_stroke_confidence_doubles: 0.5  # doubles: no form tips on strokes the model is unsure of
     min_keypoint_score: 0.3
     window_frames: 2            # contact rules use the hit frame +- this
     elbow_extension_deg: 150

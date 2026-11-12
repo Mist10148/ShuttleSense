@@ -113,3 +113,20 @@ def test_evaluate_fills_feedback_items() -> None:
     assert all(i.passed and i.tip is None for i in items)
     hit.stroke = None
     assert evaluate(record, hit, dict(DEFAULTS)) == []
+
+
+def test_doubles_skips_feedback_on_unsure_strokes() -> None:
+    """T9.7: the stroke model learned from singles, so doubles coaches only on sure strokes."""
+    from shuttlesense.config import with_court
+    from shuttlesense.fake import load_golden
+    from shuttlesense.feedback import run
+    from shuttlesense.stage import StageContext
+
+    record = load_golden("doubles")
+    record.hits[1].confidence = 0.3
+    run(record, StageContext(video_path=None, out_dir=None, config=with_court({}, "doubles")))
+    assert record.hits[1].feedback == [] and record.hits[2].feedback
+    singles = load_golden()
+    singles.hits[1].confidence = 0.3
+    run(singles, StageContext(video_path=None, out_dir=None, config={}))
+    assert singles.hits[1].feedback  # singles is unchanged

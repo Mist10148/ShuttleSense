@@ -257,8 +257,14 @@ def _racket_arm(record: ClipRecord, hit: Hit, kps: np.ndarray, min_score: float)
 
 
 def evaluate(record: ClipRecord, hit: Hit, cfg: dict[str, Any]) -> list[FeedbackItem]:
-    """One FeedbackItem per applicable rule, with the tip only when the rule fails."""
+    """One FeedbackItem per applicable rule, with the tip only when the rule fails.
+
+    A stroke below `min_stroke_confidence` gets no feedback: the rules depend on the class.
+    """
     if hit.stroke is None:
+        return []
+    gate = float(cfg.get("min_stroke_confidence", 0.0))
+    if hit.confidence is not None and hit.confidence < gate:
         return []
     pose = hit_pose(record, hit, cfg)
     if pose is None:
@@ -277,7 +283,12 @@ def evaluate(record: ClipRecord, hit: Hit, cfg: dict[str, Any]) -> list[Feedback
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill hits[].feedback for every hit with a stroke class."""
+    from shuttlesense.config import court_type
+
     cfg = {**DEFAULTS, **ctx.stage_config("feedback")}
+    if court_type(ctx.config) == "doubles":
+        # The stroke model learned from singles (T9.7): only coach on strokes it is sure of.
+        cfg["min_stroke_confidence"] = cfg.get("min_stroke_confidence_doubles", 0.5)
     for hit in record.hits:
         hit.feedback = evaluate(record, hit, cfg)
     ctx.progress(1.0)
