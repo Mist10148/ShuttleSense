@@ -9,6 +9,7 @@ import 'package:shuttlesense_app/data/models/clip_record.dart';
 import 'package:shuttlesense_app/features/results/widgets/court_minimap.dart';
 import 'package:shuttlesense_app/features/results/widgets/scoreboard.dart';
 import 'package:shuttlesense_app/features/results/widgets/stroke_timeline.dart';
+import 'package:shuttlesense_app/features/results/widgets/summary_chart.dart';
 
 import 'minimap_test.dart' show contrast;
 
@@ -98,5 +99,12 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the stroke chart shows each partner', (tester) async {
+    await pump(tester, SummaryChart(summary: doublesRecord().summary));
+    expect(find.textContaining('Near 2: 1 hits'), findsOneWidget);
+    expect(find.textContaining('Far 2: 0 hits'), findsOneWidget);
+    expect(find.textContaining('Near: '), findsNothing);
   });
 }

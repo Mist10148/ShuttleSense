@@ -18,9 +18,14 @@ class SummaryChart extends StatelessWidget {
     final colors = PlayerColors.of(context);
     final theme = Theme.of(context);
     final classes = kStrokeLabels.keys.where((c) => s.strokeCounts.containsKey(c)).toList();
+    // Doubles: one bar per partner (hits whose partner is unknown count only for the side).
+    final players = s.perPlayer.containsKey('near_1')
+        ? const ['near_1', 'near_2', 'far_1', 'far_2']
+        : const ['near', 'far'];
     int count(String side, String stroke) => s.perPlayer[side]?.strokeCounts[stroke] ?? 0;
     final maxY = [
-      for (final c in classes) ...[count('near', c), count('far', c)],
+      for (final c in classes)
+        for (final p in players) count(p, c),
     ].fold<int>(1, (a, b) => a > b ? a : b);
 
     String peak(String side) {
@@ -37,7 +42,8 @@ class SummaryChart extends StatelessWidget {
             Semantics(
               label: [
                 for (final c in classes)
-                  '${kStrokeLabels[c]}: near ${count('near', c)}, far ${count('far', c)}',
+                  '${kStrokeLabels[c]}: '
+                      '${[for (final p in players) '${playerLabel(p).toLowerCase()} ${count(p, c)}'].join(', ')}',
               ].join('; '),
               excludeSemantics: true,
               child: SizedBox(
@@ -71,16 +77,12 @@ class SummaryChart extends StatelessWidget {
                         BarChartGroupData(
                           x: i,
                           barRods: [
-                            BarChartRodData(
-                              toY: count('near', classes[i]).toDouble(),
-                              color: colors.near,
-                              width: 8,
-                            ),
-                            BarChartRodData(
-                              toY: count('far', classes[i]).toDouble(),
-                              color: colors.far,
-                              width: 8,
-                            ),
+                            for (final p in players)
+                              BarChartRodData(
+                                toY: count(p, classes[i]).toDouble(),
+                                color: colors.forPlayer(p),
+                                width: players.length > 2 ? 6 : 8,
+                              ),
                           ],
                         ),
                     ],
@@ -93,8 +95,7 @@ class SummaryChart extends StatelessWidget {
             spacing: 16,
             children: [
               for (final (side, label, color) in [
-                ('near', 'Near', colors.near),
-                ('far', 'Far', colors.far),
+                for (final p in players) (p, playerLabel(p), colors.forPlayer(p)),
               ])
                 Row(
                   mainAxisSize: MainAxisSize.min,
