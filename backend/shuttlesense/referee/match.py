@@ -43,6 +43,7 @@ class Step:
     score_after: ScorePair | None
     server_id: PlayerId | None = None  # doubles: who served and received this rally
     receiver_id: PlayerId | None = None
+    score_before: ScorePair | None = None  # the game score when the rally started
 
 
 @dataclass
@@ -133,16 +134,17 @@ def play(
             steps.append(Step(game=game, score_after=None))
             continue
         ids = courts.pair(near, far) if courts else (None, None)
+        before = ScorePair(near=near, far=far)
         if w is None:
             # No point played: an interval or change of ends still stands.
-            steps.append(Step(game, ScorePair(near=near, far=far), *ids))
+            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
             continue
         interval = change_ends = False
         near, far = (near + 1, far) if w == "near" else (near, far + 1)
         server = w
         if courts:
             courts.won(w)
-        steps.append(Step(game, ScorePair(near=near, far=far), *ids))
+        steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
         if not reached_interval and max(near, far) == INTERVAL_AT:
             reached_interval = interval = True
             # The deciding game, or a one-game match (BWF Laws 8.1.3 and Appendix 3).

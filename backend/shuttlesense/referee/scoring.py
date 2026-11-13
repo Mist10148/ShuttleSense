@@ -22,6 +22,7 @@ from shuttlesense.schema import (
 
 if TYPE_CHECKING:
     from shuttlesense.referee.linecalls import LineCallOverrideIn
+    from shuttlesense.referee.match import MatchPlay, Step
 
 # Score corrections live next to record.json, so a re-render (which rebuilds the record from
 # the stage cache) can apply them again.
@@ -63,6 +64,26 @@ def apply_rallies(
     (the game, with best_of=1), later rallies get score_after = None and do not count.
     Awarded points count before the rally whose index they carry.
     """
+    pairs, result = _rally_steps(rallies, start, best_of=best_of, first_server=first_server,
+                                 first_server_id=first_server_id,
+                                 first_receiver_id=first_receiver_id, awards=awards)  # fmt: skip
+    for rally, step in pairs:
+        rally.game, rally.score_after = step.game, step.score_after
+        rally.server_id, rally.receiver_id = step.server_id, step.receiver_id
+    return result.score
+
+
+def _rally_steps(
+    rallies: Sequence[Rally],
+    start: ScorePair | None,
+    *,
+    best_of: int,
+    first_server: PlayerSide | None,
+    first_server_id: PlayerId | None,
+    first_receiver_id: PlayerId | None,
+    awards: Sequence[ScoreCorrection],
+) -> tuple[list[tuple[Rally, Step]], MatchPlay]:
+    """Play the match over the rallies and awards: each rally's step, and the result."""
     from shuttlesense.referee.match import play
 
     winners: list[PlayerSide | None] = []
@@ -78,11 +99,8 @@ def apply_rallies(
     slots += [None] * len(pending)
     result = play(winners, start, best_of=best_of, first_server=first_server,
                   first_server_id=first_server_id, first_receiver_id=first_receiver_id)  # fmt: skip
-    for rally, step in zip(slots, result.steps, strict=True):
-        if rally is not None:
-            rally.game, rally.score_after = step.game, step.score_after
-            rally.server_id, rally.receiver_id = step.server_id, step.receiver_id
-    return result.score
+    pairs = [(r, step) for r, step in zip(slots, result.steps, strict=True) if r is not None]
+    return pairs, result
 
 
 def match_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -143,16 +161,23 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
     from shuttlesense.schema import COURT_SIZE_M, side_of, slot_attr
 
     width = (record.court.court_size_m if record.court else COURT_SIZE_M)[0]
-    score = start or ScorePair()
-    game = 1
     for rally in record.rallies:
         rally.review = None
-        if rally.game != game:
-            game, score = rally.game, ScorePair()
-        before = score
-        if rally.score_after is not None:
-            score = rally.score_after
-        if rally.server_id is None:
+    if record.score is None:
+        return
+    # The score before each rally comes from the same match steps that set server_id, so
+    # awarded points (which are steps but not rallies) count.
+    awards = [c for c in record.score.corrections
+              if c.kind == "award" and c.winner_after is not None]  # fmt: skip
+    pairs, _ = _rally_steps(record.rallies, start, best_of=record.score.best_of,
+                            first_server=record.score.first_server,
+                            first_server_id=record.score.first_server_id,
+                            first_receiver_id=record.score.first_receiver_id,
+                            awards=awards)  # fmt: skip
+    before_of = {r.index: step.score_before for r, step in pairs}
+    for rally in record.rallies:
+        before = before_of.get(rally.index)
+        if before is None or rally.server_id is None:
             continue
         serve = next((h for h in record.hits if h.rally_index == rally.index), None)
         if serve is None:

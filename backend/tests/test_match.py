@@ -166,6 +166,36 @@ def test_pose_cross_check_flags_but_never_changes_the_score() -> None:
     assert "near_2" in record.rallies[0].review
 
 
+def test_pose_cross_check_counts_awarded_points() -> None:
+    """An awarded point moves the server's court: the check must use the score with it."""
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from shuttlesense.referee.scoring import apply_corrections
+    from shuttlesense.schema import ScoreCorrection, load_record, side_of, slot_attr
+
+    path = Path(__file__).parent / "fixtures" / "golden_record_doubles.json"
+    record = load_record(path.read_text(encoding="utf-8"))
+    award = ScoreCorrection(rally_index=0, winner_before=None, winner_after="far",
+                            at=datetime.now(UTC), kind="award")  # fmt: skip
+    apply_corrections(record, [award])
+    rally = record.rallies[0]
+    serve = next(h for h in record.hits if h.rally_index == rally.index)
+    serve.hitter = rally.server_id
+    side = side_of(rally.server_id)
+    assert side == "far"  # far won the awarded point, so far serves at 0-1
+    width = record.court.court_size_m[0]
+    # Far serves at 0-1, an odd score: the left court, which is +x for a far player.
+    setattr(record.frames[serve.frame].court_positions, slot_attr(rally.server_id),
+            (width * 0.75, 10.0))  # fmt: skip
+    apply_corrections(record, [award])
+    assert record.rallies[0].review is None
+    setattr(record.frames[serve.frame].court_positions, slot_attr(rally.server_id),
+            (width * 0.25, 10.0))  # fmt: skip
+    apply_corrections(record, [award])
+    assert "left court at 0-1" in record.rallies[0].review
+
+
 def test_an_undecided_rally_keeps_the_interval_showing() -> None:
     score = play(["near"] * 11 + [None], best_of=3).score
     assert score.interval  # no point was played since 11

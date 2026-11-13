@@ -137,9 +137,10 @@ def fake_pipeline(
         start = ScorePair(**(config or {}).get("start_score", {}) or {})
         match = match_config(config or {})
         record.score.best_of, record.score.first_server = match["best_of"], match["first_server"]
-        if match["first_server_id"] or record.score.first_server_id is None:
-            record.score.first_server_id = match["first_server_id"]
-            record.score.first_receiver_id = match["first_receiver_id"]
+        # The service slots come from the job only: the golden ones would not match the
+        # user's first server (and play() refuses a server on the other side).
+        record.score.first_server_id = match["first_server_id"]
+        record.score.first_receiver_id = match["first_receiver_id"]
         if not apply_user_changes(record, out_dir, start):
             apply_corrections(record, [], start)  # still re-score from the start score
             record.rally_events = build_events(record)

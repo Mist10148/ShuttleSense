@@ -836,3 +836,19 @@ def test_doubles_first_server_and_receiver_reach_the_score(
         for bad in ({"first_receiver_id": None}, {"first_receiver_id": "far_1"},
                     {"first_server": "near"}):  # fmt: skip
             assert client.post("/jobs", json={**body, **bad}).status_code == 422
+
+
+def test_fake_doubles_job_with_only_a_first_server_completes(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    """The golden record's service slots must not clash with the user's first server."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS,
+                "court": "doubles", "first_server": "far"}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        assert record["score"]["first_server"] == "far"
+        assert record["score"].get("first_server_id") is None
+        assert all(r.get("server_id") is None for r in record["rallies"])
