@@ -255,7 +255,8 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M3 · **Estimate:** 2 h · **Priority:** P2 · **Area:** ml · **Refs:** NFR Performance · **Depends on:** T3.10 · **Blocks:** —
 
 **Steps**
-- [ ] Measure strokes stage time for a 1-minute rally on GPU and CPU; add to `timings.json`.
+- [x] Measure the strokes stage on CPU (`scripts/bench_strokes.py`, untrained model: [stroke_latency.md](../results/stroke_latency.md)).
+- [ ] Measure it on the GPU with trained weights for a 1-minute rally; add to `timings.json`.
 - [x] Ensure CPU inference works (map checkpoint to CPU) so laptops without CUDA still classify.
 
 **Acceptance criteria.** Stage takes < 5 s on GPU and < 30 s on CPU for a 1-minute clip.

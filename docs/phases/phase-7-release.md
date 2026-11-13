@@ -157,7 +157,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 - [ ] Demo GIF (≤ 10 MB) of the annotated video; screenshots of phone and laptop layouts in `docs/media/`.
 - [ ] Replace the Demo placeholder; fill feature checkboxes with what shipped.
 - [ ] Update Limitations with findings from T7.2 and open bugs.
-- [ ] Check every link in README.
+- [x] Check every link in README. (Relative links checked by script on Nov 14, T10.7; recheck after the final edit.)
 
 **Acceptance criteria.** README has no placeholders or TBD.
 
@@ -213,7 +213,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 **Steps**
 - [ ] Move unfinished features to Future work in README and PRD.
 - [ ] Flip every task status in `docs/phases/` and close or re-label GitHub issues (`wontfix` / `future`).
-- [ ] Update `docs/DECISIONS.md` with late decisions.
+- [ ] Update `docs/DECISIONS.md` with late decisions. (D23–D27 added Nov 14; add any made after the freeze.)
 
 **Acceptance criteria.** Docs and the issue tracker agree with the release.
 
@@ -229,7 +229,7 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 - [x] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
 - [x] Confirm the backend deletes uploads on `DELETE`: `backend/tests/test_api.py::test_full_round_trip`, `test_video_deleted_during_its_job_is_removed_when_the_job_stops` and `test_storage_sweeps_leftovers_of_interrupted_deletes` (Nov 12).
 - [ ] Wipe the demo server's storage after the demo.
-- [ ] Record the licences of the bundled media_kit libmpv/FFmpeg native libraries and scan the GPU ML venv (open in TECH_STACK.md).
+- [ ] Record the licences of the bundled media_kit libmpv/FFmpeg native libraries and scan the GPU ML venv (open in TECH_STACK.md). Upstream sources and the remaining gap are recorded (T10.8, Nov 14); the source offer and the GPU venv scan remain.
 
 **Acceptance criteria.** Audit table merged; no media in the repo.
 

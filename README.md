@@ -43,8 +43,8 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 ### P1: Core pipeline and app
 - [ ] **Video input:** phone or broadcast footage (MP4, MOV, AVI; 720p or 1080p; 25 to 60 fps)
 - [ ] **Shuttlecock tracking:** per-frame shuttle position with a fading trajectory trail (TrackNetV3)
-- [ ] **Player detection:** bounding boxes with stable near/far player IDs
-- [ ] **Pose estimation:** skeleton overlay on both players
+- [ ] **Player detection:** bounding boxes with stable near/far player IDs (four players in doubles)
+- [ ] **Pose estimation:** skeleton overlay on every player
 - [ ] **Hit detection:** on-screen hit marker at every racket contact
 - [ ] **Stroke classification:** smash, clear, drop, net shot, lift or serve, with confidence
 - [ ] **Annotated video export:** MP4 with toggleable overlays
@@ -83,7 +83,7 @@ The results screen mirrors the reference demo and adapts to the device:
 | Main video | Court outline, skeletons, player boxes, shuttle trail, hit markers, stroke labels | Top, full width | Left, main area |
 | Status bar | Rally state, estimated speed, stroke count | Under the video | Under the video |
 | Minimap | Top-down court with players and shuttle | Tab | Right panel |
-| Scoreboard | Score per player with correction buttons | Tab | Right panel |
+| Scoreboard | Score per side (player or pair) with correction buttons | Tab | Right panel |
 | Stroke timeline | Time, player, stroke, confidence, speed and form tip for every hit; tap to seek | Tab | Below the video |
 
 ---
@@ -284,7 +284,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
 | Line calls: IN/OUT precision and recall, near-line false-call rate (P3) | Labelled landings (ShuttleSet + team clips) | Reported as measured | Not measured: no labelled landings yet (`scripts/eval_line_calls.py` is ready) |
 | Live provisional overlay latency, p95 (P3) | RTX 4050, 720p, 30 fps, models installed | ≤ 300 ms | Not measured: TrackNetV3 and pose weights are not installed on the team laptop yet |
-| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 26.2 ms round trip, 22.9 ms server side in the paced synthetic run ([live_latency.md](docs/results/live_latency.md)) |
+| Live pipeline overhead without models, p95 (P3) | Fake perception, in-process, RTX 4050 laptop | Report | 26.2 ms round trip, 22.9 ms server side in the paced synthetic run ([live_latency.md](docs/results/live_latency.md)); 36.7 / 31.0 ms in the Nov 12 300-frame run ([live_latency_fake.md](docs/results/live_latency_fake.md)) |
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
@@ -306,7 +306,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - [ ] **Phase 8 (Nov 9 – 18):** live mode, line calls, session coaching notes, coach chat
 - [ ] **Phase 7 (Nov 18 – 20):** feature freeze, evaluation, release builds, final demo
 - [ ] **Phase 9 (from Nov 12):** doubles support: four-player tracking, hitter attribution, doubles service order, four players in the app ([plan](docs/phases/phase-9-doubles.md))
-- [ ] **Phase 10 (Nov 14–17):** review fixes, the doubles service order in every game, a job-finished notification and the remaining code-only steps ([plan](docs/phases/phase-10-hardening.md))
+- [x] **Phase 10 (Nov 14):** review fixes, the doubles service order in every game, a job-finished notification and the remaining code-only steps ([plan](docs/phases/phase-10-hardening.md))
 
 ### Future work
 - Automatic court line detection (no taps)

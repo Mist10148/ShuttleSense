@@ -258,7 +258,7 @@
 **Owner:** M2 · **Estimate:** 3 h · **Priority:** P2 · **Area:** ml · **Refs:** F11 · **Depends on:** T5.6 · **Blocks:** T7.3
 
 **Steps**
-- [ ] On team clips with calibration, list per-hit speeds by stroke class; box plot in `docs/results/speed.md`.
+- [ ] On team clips with calibration, list per-hit speeds by stroke class; box plot in `docs/results/speed.md`. (`scripts/speed_report.py` does this, T10.5; it needs the calibrated team clips.)
 - [ ] Compare with typical published amateur ranges and explain the 2D underestimate (Limitations).
 
 **Acceptance criteria.** Report merged; smashes rank above drops.

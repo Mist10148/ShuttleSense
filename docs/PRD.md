@@ -1,6 +1,6 @@
 # ShuttleSense: Product Requirements Document
 
-Version 1.3 · Nov 12, 2026 · Owner: Mist (project lead)
+Version 1.3 · Nov 12, 2026 (Design principles added Nov 13; doubles service per game Nov 14) · Owner: Mist (project lead)
 
 > **Changes from v1.2:** **doubles** moves from a non-goal into scope ([D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)): four players tracked, each hit credited to a partner, the doubles service order followed and four players shown in the app. Singles behaviour is unchanged. Doubles accuracy is not measured yet; it needs labelled doubles footage.
 
@@ -112,7 +112,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 | --- | --- | --- |
 | FR-1 (F1) | Accept MP4/MOV/AVI uploads up to 5 minutes, 720p or 1080p, 25 to 60 fps; normalize resolution and frame rate | A 1-minute phone clip and a broadcast clip both load and produce a frame index without error |
 | FR-2 (F2) | Run pretrained TrackNetV3 to output shuttle (x, y, visible) per frame; draw a fading trail of the last 8 to 15 positions | Trail follows the shuttle on sample clips; per-frame CSV saved |
-| FR-3 (F3) | Detect the two players and assign stable IDs (near / far) across the rally | Each player keeps the same ID for the full rally on test clips |
+| FR-3 (F3) | Detect the two players (four in doubles) and assign stable IDs (near / far, and partner slots in doubles) across the rally | Each player keeps the same ID for the full rally on test clips |
 | FR-4 (F4) | Extract 2D body keypoints (COCO-17) per player per frame; draw skeletons color-coded by player | Skeletons drawn on both players; keypoints saved per frame |
 | FR-5 (F5) | Detect hit frames from shuttle direction changes near a player's wrist; show a "HIT" marker for about 0.5 s | Hit detection F1 score meets the target in Success metrics |
 | FR-6 (F6) | Classify each hit into smash, clear, drop, net shot, lift or serve using a pose and trajectory window around the hit; show label and confidence | Classifier meets accuracy target on the held-out ShuttleSet test split |
@@ -144,7 +144,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 | --- | --- | --- |
 | FR-14 (F14) | Detect rally start (serve) and end (shuttle lost or stationary on floor for N frames); show "IN PLAY" or "BETWEEN RALLIES" | Rally boundaries match manual labels on test footage |
 | FR-15 (F15) | Estimate landing point on the court plane; classify in or out with a confidence value | Clear in/out cases correct on test rallies; close calls flagged as uncertain |
-| FR-16 (F16) | Award the rally to a player using landing side and in/out result; apply BWF 21-point rally scoring; let the user correct any point in the app | Scoreboard updates after each rally; a correction changes the score and is logged |
+| FR-16 (F16) | Award the rally to a player or pair using landing side and in/out result; apply BWF 21-point rally scoring; let the user correct any point in the app | Scoreboard updates after each rally; a correction changes the score and is logged |
 
 ### P3: Live mode, line calls and coaching
 
@@ -161,7 +161,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 | Area | Requirement |
 | --- | --- |
 | Performance | Process a 1-minute 720p clip in under 5 minutes on a Colab T4 or the team laptop (RTX 4050) |
-| Live latency | Target ≤ 300 ms from frame arrival to provisional overlay event (shuttle, players, rally state) on the RTX 4050. Hit and stroke events lag by their look-ahead (about 0.6 s) and line calls by the landing rule (about 0.7 to 1 s); measured values are in [Evaluation](EVALUATION.md). Under load the backend drops frames or lowers resolution rather than falling behind |
+| Live latency | Target ≤ 300 ms from frame arrival to provisional overlay event (shuttle, players, rally state) on the RTX 4050. Hit and stroke events lag by their look-ahead and line calls by the landing rule; the synthetic benchmark measured about 0.74 s for hits and 1.73 s for line calls at p95 ([Evaluation](EVALUATION.md)). Under load the backend drops frames or lowers resolution rather than falling behind |
 | Hardware | Backend runs on any machine with an NVIDIA GPU or on Colab; CPU-only mode works for short clips, slowly. Clients need no GPU |
 | Platforms | One Flutter codebase builds for Android, iOS/iPadOS, Web and Windows. iOS builds require a Mac and are best-effort |
 | Responsiveness | Usable from 360 px (small phone, portrait) to 1920 px (laptop) wide; touch, mouse and keyboard input |
@@ -274,9 +274,9 @@ The results screen mirrors the reference demo and adapts to the screen width.
 | Zone | Content | Phone (compact) | Tablet (medium) | Laptop (expanded) |
 | --- | --- | --- | --- | --- |
 | Main video | Annotated playback: court outline, skeletons, player boxes, shuttle trail, hit markers, stroke label with confidence | Full width, top | Left, ~65% | Left, ~60% |
-| Minimap | Top-down court with both players and the shuttle | Tab below video | Right panel | Right panel |
+| Minimap | Top-down court with both players (all four in doubles) and the shuttle | Tab below video | Right panel | Right panel |
 | Status bar | Rally state, current and peak speed (estimated), stroke count | Strip under video | Under video | Under video |
-| Scoreboard | Score per player with correction buttons (P3) | Tab below video | Right panel | Right panel |
+| Scoreboard | Score per side (player or pair) with correction buttons (P3) | Tab below video | Right panel | Right panel |
 | Stroke timeline | One row per hit: time, player, stroke, confidence, speed, form tip | Tab below video | Below video | Below video, full width |
 | Downloads | Annotated MP4, rally summary JSON, per-hit CSV | Menu action | App bar action | App bar action |
 
@@ -321,10 +321,13 @@ gantt
     Phase 5 P2 analysis         :p5, 2026-11-09, 9d
     section Week 3
     Phase 6 P3 referee          :p6, 2026-11-16, 3d
-    Phase 8 live and coach      :p8, 2026-11-09, 9d
+    Phase 8 live and coach      :p8, 2026-11-09, 10d
+    Phase 10 hardening          :p10, 2026-11-14, 4d
     Feature freeze              :milestone, crit, m1, 2026-11-18, 0d
     Phase 7 eval and release    :p7, 2026-11-18, 3d
     Final demo                  :milestone, m2, 2026-11-20, 0d
+    section After release
+    Phase 9 doubles             :p9, 2026-11-12, 21d
 ```
 
 The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Friday, Nov 20; shift every date together if the start moves. Anything not stable at the freeze moves to Future work.
@@ -383,7 +386,7 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 
 | v1.0 open question | Decision | Why |
 | --- | --- | --- |
-| Which pose model? | rtmlib (RTMDet + RTMPose, Apache-2.0); fallback torchvision Keypoint R-CNN (BSD) | Multi-person in one pass, fast on ONNX Runtime, permissive license compatible with MIT; validated in Phase 1 spike (T1.5) |
+| Which pose model? | rtmlib (RTMDet + RTMPose, Apache-2.0); fallback torchvision Keypoint R-CNN (BSD) | Multi-person in one pass, fast on ONNX Runtime, permissive license compatible with MIT; to be confirmed by the Phase 1 pose spike (T1.5, D6 pending) |
 | Train a CNN from scratch or fine-tune? | The stroke 1D CNN is trained from scratch; perception models are pretrained | Satisfies either course interpretation; pretrained trackers would not be retrainable in 3 weeks |
 | Gradio or Streamlit for the demo? | Neither: Flutter app, so the demo runs on phone, tablet and laptop | User requirement for cross-device use; the backend still exposes a CLI for development |
 | Where to share weights and data? | Hugging Face Hub for weights (scripted download), Google Drive for processed datasets | Versioned, scriptable weights; Drive is familiar and free for large data |

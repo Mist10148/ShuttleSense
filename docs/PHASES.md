@@ -479,6 +479,44 @@ Open at the time of that review:
 - **Verification:** backend `ruff` and `pytest -m "not gpu"` pass (358 tests); app
   `flutter analyze` and 210 widget tests pass.
 
+### Phase 10 pass (Nov 14)
+
+[Phase 10](phases/phase-10-hardening.md) collects a review of `main` after the doubles code and the
+Nov 13 redesign. All eight tasks are done:
+
+- **Backend fixes, each with a test (T10.1):**
+  - the doubles service check ignored awarded points, so it flagged a correctly placed server;
+  - the fake pipeline failed a doubles job that set only `first_server`;
+  - singles jobs and live sessions accepted doubles service slots (now `422` / `bad_request`);
+  - a doubles line-call court in `pipeline.yaml` turned singles jobs into doubles;
+  - `DELETE /jobs/{id}` during an edit could recreate the job folder;
+  - a re-render and a coach answer could start in the same instant and lose the answer;
+  - live frames skipped under load split the hit detector's runs, so hits were lost;
+  - `eval_line_calls.py` could write `NaN` into JSON, and ShuttleSet rallies rarely matched.
+- **App fixes, each with a test (T10.2):**
+  - a live socket closed during the handshake waited 90 s (up to 7.5 min across reconnects);
+  - Try again after a refused start lost the start score;
+  - a failed chat question was lost;
+  - the stroke chart legend overflowed in a narrow panel;
+  - doubles tooltips and the heatmap said "player";
+  - a doubles hit with no known partner was marked at partner 1;
+  - a live doubles session drew the singles court until a partner was seen.
+- **Doubles service in every game (T10.3, D23):** clip record 1.3 (`score.game_service`),
+  `POST /jobs/{id}/score/service`, a live `service` message, and a "Who serves first in game N?"
+  picker on the scoreboard.
+- **Code-only steps of earlier phases:**
+  - job-finished notification (T10.4, T4.4);
+  - `scripts/speed_report.py` (T10.5, T5.13);
+  - auth token tests (T10.6, T4.6);
+  - docs synced, D24–D27 added and README links checked (T10.7, T7.8, T7.12);
+  - media_kit native library sources recorded (T10.8, T7.13).
+- **Verified:**
+  - backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (373 tests);
+  - app `flutter analyze`, `dart format` and `flutter test` pass (225 tests);
+  - web, Windows and Android release builds pass (the APK is debug-signed).
+- **Not verified:** the notification and the game-service picker on a phone, tablet or Windows
+  desktop; they join the device checklists.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |
@@ -488,7 +526,7 @@ Open at the time of that review:
 | T4.1–T4.7, T4.9, T4.11, T4.13, T5.1, T5.3–T5.14 | M4, M6, M2 | Verify target devices in both themes and at 200% text size, sign off on the artwork, and publish the calibrated speed check on team clips. |
 | T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15 | M1–M4, M6 | Label rallies and landings, measure model latency and accuracy, and verify camera, chat and courtside controls. Save commands, metrics and the device checklist. |
 | T9.2, T9.4, T9.5, T9.7, T9.9, T9.12, T9.13 | M1–M6 | Doubles ([Phase 9](phases/phase-9-doubles.md)): code tasks land first; record and label doubles rallies (T9.2), then measure ID switches, hitter attribution and service order (T9.12). |
-| T10.1–T10.8 | M1, M3, M6 | Review fixes, doubles service order in every game and code-only steps ([Phase 10](phases/phase-10-hardening.md)). |
+| T10.1–T10.8 | M4, M6 | Done Nov 14 ([Phase 10](phases/phase-10-hardening.md)); only device checks of the notification and the game-service picker remain, with the T4.4 and T8.14 checks. |
 | T7.1–T7.13 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
 Verified on Nov 3 (an earlier pass, kept for the record):

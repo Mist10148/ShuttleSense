@@ -143,7 +143,7 @@
 **Steps**
 - [ ] Settings → Branches → add rule for `main`: require a PR, 1 approving review, status checks `backend / test` and `app / test`, linear history (squash merge only).
 - [x] Settings → General: allow squash merging only; auto-delete head branches. (Done Nov 2, see PHASES.md.)
-- [ ] Note: on a private repo with a free plan, branch protection may require GitHub Pro or making the repo public; if unavailable, agree in T0.12 that nobody pushes to `main` directly.
+- [x] Note: on a private repo with a free plan, branch protection may require GitHub Pro or making the repo public; if unavailable, agree in T0.12 that nobody pushes to `main` directly. (The manual rule is in CONTRIBUTING.md; noted Nov 14.)
 
 **Acceptance criteria.** `git push origin main` from a member's machine is rejected (or the manual rule is recorded in T0.12).
 

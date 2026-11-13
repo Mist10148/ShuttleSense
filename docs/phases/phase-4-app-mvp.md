@@ -42,7 +42,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 
 **Steps**
 - [x] Validate the URL (`Uri.tryParse`, host present) before calling the server; show field-level errors.
-- [x] After a successful health check, show the server's device (CPU/CUDA), version and schema version for 1 s before navigating, and warn if `schema_version` ≠ the app's expected `"1.0"` (constant in `data/models/clip_record.dart`).
+- [x] After a successful health check, show the server's device (CPU/CUDA), version and schema version for 1 s before navigating, and warn if the major version of `schema_version` differs from the app's expected one (`Health.expectedSchema` in `data/models/health.dart`, `"1.3"` since Nov 14).
 - [x] Remember the last 3 servers (`shared_preferences` list) and show them as chips for one-tap reconnect.
 - [x] Help link "How do I find my laptop's address?" opening a bottom sheet with the steps from SETUP.md §8.
 - [x] Web build: if the page is `https://` and the URL is `http://`, show "Browsers block http servers from https pages; use the tunnel URL".
@@ -102,7 +102,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 - [x] Show elapsed time and an ETA from progress rate.
 - [x] Cancel asks for confirmation, then `DELETE /jobs/{id}`.
 - [x] On `failed`, show the error and a "Try again" button that re-submits the same options.
-- [ ] Optional: local notification when done if the app is backgrounded (mobile) — only if time allows.
+- [x] Optional: local notification when done if the app is backgrounded (mobile) — only if time allows. (T10.4, Nov 14: Android, iOS and Windows, with a Settings switch; the phone check is open.)
 
 **Tests.** `test/processing_test.dart`: renders stage list; navigates to results on `done`; shows retry on `failed`.
 
@@ -141,7 +141,7 @@ Built against the stub/fake backend first (`SHUTTLESENSE_FAKE_PIPELINE=1`), then
 - [x] Playback speed control (0.25×, 0.5×, 1×) for reviewing strokes.
 - [x] Frame step buttons (±1 frame = 1/fps s).
 - [x] When `outputs.video` is false, keep the "not available" panel but still allow the timeline/minimap.
-- [ ] Verify auth: header on native, `?token=` on web.
+- [ ] Verify auth: header on native, `?token=` on web. (Unit-tested in `test/auth_test.dart`, T10.6; the on-device check is open.)
 
 **Tests.** Player is native; cover with manual checks plus a widget test of the "not available" state.
 
