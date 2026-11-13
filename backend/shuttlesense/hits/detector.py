@@ -60,6 +60,7 @@ def detect_hits(
     wrists_near: list[np.ndarray | None],
     wrists_far: list[np.ndarray | None],
     cfg: dict[str, Any],
+    unobserved: set[int] | None = None,
 ) -> list[tuple[int, PlayerSide]]:
     """Hits as (frame, player), in frame order.
 
@@ -70,13 +71,22 @@ def detect_hits(
     closest player is the hitter. Within
     min_frames_between_hits only the closest-wrist candidate survives, and consecutive hits
     by the same player within a rally (impossible in singles) keep only the closer one.
+
+    `unobserved` (live mode) are frames that got no perception. They are not evidence that
+    the shuttle was out of view: a gap made only of them does not split a run, and they do
+    not count towards a rally break.
     """
+    unobserved = unobserved or set()
     idx = np.flatnonzero(np.asarray(visible) > 0)
     if len(idx) < 3:
         return []
     pts = np.asarray(xy, dtype=float)[idx]
     cand: set[int] = set()
-    breaks = np.flatnonzero(np.diff(idx) > 1) + 1
+    breaks = np.array(
+        [k + 1 for k in np.flatnonzero(np.diff(idx) > 1)
+         if any(f not in unobserved for f in range(int(idx[k]) + 1, int(idx[k + 1])))],
+        dtype=int,
+    )  # fmt: skip
     for start, end in zip([0, *breaks], [*breaks, len(idx)], strict=True):
         run = pts[start:end]
         local = set(direction_changes(run, cfg.get("min_angle_deg", 60))) | set(vertical_flips(run))
@@ -106,8 +116,10 @@ def detect_hits(
 
     def same_rally(a: int, b: int) -> bool:
         run = 0
-        for v in hidden[a:b]:
-            run = run + 1 if v else 0
+        for f in range(a, b):
+            if f in unobserved:
+                continue  # no observation: neither hidden nor seen
+            run = run + 1 if hidden[f] else 0
             if run >= break_len:
                 return False
         return True
@@ -200,8 +212,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     cfg["scale"] = (record.height or 720) / 720
     xy, visible = track_arrays(record)
     hits = detect_hits(
-        np.nan_to_num(xy), visible, wrist_arrays(record, "near"), wrist_arrays(record, "far"), cfg
-    )
+        np.nan_to_num(xy), visible, wrist_arrays(record, "near"), wrist_arrays(record, "far"), cfg,
+        unobserved=set(ctx.config.get("_unobserved_frames", ())),
+    )  # fmt: skip
     fps = record.fps or 30.0
     record.hits = [
         Hit(id=i, frame=frame, time_s=round(frame / fps, 3), player=side)

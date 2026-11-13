@@ -85,6 +85,30 @@ def test_stage_fills_record_hits() -> None:
     assert [(h.id, h.frame, h.time_s, h.player) for h in record.hits] == [(0, 9, 0.45, "near")]
 
 
+def test_frames_live_mode_skipped_do_not_split_a_run() -> None:
+    """Live: every other frame got no perception. Those gaps are not the shuttle out of view."""
+    xy = bounce_track([11])
+    visible = np.ones(40)
+    skipped = set(range(1, 40, 2))
+    visible[list(skipped)] = 0
+    near = wrists_at(40, {10: tuple(xy[10])})
+    # Without the skipped frames every gap splits the track into runs of one point.
+    assert detect_hits(xy, visible, near, [None] * 40, CFG) == []
+    assert detect_hits(xy, visible, near, [None] * 40, CFG, unobserved=skipped) == [(10, "near")]
+
+
+def test_skipped_frames_are_not_a_rally_break() -> None:
+    """Two near hits with only skipped frames between are one rally: keep the closer one."""
+    cfg = {**CFG, "rally_break_frames": 5}
+    xy = bounce_track([11, 31])
+    visible = np.ones(40)
+    skipped = set(range(15, 25))
+    visible[list(skipped)] = 0
+    near = wrists_at(40, {10: tuple(xy[10] + [10, 0]), 30: tuple(xy[30])})
+    assert len(detect_hits(xy, visible, near, [None] * 40, cfg)) == 2  # seen as a break
+    assert detect_hits(xy, visible, near, [None] * 40, cfg, unobserved=skipped) == [(30, "near")]
+
+
 def test_same_player_may_hit_again_after_a_rally_break() -> None:
     """The winner of a rally serves the next one, so alternation resets across a break."""
     from shuttlesense.config import load_config
