@@ -109,7 +109,7 @@ Start processing.
 | `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of game 1 |
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 | `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
-| `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game. `422` if only one is given, both are on one side, or the server is not on `first_server`'s side |
+| `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game. `422` if only one is given, both are on one side, the server is not on `first_server`'s side, or `court` is not `"doubles"` |
 
 Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 
@@ -181,7 +181,7 @@ Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `correctio
 
 ### `POST /jobs/{job_id}/score/award`
 
-A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response, exports and `409` cases as `PATCH /jobs/{job_id}/score`.
+A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response and exports as `PATCH /jobs/{job_id}/score`. `409` unless the job is `done`, or if the referee stage did not run; unlike a correction, an award needs no detected rally.
 
 ### `POST /jobs/{job_id}/score/undo`
 
@@ -203,12 +203,12 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Message | Format | Notes |
 | --- | --- | --- |
-| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ...}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs`. In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ...}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |
 | `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided |
-| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far |
+| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling |
 | `undo` | `{"type": "undo"}` | Takes back the newest correction or award (`not_found` when there is none) |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |
 
@@ -227,7 +227,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `error` with code `capture_gap` | A capture gap exceeded the resume window and was shortened in playback. The session continues |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `rally_in_play`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `rally_in_play` (an `award` while a rally is open or settling) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`. The reserved ID does not
 create a job on its own. If the client loses the `saved` reply, it can check

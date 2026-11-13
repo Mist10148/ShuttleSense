@@ -571,6 +571,8 @@ def test_start_accepts_the_doubles_first_server_and_receiver() -> None:
         {"first_server_id": "near_2"},
         {"first_server_id": "near_2", "first_receiver_id": "near_1"},
         {"first_server_id": "x", "first_receiver_id": "far_1"},
+        # Service slots are for doubles only.
+        {"court": "singles", "first_server_id": "near_1", "first_receiver_id": "far_1"},
     ]
     for bad in bad_starts:
         with pytest.raises(ValueError):

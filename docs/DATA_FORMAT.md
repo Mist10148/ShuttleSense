@@ -185,7 +185,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
   "rally_events": [                                            // v1.1: what live mode streamed, in order
     {"frame": 12,  "time_s": 0.4,    "type": "rally_start", "rally_index": 0, "data": {}},
     {"frame": 42,  "time_s": 1.4,    "type": "hit",         "rally_index": 0,
-     "data": {"hit_id": 0, "player": "near", "stroke": "smash"}},
+     "data": {"hit_id": 0, "player": "near", "stroke": "smash"}},   // doubles (v1.2): also "hitter" when known
     {"frame": 410, "time_s": 13.667, "type": "landing",     "rally_index": 0,
      "data": {"line_call_id": 0, "call": "in"}},                  // call after any override
     {"frame": 410, "time_s": 13.667, "type": "rally_end",   "rally_index": 0, "data": {"winner": "near"}},

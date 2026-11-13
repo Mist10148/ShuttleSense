@@ -339,11 +339,16 @@ def rerender(job_id: str, body: RenderRequest, request: Request, jobs: JobsDep) 
     overlays = _check_overlays(body.overlays)
     if job.status != "done" and not (job.status == "failed" and jobs.has_outputs(job_id)):
         raise HTTPException(status_code=409, detail="only finished jobs can be re-rendered")
+
     # The run would rewrite record.json under an answer that is about to be saved to it.
-    if _chat_in_flight(request, job_id):
-        raise HTTPException(status_code=409, detail="a coach answer is still being written")
+    # Checked again under the job lock, which the chat also takes to start an answer.
+    def no_answer_in_flight() -> None:
+        if _chat_in_flight(request, job_id):
+            raise HTTPException(status_code=409, detail="a coach answer is still being written")
+
+    no_answer_in_flight()
     try:
-        updated = jobs.rerender(job_id, overlays)
+        updated = jobs.rerender(job_id, overlays, check=no_answer_in_flight)
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail="job is already queued or running") from exc
     if updated is None:
@@ -485,10 +490,18 @@ async def chat(
     # One question at a time per job, so parallel requests cannot get past the limit above
     # (the history only grows once an answer is saved).
     # The mark expires on its own in case the stream is never started.
-    if _chat_in_flight(request, job_id):
-        raise HTTPException(status_code=409, detail="a question is already being answered")
     answering: dict[str, float] = request.app.state.chat_answering
-    answering[job_id] = time.monotonic()
+
+    def mark_answering() -> None:
+        # Under the job lock, like rerender's check: a re-render cannot be queued between
+        # this status check and the mark.
+        with jobs.job_lock(job_id):
+            _require_done(jobs, job_id)
+            if _chat_in_flight(request, job_id):
+                raise HTTPException(status_code=409, detail="a question is already being answered")
+            answering[job_id] = time.monotonic()
+
+    await asyncio.to_thread(mark_answering)
     question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
     digest = build_digest(record, settings.chat_max_digest_chars)
     chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)

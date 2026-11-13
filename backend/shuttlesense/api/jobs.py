@@ -112,20 +112,25 @@ class JobManager:
         self._queue.put(job.id)
         return self.get(job.id)
 
-    def rerender(self, job_id: str, overlays: list[str]) -> Job | None:
+    def rerender(
+        self, job_id: str, overlays: list[str], check: Callable[[], None] | None = None
+    ) -> Job | None:
         """Queue a finished job again with new overlays. The pipeline reuses its stage cache
         in the job folder, so only io and render actually run.
 
         Returns None if the job is gone. Raises JobBusy if it is queued or running.
 
         Holds the job's edit lock while queueing, so a score edit in progress saves its
-        corrections first and the new run reads them; edits re-check the status under it."""
+        corrections first and the new run reads them; edits re-check the status under it.
+        `check` runs under the same lock and may raise to refuse the re-render."""
         with self.job_lock(job_id), self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None
             if job.status in ("queued", "running"):
                 raise JobBusy(job_id)
+            if check is not None:
+                check()
             previous = self.storage.previous_path(job_id)
             if not previous.exists():  # after a failed re-render it still holds the last good run
                 state = {
@@ -181,17 +186,20 @@ class JobManager:
         return [j for j in (self.get(i) for i in ids[:limit]) if j is not None]
 
     def cancel_or_delete(self, job_id: str) -> bool:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job is None:
-                return False
-            if job.status in ("queued", "running"):
-                self._cancelled.add(job_id)
-                job.status = "cancelled"
-                job.finished_at = utcnow()
-            del self._jobs[job_id]
-            self._enqueued.pop(job_id, None)
-        self.storage.delete_job(job_id)
+        """Cancel and delete a job. Holds the job's edit lock, so an edit in progress finishes
+        first and a later one finds the job gone (404) instead of recreating its folder."""
+        with self.job_lock(job_id):
+            with self._lock:
+                job = self._jobs.get(job_id)
+                if job is None:
+                    return False
+                if job.status in ("queued", "running"):
+                    self._cancelled.add(job_id)
+                    job.status = "cancelled"
+                    job.finished_at = utcnow()
+                del self._jobs[job_id]
+                self._enqueued.pop(job_id, None)
+            self.storage.delete_job(job_id)
         return True
 
     def delete_for_video(self, video_id: str) -> None:
@@ -237,9 +245,14 @@ class JobManager:
 
     def job_config(self, job: Job) -> dict[str, Any]:
         """Pipeline config plus this job's own inputs."""
-        from shuttlesense.config import with_court
+        from shuttlesense.config import court_type, with_court
 
-        config = with_court(self.config, job.court) if job.court == "doubles" else dict(self.config)
+        # A job's court is its own: a doubles line-call court in pipeline.yaml must not turn a
+        # singles job into doubles. Singles configs without that setting stay as they were.
+        if job.court == "doubles" or court_type(self.config) == "doubles":
+            config = with_court(self.config, job.court)
+        else:
+            config = dict(self.config)
         if job.start_score is not None:
             config["start_score"] = job.start_score.model_dump()
         config["match"] = {"best_of": job.best_of, "first_server": job.first_server}

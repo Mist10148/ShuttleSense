@@ -268,7 +268,7 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
         raise ValueError("first_server_id and first_receiver_id must be player slots")
     from shuttlesense.api.models import check_first_service
 
-    check_first_service(first_server, server_id, receiver_id)
+    check_first_service(first_server, server_id, receiver_id, court)
     if server_id and first_server is None:
         first_server = server_id[:-2]
     return StartRequest(

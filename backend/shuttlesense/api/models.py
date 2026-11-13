@@ -64,13 +64,18 @@ class VideoInfoOut(BaseModel):
 
 
 def check_first_service(
-    first_server: str | None, server_id: str | None, receiver_id: str | None
+    first_server: str | None,
+    server_id: str | None,
+    receiver_id: str | None,
+    court: str = "doubles",
 ) -> None:
     """Raise ValueError unless the doubles first server and receiver make sense together."""
     if (server_id is None) != (receiver_id is None):
         raise ValueError("first_server_id and first_receiver_id go together")
     if server_id is None or receiver_id is None:
         return
+    if court != "doubles":
+        raise ValueError("first_server_id and first_receiver_id are for doubles only")
     if server_id[:3] == receiver_id[:3]:
         raise ValueError("the first server and receiver must be on opposite sides")
     if first_server is not None and not server_id.startswith(first_server):
@@ -94,7 +99,9 @@ class JobCreate(BaseModel):
 
     @model_validator(mode="after")
     def _doubles_service(self) -> JobCreate:
-        check_first_service(self.first_server, self.first_server_id, self.first_receiver_id)
+        check_first_service(
+            self.first_server, self.first_server_id, self.first_receiver_id, self.court
+        )
         return self
 
 

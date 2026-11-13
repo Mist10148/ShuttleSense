@@ -852,3 +852,54 @@ def test_fake_doubles_job_with_only_a_first_server_completes(
         assert record["score"]["first_server"] == "far"
         assert record["score"].get("first_server_id") is None
         assert all(r.get("server_id") is None for r in record["rallies"])
+
+
+def test_service_slots_are_for_doubles_jobs_only(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS,
+                "first_server_id": "near_1", "first_receiver_id": "far_1"}  # fmt: skip
+        assert client.post("/jobs", json=body).status_code == 422
+        assert client.post("/jobs", json={**body, "court": "doubles"}).status_code == 202
+
+
+def test_a_singles_job_stays_singles_with_a_doubles_line_call_config(tmp_path: Path) -> None:
+    from shuttlesense.api.jobs import JobManager
+    from shuttlesense.api.models import Job
+    from shuttlesense.api.storage import Storage
+    from shuttlesense.config import court_type
+
+    config = {"stages": {"referee": {"line_call": {"court": "doubles"}}}}
+    jobs = JobManager(
+        Storage(tmp_path / "s"), config=config, device="cpu", pipeline=lambda *a, **k: None
+    )
+    singles = Job(id="a" * 12, video_id="v" * 12)
+    doubles = Job(id="b" * 12, video_id="v" * 12, court="doubles")
+    assert court_type(jobs.job_config(singles)) == "singles"
+    assert court_type(jobs.job_config(doubles)) == "doubles"
+    # Without a doubles setting a singles config is left exactly as it was.
+    plain = JobManager(
+        Storage(tmp_path / "t"), config={"x": 1}, device="cpu", pipeline=lambda *a, **k: None
+    )
+    assert "court" not in plain.job_config(singles)
+
+
+def test_delete_waits_for_an_edit_in_progress(tmp_path: Path, tiny_video: Path) -> None:
+    """An edit holding the job lock finishes first; the folder is not recreated after."""
+    import threading
+
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        job = client.post("/jobs", json={"video_id": vid}).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        jobs = client.app.state.jobs
+        lock = jobs.job_lock(job["id"])
+        lock.acquire()
+        done = threading.Event()
+        worker = threading.Thread(target=lambda: (jobs.cancel_or_delete(job["id"]), done.set()))
+        worker.start()
+        assert not done.wait(0.3)  # blocked by the edit
+        assert jobs.get(job["id"]) is not None
+        lock.release()
+        worker.join(5)
+        assert done.is_set() and jobs.get(job["id"]) is None
