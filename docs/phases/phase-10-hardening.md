@@ -5,7 +5,7 @@
 > **Scope (Nov 14).** A review of `main` after the Phase 9 code and the Nov 13 redesign found
 > bugs in the referee, the API, live hit detection, the evaluation scripts and the app. It also
 > left a few steps in earlier phases that need only code or docs. This phase collects that work
-> so it has task cards like every other phase. Nothing here needs footage, weights, a GPU or a
+> so it has task cards like every other phase. Milestone "Phase 10 — Hardening and courtside follow-ups", issues #126–#133. Nothing here needs footage, weights, a GPU or a
 > device; device checks of the new app pieces join the existing device checklists.
 
 | | |
@@ -21,14 +21,14 @@
 
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| [T10.1](#t101) | Backend review fixes | M1 + M3 | 8 h | — | ✅ | — |
-| [T10.2](#t102) | App review fixes | M6 | 6 h | — | ✅ | — |
-| [T10.3](#t103) | Doubles service order in every game | M3 + M1 + M6 | 10 h | T9.6 | ✅ | — |
-| [T10.4](#t104) | Notify when a job finishes | M6 | 4 h | T4.4 | ✅ | — |
-| [T10.5](#t105) | Speed report by stroke class | M2 | 3 h | T5.6 | ✅ | — |
-| [T10.6](#t106) | Auth token tests | M4 | 2 h | T4.6 | ✅ | — |
-| [T10.7](#t107) | Docs sync and late decisions | M1 | 4 h | — | ✅ | — |
-| [T10.8](#t108) | media_kit library license notes | M1 | 2 h | T7.13 | ✅ | — |
+| [T10.1](#t101) | Backend review fixes | M1 + M3 | 8 h | — | ✅ | [#126](https://github.com/Mist10148/ShuttleSense/issues/126) |
+| [T10.2](#t102) | App review fixes | M6 | 6 h | — | ✅ | [#127](https://github.com/Mist10148/ShuttleSense/issues/127) |
+| [T10.3](#t103) | Doubles service order in every game | M3 + M1 + M6 | 10 h | T9.6 | ✅ | [#128](https://github.com/Mist10148/ShuttleSense/issues/128) |
+| [T10.4](#t104) | Notify when a job finishes | M6 | 4 h | T4.4 | ✅ | [#129](https://github.com/Mist10148/ShuttleSense/issues/129) |
+| [T10.5](#t105) | Speed report by stroke class | M2 | 3 h | T5.6 | ✅ | [#130](https://github.com/Mist10148/ShuttleSense/issues/130) |
+| [T10.6](#t106) | Auth token tests | M4 | 2 h | T4.6 | ✅ | [#131](https://github.com/Mist10148/ShuttleSense/issues/131) |
+| [T10.7](#t107) | Docs sync and late decisions | M1 | 4 h | — | ✅ | [#132](https://github.com/Mist10148/ShuttleSense/issues/132) |
+| [T10.8](#t108) | media_kit library license notes | M1 | 2 h | T7.13 | ✅ | [#133](https://github.com/Mist10148/ShuttleSense/issues/133) |
 
 ---
 

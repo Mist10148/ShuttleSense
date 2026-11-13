@@ -129,7 +129,7 @@
 - [ ] When teammates share their GitHub usernames, replace `owner:Mx` labels with real assignees.
 - [x] Put issue numbers into the phase task tables.
 
-**Outputs.** Labels, 11 milestones (phases 0–10), one issue per task, board. Phases 0–7 are issues #1–#96 and Phase 8 is #97–#112 (#97–#108 created Nov 2, #109–#112 on Nov 3); Phase 9 is #113–#125 (Nov 13) and Phase 10 is listed in its file; the board is still to do.
+**Outputs.** Labels, 11 milestones (phases 0–10), one issue per task, board. Phases 0–7 are issues #1–#96 and Phase 8 is #97–#112 (#97–#108 created Nov 2, #109–#112 on Nov 3); Phase 9 is #113–#125 (Nov 13) and Phase 10 is #126–#133 (Nov 14); the board is still to do.
 
 **Acceptance criteria.** `gh issue list --state all --limit 200` count equals the number of task cards; every issue has a phase label, owner label and milestone.
 
