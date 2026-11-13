@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/notifications/job_notifier.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/job.dart';
@@ -77,7 +80,20 @@ class ProcessingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Ask for notification permission while the app is in front (T4.4).
+    if (ref.watch(notifyWhenDoneProvider)) unawaited(ref.read(jobNotifierProvider).prepare());
     ref.listen(jobProvider(jobId), (prev, next) {
+      // The job finished while the app was in the background: say so (T4.4, T10.4).
+      final was = prev?.valueOrNull?.status, now = next.valueOrNull?.status;
+      if (was != null &&
+          !was.isFinished &&
+          (now == JobStatus.done || now == JobStatus.failed) &&
+          ref.read(notifyWhenDoneProvider) &&
+          ref.read(appInBackgroundProvider)()) {
+        unawaited(
+          ref.read(jobNotifierProvider).jobFinished(jobId: jobId, ok: now == JobStatus.done),
+        );
+      }
       // Only a fresh poll counts: after a re-render the provider is invalidated and, while it
       // reloads, still holds the old "done" job, which must not send the user back to the
       // old results.

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_mode.dart';
 import '../../core/config/server_config.dart';
+import '../../core/notifications/job_notifier.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/theme_mode.dart';
 import '../../data/api_client.dart';
@@ -101,6 +102,17 @@ class SettingsScreen extends ConsumerWidget {
             ],
             selected: {ref.watch(appModeProvider)},
             onSelectionChanged: (s) => ref.read(appModeProvider.notifier).set(s.first),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Notifications',
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Notify when an analysis finishes'),
+            subtitle: const Text('Only while the app is in the background'),
+            value: ref.watch(notifyWhenDoneProvider),
+            onChanged: (on) => ref.read(notifyWhenDoneProvider.notifier).set(on),
           ),
         ),
         const SizedBox(height: 16),

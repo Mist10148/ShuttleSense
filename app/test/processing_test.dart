@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/core/notifications/job_notifier.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
@@ -14,6 +15,18 @@ import 'package:shuttlesense_app/features/processing/processing_screen.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
+
+/// Records what would have been shown.
+class FakeJobNotifier implements JobNotifier {
+  final shown = <String>[];
+
+  @override
+  Future<bool> prepare() async => true;
+
+  @override
+  Future<void> jobFinished({required String jobId, required bool ok}) async =>
+      shown.add('$jobId ${ok ? 'done' : 'failed'}');
+}
 
 /// Serves [job] through jobProvider without the polling loop (no pending timers in tests).
 Override fixedJob(Job job) => jobProvider.overrideWith((ref, _) => Stream.value(job));
@@ -90,6 +103,36 @@ void main() {
     expect(visited, ['/jobs/job1/results']);
     expect(api.calls.where((c) => c.startsWith('createJob')), isEmpty);
   });
+
+  for (final (background, enabled, expected) in [
+    (true, true, ['job1 done']),
+    (false, true, <String>[]),
+    (true, false, <String>[]),
+  ]) {
+    testWidgets('a job finishing (background: $background, setting: $enabled) notifies: '
+        '$expected', (tester) async {
+      final jobs = StreamController<Job>();
+      addTearDown(jobs.close);
+      final notifier = FakeJobNotifier();
+      await pumpScreen(
+        tester,
+        const ProcessingScreen(jobId: 'job1'),
+        prefs: {'ui.notifyWhenDone': enabled},
+        settle: false,
+        overrides: [
+          jobProvider.overrideWith((ref, _) => jobs.stream),
+          jobNotifierProvider.overrideWithValue(notifier),
+          appInBackgroundProvider.overrideWithValue(() => background),
+        ],
+      );
+      jobs.add(Job.fromJson(jobJson(status: 'running', progress: 0.5)));
+      await tester.pump();
+      jobs.add(Job.fromJson(jobJson()));
+      await tester.pump();
+      await tester.pump();
+      expect(notifier.shown, expected);
+    });
+  }
 
   testWidgets('a finished job opens the results', (tester) async {
     final done = Job.fromJson(jobJson());

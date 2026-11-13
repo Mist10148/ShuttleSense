@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Live mode (F19): camera frames are streamed to the ShuttleSense backend. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- A notification when an analysis finishes in the background (T4.4). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="ShuttleSense"
         android:usesCleartextTraffic="true"
