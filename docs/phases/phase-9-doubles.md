@@ -1,6 +1,6 @@
 # Phase 9 — Doubles support
 
-[← Phase 8](phase-8-live-coach.md) · [Phase overview](../PHASES.md)
+[← Phase 8](phase-8-live-coach.md) · [Phase overview](../PHASES.md) · [Phase 10 →](phase-10-hardening.md)
 
 > **Scope (D22, Nov 12).** Doubles moved into scope and its code lands on `main` before the
 > feature freeze, under one rule: the singles path stays behaviourally identical. Every
