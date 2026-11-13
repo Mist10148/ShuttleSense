@@ -384,3 +384,36 @@ def test_eval_doubles_scores_hitters_service_and_slot_jumps(tmp_path: Path) -> N
     assert result["matched_rallies"] == 1 and result["service_accuracy"] == 1.0
     assert result["slot_steps"] > 0 and result["slot_jumps"] == 0
     assert "| golden_doubles | 3 | 66.7% |" in eval_doubles.markdown([result])
+
+
+def test_speed_report_on_the_golden_record(tmp_path: Path) -> None:
+    """T10.5: one row per stroke class with a speed, Markdown + JSON, and a box plot."""
+    import json
+
+    from shuttlesense.fake import load_golden
+
+    speed_report = load_script("speed_report")
+    record = load_golden()
+    record.hits[0].speed_kmh = None  # a hit without a speed is left out
+    record.hits[1].stroke = None
+    path = tmp_path / "record.json"
+    path.write_text(record.model_dump_json(), encoding="utf-8")
+    speeds = speed_report.speeds_by_class([path])
+    rows = speed_report.summarize(speeds)
+    assert [(r["stroke"], r["hits"], r["median_kmh"]) for r in rows] == [
+        ("smash", 1, 241.0), ("unlabelled", 1, 118.0),
+    ]  # fmt: skip
+    md = speed_report.to_markdown(rows, ["record.json"])
+    assert "| smash | 1 | 241.0 |" in md
+    assert "No hit had a speed" in speed_report.to_markdown([], [])
+    assert speed_report._percentile([10.0, 20.0, 30.0, 40.0], 0.5) == 25.0
+    out = tmp_path / "speed.md"
+    png = tmp_path / "speed.png"
+    import sys
+    from unittest import mock
+
+    argv = ["speed_report.py", str(path), "--out", str(out), "--plot", str(png)]
+    with mock.patch.object(sys, "argv", argv):
+        speed_report.main()
+    assert json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))["rows"] == rows
+    assert png.stat().st_size > 0

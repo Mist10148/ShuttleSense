@@ -12,7 +12,7 @@ Every number in the README's Evaluation section comes from one of these reports.
 | [stroke_latency.md](stroke_latency.md) | `scripts/bench_strokes.py` | T3.14 | CPU measured with an untrained model; GPU and trained weights to add |
 | `rallies.md` | `scripts/label_clip.py`, then `scripts/eval_rallies.py` | T6.7 | Needs labelled team clips |
 | `phone.md` | `scripts/label_clip.py`, then `scripts/eval_phone.py` | T7.2 | Needs labelled team clips |
-| `speed.md` | by hand, see T5.13 | T5.13 | Needs a team clip |
+| `speed.md` (+ `speed.png`) | `scripts/speed_report.py RECORD.json ... --plot speed.png` (T10.5) | T5.13 | Script ready; needs calibrated team clips |
 | [live_latency.md](live_latency.md) | `scripts/bench_live.py` (`--fake`, or `--url` against a server with weights) | T8.12 | Fake-perception overhead measured; use `--require-models` for the GPU run. Default outputs separate fake, model-backed, and unverified runs. |
 | [live_latency_fake.md](live_latency_fake.md) | `scripts/bench_live.py --fake --frames 300 --realtime` | T8.12 | Paced synthetic smoke run on Nov 12; no models or camera |
 | `line_calls.md` | `scripts/eval_line_calls.py` (T7.1 labels with `in_out`, or `--gt-format shuttleset`) | T8.12 | Needs labelled landings |
