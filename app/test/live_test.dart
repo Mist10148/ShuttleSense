@@ -431,6 +431,36 @@ void main() {
     expect(find.textContaining('The server is busy'), findsOneWidget);
   });
 
+  testWidgets('a socket closed before started fails at once, not after the start timeout', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester, onHello: (_) => null);
+    await startWithoutCourt(tester);
+    expect(find.textContaining('closed the connection'), findsNothing);
+    await sockets.single.drop();
+    await events(tester);
+    expect(find.textContaining('The live server closed the connection'), findsOneWidget);
+  });
+
+  testWidgets('a refused start keeps the start score for Try again', (tester) async {
+    final sockets = await pumpLive(
+      tester,
+      size: laptop,
+      onHello: (_) => {'type': 'error', 'code': 'busy', 'detail': 'busy'},
+    );
+    await tester.tap(find.text('Game already under way'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('7').last);
+    await tester.pumpAndSettle();
+    await startWithoutCourt(tester);
+    expect(sockets.single.sent.first['start_score'], {'near': 7, 'far': 0});
+    expect(find.textContaining('The server is busy'), findsOneWidget);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    expect(container.read(liveStartScoreProvider), (near: 7, far: 0));
+  });
+
   testWidgets('a dropped connection resumes the same session', (tester) async {
     final sockets = await pumpLive(tester);
     await startWithoutCourt(tester);
@@ -1222,5 +1252,8 @@ void main() {
     expect(record.isLive, isTrue);
     expect(record.width, 1280);
     expect(record.courtCorners, isNull);
+    expect(record.isDoubles, isFalse);
+    // A doubles session draws the doubles court before any partner is seen.
+    expect(state.copyWith(doubles: true).record.isDoubles, isTrue);
   });
 }

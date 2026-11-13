@@ -107,4 +107,50 @@ void main() {
     expect(find.textContaining('Far 2: 0 hits'), findsOneWidget);
     expect(find.textContaining('Near: '), findsNothing);
   });
+
+  testWidgets('rally winner tooltips name the pair in doubles', (tester) async {
+    final record = doublesRecord();
+    await pump(tester, RallyHistory(record: record, frameIndex: 0, onCorrect: (_, _) {}));
+    final chips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip));
+    expect(chips, isNotEmpty);
+    expect(chips.map((c) => c.tooltip ?? ''), everyElement(contains(' pair')));
+  });
+
+  test('the heatmap describes each pair in doubles', () {
+    final text = HeatGrid.fromRecord(doublesRecord()).describe();
+    expect(text, contains('near pair'));
+    expect(text, contains('far pair'));
+  });
+
+  test('a doubles hit with no known partner is not marked as partner 1', () {
+    final json =
+        jsonDecode(File('test/fixtures/golden_record_doubles.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final hits = json['hits'] as List;
+    final first = (hits.first as Map<String, dynamic>)..remove('hitter');
+    final record = ClipRecord.fromJson(json);
+    final at = first['frame'] as int;
+    final painter = CourtPainter.fromRecord(
+      record,
+      at,
+      lines: Colors.white,
+      surface: Colors.green,
+      players: AppTheme.playerColorsLight,
+    );
+    expect(painter.hitMarks.where((m) => m.$1 == 'near'), isEmpty);
+    final known = CourtPainter.fromRecord(
+      doublesRecord(),
+      at,
+      lines: Colors.white,
+      surface: Colors.green,
+      players: AppTheme.playerColorsLight,
+    );
+    expect(known.hitMarks, isNotEmpty);
+  });
+
+  testWidgets('the stroke chart legend wraps in a narrow side panel', (tester) async {
+    await pump(tester, SizedBox(width: 180, child: SummaryChart(summary: doublesRecord().summary)));
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Near 2: 1 hits'), findsOneWidget);
+  });
 }

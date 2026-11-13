@@ -102,9 +102,12 @@ class SummaryChart extends StatelessWidget {
                   children: [
                     Icon(Icons.square, size: 12, color: color),
                     const SizedBox(width: 4),
-                    Text(
-                      '$label: ${s.perPlayer[side]?.hits ?? 0} hits, peak ${peak(side)} (est.)',
-                      style: theme.textTheme.bodySmall,
+                    // Flexible: a narrow side panel wraps the label instead of overflowing.
+                    Flexible(
+                      child: Text(
+                        '$label: ${s.perPlayer[side]?.hits ?? 0} hits, peak ${peak(side)} (est.)',
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ),
                   ],
                 ),

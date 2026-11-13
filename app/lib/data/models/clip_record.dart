@@ -33,6 +33,7 @@ class ClipRecord {
     this.rallyEvents = const [],
     this.coaching,
     this.chat = const [],
+    this.court,
   });
 
   final String schemaVersion;
@@ -54,6 +55,10 @@ class ClipRecord {
   final List<RallyEvent> rallyEvents;
   final Coaching? coaching;
   final List<ChatMessage> chat;
+
+  /// "doubles" when the match was set up as doubles (a live session), even before the data
+  /// shows it; null for records, which tell from their data.
+  final String? court;
 
   bool get isLive => mode == 'live';
 
@@ -95,6 +100,7 @@ class ClipRecord {
 
   /// A doubles record: partners tracked, a partner credited with a hit, or doubles calls.
   bool get isDoubles =>
+      court == 'doubles' ||
       lineCalls.any((c) => c.court == 'doubles') ||
       hits.any((h) => h.hitter != null) ||
       frames.any((f) => f.near2Pos != null || f.far2Pos != null);

@@ -127,7 +127,7 @@ String minimapLabel(ClipRecord record, int frameIndex) {
 /// How often each player stood in each [kHeatCellM] cell of the court (and up to 1 m
 /// beyond the lines), over every frame of the clip.
 class HeatGrid {
-  HeatGrid._(this.near, this.far, this.nearMax, this.farMax);
+  HeatGrid._(this.near, this.far, this.nearMax, this.farMax, {this.doubles = false});
 
   static const double margin = 1.0;
   static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
@@ -150,12 +150,15 @@ class HeatGrid {
       add(far, f.far2Pos);
     }
     int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
-    return HeatGrid._(near, far, max(near), max(far));
+    return HeatGrid._(near, far, max(near), max(far), doubles: record.isDoubles);
   }
 
   /// Frame counts per cell, row-major from the near-left corner (court y grows away).
   final List<int> near, far;
   final int nearMax, farMax;
+
+  /// Doubles: each grid covers both partners of a side.
+  final bool doubles;
 
   /// Near-left corner of a cell in court meters.
   static CourtPoint cellOrigin(int index) => (
@@ -173,8 +176,9 @@ class HeatGrid {
       return '$who mostly at $x m across, $y m up the court';
     }
 
-    return 'Heatmap: ${where('near player', near, nearMax)}; '
-        '${where('far player', far, farMax)}.';
+    final who = doubles ? 'pair' : 'player';
+    return 'Heatmap: ${where('near $who', near, nearMax)}; '
+        '${where('far $who', far, farMax)}.';
   }
 }
 
@@ -211,10 +215,12 @@ class CourtPainter extends CustomPainter {
     ];
     final rally = record.rallyAt(frameIndex);
     final start = rally?.startFrame ?? 0;
-    // Each hit is marked where the player who made it stood (the partner, in doubles).
+    // Each hit is marked where the player who made it stood (the partner, in doubles). A
+    // doubles hit with no known partner has no single spot: marking it at partner 1 would
+    // credit the hit to them.
     final marks = <(String, CourtPoint)>[
       for (final h in record.hits)
-        if (h.frame >= start && h.frame <= frameIndex)
+        if (h.frame >= start && h.frame <= frameIndex && !(record.isDoubles && h.hitter == null))
           if (record.frame(h.frame)?.positionOf(h.who) case final p?) (h.who, p),
     ];
     final landings = [

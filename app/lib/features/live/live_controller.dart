@@ -112,6 +112,7 @@ class LiveState {
     this.notice,
     this.coaching,
     this.lastRally,
+    this.doubles = false,
   });
 
   final LivePhase phase;
@@ -166,6 +167,9 @@ class LiveState {
   final Coaching? coaching;
   final RallySummary? lastRally;
 
+  /// The session was started as a doubles match (the court, before any partner is seen).
+  final bool doubles;
+
   bool get reducedQuality => qualityLevel > 0;
 
   int get frameIndex => frames.isEmpty ? 0 : frames.length - 1;
@@ -186,6 +190,7 @@ class LiveState {
     lineCalls: lineCalls,
     score: score,
     coaching: coaching,
+    court: doubles ? 'doubles' : null,
   );
 
   LiveState copyWith({
@@ -219,6 +224,7 @@ class LiveState {
     ({int id, String text})? notice,
     Coaching? coaching,
     RallySummary? lastRally,
+    bool? doubles,
   }) => LiveState(
     phase: phase ?? this.phase,
     error: error,
@@ -253,6 +259,7 @@ class LiveState {
     notice: notice ?? this.notice,
     coaching: coaching ?? this.coaching,
     lastRally: lastRally ?? this.lastRally,
+    doubles: doubles ?? this.doubles,
   );
 }
 
@@ -469,7 +476,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final source = _source;
     if (source == null) return;
     final generation = _generation;
-    _set(state.copyWith(phase: LivePhase.connecting, corners: corners ?? const []));
+    _set(
+      state.copyWith(
+        phase: LivePhase.connecting,
+        corners: corners ?? const [],
+        doubles: ref.read(liveMatchSetupProvider).court == 'doubles',
+      ),
+    );
     final CapturedFrame first;
     try {
       // Time a few captures: still captures are slower than video on most devices, and the
@@ -518,6 +531,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       ...match.toJson(),
     });
     if (connected.started == null || _disposed || generation != _generation) return;
+    // The start score belongs to this session only; kept until now so Try again reuses it.
+    if (startScore != null) ref.read(liveStartScoreProvider.notifier).state = null;
     _beginStreaming();
   }
 
@@ -932,6 +947,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// The socket closed: resume if it dropped mid-session, fail fast if it was saving.
   void _onClosed() {
     if (_disposed) return;
+    final starting = _started;
+    if (starting != null && !starting.isCompleted) {
+      // Closed before `started` (the server stopped, a tunnel dropped): fail now instead of
+      // waiting out kStartTimeout. A resume attempt then retries straight away.
+      starting.completeError(_Refused(null, 'The live server closed the connection'));
+      return;
+    }
     if (state.phase == LivePhase.stopping) {
       final saved = _saved;
       if (saved != null && !saved.isCompleted) {

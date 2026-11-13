@@ -179,9 +179,8 @@ class _ReadyView extends ConsumerWidget {
               onPressed: () {
                 // Without a court there are no line calls, but awards and corrections still
                 // keep score from the start score.
-                final score = ref.read(liveStartScoreProvider.notifier);
-                controller.start(startScore: score.state);
-                score.state = null; // belongs to this session only
+                // Cleared by the controller once the session has started.
+                controller.start(startScore: ref.read(liveStartScoreProvider));
               },
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start without court'),
@@ -292,9 +291,10 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
               FilledButton.icon(
                 onPressed: convex
                     ? () {
-                        final score = ref.read(liveStartScoreProvider.notifier);
-                        controller.start(corners: List.of(_corners), startScore: score.state);
-                        score.state = null; // belongs to this session only
+                        controller.start(
+                          corners: List.of(_corners),
+                          startScore: ref.read(liveStartScoreProvider),
+                        );
                       }
                     : null,
                 icon: const Icon(Icons.play_arrow),

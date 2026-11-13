@@ -121,7 +121,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (ref.read(chatControllerProvider(widget.jobId)).busy) return;
     final message = text ?? _input.text;
     _input.clear();
-    ref.read(chatControllerProvider(widget.jobId).notifier).send(message);
+    ref.read(chatControllerProvider(widget.jobId).notifier).send(message).then((_) {
+      // A question that failed (too many requests, a server or network error) is taken out
+      // of the list; put it back in the box so it need not be typed again.
+      if (!mounted || text != null) return;
+      final state = ref.read(chatControllerProvider(widget.jobId));
+      if (state.error != null && _input.text.isEmpty) {
+        _input.text = message.trim();
+      }
+    });
   }
 
   /// Keep the newest message in view as questions are asked and the answer streams in.

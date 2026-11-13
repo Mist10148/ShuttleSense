@@ -250,6 +250,8 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.send);
       await tester.pumpAndSettle();
       expect(find.text('coach chat is off'), findsOneWidget);
+      // The failed question is back in the box, ready to send again.
+      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'hello');
     });
 
     testWidgets('an answer that stops before it is done says so', (tester) async {

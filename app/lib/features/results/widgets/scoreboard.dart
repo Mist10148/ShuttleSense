@@ -196,6 +196,7 @@ class RallyHistory extends StatelessWidget {
           _RallyRow(
             rally: rally,
             showGame: (record.score?.bestOf ?? 1) > 1,
+            doubles: record.isDoubles,
             current: current == rally.index,
             onCorrect: onCorrect == null ? null : (winner) => onCorrect!(rally.index, winner),
           ),
@@ -299,12 +300,14 @@ class _RallyRow extends StatelessWidget {
     required this.rally,
     required this.current,
     this.showGame = false,
+    this.doubles = false,
     this.onCorrect,
   });
 
   final Rally rally;
   final bool current;
   final bool showGame;
+  final bool doubles;
   final ValueChanged<String?>? onCorrect;
 
   @override
@@ -337,8 +340,9 @@ class _RallyRow extends StatelessWidget {
                 label: Text(playerLabel(side)),
                 selected: rally.winner == side,
                 tooltip: rally.winner == side
-                    ? 'Rally ${rally.index + 1} won by the $side player; tap to clear'
-                    : 'Rally ${rally.index + 1} won by the $side player',
+                    ? 'Rally ${rally.index + 1} won by the $side ${doubles ? 'pair' : 'player'}; '
+                          'tap to clear'
+                    : 'Rally ${rally.index + 1} won by the $side ${doubles ? 'pair' : 'player'}',
                 // Tapping the chosen winner again makes the rally undecided (not counted).
                 onSelected: onCorrect == null
                     ? null
