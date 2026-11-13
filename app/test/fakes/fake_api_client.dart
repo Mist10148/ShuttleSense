@@ -249,6 +249,31 @@ class FakeApiClient extends ApiClient {
       });
 
   @override
+  Future<ScoreUpdate> setGameService(
+    String jobId, {
+    required int game,
+    required String serverId,
+    required String receiverId,
+  }) => _answer('setGameService $jobId $game $serverId $receiverId', () {
+    final old = record.score ?? const Score(near: 0, far: 0);
+    final score = Score(
+      near: old.near,
+      far: old.far,
+      corrections: old.corrections,
+      bestOf: old.bestOf,
+      game: old.game,
+      games: old.games,
+      gamesWon: old.gamesWon,
+      server: old.server,
+      serviceCourt: old.serviceCourt,
+      serverId: serverId,
+      receiverId: receiverId,
+    );
+    record = record.copyWith(score: score);
+    return ScoreUpdate(score: score, rallies: record.rallies);
+  });
+
+  @override
   Future<ScoreUpdate> undoScore(String jobId) => _answer('undoScore $jobId', () {
     final score = _beforeAwards.isEmpty
         ? (record.score ?? const Score(near: 0, far: 0))

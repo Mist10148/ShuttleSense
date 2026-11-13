@@ -523,6 +523,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         showHistory: false,
         onAward: _coach ? null : controller.award,
         onUndo: _coach ? null : controller.undo,
+        onSetService: _coach ? null : controller.setService,
         onClearLast: _coach || lastRally?.winner == null
             ? null
             : () => controller.correct(lastRally!.index, null),

@@ -11,7 +11,7 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | Pixel coordinates | Origin top-left of the **normalized** video frame (after io resizing), x right, y down, floats |
 | Court coordinates | Meters on the court plane. Origin at the near-left corner of the singles court, x across the court (0 to 5.18), y toward the far baseline (0 to 13.40) |
 | Frame index | 0-based index into the normalized video; time in seconds is `frame / fps`. `frames[]` holds **every** normalized frame (after fps downsampling), in order |
-| Players | A side is always `"near"` (closer to the camera, bottom of the image) or `"far"`. In doubles (v1.2) each person also has a slot: `near_1`, `near_2`, `far_1`, `far_2`; `near_1`/`far_1` live in the `near`/`far` fields, partners in `near_2`/`far_2`. Slot 1 is the left one when play starts |
+| Players | A side is always `"near"` (closer to the camera, bottom of the image) or `"far"`. In doubles (v1.2) each person also has a slot: `near_1`, `near_2`, `far_1`, `far_2`; `near_1`/`far_1` live in the `near`/`far` fields, partners in `near_2`/`far_2`. Slot 1 is the left one when play starts; the slot then stays with that person as the partners move |
 | Missing values | `null`, never `-1` or `0`, except `shuttle.visible` which is `0` or `1` as in TrackNetV3 |
 | Confidences | Floats in [0, 1]. A keypoint with `score < 0.3` counts as missing: stages that read joints (hits, feedback, positions) ignore it |
 | Speeds | km/h, always estimates |
@@ -45,6 +45,10 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
+## Schema v1.3 (doubles service in every game)
+
+v1.3 (Nov 14, [D23](DECISIONS.md), [T10.3](phases/phase-10-hardening.md#t103)) adds one optional field, left out while empty: `score.game_service`, a list of `{"game": 2, "server_id": "far_2", "receiver_id": "near_1"}`. The winners of a game choose who serves and receives first in the next one, so the user names them (`POST /jobs/{id}/score/service` or the live `service` message). With a game's entry, `rallies[].server_id` / `receiver_id` and the service check cover that game too. An entry whose server is not on the side that won the previous game is ignored. `schema.migrate()` reads 1.0–1.2 records unchanged.
+
 ## Schema v1.2 (doubles)
 
 v1.2 (Nov 12, [D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)) adds optional doubles fields only. Each is **left out of the JSON while it is empty**, so a singles record looks exactly like v1.1 apart from `schema_version`. `schema.migrate()` reads 1.0 and 1.1 records; the app accepts any `1.x`.
@@ -54,7 +58,7 @@ v1.2 (Nov 12, [D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)) adds op
 | `frames[].players` | `near_2`, `far_2` | The partner on each side (same shape as `near` / `far`) |
 | `frames[].court_positions` | `near_2`, `far_2` | Their court positions |
 | `hits[]` | `hitter`, `hitter_confidence` | The slot who hit (`player` stays the side). Absent when the two partners were about as close to the shuttle |
-| `rallies[]` | `server_id`, `receiver_id` | Who served and received the rally (first game only; the game winners choose afterwards) |
+| `rallies[]` | `server_id`, `receiver_id` | Who served and received the rally (the first game, and later games the user named in `score.game_service`, v1.3) |
 | `rallies[]` | `review` | Why the user should check the rally: pose disagrees with the derived service order. Never changes the score |
 | `score` | `first_server_id`, `first_receiver_id`, `server_id`, `receiver_id` | The user's first server and receiver, and who serves and receives next |
 | `summary.per_player` | `near_1` … `far_2` keys | Per partner, next to the `near` / `far` side totals |
@@ -68,7 +72,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
 ```jsonc
 {
-  "schema_version": "1.2",
+  "schema_version": "1.3",
   "clip_id": "match03_rally12",          // unique per processed clip
   "mode": "upload",                       // v1.1: "upload" | "live" (a saved live session)
   "source_name": "rally12.mp4",          // original file name, informational

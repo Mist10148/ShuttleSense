@@ -9,7 +9,7 @@ from snapshots import assert_matches_snapshot
 from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord, load_record, migrate
 
 EXAMPLE = {
-    "schema_version": "1.2",
+    "schema_version": "1.3",
     "clip_id": "match03_rally12",
     "mode": "live",
     "source_name": "rally12.mp4",
@@ -185,7 +185,7 @@ def test_migrate_1_1_record_adds_nothing() -> None:
     old["schema_version"] = "1.1"
     old["line_calls"] = []  # 1.1 records keep the calls they have; only 1.0 derives them
     record = load_record(json.dumps(old))
-    assert record.schema_version == SCHEMA_VERSION == "1.2"
+    assert record.schema_version == SCHEMA_VERSION == "1.3"
     assert record.line_calls == []
 
 
@@ -195,7 +195,7 @@ def test_singles_records_serialize_without_doubles_fields() -> None:
 
     text = load_golden().model_dump_json()
     for key in ("near_2", "far_2", "hitter", "server_id", "receiver_id", "first_server_id",
-                "first_receiver_id", "review"):  # fmt: skip
+                "first_receiver_id", "review", "game_service"):  # fmt: skip
         assert f'"{key}"' not in text
 
 

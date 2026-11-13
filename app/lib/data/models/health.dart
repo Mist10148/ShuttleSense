@@ -26,7 +26,7 @@ class Health {
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
-  static const expectedSchema = '1.2';
+  static const expectedSchema = '1.3';
 
   bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 

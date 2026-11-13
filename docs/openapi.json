@@ -31,6 +31,93 @@
         "title": "ChatRequest",
         "type": "object"
       },
+      "GameService": {
+        "description": "Doubles (v1.3): who serves and receives first in a game after the first (D23).\n\nThe winners of a game choose, so the user names them; the game winner's side serves.",
+        "properties": {
+          "game": {
+            "minimum": 2.0,
+            "title": "Game",
+            "type": "integer"
+          },
+          "receiver_id": {
+            "enum": [
+              "near_1",
+              "near_2",
+              "far_1",
+              "far_2"
+            ],
+            "title": "Receiver Id",
+            "type": "string"
+          },
+          "server_id": {
+            "enum": [
+              "near_1",
+              "near_2",
+              "far_1",
+              "far_2"
+            ],
+            "title": "Server Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "game",
+          "server_id",
+          "receiver_id"
+        ],
+        "title": "GameService",
+        "type": "object"
+      },
+      "GameServiceIn": {
+        "description": "Doubles: who serves and receives first in a game after the first (both, or neither\nto forget the game's slots). The game winner's side serves.",
+        "properties": {
+          "game": {
+            "maximum": 3.0,
+            "minimum": 2.0,
+            "title": "Game",
+            "type": "integer"
+          },
+          "receiver_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receiver Id"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          }
+        },
+        "required": [
+          "game"
+        ],
+        "title": "GameServiceIn",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -227,6 +314,13 @@
               }
             ],
             "title": "First Server Id"
+          },
+          "game_service": {
+            "items": {
+              "$ref": "#/components/schemas/GameService"
+            },
+            "title": "Game Service",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -893,6 +987,13 @@
               "type": "string"
             },
             "title": "Game Point",
+            "type": "array"
+          },
+          "game_service": {
+            "items": {
+              "$ref": "#/components/schemas/GameService"
+            },
+            "title": "Game Service",
             "type": "array"
           },
           "games": {
@@ -2058,6 +2159,74 @@
           }
         },
         "summary": "Award Point"
+      }
+    },
+    "/jobs/{job_id}/score/service": {
+      "post": {
+        "description": "Doubles: name who serves and receives first in game 2 or 3 (D23); the service order\nand the service check then cover that game. Both null forgets the game's slots.",
+        "operationId": "set_game_service_jobs__job_id__score_service_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameServiceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Game Service"
       }
     },
     "/jobs/{job_id}/score/undo": {

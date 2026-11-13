@@ -21,7 +21,9 @@ Doubles (Phase 9, T9.6), from the user's first server and first receiver slots:
 - the receiving side wins: they serve next and nobody moves; whoever of them stands in the
   court that matches their new score serves.
 Who serves first in a later game is the winning side's choice, so the slots are unknown
-(None) from the second game on.
+(None) from the second game on unless the user names that game's first server and receiver
+(`game_service`, D23). Slots whose server is not on the game winner's side are ignored: a
+correction can change who won the game.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from shuttlesense.schema import PlayerId, PlayerSide, Score, ScorePair, side_of
+from shuttlesense.schema import GameService, PlayerId, PlayerSide, Score, ScorePair, side_of
 
 INTERVAL_AT = 11
 OTHER: dict[PlayerSide, PlayerSide] = {"near": "far", "far": "near"}
@@ -104,12 +106,15 @@ def play(
     first_server: PlayerSide | None = None,
     first_server_id: PlayerId | None = None,
     first_receiver_id: PlayerId | None = None,
+    game_service: Sequence[GameService] = (),
 ) -> MatchPlay:
     """Run the match over the rally winners and return each step and the final state.
 
     With `first_server_id` and `first_receiver_id` (doubles, on opposite sides) every step
-    and the score also say who serves and receives.
+    and the score also say who serves and receives; `game_service` does the same for games
+    after the first.
     """
+    later = {g.game: g for g in game_service}
     if best_of not in (1, 3):
         raise ValueError("best_of must be 1 or 3")
     start = start or ScorePair()
@@ -162,11 +167,17 @@ def play(
         game += 1
         near, far = 0, 0
         reached_interval = False
-        courts = None  # the game winners choose their server: unknown from here
-        # The game winner serves first in the next game: server is already w.
+        # The game winners choose their server: unknown unless the user named them. The game
+        # winner serves first in the next game: server is already w.
+        named = later.get(game)
+        courts = None
+        if (named and side_of(named.server_id) == w
+                and side_of(named.receiver_id) != w):  # fmt: skip
+            courts = DoublesCourts(named.server_id, named.receiver_id, 0, 0)
 
     score = Score(near=near, far=far, best_of=best_of, first_server=first_server, game=game,
-                  first_server_id=first_server_id, first_receiver_id=first_receiver_id)  # fmt: skip
+                  first_server_id=first_server_id, first_receiver_id=first_receiver_id,
+                  game_service=sorted(later.values(), key=lambda g: g.game))  # fmt: skip
     if match_winner is not None:
         # The match is over: the score shows the last game, games lists every game.
         last = games[-1]

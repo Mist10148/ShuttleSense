@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
+import '../../../shared/widgets/game_service_prompt.dart';
 import '../../../shared/widgets/section_card.dart';
 
 /// F14/F16: assisted scoreboard at the current playback position, with per-rally winner
@@ -18,6 +19,7 @@ class Scoreboard extends StatelessWidget {
     this.onAward,
     this.onUndo,
     this.onClearLast,
+    this.onSetService,
     this.busy = false,
     this.live = false,
     this.showHistory = true,
@@ -35,6 +37,9 @@ class Scoreboard extends StatelessWidget {
   /// Take back the newest correction or award.
   final VoidCallback? onUndo;
   final VoidCallback? onClearLast;
+
+  /// Doubles (D23): name who serves and receives first in a later game.
+  final void Function(int game, String serverId, String receiverId)? onSetService;
   final bool busy;
 
   /// A live session: the score is always the current one.
@@ -111,6 +116,20 @@ class Scoreboard extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
             if (atEnd) _MatchState(score: total),
+            // Doubles: the game winners chose their server; ask so the order can go on.
+            if (atEnd &&
+                onSetService != null &&
+                record.isDoubles &&
+                !total.matchOver &&
+                total.game >= 2 &&
+                total.server != null &&
+                total.serverId == null)
+              GameServicePrompt(
+                game: total.game,
+                servingSide: total.server!,
+                busy: busy,
+                onSet: onSetService!,
+              ),
             if (onAward != null || onUndo != null) ...[
               const SizedBox(height: 8),
               // One large button per side, in the side's colour, under its score.

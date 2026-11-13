@@ -263,6 +263,12 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
 
   Future<void> _undo() => _changeScore((api) => api.undoScore(widget.jobId));
 
+  /// D23: who serves and receives first in a later doubles game.
+  Future<void> _setService(int game, String serverId, String receiverId) => _changeScore(
+    (api) =>
+        api.setGameService(widget.jobId, game: game, serverId: serverId, receiverId: receiverId),
+  );
+
   Future<void> _changeScore(Future<ScoreUpdate> Function(ApiClient api) change) async {
     setState(() => _correcting = true);
     try {
@@ -388,6 +394,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onCorrect: _correct,
                   onAward: _award,
                   onUndo: _undo,
+                  onSetService: _setService,
                 ),
                 const SizedBox(height: 16),
                 chart,

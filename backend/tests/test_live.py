@@ -579,6 +579,41 @@ def test_start_accepts_the_doubles_first_server_and_receiver() -> None:
             _start_request({**START, **bad})
 
 
+def test_live_service_message_names_a_later_games_server(tmp_path: Path) -> None:
+    """D23 live: after game 1 the referee names who serves and receives first in game 2."""
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "court": "doubles", "best_of": 3,
+                      "first_server_id": "near_1", "first_receiver_id": "far_1"})  # fmt: skip
+        assert ws.receive_json()["type"] == "started"
+        ws.send_json({"type": "service", "game": 4, "server_id": "near_1",
+                      "receiver_id": "far_1"})  # fmt: skip
+        assert ws.receive_json()["code"] == "bad_request"
+        for _ in range(21):
+            ws.send_json({"type": "award", "winner": "near"})
+            score = ws.receive_json()["score"]
+            assert ws.receive_json()["type"] == "coaching"
+        assert score["game"] == 2 and score.get("server_id") is None
+        ws.send_json({"type": "service", "game": 2, "server_id": "near_2",
+                      "receiver_id": "far_1"})  # fmt: skip
+        score = ws.receive_json()["score"]
+        assert (score["server_id"], score["receiver_id"]) == ("near_2", "far_1")
+        ws.send_json({"type": "stop"})
+        while ws.receive_json()["type"] != "saved":
+            pass
+
+
+def test_live_service_message_is_for_doubles_only(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        assert ws.receive_json()["type"] == "started"
+        ws.send_json({"type": "service", "game": 2, "server_id": "near_1",
+                      "receiver_id": "far_1"})  # fmt: skip
+        assert ws.receive_json()["code"] == "bad_request"
+        ws.send_json({"type": "stop"})
+        while ws.receive_json()["type"] != "saved":
+            pass
+
+
 def test_fake_doubles_session_streams_four_players(tmp_path: Path) -> None:
     """T9.9: four players, partner hitters and the doubles service order over the socket."""
     with make_client(tmp_path) as client:

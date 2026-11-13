@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 from shuttlesense.atomic import atomic_write_text
 from shuttlesense.schema import (
     ClipRecord,
+    GameService,
     PlayerId,
     PlayerSide,
     Rally,
@@ -57,6 +58,7 @@ def apply_rallies(
     first_server_id: PlayerId | None = None,
     first_receiver_id: PlayerId | None = None,
     awards: Sequence[ScoreCorrection] = (),
+    game_service: Sequence[GameService] = (),
 ) -> Score:
     """Set each rally's game and score_after from the winners and return the match score.
 
@@ -66,7 +68,8 @@ def apply_rallies(
     """
     pairs, result = _rally_steps(rallies, start, best_of=best_of, first_server=first_server,
                                  first_server_id=first_server_id,
-                                 first_receiver_id=first_receiver_id, awards=awards)  # fmt: skip
+                                 first_receiver_id=first_receiver_id, awards=awards,
+                                 game_service=game_service)  # fmt: skip
     for rally, step in pairs:
         rally.game, rally.score_after = step.game, step.score_after
         rally.server_id, rally.receiver_id = step.server_id, step.receiver_id
@@ -82,6 +85,7 @@ def _rally_steps(
     first_server_id: PlayerId | None,
     first_receiver_id: PlayerId | None,
     awards: Sequence[ScoreCorrection],
+    game_service: Sequence[GameService] = (),
 ) -> tuple[list[tuple[Rally, Step]], MatchPlay]:
     """Play the match over the rallies and awards: each rally's step, and the result."""
     from shuttlesense.referee.match import play
@@ -98,7 +102,8 @@ def _rally_steps(
     winners += [a.winner_after for a in pending]
     slots += [None] * len(pending)
     result = play(winners, start, best_of=best_of, first_server=first_server,
-                  first_server_id=first_server_id, first_receiver_id=first_receiver_id)  # fmt: skip
+                  first_server_id=first_server_id, first_receiver_id=first_receiver_id,
+                  game_service=game_service)  # fmt: skip
     pairs = [(r, step) for r, step in zip(slots, result.steps, strict=True) if r is not None]
     return pairs, result
 
@@ -112,6 +117,7 @@ def match_config(config: dict[str, Any]) -> dict[str, Any]:
         "first_server": match.get("first_server"),
         "first_server_id": match.get("first_server_id"),
         "first_receiver_id": match.get("first_receiver_id"),
+        "game_service": [GameService.model_validate(g) for g in match.get("game_service") or []],
     }
 
 
@@ -145,7 +151,7 @@ def apply_corrections(
                           first_server=record.score.first_server,
                           first_server_id=record.score.first_server_id,
                           first_receiver_id=record.score.first_receiver_id,
-                          awards=awards)  # fmt: skip
+                          awards=awards, game_service=record.score.game_service)  # fmt: skip
     final.corrections = list(corrections)
     record.score = final
     flag_service(record, start)
@@ -173,7 +179,7 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
                             first_server=record.score.first_server,
                             first_server_id=record.score.first_server_id,
                             first_receiver_id=record.score.first_receiver_id,
-                            awards=awards)  # fmt: skip
+                            awards=awards, game_service=record.score.game_service)  # fmt: skip
     before_of = {r.index: step.score_before for r, step in pairs}
     for rally in record.rallies:
         before = before_of.get(rally.index)

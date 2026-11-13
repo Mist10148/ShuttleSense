@@ -1018,6 +1018,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// Take back the newest correction or award.
   void undo() => _decide({'type': 'undo'});
 
+  /// Doubles (D23): who serves and receives first in [game].
+  void setService(int game, String serverId, String receiverId) =>
+      _decide({'type': 'service', 'game': game, 'server_id': serverId, 'receiver_id': receiverId});
+
   /// Give up connecting or reconnecting and go back to the camera. A session the server
   /// already started is saved to History once its resume window runs out.
   Future<void> cancel() async {

@@ -30,6 +30,7 @@ from shuttlesense.analytics import build_summary, write_exports
 from shuttlesense.api.jobs import JobBusy, JobManager, VideoGone
 from shuttlesense.api.models import (
     ChatRequest,
+    GameServiceIn,
     Health,
     Job,
     JobCreate,
@@ -64,6 +65,7 @@ from shuttlesense.schema import (
     Chat,
     ChatMessage,
     ClipRecord,
+    GameService,
     ScoreCorrection,
     load_record,
     migrate,
@@ -419,6 +421,31 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
         award = ScoreCorrection(rally_index=before, winner_before=None, winner_after=body.winner,
                                 at=utcnow(), kind="award", frame=frame)  # fmt: skip
         apply_corrections(record, [*record.score.corrections, award], job.start_score)
+        _save_score(record, storage, jobs, job_id)
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+@router.post("/jobs/{job_id}/score/service", response_model=ScoreUpdate)
+def set_game_service(
+    job_id: str, body: GameServiceIn, storage: StorageDep, jobs: JobsDep
+) -> ScoreUpdate:
+    """Doubles: name who serves and receives first in game 2 or 3 (D23); the service order
+    and the service check then cover that game. Both null forgets the game's slots."""
+    job, path = _score_record(storage, jobs, job_id)
+    with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
+        if job.court != "doubles":
+            raise HTTPException(status_code=409, detail="the service order is for doubles jobs")
+        record = load_record(path.read_text(encoding="utf-8"))
+        if record.score is None:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        kept = [g for g in record.score.game_service if g.game != body.game]
+        if body.server_id is not None and body.receiver_id is not None:
+            kept.append(GameService(game=body.game, server_id=body.server_id,
+                                    receiver_id=body.receiver_id))  # fmt: skip
+        record.score.game_service = sorted(kept, key=lambda g: g.game)
+        apply_corrections(record, record.score.corrections, job.start_score)
+        jobs.set_game_service(job_id, record.score.game_service)
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 

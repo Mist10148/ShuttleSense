@@ -238,6 +238,20 @@ class ApiClient {
         return ScoreUpdate.fromJson(res.data!);
       });
 
+  /// Doubles (D23): who serves and receives first in [game] (2 or 3).
+  Future<ScoreUpdate> setGameService(
+    String jobId, {
+    required int game,
+    required String serverId,
+    required String receiverId,
+  }) => _call(() async {
+    final res = await _dio.post<Json>(
+      '/jobs/$jobId/score/service',
+      data: {'game': game, 'server_id': serverId, 'receiver_id': receiverId},
+    );
+    return ScoreUpdate.fromJson(res.data!);
+  });
+
   /// Take back the newest correction or award.
   Future<ScoreUpdate> undoScore(String jobId) => _call(() async {
     final res = await _dio.post<Json>('/jobs/$jobId/score/undo');

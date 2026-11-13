@@ -18,7 +18,15 @@ from typing import Any
 
 import numpy as np
 
-from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Court, Players, ScorePair, Shuttle
+from shuttlesense.schema import (
+    COURT_SIZE_M,
+    ClipRecord,
+    Court,
+    GameService,
+    Players,
+    ScorePair,
+    Shuttle,
+)
 from shuttlesense.stream.analyzer import Event, StreamAnalyzer
 from shuttlesense.stream.perception import Perception
 
@@ -315,6 +323,9 @@ class LiveSession:
 
     def undo(self) -> list[Event]:
         return self.analyzer.undo()
+
+    def set_service(self, game: int, service: GameService | None) -> list[Event]:
+        return self.analyzer.set_service(game, service)
 
     # End ------------------------------------------------------------------------
 

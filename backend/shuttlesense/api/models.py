@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from shuttlesense.schema import (
     Call,
     CourtType,
+    GameService,
     LineCall,
     Mode,
     PlayerId,
@@ -114,6 +115,20 @@ class ScoreCorrectionIn(BaseModel):
     winner: PlayerSide | None  # None: the rally is undecided again
 
 
+class GameServiceIn(BaseModel):
+    """Doubles: who serves and receives first in a game after the first (both, or neither
+    to forget the game's slots). The game winner's side serves."""
+
+    game: int = Field(ge=2, le=3)
+    server_id: PlayerId | None = None
+    receiver_id: PlayerId | None = None
+
+    @model_validator(mode="after")
+    def _pair(self) -> GameServiceIn:
+        check_first_service(None, self.server_id, self.receiver_id)
+        return self
+
+
 class ScoreAwardIn(BaseModel):
     """A point for a rally the referee layer missed."""
 
@@ -179,4 +194,6 @@ class Job(BaseModel):
     court: CourtType = "singles"
     first_server_id: PlayerId | None = None
     first_receiver_id: PlayerId | None = None
+    # Doubles: who serves and receives first in games 2 and 3, named after each game (D23).
+    game_service: list[GameService] = Field(default_factory=list)
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)

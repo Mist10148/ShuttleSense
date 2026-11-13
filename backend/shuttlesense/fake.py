@@ -141,6 +141,7 @@ def fake_pipeline(
         # user's first server (and play() refuses a server on the other side).
         record.score.first_server_id = match["first_server_id"]
         record.score.first_receiver_id = match["first_receiver_id"]
+        record.score.game_service = match["game_service"]
         if not apply_user_changes(record, out_dir, start):
             apply_corrections(record, [], start)  # still re-score from the start score
             record.rally_events = build_events(record)

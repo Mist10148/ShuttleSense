@@ -357,7 +357,7 @@ def test_old_record_is_migrated_when_served(tmp_path: Path, tiny_video: Path) ->
             data.pop(key, None)
         path.write_text(json.dumps(data), encoding="utf-8")
         served = client.get(f"/jobs/{job_id}/record").json()
-        assert served["schema_version"] == "1.2" and served["mode"] == "upload"
+        assert served["schema_version"] == "1.3" and served["mode"] == "upload"
         assert served["line_calls"][0]["call"] == "in"
 
 
@@ -903,3 +903,45 @@ def test_delete_waits_for_an_edit_in_progress(tmp_path: Path, tiny_video: Path) 
         lock.release()
         worker.join(5)
         assert done.is_set() and jobs.get(job["id"]) is None
+
+
+def test_doubles_service_for_a_later_game_is_kept_through_a_rerender(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    """D23: POST /jobs/{id}/score/service names game 2's first server and receiver."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS,
+                "court": "doubles", "best_of": 3, "first_server_id": "near_1",
+                "first_receiver_id": "far_1"}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        url = f"/jobs/{job['id']}/score"
+        score = client.get(f"/jobs/{job['id']}/record").json()["score"]
+        while score["game"] == 1:  # far wins game 1 on awarded points
+            score = client.post(f"{url}/award", json={"winner": "far"}).json()["score"]
+        assert score.get("server_id") is None  # game 2: unknown until named
+        named = {"game": 2, "server_id": "far_2", "receiver_id": "near_2"}
+        score = client.post(f"{url}/service", json=named).json()["score"]
+        assert (score["server_id"], score["receiver_id"]) == ("far_2", "near_2")
+        assert score["game_service"] == [named]
+        assert client.get(f"/jobs/{job['id']}").json()["game_service"] == [named]
+        for bad in ({**named, "game": 1}, {**named, "receiver_id": None},
+                    {**named, "receiver_id": "far_1"}):  # fmt: skip
+            assert client.post(f"{url}/service", json=bad).status_code == 422
+        client.post(f"/jobs/{job['id']}/render", json={"overlays": ["score"]})
+        assert wait_for(client, job["id"])["status"] == "done"
+        score = client.get(f"/jobs/{job['id']}/record").json()["score"]
+        assert score["game_service"] == [named] and score["server_id"] == "far_2"
+        cleared = client.post(f"{url}/service", json={"game": 2}).json()["score"]
+        assert cleared.get("server_id") is None and "game_service" not in cleared
+
+
+def test_singles_jobs_have_no_service_order(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS}
+        job = client.post("/jobs", json=body).json()
+        assert wait_for(client, job["id"])["status"] == "done"
+        named = {"game": 2, "server_id": "far_2", "receiver_id": "near_2"}
+        assert client.post(f"/jobs/{job['id']}/score/service", json=named).status_code == 409

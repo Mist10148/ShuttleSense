@@ -390,6 +390,43 @@
       "title": "Frame",
       "type": "object"
     },
+    "GameService": {
+      "description": "Doubles (v1.3): who serves and receives first in a game after the first (D23).\n\nThe winners of a game choose, so the user names them; the game winner's side serves.",
+      "properties": {
+        "game": {
+          "minimum": 2,
+          "title": "Game",
+          "type": "integer"
+        },
+        "receiver_id": {
+          "enum": [
+            "near_1",
+            "near_2",
+            "far_1",
+            "far_2"
+          ],
+          "title": "Receiver Id",
+          "type": "string"
+        },
+        "server_id": {
+          "enum": [
+            "near_1",
+            "near_2",
+            "far_1",
+            "far_2"
+          ],
+          "title": "Server Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "game",
+        "server_id",
+        "receiver_id"
+      ],
+      "title": "GameService",
+      "type": "object"
+    },
     "Hit": {
       "properties": {
         "class_probs": {
@@ -1113,6 +1150,13 @@
           "title": "Game Point",
           "type": "array"
         },
+        "game_service": {
+          "items": {
+            "$ref": "#/$defs/GameService"
+          },
+          "title": "Game Service",
+          "type": "array"
+        },
         "games": {
           "items": {
             "$ref": "#/$defs/ScorePair"
@@ -1593,7 +1637,7 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "1.2",
+      "default": "1.3",
       "title": "Schema Version",
       "type": "string"
     },

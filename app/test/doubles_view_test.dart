@@ -153,4 +153,47 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Near 2: 1 hits'), findsOneWidget);
   });
+
+  testWidgets('after game 1 the scoreboard asks who serves first in game 2', (tester) async {
+    const game2 = Score(
+      near: 0,
+      far: 0,
+      bestOf: 3,
+      game: 2,
+      gamesWon: ScorePair(near: 0, far: 1),
+      server: 'far',
+      serviceCourt: 'right',
+    );
+    final record = doublesRecord().copyWith(score: game2);
+    final set = <String>[];
+    await pump(
+      tester,
+      Scoreboard(
+        record: record,
+        frameIndex: record.numFrames - 1,
+        onSetService: (game, s, r) => set.add('$game $s $r'),
+      ),
+    );
+    expect(find.text('Who serves first in game 2?'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButton<String?>).at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Far 2').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<String?>).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Near 1').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Set service'));
+    expect(set, ['2 far_2 near_1']);
+    // Named already, or a game-1 score: no prompt.
+    await pump(
+      tester,
+      Scoreboard(
+        record: doublesRecord(),
+        frameIndex: record.numFrames - 1,
+        onSetService: (_, _, _) {},
+      ),
+    );
+    expect(find.textContaining('Who serves first'), findsNothing);
+  });
 }

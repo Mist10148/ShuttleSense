@@ -15,6 +15,7 @@ from shuttlesense.api.models import Job, JobOutputs, StageState, utcnow
 from shuttlesense.api.storage import OUTPUT_FILES, Storage
 from shuttlesense.atomic import atomic_write_text
 from shuttlesense.pipeline import STAGE_NAMES, run_pipeline
+from shuttlesense.schema import GameService
 
 # Signature of run_pipeline, injectable for tests.
 PipelineFn = Callable[..., Any]
@@ -238,6 +239,10 @@ class JobManager:
                 setattr(job, key, value)
             self.storage.save_job(job)
 
+    def set_game_service(self, job_id: str, game_service: list[GameService]) -> None:
+        """Keep a doubles job's per-game service slots, so a re-render applies them again."""
+        self._update(job_id, game_service=list(game_service))
+
     def job_lock(self, job_id: str) -> threading.Lock:
         """Lock for edits to one job's outputs (score corrections)."""
         with self._lock:
@@ -259,6 +264,8 @@ class JobManager:
         if job.first_server_id:  # doubles; singles configs stay as they were
             config["match"]["first_server_id"] = job.first_server_id
             config["match"]["first_receiver_id"] = job.first_receiver_id
+        if job.game_service:
+            config["match"]["game_service"] = [g.model_dump() for g in job.game_service]
         config["mode"] = job.mode
         return config
 

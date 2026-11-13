@@ -134,6 +134,34 @@ def test_doubles_slots_are_unknown_after_the_first_game() -> None:
     assert m.score.game == 2 and m.score.server_id is None
 
 
+def test_doubles_service_order_in_later_games_from_the_named_slots() -> None:
+    """D23: the user names game 2's first server and receiver; the order follows from there."""
+    from shuttlesense.schema import GameService
+
+    game2 = GameService(game=2, server_id="far_2", receiver_id="near_1")
+    winners = ["far"] * 21 + ["far", "near", "near"]
+    m = play(winners, best_of=3, first_server_id="far_1", first_receiver_id="near_2",
+             game_service=[game2])  # fmt: skip
+    assert m.score.game == 2
+    assert [(s.server_id, s.receiver_id) for s in m.steps[21:]] == [
+        ("far_2", "near_1"),  # 0-0 in game 2: far won game 1 and serves from the right
+        ("far_2", "near_2"),  # far won: same server, from the left
+        ("near_2", "far_2"),  # near won at 1-1: near_2 stands in near's left (odd) court
+    ]  # fmt: skip
+    assert m.score.game_service == [game2]
+    # A named server on the side that lost the game cannot serve first: the slots are ignored.
+    wrong = GameService(game=2, server_id="near_1", receiver_id="far_1")
+    m = play(winners, best_of=3, first_server_id="far_1", first_receiver_id="near_2",
+             game_service=[wrong])  # fmt: skip
+    assert m.steps[21].server_id is None
+    # Game 3 too.
+    game3 = GameService(game=3, server_id="near_1", receiver_id="far_1")
+    m = play(["far"] * 21 + ["near"] * 21 + ["near"], best_of=3, first_server_id="far_1",
+             first_receiver_id="near_2", game_service=[game2, game3])  # fmt: skip
+    assert m.steps[21].server_id == "far_2" and m.steps[42].server_id == "near_1"
+    assert m.score.game == 3
+
+
 def test_doubles_first_server_and_receiver_must_face_each_other() -> None:
     with pytest.raises(ValueError):
         play(["near"], first_server_id="near_1", first_receiver_id="near_2")

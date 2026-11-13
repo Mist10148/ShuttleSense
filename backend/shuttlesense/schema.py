@@ -1,4 +1,4 @@
-"""Clip record schema v1.2 — the shared per-clip data format.
+"""Clip record schema v1.3 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 
 PlayerSide = Literal["near", "far"]
 # Doubles (v1.2, D22): one slot per person. near_1/far_1 live in the near/far fields that
@@ -169,6 +169,16 @@ class ScoreCorrection(BaseModel):
     frame: int | None = None  # where an award was given
 
 
+class GameService(BaseModel):
+    """Doubles (v1.3): who serves and receives first in a game after the first (D23).
+
+    The winners of a game choose, so the user names them; the game winner's side serves."""
+
+    game: int = Field(ge=2)
+    server_id: PlayerId
+    receiver_id: PlayerId
+
+
 class Score(ScorePair):
     """The current game's score (the last game's once the match is over) and match state."""
 
@@ -190,6 +200,8 @@ class Score(ScorePair):
     first_receiver_id: PlayerId | None = _omit_none()
     server_id: PlayerId | None = _omit_none()  # who serves the next rally
     receiver_id: PlayerId | None = _omit_none()
+    # Doubles (v1.3): the first server and receiver of later games, as the user named them.
+    game_service: list[GameService] = Field(default_factory=list, exclude_if=lambda v: not v)
 
 
 class Moment(BaseModel):
@@ -306,7 +318,7 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
 
     1.0 -> 1.1 only adds optional fields; the defaults fill them, and line calls and rally
     events are derived from the rallies so old jobs show calls in the app. 1.1 -> 1.2 adds
-    optional doubles fields only.
+    optional doubles fields only, and 1.2 -> 1.3 the optional per-game doubles service.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:

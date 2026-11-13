@@ -25,7 +25,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from shuttlesense.api.models import Job, VideoInfoOut, utcnow
 from shuttlesense.api.storage import Storage, new_id
-from shuttlesense.schema import ScorePair
+from shuttlesense.schema import GameService, ScorePair
 from shuttlesense.stream.analyzer import RallyInPlay
 from shuttlesense.stream.session import LiveSession, StartRequest
 
@@ -192,6 +192,7 @@ class LiveManager:
             best_of=session.request.best_of, first_server=session.request.first_server,
             court=session.request.court, first_server_id=session.request.first_server_id,
             first_receiver_id=session.request.first_receiver_id,
+            game_service=list(record.score.game_service) if record.score else [],
             court_corners_px=list(session.corners) if session.corners else None,
             overlays=list(OVERLAYS),
         )  # fmt: skip
@@ -514,12 +515,37 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             return session.award(msg["winner"])
         if msg.get("type") == "undo":
             return session.undo()
+        if msg.get("type") == "service":
+            try:
+                game, service = _game_service(session, msg)
+            except ValueError as exc:
+                return [{"type": "error", "code": "bad_request", "detail": str(exc)}]
+            return session.set_service(game, service)
     except RallyInPlay as exc:
         return [{"type": "error", "code": "rally_in_play", "detail": str(exc)}]
     except (KeyError, TypeError, ValueError):
         detail = "nothing to undo" if msg.get("type") == "undo" else "no such line call or rally"
         return [{"type": "error", "code": "not_found", "detail": detail}]
     return [_bad_message(msg)]
+
+
+def _game_service(session: LiveSession, msg: dict[str, Any]) -> tuple[int, GameService | None]:
+    """A `service` message: {game, server_id, receiver_id}; both ids null forgets the game.
+    Raises ValueError (answered with bad_request) for anything else."""
+    from shuttlesense.api.models import GameServiceIn
+
+    if session.request.court != "doubles":
+        raise ValueError("the service order is for doubles sessions")
+    game = msg.get("game")
+    if type(game) is not int:
+        raise ValueError("game must be 2 or 3")
+    body = GameServiceIn.model_validate(
+        {"game": game, "server_id": msg.get("server_id"), "receiver_id": msg.get("receiver_id")}
+    )
+    if body.server_id is None or body.receiver_id is None:
+        return body.game, None
+    return body.game, GameService(game=body.game, server_id=body.server_id,
+                                  receiver_id=body.receiver_id)  # fmt: skip
 
 
 def _bad_message(msg: Any) -> dict:

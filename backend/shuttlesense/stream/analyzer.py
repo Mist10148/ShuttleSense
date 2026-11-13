@@ -32,6 +32,7 @@ from shuttlesense.schema import (
     Court,
     CourtPositions,
     Frame,
+    GameService,
     Player,
     PlayerId,
     Players,
@@ -447,6 +448,15 @@ class StreamAnalyzer:
         ))  # fmt: skip
         self._rescore()
         return [self._score_event(), self._latest_coaching_event()]
+
+    def set_service(self, game: int, service: GameService | None) -> list[Event]:
+        """Doubles: name who serves and receives first in `game` (D23), or forget it (None)."""
+        kept = [g for g in self.record.score.game_service if g.game != game]
+        self.record.score.game_service = sorted(
+            [*kept, service] if service is not None else kept, key=lambda g: g.game
+        )
+        self._rescore()
+        return [self._score_event()]
 
     def undo(self) -> list[Event]:
         """Take back the newest score correction or award."""
