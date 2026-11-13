@@ -326,6 +326,34 @@ def test_shuttleset_landing_pixels_become_court_meters(tmp_path: Path) -> None:
     assert eval_line_calls.court_mapper(pred) is None
 
 
+def test_shuttleset_landing_at_the_horizon_is_dropped(tmp_path: Path, monkeypatch) -> None:
+    """A pixel the homography sends to infinity has no landing (JSON cannot hold NaN)."""
+    import numpy as np
+
+    from shuttlesense.fake import load_golden
+
+    eval_line_calls = load_script("eval_line_calls")
+    pred = tmp_path / "record.json"
+    pred.write_text(load_golden().model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr(eval_line_calls, "image_to_court",
+                        lambda h, pts: np.array([[np.inf, np.nan]]))  # fmt: skip
+    assert eval_line_calls.court_mapper(pred)(10.0, 10.0) is None
+
+
+def test_shuttleset_rallies_match_on_their_start(tmp_path: Path) -> None:
+    """ShuttleSet ends at the last stroke, a predicted rally at the landing: match the start."""
+    eval_line_calls = load_script("eval_line_calls")
+    truth = [{"start_s": 1.0, "end_s": 3.0, "call": "out", "landing": None},
+             {"start_s": 20.0, "end_s": 25.0, "call": "in", "landing": None}]  # fmt: skip
+    predicted = [{"start_s": 1.2, "end_s": 4.6, "call": "out", "uncertain": False,
+                  "margin_cm": -30.0, "court": "singles", "bounds": None}]  # fmt: skip
+    by_both = eval_line_calls.evaluate(predicted, truth)
+    assert by_both["called"] == 0 and by_both["unmatched"] == 2
+    by_start = eval_line_calls.evaluate(predicted, truth, match_end=False)
+    assert by_start["called"] == 1 and by_start["unmatched"] == 1
+    assert by_start["accuracy_certain"] == 1.0
+
+
 def test_eval_doubles_scores_hitters_service_and_slot_jumps(tmp_path: Path) -> None:
     """T9.12 on the doubles golden record with labels written by label_clip.py."""
     import argparse

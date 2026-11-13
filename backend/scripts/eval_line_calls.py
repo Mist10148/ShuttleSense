@@ -89,21 +89,24 @@ def read_labels(path: Path) -> list[dict[str, Any]]:
     return sorted(out, key=lambda r: r["start_s"])
 
 
-ToCourt = Callable[[float, float], tuple[float, float]]
+ToCourt = Callable[[float, float], tuple[float, float] | None]
 
 
 def court_mapper(pred: Path, annotation_size: tuple[int, int] = (1280, 720)) -> ToCourt | None:
     """Annotation pixels -> court meters through the record's homography; None without a
     calibrated court. The record must show the same framing as the annotated video; a
-    different resolution is scaled."""
+    different resolution is scaled. A pixel near the homography's horizon has no court point
+    (None): it would map to inf/NaN, which JSON cannot hold."""
     record = load_record(pred.read_text(encoding="utf-8"))
     if record.court is None or not record.width or not record.height:
         return None
     h = np.asarray(record.court.homography, dtype=float)
     sx, sy = record.width / annotation_size[0], record.height / annotation_size[1]
 
-    def to_court(x: float, y: float) -> tuple[float, float]:
+    def to_court(x: float, y: float) -> tuple[float, float] | None:
         mx, my = image_to_court(h, np.array([[x * sx, y * sy]]))[0]
+        if not (np.isfinite(mx) and np.isfinite(my)):
+            return None
         return round(float(mx), 3), round(float(my), 3)
 
     return to_court
@@ -159,13 +162,37 @@ def _ratio(num: int, den: int) -> float | None:
     return num / den if den else None
 
 
+def match_on_start(
+    predicted: list[dict[str, Any]], truth: list[dict[str, Any]], tolerance_s: float
+) -> dict[int, int]:
+    """{truth index: predicted index} by rally start only, nearest first.
+
+    ShuttleSet's rally end is the frame of the last stroke, while a predicted rally ends at
+    the landing or rest, about one shot's flight later; matching ends too would drop most
+    rallies that ended on a clear or a lift."""
+    used: set[int] = set()
+    pairs: dict[int, int] = {}
+    for j, t in enumerate(truth):
+        free = [(abs(p["start_s"] - t["start_s"]), i) for i, p in enumerate(predicted)
+                if i not in used and abs(p["start_s"] - t["start_s"]) <= tolerance_s]  # fmt: skip
+        if free:
+            i = min(free)[1]
+            used.add(i)
+            pairs[j] = i
+    return pairs
+
+
 def evaluate(
     predicted: list[dict[str, Any]],
     truth: list[dict[str, Any]],
     tolerance_s: float = 1.0,
     near_line_cm: float = 20.0,
+    match_end: bool = True,
 ) -> dict[str, Any]:
-    pairs = _eval_rallies().match_rallies(predicted, truth, tolerance_s)
+    if match_end:
+        pairs = _eval_rallies().match_rallies(predicted, truth, tolerance_s)
+    else:
+        pairs = match_on_start(predicted, truth, tolerance_s)
     rows = []
     for j, t in enumerate(truth):
         if t["call"] is None:
@@ -177,6 +204,7 @@ def evaluate(
             true_margin = signed_margin(t["landing"], bounds) * 100
         rows.append({
             "end_s": round(t["end_s"], 3),
+            "matched": p is not None,
             "label": t["call"],
             "call": None if p is None else p["call"],
             "uncertain": None if p is None else p["uncertain"],
@@ -191,6 +219,7 @@ def summarize(rows: list[dict[str, Any]], near_line_cm: float) -> dict[str, Any]
     certain = [r for r in called if not r["uncertain"]]
     out: dict[str, Any] = {
         "labelled": len(rows),
+        "unmatched": sum(not r.get("matched", True) for r in rows),
         "called": len(called),
         "certain": len(certain),
         "uncertain_share": _ratio(len(called) - len(certain), len(called)),
@@ -237,7 +266,9 @@ def to_markdown(clips: dict[str, dict[str, Any]], overall: dict[str, Any], args:
         return "\n".join(lines) + "\n"
     n = overall["near_line"]
     lines += [
-        f"Matched within ±{args.tolerance} s. Precision and recall count certain calls only; "
+        f"Matched within ±{args.tolerance} s"
+        f"{' on the rally start' if getattr(args, 'gt_format', '') == 'shuttleset' else ''}. "
+        "Precision and recall count certain calls only; "
         "UNCERTAIN calls go to the user.",
         "",
         "| Clip | Labelled | Called | Certain | IN P / R | OUT P / R | Accuracy (certain) |",
@@ -255,6 +286,9 @@ def to_markdown(clips: dict[str, dict[str, Any]], overall: dict[str, Any], args:
         f"Near-line (within {n['within_cm']:g} cm, by {n['basis']}): {n['certain_calls']} "
         f"certain calls, false-call rate {_pct(n['false_call_rate'])}. "
         f"Uncertain share overall: {_pct(overall['uncertain_share'])}.",
+        "",
+        f"{overall['unmatched']} of {overall['labelled']} labelled rallies matched no predicted "
+        "rally; they count as not called.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -286,7 +320,8 @@ def main() -> None:
         name, n = gt.stem, 2
         while name in clips:  # two label files with the same name in different folders
             name, n = f"{gt.stem} ({n})", n + 1
-        clips[name] = evaluate(read_predicted(pred), truth, args.tolerance, args.near_line_cm)
+        clips[name] = evaluate(read_predicted(pred), truth, args.tolerance, args.near_line_cm,
+                               match_end=args.gt_format != "shuttleset")  # fmt: skip
     rows = [r for c in clips.values() for r in c["rows"]]
     overall = summarize(rows, args.near_line_cm)
     markdown = to_markdown(clips, overall, args)
@@ -294,7 +329,9 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(markdown, encoding="utf-8")
     data = {"tolerance_s": args.tolerance, "overall": overall, "clips": clips}
-    args.out.with_suffix(".json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    args.out.with_suffix(".json").write_text(
+        json.dumps(data, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
     print(f"wrote {args.out} and {args.out.with_suffix('.json')}")
 
 
