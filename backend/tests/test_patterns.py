@@ -63,7 +63,7 @@ def test_ranking_uses_count_times_severity_and_is_deterministic() -> None:
     ]
     record = _record(hits)
     first = build_coaching(record)
-    # 2 serves x 1.5 severity = 3.0 ties 3 smashes x 1.0; the higher rate (both 100%) ties,
+    # 2 serve pose cues rank below 3 smash cues at the same severity.
     # so the id breaks the tie.
     assert first.top_fixes == ["elbow_extension:near", "stable_feet:near"]
     assert build_coaching(record) == first
@@ -83,7 +83,7 @@ def test_out_shots_come_from_line_calls_and_overrides() -> None:
 
 def test_top_fix_count_is_configurable() -> None:
     cfg = pattern_config({"patterns": {"top_fixes": 1, "severity": {"elbow_extension": 2}}})
-    assert cfg["top_fixes"] == 1 and cfg["severity"]["stable_feet"] == 1.5
+    assert cfg["top_fixes"] == 1 and cfg["severity"]["stable_feet"] == 1.0
     assert cfg["severity"]["elbow_extension"] == 2
 
 

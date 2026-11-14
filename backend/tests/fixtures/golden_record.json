@@ -1,5 +1,5 @@
 {
- "schema_version": "1.1",
+ "schema_version": "1.6",
  "clip_id": "golden",
  "mode": "upload",
  "source_name": "golden.mp4",
@@ -13421,7 +13421,7 @@
     "text": "Near player: Feet moving during the serve on 1 of 1 serves",
     "count": 1,
     "total": 1,
-    "severity": 1.5,
+    "severity": 1.0,
     "moments": [
      {
       "frame": 5,
@@ -13432,10 +13432,11 @@
    }
   ],
   "top_fixes": [
-   "stable_feet:near",
    "elbow_extension:far",
-   "elbow_extension:near"
+   "elbow_extension:near",
+   "stable_feet:near"
   ]
  },
- "chat": null
+ "chat": null,
+ "stroke_model": null
 }

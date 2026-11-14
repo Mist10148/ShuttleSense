@@ -212,7 +212,7 @@ RULES: tuple[Rule, ...] = (
     Rule("wrist_below_shoulder", ("lift",), wrist_below_shoulder,
          "Get under the shuttle: contact below the shoulder"),
     Rule("contact_below_waist", ("serve",), contact_below_waist,
-         "Serve from below the waist (service rule)"),
+         "Try a lower serve contact (2D pose cue, not a fault call)"),
     Rule("stable_feet", ("serve",), stable_feet,
          "Keep both feet still until the shuttle is struck"),
 )  # fmt: skip

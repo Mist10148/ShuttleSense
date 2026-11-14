@@ -79,9 +79,9 @@ stages:
       min_rate: 0.5             # ... and this share of the strokes the rule checked
       top_fixes: 3
       max_moments: 5            # timeline moments listed per note
-      severity:                 # rank weight; service faults and out shots lose the point
-        contact_below_waist: 1.5
-        stable_feet: 1.5
+      severity:                 # coaching priority; pose cues are not service-fault judgments
+        contact_below_waist: 1.0
+        stable_feet: 1.0
         shots_out: 1.5
 
   analytics:

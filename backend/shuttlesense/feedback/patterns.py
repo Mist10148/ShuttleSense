@@ -18,9 +18,9 @@ PATTERN_DEFAULTS: dict[str, Any] = {
     "min_rate": 0.5,  # ... and this share of the strokes the rule was checked on
     "top_fixes": 3,
     "max_moments": 5,  # moments listed per note
-    "severity": {  # weight per rule; service faults lose the point outright
-        "contact_below_waist": 1.5,
-        "stable_feet": 1.5,
+    "severity": {  # coaching priority; pose heuristics cannot establish a service fault
+        "contact_below_waist": 1.0,
+        "stable_feet": 1.0,
         "shots_out": 1.5,
     },
 }
@@ -34,7 +34,7 @@ FAULTS: dict[str, str] = {
     "lunge_knee_bend": "Shallow lunge, front knee too straight",
     "racket_arm_forward": "Racket arm not reaching toward the net",
     "wrist_below_shoulder": "Lift contact above the shoulder",
-    "contact_below_waist": "Serve contact above the waist",
+    "contact_below_waist": "Serve wrist above hip in the camera view",
     "stable_feet": "Feet moving during the serve",
 }
 
