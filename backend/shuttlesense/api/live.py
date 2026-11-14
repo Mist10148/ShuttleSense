@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import hmac
 import json
 import logging
@@ -540,7 +541,9 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
         ]
     with session.lock:
         key = (client_id, decision_id)
-        fingerprint = json.dumps(msg, sort_keys=True, separators=(",", ":"))
+        fingerprint = hashlib.sha256(
+            json.dumps(msg, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
         previous = session.command_receipts.get(key) if identified else None
         if previous is not None:
             if previous[0] != fingerprint:
@@ -553,7 +556,7 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
                     }
                 ]
             # A duplicate must not roll the screen back to an old score.
-            errors = [e for e in previous[1] if e["type"] == "error"]
+            errors = previous[1]
             events = (
                 deepcopy(errors)
                 if errors
@@ -575,13 +578,14 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             before_score = session.analyzer.record.score
             game = before_score.game if before_score else 1
             events = _control_locked(session, msg)
-            if not any(e["type"] == "error" for e in events):
+            errors = [e for e in events if e["type"] == "error"]
+            if not errors:
                 log_decision(session.analyzer.record, {**msg, "_game": game})
                 for event in events:
                     if event["type"] == "score":
                         event.update(courtside_snapshot(session.analyzer.record))
             if identified:
-                session.command_receipts[key] = (fingerprint, deepcopy(events))
+                session.command_receipts[key] = (fingerprint, deepcopy(errors))
         if identified:
             for event in events:
                 if event["type"] in ("score", "error"):
