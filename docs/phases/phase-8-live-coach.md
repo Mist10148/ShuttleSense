@@ -74,6 +74,10 @@ either role, open the replay from History, and seek to a coaching citation. Use 
 label rallies and landings, and record the device, model versions, and reproduction steps.
 The real-camera, model-backed latency, and labelled-accuracy gates remain open.
 
+### Courtside follow-up on Nov 14 (Phase 12)
+
+[Phase 12](phase-12-courtside.md) fixed what a review of the live referee and coach found. Undo now takes back the newest decision of any kind, including a line-call override (D32). A decision after the match is won is refused (`match_over`). The live minimap marks only the open rally's hits. A finished game keeps its score on the board, and the chat digest knows the match result. It also added the referee's real-match tools (D33): joining in game 2 or 3, let, fault, service fault, retirement, keyboard keys, the screen kept on, and a Stop confirmation. Add the [Phase 12 device checks](phase-12-courtside.md#device-checks-open) to the session below.
+
 ### Courtside acceptance (T8.6, T8.9–T8.12, T8.14–T8.15)
 
 Run one consented session on a tripod with a calibrated court and real tracking and pose.

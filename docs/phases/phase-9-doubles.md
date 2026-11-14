@@ -120,7 +120,8 @@ are the version string (`"1.1"` → `"1.2"`) and the regenerated snapshots.
       including at least 2 with partners crossing and 2 with front/back rotations.
 - [ ] Look for a public, licensed doubles stroke dataset. If none is usable, label our own.
 - [x] Extend `scripts/label_clip.py`: per hit, the hitter slot (`near_1` … `far_2`); per rally,
-      the server and receiver slots. Every 10th frame, the four player boxes with slot IDs.
+      the server and receiver slots. Every 10th frame, the four player boxes with slot IDs
+      (`label_clip.py --boxes`, built on Nov 14 in [T12.7](phase-12-courtside.md#t127)).
 
 **Acceptance criteria.** Labels for ≥ 300 hits and ≥ 40 rallies, stored as in `docs/DATA_FORMAT.md`.
 
@@ -303,7 +304,7 @@ confidence gate and say so in Limitations.
 **Owner:** M4 · **Area:** data · **Files:** `scripts/eval_doubles.py`, `docs/EVALUATION.md`
 
 **Metrics**
-- ID switches per rally and IDF1 against the T9.2 box labels.
+- ID switches per rally and IDF1 against the T9.2 box labels (`eval_doubles.py --boxes`, T12.7).
 - Hitter attribution accuracy, with the rate of `hitter = None`.
 - Service order: share of rallies where `server_id` and `receiver_id` match labels.
 - Stroke macro accuracy (from T9.7) and line calls on doubles landings (existing script with `court: doubles`).

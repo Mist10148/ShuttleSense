@@ -230,7 +230,7 @@ debug-signed until the release keystore exists, T7.6). Issue #58 can be closed.
 **Owner:** M4 · **Estimate:** 3 h · **Priority:** C · **Area:** app · **Refs:** NFR Usability · **Depends on:** T4.9 · **Blocks:** —
 
 **Steps**
-- [ ] Text scale 200% on phone: no clipped text or overflow on any screen.
+- [ ] Text scale 200% on phone: no clipped text or overflow on any screen. (Automated on Nov 14 for every screen without a video player, [T12.7](phase-12-courtside.md#t127); the phone review remains.)
 - [x] Semantics labels for icon-only buttons and the minimap ("Near player at 2.6 m, 1.9 m").
 - [x] Contrast check of player colours on the court background in both themes (≥ 3:1 for graphics).
 - [x] Keyboard: Tab order and Enter/Space on desktop/web; Space toggles play/pause on results.

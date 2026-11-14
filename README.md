@@ -64,6 +64,7 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 - [ ] **Line calls:** IN / OUT per landing with margin and confidence; calls near a line are UNCERTAIN and ask you to confirm or override
 - [ ] **Assisted scoreboard:** BWF 21-point rally scoring with manual correction in the app
 - [ ] **Match play:** one game or best of 3, who serves from which service court, interval at 11, change of ends, game and match point; award a missed point and undo
+- [ ] **Courtside referee:** join a match in game 2 or 3, record a let, a fault or a service fault, end a match on a retirement, one Undo for every decision, keyboard keys on a laptop, the screen kept on during a live session; exports list games, decisions and points won on serve
 - [ ] **Session coaching notes:** pattern-level cues ("bent hitting arm on 4 of 6 smashes") and the top 3 fixes, each linked to the moments that show it
 - [ ] **Live coaching:** after each rally, what it showed (strokes, length, peak speed, form tips) and the running top 3 fixes
 - [ ] **Coach chat:** ask about your session; answers come only from the clip record and cite moments you can tap to seek

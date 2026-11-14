@@ -1,6 +1,6 @@
 # Phased task plan
 
-The 3-week build is split into 12 phases (0–11) and **146 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112; Phase 9: #113–#125; Phase 10: #126–#133; Phase 11: #134–#146).
+The 3-week build is split into 13 phases (0–12) and **154 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112; Phase 9: #113–#125; Phase 10: #126–#133; Phase 11: #134–#146). Phase 12 issues are still to be opened.
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ The 3-week build is split into 12 phases (0–11) and **146 tasks**. This page i
 | 9 | [Doubles support](phases/phase-9-doubles.md) | Nov 12 – after release | 13 | Doubles code on `main` with the singles path unchanged; ID switches, hitter attribution and service order measured on labelled doubles clips |
 | 10 | [Hardening and courtside follow-ups](phases/phase-10-hardening.md) | Nov 14 – Nov 17 | 8 | Nov 14 review findings fixed with tests; doubles service order in every game; code-only steps of Phases 4, 5 and 7 done |
 | 11 | [Selectable stroke models](phases/phase-11-stroke-models.md) | Nov 14 – Nov 17 | 13 | CNN, LSTM and Random Forest can be picked per job, each with trained weights and measured accuracy; Nov 14 review findings fixed with tests |
+| 12 | [Courtside referee and coach](phases/phase-12-courtside.md) | Nov 14 | 8 | Live referee and coach review findings fixed with tests; join mid-match, let, fault, retirement, one Undo; code-only steps of Phases 2, 4 and 9 done |
 
 **Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · **feature freeze Wed Nov 18** · final demo Fri Nov 20. Since PRD v1.2 the referee layer is committed scope; the old P3 go/no-go on Nov 16 is gone ([D17](DECISIONS.md)).
 
@@ -76,6 +77,7 @@ gantt
     Phase 6 referee                :p6, 2026-11-16, 3d
     Phase 10 hardening             :p10, 2026-11-14, 4d
     Phase 11 stroke models         :p11, 2026-11-14, 4d
+    Phase 12 courtside             :p12, 2026-11-14, 1d
     Feature freeze                 :milestone, crit, 2026-11-18, 0d
     Phase 7 eval + release         :p7, 2026-11-18, 3d
     Final demo                     :milestone, crit, 2026-11-20, 0d
@@ -109,6 +111,8 @@ flowchart LR
     P3 --> P11[Phase 11<br/>stroke models]
     P10 --> P11
     P11 --> P7
+    P8 --> P12[Phase 12<br/>courtside]
+    P12 --> P7
 ```
 
 Phases overlap on purpose: the app (Phase 4) is built against the stub and fake pipelines (T1.10) while models are still being trained.
@@ -558,6 +562,45 @@ models and ships trained weights for all of them. All thirteen tasks are done:
   - the selector on a phone, tablet or Windows desktop;
   - release builds, which were not re-run.
 
+### Phase 12 pass (Nov 14, later)
+
+[Phase 12](phases/phase-12-courtside.md) reviewed the live referee and coach code, in the backend and the app. All eight tasks are done:
+
+- **Referee fixes (T12.1, D32):**
+  - Undo takes back the newest decision of any kind. It used to skip line-call overrides and take back an older award.
+  - An override after a winner correction on the same rally now decides it.
+  - A decision after the match is won is refused (`match_over`, `409`).
+  - A final-tick error no longer loses a live session.
+  - An oversized JPEG is refused before decoding.
+- **Coach fixes (T12.2):**
+  - The chat digest gives the match result and each rally's game.
+  - Session notes survive shortening.
+  - Uncertain unconfirmed calls no longer count as shots out.
+- **Real-match referee tools (T12.3, T12.6, D33):**
+  - Clip record 1.5 adds `start_games` (join in game 2 or 3), decision reasons (let, fault, service fault, misconduct), a `concede` correction for a retirement, and the 120 s interval between games.
+  - The app has a **More** menu, a "games already won" setting, keyboard keys N / F / Z / L / I / O, the screen kept on, Stop and Back confirmations, and a match-over card.
+- **Exports (T12.4):**
+  - `rallies.csv` gains game, server, receiver, call, margin and decision.
+  - `summary.json` gains `match`.
+- **App fixes (T12.5):**
+  - The live minimap marked every hit of the session.
+  - Scrubbing showed the wrong game header.
+  - A finished game's score disappeared.
+  - The doubles service picker was hidden for some doubles jobs.
+  - A double tap on Start opened two sessions.
+  - An unknown error code ended a live session.
+- **Earlier phases (T12.7):**
+  - Every screen is checked at 200% text (T4.11).
+  - A CPU TrackNet test (T2.2).
+  - `label_clip.py --boxes` (T9.2).
+  - ID switches and IDF1 in `eval_doubles.py` (T9.12).
+- **Verified:**
+  - backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (426 tests);
+  - app `flutter analyze`, `dart format` and `flutter test` pass (258 tests).
+- **Not verified:**
+  - the new app pieces on a phone, tablet or Windows desktop ([device checks](phases/phase-12-courtside.md#device-checks-open));
+  - release builds, which were not re-run.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |
@@ -569,6 +612,7 @@ models and ships trained weights for all of them. All thirteen tasks are done:
 | T9.2, T9.4, T9.5, T9.7, T9.9, T9.12, T9.13 | M1–M6 | Doubles ([Phase 9](phases/phase-9-doubles.md)): code tasks land first; record and label doubles rallies (T9.2), then measure ID switches, hitter attribution and service order (T9.12). |
 | T10.1–T10.8 | M1–M4, M6 | Done Nov 14 ([Phase 10](phases/phase-10-hardening.md)); only device checks of the notification and the game-service picker remain, with the T4.4 and T8.14 checks. |
 | T11.1–T11.13 | M1, M5, M6 | Done Nov 14 ([Phase 11](phases/phase-11-stroke-models.md)); what remains is a run on a real clip with the perception models installed and the device check of the selector, with the T4.3 and T7.2 checks. |
+| T12.1–T12.8 | M1, M3, M6 | Done Nov 14 ([Phase 12](phases/phase-12-courtside.md)); what remains is the device checks listed there, with the T8.14 and T8.15 courtside session, and opening the Phase 12 issues. |
 | T7.1–T7.13 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
 Verified on Nov 3 (an earlier pass, kept for the record):
@@ -622,4 +666,5 @@ Verified on Nov 3 (an earlier pass, kept for the record):
 | [9](phases/phase-9-doubles.md) | T9.1 Record v1.2 · T9.2 Doubles clips + labels · T9.3 Four-player tracker · T9.4 Appearance cue · T9.5 Hitter attribution · T9.6 Service order · T9.7 Doubles strokes · T9.8 Doubles feedback + analytics · T9.9 Live doubles · T9.10 Court choice in upload · T9.11 App four players · T9.12 Doubles evaluation · T9.13 Doubles docs |
 | [10](phases/phase-10-hardening.md) | T10.1 Backend review fixes · T10.2 App review fixes · T10.3 Doubles service in every game · T10.4 Job-finished notification · T10.5 Speed report · T10.6 Auth token tests · T10.7 Docs sync · T10.8 media_kit licenses |
 | [11](phases/phase-11-stroke-models.md) | T11.1 Research + decisions · T11.2 BST feature import · T11.3 Model registry · T11.4 LSTM · T11.5 Random Forest · T11.6 Training + comparison · T11.7 Stroke model per job (API) · T11.8 Stroke model selector (app) · T11.9 CLI flag · T11.10 Live job fixes · T11.11 API fixes · T11.12 Windows re-render + test notifier · T11.13 Docs sweep + link check |
+| [12](phases/phase-12-courtside.md) | T12.1 Referee decision fixes · T12.2 Coach fixes · T12.3 Mid-match start, reasons, retirement · T12.4 Match stats exports · T12.5 App live and scoreboard fixes · T12.6 Courtside app controls · T12.7 Earlier code-only steps · T12.8 Docs |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |
