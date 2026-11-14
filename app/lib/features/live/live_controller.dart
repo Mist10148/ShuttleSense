@@ -116,6 +116,10 @@ class LiveState {
     this.coaching,
     this.lastRally,
     this.doubles = false,
+    this.courtsideDepth = false,
+    this.decisionLog = const [],
+    this.practiceGoals = const [],
+    this.intervalState,
   });
 
   final LivePhase phase;
@@ -172,6 +176,10 @@ class LiveState {
 
   /// The session was started as a doubles match (the court, before any partner is seen).
   final bool doubles;
+  final bool courtsideDepth;
+  final List<DecisionEntry> decisionLog;
+  final List<PracticeGoal> practiceGoals;
+  final IntervalState? intervalState;
 
   bool get reducedQuality => qualityLevel > 0;
 
@@ -179,7 +187,7 @@ class LiveState {
 
   /// The session so far as a clip record, for the minimap and scoreboard widgets.
   ClipRecord get record => ClipRecord(
-    schemaVersion: '1.1',
+    schemaVersion: courtsideDepth ? '1.6' : '1.1',
     clipId: sessionId ?? 'live',
     mode: 'live',
     fps: fps,
@@ -194,6 +202,9 @@ class LiveState {
     score: score,
     coaching: coaching,
     court: doubles ? 'doubles' : null,
+    decisionLog: decisionLog,
+    practiceGoals: practiceGoals,
+    intervalState: intervalState,
   );
 
   LiveState copyWith({
@@ -228,6 +239,11 @@ class LiveState {
     Coaching? coaching,
     RallySummary? lastRally,
     bool? doubles,
+    bool? courtsideDepth,
+    List<DecisionEntry>? decisionLog,
+    List<PracticeGoal>? practiceGoals,
+    IntervalState? intervalState,
+    bool clearInterval = false,
   }) => LiveState(
     phase: phase ?? this.phase,
     error: error,
@@ -263,6 +279,10 @@ class LiveState {
     coaching: coaching ?? this.coaching,
     lastRally: lastRally ?? this.lastRally,
     doubles: doubles ?? this.doubles,
+    courtsideDepth: courtsideDepth ?? this.courtsideDepth,
+    decisionLog: decisionLog ?? this.decisionLog,
+    practiceGoals: practiceGoals ?? this.practiceGoals,
+    intervalState: clearInterval ? null : (intervalState ?? this.intervalState),
   );
 }
 
@@ -669,6 +689,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   void _seed(Json started) {
     _decisionAck = started['decision_ack'] == true;
     _decisionDedup = started['decision_dedup'] == true;
+    _set(state.copyWith(courtsideDepth: started['courtside_depth'] == true));
+    _courtside(started);
     _padFrames(asInt(started['frames']) ?? 0);
     if (!started.containsKey('rallies')) return; // an older backend
     state.hits
@@ -684,7 +706,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final summary = started['rally_summary'] as Json?;
     final retry = _decisionDedup ? _pendingCommand : null;
     if (retry == null) _clearDecision();
-    if (retry != null) _socket?.sendJson(retry);
+    if (retry != null) {
+      _socket?.sendJson(retry);
+      _decisionTimeout = Timer(
+        const Duration(seconds: 5),
+        () => unawaited(_reconnect(_generation)),
+      );
+    }
     _set(
       state.copyWith(
         speedKmh: state.speedKmh,
@@ -800,6 +828,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           );
         }
       case 'score':
+        _courtside(e);
         if (_matchesDecision(e)) _clearDecision();
         final rallies = asList(e['rallies']).map(Rally.fromJson).toList();
         state.rallies
@@ -823,6 +852,24 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         _onServerError(e);
     }
   }
+
+  void _courtside(Json e) {
+    if (!e.containsKey('practice_goals')) return;
+    _set(
+      state.copyWith(
+        decisionLog: asList(e['decision_log']).map(DecisionEntry.fromJson).toList(),
+        practiceGoals: asList(e['practice_goals']).map(PracticeGoal.fromJson).toList(),
+        intervalState: e['interval_state'] == null
+            ? null
+            : IntervalState.fromJson(e['interval_state'] as Json),
+        clearInterval: e['interval_state'] == null,
+      ),
+    );
+  }
+
+  void interval(String action) => _decide({'type': 'interval', 'action': action});
+  void saveGoal(PracticeGoal goal, {bool? completed}) =>
+      _decide({'type': 'goal', 'goal': goal.toJson(done: completed)});
 
   void _onFrame(Json e) {
     final clientFrame = asInt(e['client_frame']);

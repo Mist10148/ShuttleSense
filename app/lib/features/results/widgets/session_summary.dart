@@ -1,3 +1,4 @@
+import '../../../shared/widgets/courtside_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,12 +18,14 @@ class SessionSummary extends StatelessWidget {
     required this.onSeek,
     this.onAskCoach,
     this.chatAvailable = false,
+    this.onGoalChanged,
   });
 
   final ClipRecord record;
   final ValueChanged<Moment> onSeek;
   final VoidCallback? onAskCoach;
   final bool chatAvailable;
+  final void Function(PracticeGoal, bool)? onGoalChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +41,31 @@ class SessionSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text('Session recap', style: theme.textTheme.titleLarge),
+          if (record.score?.matchWinner != null)
+            Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
+          if (record.score != null)
+            Text('Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}'),
+          if (record.summary != null)
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final item in record.summary!.strokeCounts.entries)
+                  Chip(label: Text('${kStrokeLabels[item.key] ?? item.key}: ${item.value}')),
+              ],
+            ),
+          for (final goal in record.practiceGoals)
+            PracticeGoalCard(
+              goal: goal,
+              onSeek: onSeek,
+              onComplete: onGoalChanged == null ? null : (done) => onGoalChanged!(goal, done),
+            ),
+          if (record.practiceGoals.isEmpty) const Text('No saved practice goals.'),
           if (top.isEmpty)
             Text(
               coaching == null
                   ? 'Session notes appear once strokes are classified.'
-                  : 'No repeated faults in this session. Keep it up.',
+                  : 'Not enough evidence of a repeated pattern in this session.',
               style: theme.textTheme.bodyMedium,
             )
           else ...[

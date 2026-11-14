@@ -47,7 +47,11 @@ class LiveCoachPanel extends StatelessWidget {
     // Doubles notes carry the partner (near_2), so match on the side. Formation notes have
     // no severity and are not faults; the server keeps them out of its top fixes too.
     final notes = coaching.notes.where(
-      (note) => note.severity > 0 && (note.player == null || sideOf(note.player!) == player),
+      (note) =>
+          note.severity > 0 &&
+          (note.player == null ||
+              note.player == player ||
+              (!player!.contains('_') && sideOf(note.player!) == player)),
     );
     final ranked = notes.toList()
       ..sort((a, b) {
@@ -77,11 +81,21 @@ class LiveCoachPanel extends StatelessWidget {
             Wrap(
               spacing: Spacing.sm,
               children: [
-                for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
+                for (final (value, label) in [
+                  (null, 'Both'),
+                  ('near', 'Near'),
+                  ('far', 'Far'),
+                  if (state.doubles) ...[
+                    ('near_1', 'Near 1'),
+                    ('near_2', 'Near 2'),
+                    ('far_1', 'Far 1'),
+                    ('far_2', 'Far 2'),
+                  ],
+                ])
                   ChoiceChip(
                     avatar: value == null
                         ? null
-                        : Icon(Icons.circle, size: 12, color: colors.forSide(value)),
+                        : Icon(Icons.circle, size: 12, color: colors.forPlayer(value)),
                     showCheckmark: value == null,
                     label: Text(label),
                     selected: player == value,
@@ -216,7 +230,7 @@ class LiveCoachPanel extends StatelessWidget {
         .takeWhile((hit) => hit.frame >= rally.startFrame);
     String? cue;
     for (final hit in hits) {
-      if (player != null && hit.player != player) continue;
+      if (player != null && hit.player != player && hit.who != player) continue;
       cue = _formatCue(hit.who, hit.stroke, hit.tip);
       if (cue != null) break;
     }
@@ -242,7 +256,7 @@ class LiveCoachPanel extends StatelessWidget {
   String? _nextCue(RallySummary? rally) {
     if (rally == null) return null;
     for (final fault in rally.faults) {
-      if (player != null && fault.player != player) continue;
+      if (player != null && fault.player != player && _faultWho(fault) != player) continue;
       final cue = _formatCue(_faultWho(fault), fault.stroke, fault.tip);
       if (cue != null) return cue;
     }

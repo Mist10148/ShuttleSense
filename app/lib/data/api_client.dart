@@ -280,6 +280,15 @@ class ApiClient {
     return LineCallUpdate.fromJson(res.data!);
   });
 
+  Future<ClipRecord> savePracticeGoal(String jobId, PracticeGoal goal, {bool? completed}) =>
+      _call(() async {
+        final res = await _dio.put<Json>(
+          '/jobs/$jobId/practice-goal',
+          data: goal.toJson(done: completed),
+        );
+        return ClipRecord.fromJson(res.data!);
+      });
+
   /// WS /live address for this server (ws:// or wss://, token as a query parameter).
   Uri liveUri() {
     final base = Uri.parse(config.baseUrl);

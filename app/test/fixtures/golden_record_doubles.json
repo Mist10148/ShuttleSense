@@ -1,5 +1,5 @@
 {
- "schema_version": "1.2",
+ "schema_version": "1.6",
  "clip_id": "golden_doubles",
  "mode": "upload",
  "source_name": "golden_doubles.mp4",
@@ -25442,7 +25442,7 @@
     "text": "Near player 1: Feet moving during the serve on 1 of 1 serves",
     "count": 1,
     "total": 1,
-    "severity": 1.5,
+    "severity": 1.0,
     "moments": [
      {
       "frame": 5,
@@ -25492,10 +25492,11 @@
    }
   ],
   "top_fixes": [
-   "stable_feet:near_1",
    "elbow_extension:far_1",
-   "elbow_extension:near_2"
+   "elbow_extension:near_2",
+   "stable_feet:near_1"
   ]
  },
- "chat": null
+ "chat": null,
+ "stroke_model": null
 }

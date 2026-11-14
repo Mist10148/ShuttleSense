@@ -1,3 +1,4 @@
+import '../../shared/widgets/courtside_tools.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -436,12 +437,29 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onLet: courtside && record.rallies.isNotEmpty ? _let : null,
                   onConcede: courtside ? _concede : null,
                 ),
+                DecisionHistory(record: record, onSeek: _seekMoment),
                 const SizedBox(height: 16),
                 chart,
               ],
             ),
             coach: SessionSummary(
               record: record,
+              onGoalChanged: record.schemaVersion == '1.6'
+                  ? (goal, done) async {
+                      try {
+                        await ref
+                            .read(apiClientProvider)
+                            .savePracticeGoal(widget.jobId, goal, completed: done);
+                        ref.invalidate(recordProvider(widget.jobId));
+                      } on Exception catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Could not save goal: $e')));
+                        }
+                      }
+                    }
+                  : null,
               onSeek: _seekMoment,
               chatAvailable: chatAvailable,
               onAskCoach: () => context.go(Routes.chat(widget.jobId)),

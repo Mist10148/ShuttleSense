@@ -1,3 +1,4 @@
+import '../../shared/widgets/courtside_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -619,18 +620,43 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         onConcede: _coach || !courtside ? null : controller.concede,
       ),
     ];
+    final savedGoal = state.practiceGoals.where((g) => g.player == _coachPlayer).firstOrNull;
+    Future<void> editGoal() async {
+      final goal = await editPracticeGoal(context, player: _coachPlayer, current: savedGoal);
+      if (goal != null && mounted) controller.saveGoal(goal);
+    }
+
     final details = _coach
         ? LiveCoachPanel(
             state: state,
             player: _coachPlayer,
-            practiceCue: _practiceCues[_coachPlayer],
-            onPracticeCueChanged: (cue) => setState(() {
-              if (cue == null) {
-                _practiceCues.remove(_coachPlayer);
-              } else {
-                _practiceCues[_coachPlayer] = cue;
-              }
-            }),
+            practiceCue: state.courtsideDepth ? null : _practiceCues[_coachPlayer],
+            onPracticeCueChanged: state.courtsideDepth
+                ? (decisionBusy
+                      ? null
+                      : (cue) {
+                          if (cue == null) return;
+                          final rally = record.rallies
+                              .where((r) => r.index == cue.rally)
+                              .firstOrNull;
+                          controller.saveGoal(
+                            PracticeGoal(
+                              text: cue.text,
+                              player: _coachPlayer,
+                              source: 'cue',
+                              rally: cue.rally,
+                              frame: rally?.endFrame,
+                              timeS: rally == null ? null : rally.endFrame / state.fps,
+                            ),
+                          );
+                        })
+                : (cue) => setState(() {
+                    if (cue == null) {
+                      _practiceCues.remove(_coachPlayer);
+                    } else {
+                      _practiceCues[_coachPlayer] = cue;
+                    }
+                  }),
             onPlayerChanged: (player) => setState(() => _coachPlayer = player),
           )
         : SectionCard(
@@ -644,6 +670,41 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                     onCorrect: decisionBusy ? null : controller.correct,
                   ),
           );
+    if (state.courtsideDepth) {
+      if (!_coach && state.intervalState != null) {
+        controls.add(
+          IntervalPanel(
+            interval: state.intervalState!,
+            onAction: decisionBusy ? null : controller.interval,
+          ),
+        );
+      }
+      if (!_coach) controls.add(DecisionHistory(record: record));
+      if (_coach) {
+        if (savedGoal != null) {
+          controls.add(
+            PracticeGoalCard(
+              goal: savedGoal,
+              onComplete: decisionBusy
+                  ? null
+                  : (done) => controller.saveGoal(savedGoal, completed: done),
+              onEdit: decisionBusy ? null : editGoal,
+            ),
+          );
+        } else {
+          controls.add(
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: decisionBusy ? null : editGoal,
+                icon: const Icon(Icons.flag_outlined),
+                label: const Text('Set practice goal'),
+              ),
+            ),
+          );
+        }
+      }
+    }
     final camera = [
       video,
       LiveStatusBar(state: state),
@@ -703,7 +764,16 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       },
     };
     return CallbackShortcuts(
-      bindings: shortcuts,
+      bindings: shortcuts.map(
+        (key, action) => MapEntry(key, () {
+          final focus = FocusManager.instance.primaryFocus?.context;
+          if (focus?.findAncestorWidgetOfExactType<EditableText>() != null ||
+              focus?.widget is EditableText) {
+            return;
+          }
+          action();
+        }),
+      ),
       child: Focus(autofocus: true, child: _layout(controls, details, camera, analysis)),
     );
   }
