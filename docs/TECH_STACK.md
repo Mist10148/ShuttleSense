@@ -62,12 +62,14 @@ Platform notes:
 | Vision | opencv-python-headless | 5.0.0.93 | Apache-2.0 | Video IO, drawing overlays, homography; headless so it installs on servers/Colab |
 | Tables | pandas | 3.1.0 | BSD-3 | ShuttleSet CSVs, exports |
 | Config | PyYAML | 6.0.3 | MIT | `configs/*.yaml` |
+| Classical ML | scikit-learn | 1.9.1 | BSD-3 | Random Forest stroke model (D28, D31); imported inside functions |
+| Model files | joblib | 1.6.0 | BSD-3 | Saves and loads the Random Forest; the file's SHA-256 is checked first (D30) |
 
 ### Machine learning (requirements/ml.txt — GPU host and Colab only)
 
 | Concern | Choice | Version | License | Why |
 | --- | --- | --- | --- | --- |
-| Deep learning | PyTorch | 2.15.0 (CUDA wheel) | BSD-3 | TrackNetV3 is PyTorch; stroke CNN training |
+| Deep learning | PyTorch | 2.15.0 (CUDA wheel) | BSD-3 | TrackNetV3 is PyTorch; stroke CNN and LSTM training and inference |
 | Shuttle tracking | TrackNetV3 (git submodule) | `6eda442ada1740573f200f836d93edc9a541ee86` | MIT | State of the art for tiny, blurred shuttles; pretrained weights; trajectory rectification |
 | Person + pose | rtmlib (RTMDet + RTMPose) | 0.0.16 | Apache-2.0 | Multi-person, fast on ONNX Runtime, no mmcv install; COCO-17 keypoints |
 | Inference runtime | onnxruntime-gpu | 1.31.1 | MIT | Runs RTMDet/RTMPose on CUDA; CPU fallback with `onnxruntime` |
@@ -117,7 +119,9 @@ License audit for T7.13. ShuttleSense is MIT.
 | --- | --- | --- |
 | ffmpeg (with libx264 for H.264) | Run as a separate program by `render/writer.py`. It is not linked or shipped. | Fine as long as releases do not bundle an ffmpeg binary. Many builds with libx264 are GPL. |
 | media_kit_libs_video | Bundles libmpv and FFmpeg inside the app builds | Identify each packaged build and collect its notices and corresponding source materials. Windows evidence is below. |
-| TrackNetV3, InpaintNet and stroke weights | Downloaded from Hugging Face, never committed | Keep upstream's MIT notice next to the weights. |
+| TrackNetV3 and InpaintNet weights | Downloaded from Hugging Face, never committed | Keep upstream's MIT notice next to the weights. |
+| BST pre-extracted ShuttleSet features (`dataset_npy.rar`) | Downloaded by hand into gitignored `backend/data/` and read by `import_bst_features.py`; used to train the committed stroke weights (D29). Never redistributed. | The BST repository is MIT; cite the BST paper (arXiv 2502.21085) and ShuttleSet (KDD 2023). |
+| Stroke weights (`backend/weights/strokes/`) | Trained by us and committed (D30) | MIT like the rest of the repo; the training data terms above apply. |
 | ShuttleSet annotations and match videos | Downloaded by `download_shuttleset.py` into gitignored `backend/data/`. Videos are never redistributed. | Follow the dataset's terms of use. |
 | rtmlib, onnxruntime-gpu, scipy, huggingface-hub, tqdm | ML stack; not in the scanned venv below | Apache-2.0, MIT, BSD-3, Apache-2.0, MPL-2.0 AND MIT. Run the scan again in the laptop/Colab ML venv at the freeze. |
 
