@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import codecs
+import csv
+import io
 import json
 import time
 from collections.abc import Iterator
@@ -312,7 +314,9 @@ def test_score_correction_recomputes_following_rallies(
         summary = client.get(f"/jobs/{job_id}/summary.json").json()
         assert summary["score"]["far"] == 2
         rallies_csv = client.get(f"/jobs/{job_id}/rallies.csv").content.decode("utf-8-sig")
-        assert rallies_csv.splitlines()[1].endswith(",0,1")
+        row = next(csv.DictReader(io.StringIO(rallies_csv)))
+        assert (row["score_near"], row["score_far"]) == ("0", "1")
+        assert row["decision"] == "winner far"
         # The rally timeline follows the correction too.
         ends = [e for e in record["rally_events"] if e["type"] == "rally_end"]
         assert ends[0]["data"]["winner"] == "far"

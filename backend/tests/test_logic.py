@@ -130,3 +130,33 @@ def test_summary_matches_record(tmp_path) -> None:
     assert stats["duration_s"] == round(55 / 30, 3)
     rows = list(csv.DictReader((tmp_path / "rallies.csv").open(encoding="utf-8-sig")))
     assert rows[0]["winner"] == "near" and rows[0]["score_near"] == "1"
+
+
+def test_match_stats_and_referee_columns(tmp_path) -> None:
+    import json
+    from datetime import UTC, datetime
+
+    from shuttlesense.fake import load_golden
+    from shuttlesense.schema import LineCallOverride, ScoreCorrection
+
+    record = load_golden()
+    call = record.line_calls[0]
+    call.override = LineCallOverride(call="out" if call.call == "in" else "in",
+                                     at=datetime.now(UTC))  # fmt: skip
+    record.score.corrections = [
+        ScoreCorrection(rally_index=record.rallies[0].index, winner_before="near",
+                        winner_after=None, at=datetime.now(UTC), reason="let"),
+        ScoreCorrection(rally_index=1, winner_before=None, winner_after="far",
+                        at=datetime.now(UTC), kind="award", reason="fault"),
+    ]  # fmt: skip
+    write_exports(record, tmp_path)
+    match = json.loads((tmp_path / "summary.json").read_text())["match"]
+    assert match["best_of"] == record.score.best_of
+    assert match["decisions"] == {"corrections": 1, "awards": 1, "line_call_overrides": 1,
+                                  "reasons": {"let": 1, "fault": 1}}  # fmt: skip
+    serve = match["points_won_on_serve"]
+    assert sum(v["served"] for v in serve.values()) <= len(record.rallies)
+    assert match["longest_rally"]["strokes"] == max(r.stroke_count for r in record.rallies)
+    rows = list(csv.DictReader((tmp_path / "rallies.csv").open(encoding="utf-8-sig")))
+    assert rows[0]["game"] == "1" and rows[0]["call"] == call.effective_call
+    assert rows[0]["decision"] == f"call overridden {call.override.call}; cleared (let)"

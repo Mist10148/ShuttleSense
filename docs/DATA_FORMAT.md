@@ -256,9 +256,9 @@ Mapping from ShuttleSet's 18 annotated types plus "unknown" (task T3.3; `strokes
 | File | Content | Producer |
 | --- | --- | --- |
 | `record.json` | The full clip record above | pipeline |
-| `summary.json` | `{clip_id, fps, summary, score, rallies, rally_stats}` subset | analytics (F13) |
+| `summary.json` | `{clip_id, fps, summary, score, rallies, rally_stats, match}` subset; `match` (null without the referee layer) has `best_of`, `start_games`, `games`, `games_won`, `match_winner`, `conceded`, `points_won_on_serve` per side (`won`, `served`; the server is the doubles slot or the side of the rally's first hit), `longest_rally` and `decisions` (counts of corrections, awards, line-call overrides and reasons) | analytics (F13) |
 | `hits.csv` | One row per hit: `id,frame,time_s,player,stroke,confidence,speed_kmh,tip,rally_index,hitter` (UTF-8 with BOM; `hitter` is the doubles partner, empty in singles or when unsure) | analytics (F13) |
-| `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (UTF-8 with BOM) | analytics (F13) |
+| `rallies.csv` | One row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far,game,server_id,receiver_id,call,margin_cm,decision` (UTF-8 with BOM). The last six (T12.4) come after the original columns: the rally's game, doubles server and receiver, the effective line call and its margin, and the referee's decisions in words (`call overridden out; cleared (let)`) | analytics (F13) |
 | `annotated.mp4` | H.264, yuv420p, same fps and size as the normalized clip | render (F7) |
 | `tracking.csv` | `frame,visible,x,y,source` (TrackNetV3 format plus `source`: `net`, `interp` or empty) for debugging and evaluation | tracking (F2) |
 

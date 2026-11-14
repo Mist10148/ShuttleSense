@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from shuttlesense.atomic import atomic_open, atomic_write_text
-from shuttlesense.schema import PLAYER_IDS, ClipRecord, PlayerSummary, Summary, is_doubles
+from shuttlesense.schema import PLAYER_IDS, ClipRecord, PlayerSummary, Rally, Summary, is_doubles
 
 HITS_CSV_COLUMNS = (
     "id",
@@ -36,6 +36,14 @@ RALLIES_CSV_COLUMNS = (
     "landing_confidence",
     "score_near",
     "score_far",
+    # Added for the courtside referee (T12.4), after the original columns so scripts that
+    # read columns by position keep working.
+    "game",
+    "server_id",
+    "receiver_id",
+    "call",
+    "margin_cm",
+    "decision",
 )
 # UTF-8 with a byte-order mark so Excel on Windows detects the encoding.
 CSV_ENCODING = "utf-8-sig"
@@ -88,6 +96,75 @@ def rally_stats(record: ClipRecord) -> list[dict]:
     return stats
 
 
+def _server(record: ClipRecord, rally: Rally) -> str | None:
+    """Who served: the doubles slot when known, else the side that hit the first shot."""
+    if rally.server_id is not None:
+        return rally.server_id
+    first = next((h for h in record.hits if h.rally_index == rally.index), None)
+    return first.player if first is not None else None
+
+
+def _decisions(record: ClipRecord) -> dict[int, str]:
+    """Per rally, the referee's decisions in words: a call confirmed or overridden, a winner
+    set or cleared (with its reason)."""
+    out: dict[int, list[str]] = {}
+    for c in record.line_calls:
+        if c.override is not None:
+            verb = "confirmed" if c.override.call == c.call else "overridden"
+            out.setdefault(c.rally_index, []).append(f"call {verb} {c.override.call}")
+    if record.score is not None:
+        for c in record.score.corrections:
+            if c.kind != "winner":
+                continue
+            what = f"winner {c.winner_after}" if c.winner_after else "cleared"
+            if c.reason:
+                what += f" ({c.reason})"
+            out.setdefault(c.rally_index, []).append(what)
+    return {k: "; ".join(v) for k, v in out.items()}
+
+
+def match_stats(record: ClipRecord) -> dict | None:
+    """The match in numbers (summary.json): games, points won on serve, the longest rally and
+    the referee's decisions. None without the referee layer."""
+    score = record.score
+    if score is None:
+        return None
+    fps = record.fps or 30.0
+    served = {"near": 0, "far": 0}
+    held = {"near": 0, "far": 0}
+    for r in record.rallies:
+        server = _server(record, r)
+        if server is None or r.winner is None or r.score_after is None:
+            continue
+        side = server[:4] if server.startswith("near") else server[:3]
+        served[side] += 1
+        held[side] += r.winner == side
+    longest = max(record.rallies, key=lambda r: (r.stroke_count, r.end_frame - r.start_frame),
+                  default=None)  # fmt: skip
+    kinds = Counter(c.kind for c in score.corrections)
+    return {
+        "best_of": score.best_of,
+        "start_games": score.start_games.model_dump() if score.start_games else None,
+        "games": [g.model_dump() for g in score.games],
+        "games_won": score.games_won.model_dump(),
+        "match_winner": score.match_winner,
+        "conceded": kinds.get("concede", 0) > 0,
+        "points_won_on_serve": {side: {"won": held[side], "served": served[side]}
+                                for side in ("near", "far")},  # fmt: skip
+        "longest_rally": None if longest is None else {
+            "index": longest.index,
+            "strokes": longest.stroke_count,
+            "duration_s": round((longest.end_frame - longest.start_frame) / fps, 3),
+        },
+        "decisions": {
+            "corrections": kinds.get("winner", 0),
+            "awards": kinds.get("award", 0),
+            "line_call_overrides": sum(1 for c in record.line_calls if c.override is not None),
+            "reasons": dict(Counter(c.reason for c in score.corrections if c.reason)),
+        },
+    }  # fmt: skip
+
+
 def _fmt(value: float | None, digits: int) -> str:
     return "" if value is None else f"{value:.{digits}f}"
 
@@ -121,13 +198,17 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
         "score": record.score.model_dump(mode="json") if record.score else None,
         "rallies": [r.model_dump() for r in record.rallies],
         "rally_stats": stats,
+        "match": match_stats(record),
     }
     atomic_write_text(out_dir / "summary.json", json.dumps(summary, indent=2))
 
     with atomic_open(out_dir / "rallies.csv", newline="", encoding=CSV_ENCODING) as f:
         writer = csv.writer(f)
         writer.writerow(RALLIES_CSV_COLUMNS)
+        calls = {c.rally_index: c for c in record.line_calls}
+        decisions = _decisions(record)
         for r, s in zip(record.rallies, stats, strict=True):
+            call = calls.get(r.index)
             writer.writerow(
                 [
                     r.index,
@@ -142,6 +223,12 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
                     "" if r.landing is None else f"{r.landing.confidence:.2f}",
                     "" if r.score_after is None else r.score_after.near,
                     "" if r.score_after is None else r.score_after.far,
+                    r.game if r.game is not None else "",
+                    r.server_id or "",
+                    r.receiver_id or "",
+                    "" if call is None else call.effective_call,
+                    "" if call is None else f"{call.margin_cm:.1f}",
+                    decisions.get(r.index, ""),
                 ]
             )
 

@@ -168,7 +168,7 @@ Annotated MP4 (`video/mp4`). Supports HTTP range requests so players can seek.
 
 ### `GET /jobs/{job_id}/summary.json` · `GET /jobs/{job_id}/hits.csv` · `GET /jobs/{job_id}/rallies.csv`
 
-Export files (F13). Served with `Content-Disposition: attachment`. CSV files are UTF-8 with a byte-order mark so Excel opens them correctly. `summary.json` adds `rally_stats` (per rally: `stroke_count`, `start_s`, `end_s`, `duration_s`, `peak_speed_kmh`). `rallies.csv` has one row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far` (empty when the referee stage did not run).
+Export files (F13). Served with `Content-Disposition: attachment`. CSV files are UTF-8 with a byte-order mark so Excel opens them correctly. `summary.json` adds `rally_stats` (per rally: `stroke_count`, `start_s`, `end_s`, `duration_s`, `peak_speed_kmh`) and `match` (games, points won on serve, the longest rally and the referee's decisions; see [DATA_FORMAT.md](DATA_FORMAT.md)). `rallies.csv` has one row per rally: `index,start_frame,end_frame,start_s,end_s,stroke_count,peak_speed_kmh,winner,landing_in,landing_confidence,score_near,score_far,game,server_id,receiver_id,call,margin_cm,decision` (empty when the referee stage did not run).
 
 ### `POST /jobs/{job_id}/render`
 
