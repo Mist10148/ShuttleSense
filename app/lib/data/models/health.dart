@@ -9,6 +9,7 @@ class Health {
     required this.device,
     required this.authRequired,
     required this.stages,
+    this.strokeModels,
     this.chatAvailable = false,
     this.chatMaxMessages = 0,
   });
@@ -20,13 +21,17 @@ class Health {
   final bool authRequired;
   final List<String> stages;
 
+  /// Stroke models installed on the server (cnn, lstm, rf). Null on a server older than clip
+  /// record 1.4, which has one model and no choice.
+  final List<String>? strokeModels;
+
   /// The backend has a Claude API key, so the coach chat works.
   final bool chatAvailable;
   final int chatMaxMessages;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
-  static const expectedSchema = '1.3';
+  static const expectedSchema = '1.4';
 
   bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 
@@ -51,6 +56,7 @@ class Health {
     device: j['device'] as String,
     authRequired: j['auth_required'] as bool,
     stages: (j['stages'] as List<dynamic>).cast<String>(),
+    strokeModels: (j['stroke_models'] as List<dynamic>?)?.cast<String>(),
     chatAvailable: j['chat_available'] as bool? ?? false,
     chatMaxMessages: asInt(j['chat_max_messages']) ?? 0,
   );

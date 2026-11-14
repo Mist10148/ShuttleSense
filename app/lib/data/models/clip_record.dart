@@ -34,6 +34,7 @@ class ClipRecord {
     this.coaching,
     this.chat = const [],
     this.court,
+    this.strokeModel,
   });
 
   final String schemaVersion;
@@ -59,6 +60,9 @@ class ClipRecord {
   /// "doubles" when the match was set up as doubles (a live session), even before the data
   /// shows it; null for records, which tell from their data.
   final String? court;
+
+  /// The stroke model that named the hits (cnn, lstm, rf; clip record 1.4), if any ran.
+  final String? strokeModel;
 
   bool get isLive => mode == 'live';
 
@@ -183,6 +187,8 @@ class ClipRecord {
     rallyEvents: rallyEvents,
     coaching: coaching,
     chat: chat ?? this.chat,
+    court: court,
+    strokeModel: strokeModel,
   );
 
   factory ClipRecord.fromJson(Json j) {
@@ -207,6 +213,7 @@ class ClipRecord {
       rallyEvents: asList(j['rally_events']).map(RallyEvent.fromJson).toList(),
       coaching: j['coaching'] == null ? null : Coaching.fromJson(j['coaching'] as Json),
       chat: asList((j['chat'] as Json?)?['messages']).map(ChatMessage.fromJson).toList(),
+      strokeModel: j['stroke_model'] as String?,
     );
   }
 }

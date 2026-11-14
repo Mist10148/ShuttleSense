@@ -170,6 +170,7 @@ class ApiClient {
         if (options.referee) ...options.match.toJson(),
         // Doubles tracks four players even without the referee layer (Phase 9).
         if (options.court == 'doubles') 'court': 'doubles',
+        if (options.strokeModel != null) 'stroke_model': options.strokeModel,
         if (corners != null)
           'court_corners_px': [
             for (final c in corners) [c.x, c.y],

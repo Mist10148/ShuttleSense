@@ -12,6 +12,7 @@ import '../mode/mode_screen.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/start_score_field.dart';
+import '../../shared/widgets/stroke_model_field.dart';
 import 'upload_controller.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
@@ -183,6 +184,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   onChanged: notifier.setMatch,
                   showCourt: true,
                 ),
+              StrokeModelField(
+                value: options.strokeModel,
+                health: health,
+                onChanged: notifier.setStrokeModel,
+              ),
               const SizedBox(height: 8),
               Text('Overlays', style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),

@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/clip_record.dart';
+import '../../data/models/job.dart';
 import '../../data/models/json.dart';
 import '../../core/config/server_config.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../upload/upload_controller.dart';
 import '../../shared/widgets/match_setup_field.dart';
 import '../calibration/calibration_screen.dart' show Corner;
 import 'frame_source.dart';
@@ -516,6 +518,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     final match = ref.read(liveMatchSetupProvider);
+    final strokeModel = resolveStrokeModel(
+      ref.read(pendingJobOptionsProvider).strokeModel,
+      ref.read(healthProvider).valueOrNull,
+    );
     final connected = await _connect({
       'type': 'start',
       'fps': _fps,
@@ -529,6 +535,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       'start_score': startScore == null ? null : {'near': startScore.near, 'far': startScore.far},
       'court': match.court,
       ...match.toJson(),
+      'stroke_model': ?strokeModel,
     });
     if (connected.started == null || _disposed || generation != _generation) return;
     // The start score belongs to this session only; kept until now so Try again reuses it.

@@ -82,6 +82,7 @@ class Job {
     this.court = 'singles',
     this.firstServerId,
     this.firstReceiverId,
+    this.strokeModel,
   });
 
   final String id;
@@ -113,6 +114,9 @@ class Job {
   final String? firstServerId;
   final String? firstReceiverId;
 
+  /// The stroke model the job runs (cnn, lstm, rf); null from a server without the choice.
+  final String? strokeModel;
+
   bool get isLive => mode == 'live';
 
   /// Time spent running so far (or in total once finished).
@@ -141,6 +145,7 @@ class Job {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    strokeModel: strokeModel,
   );
 
   factory Job.fromJson(Json j) => Job(
@@ -169,6 +174,7 @@ class Job {
     court: j['court'] as String? ?? 'singles',
     firstServerId: j['first_server_id'] as String?,
     firstReceiverId: j['first_receiver_id'] as String?,
+    strokeModel: j['stroke_model'] as String?,
   );
 }
 
@@ -184,6 +190,7 @@ class JobOptions {
     this.court = 'singles',
     this.firstServerId,
     this.firstReceiverId,
+    this.strokeModel,
   });
 
   final Set<String> overlays;
@@ -203,6 +210,10 @@ class JobOptions {
   final String? firstServerId;
   final String? firstReceiverId;
 
+  /// Which classifier names the strokes: cnn, lstm or rf (Phase 11). Null: the server's
+  /// default, also what is sent to a server without the choice.
+  final String? strokeModel;
+
   MatchSetup get match => MatchSetup(
     bestOf: bestOf,
     firstServer: firstServer,
@@ -221,6 +232,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    strokeModel: strokeModel,
   );
 
   JobOptions withStartScore(({int near, int far})? score) => JobOptions(
@@ -233,6 +245,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    strokeModel: strokeModel,
   );
 
   JobOptions withMatch(MatchSetup match) => JobOptions(
@@ -245,13 +258,28 @@ class JobOptions {
     court: match.court,
     firstServerId: match.firstServerId,
     firstReceiverId: match.firstReceiverId,
+    strokeModel: strokeModel,
+  );
+
+  JobOptions withStrokeModel(String? model) => JobOptions(
+    overlays: overlays,
+    referee: referee,
+    calibrate: calibrate,
+    startScore: startScore,
+    bestOf: bestOf,
+    firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
+    strokeModel: model,
   );
 
   /// What to send to the server: no referee without calibration, no start score without the
-  /// referee, and only the overlays that can be drawn (greyed-out chips keep their remembered
-  /// choice but are not requested).
+  /// referee, only the overlays that can be drawn (greyed-out chips keep their remembered
+  /// choice but are not requested), and a stroke model the server has.
   JobOptions submittable(Health? health) {
-    final base = calibrate && referee ? this : copyWith(referee: false).withStartScore(null);
+    final sent = calibrate && referee ? this : copyWith(referee: false).withStartScore(null);
+    final base = sent.withStrokeModel(resolveStrokeModel(strokeModel, health));
     return base.copyWith(
       overlays: {
         for (final o in base.overlays)
@@ -259,6 +287,20 @@ class JobOptions {
       },
     );
   }
+}
+
+/// Stroke models a job can choose from (backend/shuttlesense/strokes/registry.py).
+const kStrokeModels = <String, String>{'cnn': 'CNN', 'lstm': 'LSTM', 'rf': 'Random Forest'};
+
+/// The stroke model to ask [health]'s server for, given the remembered choice: the choice
+/// when it is installed, else the first installed model. Null (send nothing, the server
+/// decides) when the server has no model installed or is too old to offer the choice.
+String? resolveStrokeModel(String? chosen, Health? health) {
+  if (health == null) return chosen;
+  final installed = health.strokeModels;
+  if (installed == null) return null;
+  if (chosen != null && installed.contains(chosen)) return chosen;
+  return installed.isEmpty ? null : installed.first;
 }
 
 /// Why an overlay cannot be chosen, or null when it can (T4.3, T5.12).

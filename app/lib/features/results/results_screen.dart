@@ -345,7 +345,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     final chatAvailable = ref.watch(healthProvider).valueOrNull?.chatAvailable ?? false;
     final record = _record;
     final fps = record.fps == 0 ? 30.0 : record.fps;
-    final chart = SummaryChart(summary: record.summary); // does not change with the frame
+    final chart = SummaryChart(
+      summary: record.summary,
+      strokeModel: record.strokeModel,
+    ); // does not change with the frame
     return PlaybackShortcuts(
       target: _target,
       fps: fps,

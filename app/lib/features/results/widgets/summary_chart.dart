@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
+import '../../../data/models/job.dart';
 import '../../../shared/widgets/section_card.dart';
 
 /// F13: stroke distribution per player as grouped bars, plus hits and peak speed.
 class SummaryChart extends StatelessWidget {
-  const SummaryChart({super.key, required this.summary});
+  const SummaryChart({super.key, required this.summary, this.strokeModel});
 
   final Summary? summary;
+
+  /// The classifier that named the strokes (cnn, lstm, rf), shown under the title.
+  final String? strokeModel;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,14 @@ class SummaryChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (classes.isNotEmpty && kStrokeModels.containsKey(strokeModel))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Strokes named by the ${kStrokeModels[strokeModel]} model',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
           if (classes.isNotEmpty)
             Semantics(
               label: [

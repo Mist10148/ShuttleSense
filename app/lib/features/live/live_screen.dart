@@ -6,11 +6,13 @@ import '../../core/router/app_router.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/clip_record.dart';
+import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/start_score_field.dart';
+import '../../shared/widgets/stroke_model_field.dart';
 import '../calibration/calibration_screen.dart';
 import '../mode/mode_screen.dart';
 import '../results/widgets/court_minimap.dart';
@@ -18,6 +20,7 @@ import '../results/widgets/line_call_banner.dart';
 import '../results/widgets/scoreboard.dart';
 import '../results/widgets/status_strip.dart';
 import '../results/widgets/stroke_timeline.dart';
+import '../upload/upload_controller.dart';
 import 'live_controller.dart';
 import 'widgets/live_coach_panel.dart';
 import 'widgets/live_status.dart';
@@ -197,6 +200,11 @@ class _ReadyView extends ConsumerWidget {
           value: ref.watch(liveMatchSetupProvider),
           onChanged: ref.read(liveMatchSetupProvider.notifier).set,
           showCourt: true,
+        ),
+        StrokeModelField(
+          value: ref.watch(pendingJobOptionsProvider).strokeModel,
+          health: ref.watch(healthProvider).valueOrNull,
+          onChanged: ref.read(pendingJobOptionsProvider.notifier).setStrokeModel,
         ),
       ],
     );

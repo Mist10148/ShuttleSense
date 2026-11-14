@@ -47,6 +47,7 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   static const _courtKey = 'options.court';
   static const _firstServerIdKey = 'options.first_server_id';
   static const _firstReceiverIdKey = 'options.first_receiver_id';
+  static const _strokeModelKey = 'options.stroke_model';
 
   @override
   JobOptions build() {
@@ -63,6 +64,10 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
       court: prefs.getString(_courtKey) == 'doubles' ? 'doubles' : 'singles',
       firstServerId: prefs.getString(_firstServerIdKey),
       firstReceiverId: prefs.getString(_firstReceiverIdKey),
+      strokeModel: switch (prefs.getString(_strokeModelKey)) {
+        final String m when kStrokeModels.containsKey(m) => m,
+        _ => kStrokeModels.keys.first,
+      },
     );
   }
 
@@ -91,6 +96,13 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
     ]) {
       value == null ? await prefs.remove(key) : await prefs.setString(key, value);
     }
+  }
+
+  /// Remembered, and shared by upload and live: a team compares models on its own footage.
+  Future<void> setStrokeModel(String model) async {
+    if (!kStrokeModels.containsKey(model)) return;
+    state = state.withStrokeModel(model);
+    await ref.read(sharedPreferencesProvider).setString(_strokeModelKey, model);
   }
 
   /// For a clip that begins mid-game; not remembered, it belongs to one clip.

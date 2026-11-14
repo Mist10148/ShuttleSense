@@ -1256,4 +1256,40 @@ void main() {
     // A doubles session draws the doubles court before any partner is seen.
     expect(state.copyWith(doubles: true).record.isDoubles, isTrue);
   });
+
+  testWidgets('the live start names the chosen stroke model', (tester) async {
+    const health = Health(
+      version: '0.1.0',
+      schemaVersion: '1.4',
+      device: 'cpu',
+      authRequired: false,
+      stages: kAllStages,
+      strokeModels: ['cnn', 'rf'],
+    );
+    // Tall enough that the setup list builds the choice below the match settings.
+    final sockets = await pumpLive(
+      tester,
+      size: const Size(1280, 1800),
+      api: FakeApiClient(health: health),
+    );
+    await tester.ensureVisible(find.text('Random Forest'));
+    await tester.tap(find.text('Random Forest'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Start without court'));
+    await startWithoutCourt(tester);
+    expect(sockets.single.sent.first['stroke_model'], 'rf');
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a server without the stroke model choice gets none', (tester) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    expect(find.text('Stroke model'), findsNothing);
+    await startWithoutCourt(tester);
+    expect(sockets.single.sent.first.containsKey('stroke_model'), isFalse);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
 }
