@@ -15,8 +15,10 @@ def partial_path(path: Path) -> Path:
     return path.with_name(f".{path.stem}.partial{path.suffix}")
 
 
-def replace(src: Path, dst: Path, *, attempts: int = 20, delay_s: float = 0.1) -> None:
-    """os.replace, retried briefly: on Windows it fails while a reader still has dst open."""
+def replace(src: Path, dst: Path, *, timeout_s: float = 2.0, delay_s: float = 0.1) -> None:
+    """os.replace, retried for about timeout_s: on Windows it fails while a reader still has
+    dst open."""
+    attempts = max(1, round(timeout_s / delay_s))
     for attempt in range(attempts):
         try:
             os.replace(src, dst)

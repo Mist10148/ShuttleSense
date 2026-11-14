@@ -18,6 +18,10 @@ from shuttlesense.atomic import partial_path, replace
 
 log = logging.getLogger(__name__)
 
+# Windows cannot replace the old video while a player has it open: wait for the player to
+# let go rather than lose the render.
+REPLACE_TIMEOUT_S = 15.0
+
 
 def ffmpeg_command(
     out_path: Path, *, fps: float, size: tuple[int, int], crf: int, codec: str, exe: str
@@ -121,6 +125,6 @@ class VideoWriter:
             if self._cv is not None:
                 self._cv.release()
             if exc_type is None:
-                replace(self._tmp, self.path)
+                replace(self._tmp, self.path, timeout_s=REPLACE_TIMEOUT_S)
         finally:
             self._tmp.unlink(missing_ok=True)

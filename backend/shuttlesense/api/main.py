@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -50,6 +52,32 @@ class UploadLimit:
         await self.app(scope, limited, send)
 
 
+_TOKEN_PARAM = re.compile(r"([?&]token=)[^&\s\"]+")
+
+
+class RedactToken(logging.Filter):
+    """Keeps the access token out of the logs: media, export and frame URLs and WS /live
+    carry it in the query string, and uvicorn logs the full URL."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _TOKEN_PARAM.sub(r"\1***", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _TOKEN_PARAM.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args
+            )
+        return True
+
+
+def redact_tokens_in_logs() -> None:
+    """Safe to call again: each logger gets the filter once."""
+    # uvicorn logs HTTP requests on uvicorn.access and WebSocket connections on uvicorn.error.
+    for name in ("uvicorn.access", "uvicorn.error"):
+        logger = logging.getLogger(name)
+        if not any(isinstance(f, RedactToken) for f in logger.filters):
+            logger.addFilter(RedactToken())
+
+
 def create_app(
     settings: Settings | None = None,
     pipeline: PipelineFn | None = None,
@@ -57,6 +85,7 @@ def create_app(
 ) -> FastAPI:
     """`chat_client` replaces the Claude API client (tests); otherwise one is made from the key."""
     settings = settings or get_settings()
+    redact_tokens_in_logs()
     if pipeline is None:
         pipeline = run_pipeline
         if settings.fake_pipeline:
@@ -64,6 +93,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        redact_tokens_in_logs()  # again: uvicorn has set up its loggers by now
         storage = Storage(settings.storage_dir)
         device = detect_device(settings.device)
         jobs = JobManager(
