@@ -185,6 +185,7 @@ class LiveManager:
             return None
         record = session.finish()
         source = self.storage.video_dir(entry.video_id) / "source.mp4"
+        source.parent.mkdir(parents=True, exist_ok=True)
         name = session.request.name or f"Live session {utcnow():%Y-%m-%d %H:%M}"
         self.storage.save_video_meta(VideoInfoOut(
             id=entry.video_id, filename=f"{name}.mp4",

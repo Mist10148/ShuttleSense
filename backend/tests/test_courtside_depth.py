@@ -175,3 +175,21 @@ def test_saved_goal_endpoint_and_exports(tmp_path, tiny_video):
         assert client.put(url + "/practice-goal", json={"text": " "}).status_code == 422
         exported = client.get(url + "/summary.json").json()
         assert exported["coaching_recap"]["practice_goals"][0]["text"] == "Stay balanced"
+
+
+def test_stop_preserves_decisions_and_goals_without_decodable_frames(tmp_path):
+    from test_live import START, make_client
+
+    with make_client(tmp_path) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            job_id = ws.receive_json()["job_id"]
+            ws.send_json({"type": "goal", "goal": {"text": "Recover to base"}})
+            assert ws.receive_json()["practice_goals"]
+            ws.send_json({"type": "stop"})
+            assert ws.receive_json()["job_id"] == job_id
+        job = client.get(f"/jobs/{job_id}").json()
+        assert job["outputs"]["record"] and not job["outputs"]["video"]
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert record["num_frames"] == 0
+        assert record["practice_goals"][0]["text"] == "Recover to base"
