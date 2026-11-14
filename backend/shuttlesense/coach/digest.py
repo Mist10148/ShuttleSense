@@ -50,8 +50,8 @@ def _rally_lines(record: ClipRecord) -> list[str]:
     for r in record.rallies:
         s, e = r.start_frame / fps, r.end_frame / fps
         line = (
-            f"rally {r.index}: {_t(s)} to {_t(e)}, {r.stroke_count} strokes, "
-            f"winner {r.winner or 'undecided'}"
+            f"rally {r.index}{_game(record, r.game)}: {_t(s)} to {_t(e)}, "
+            f"{r.stroke_count} strokes, winner {r.winner or 'undecided'}"
         )
         if r.score_after is not None:
             line += f", score after {r.score_after.near}-{r.score_after.far} (near-far)"
@@ -72,6 +72,42 @@ def _rally_lines(record: ClipRecord) -> list[str]:
             elif call.uncertain:
                 line += " (UNCERTAIN, not confirmed)"
         lines.append(line)
+    return lines
+
+
+def _game(record: ClipRecord, game: int | None) -> str:
+    """' (game N)' in a match of more than one game, so rallies of different games are told
+    apart (each game's score starts again at 0-0)."""
+    if record.score is None or record.score.best_of <= 1 or game is None:
+        return ""
+    return f" (game {game})"
+
+
+def _score_lines(record: ClipRecord) -> list[str]:
+    """The match result: per-game scores, games won and the winner, not only the last game."""
+    score = record.score
+    if score is None:
+        return []
+    lines = []
+    if score.best_of > 1:
+        games = ", ".join(f"game {i} {g.near}-{g.far}" for i, g in enumerate(score.games, 1))
+        lines.append(
+            f"Match: best of {score.best_of}; finished games (near-far): {games or 'none'}; "
+            f"games won {score.games_won.near}-{score.games_won.far}."
+        )
+    if score.match_winner is not None:
+        lines.append(f"Match won by {score.match_winner}.")
+        last = score.games[-1] if score.games else score
+        lines.append(f"Final game score {last.near}-{last.far} (near-far).")
+    else:
+        current = f"game {score.game} " if score.best_of > 1 else ""
+        lines.append(f"Current {current}score {score.near}-{score.far} (near-far).")
+    reasons = [c.reason for c in score.corrections if getattr(c, "reason", None)]
+    lines.append(
+        f"{len(score.corrections)} manual referee decisions"
+        + (f" ({', '.join(sorted(set(reasons)))})" if reasons else "")
+        + "."
+    )
     return lines
 
 
@@ -128,9 +164,7 @@ def build_digest(record: ClipRecord, max_chars: int = 24000) -> Digest:
             peak = f", peak {p.peak_speed_kmh:.0f} km/h est." if p.peak_speed_kmh else ""
             pc = ", ".join(f"{k} {v}" for k, v in sorted(p.stroke_counts.items())) or "none"
             head.append(f"{side}: {p.hits} hits ({pc}){peak}")
-    if record.score is not None:
-        head.append(f"Final score {record.score.near}-{record.score.far} (near-far), "
-                    f"{len(record.score.corrections)} manual corrections.")  # fmt: skip
+    head += _score_lines(record)
     notes = []
     if record.coaching is not None:
         top = set(record.coaching.top_fixes)
@@ -149,20 +183,31 @@ def build_digest(record: ClipRecord, max_chars: int = 24000) -> Digest:
     if record.coaching is not None:
         moments += [m for n in record.coaching.session_notes for m in n.moments]
 
-    def assemble(hit_lines: list[str]) -> str:
+    def assemble(hit_lines: list[str], rally_lines: list[str]) -> str:
+        # Notes come before the per-rally and per-hit detail, so trimming never drops them.
         sections = [
             "## Session", *head,
-            "## Rallies", *(_rally_lines(record) or ["no rallies detected"]),
-            "## Hits", *(hit_lines or ["no hits detected"]),
             "## Session notes", *(notes or ["no repeated patterns"]),
+            "## Rallies", *(rally_lines or ["no rallies detected"]),
+            "## Hits", *(hit_lines or ["no hits detected"]),
         ]  # fmt: skip
         return "\n".join(sections)
 
-    text = assemble([_hit_line(h) for h in record.hits])
+    rally_lines = _rally_lines(record)
+    text = assemble([_hit_line(h) for h in record.hits], rally_lines)
     shortened = False
     if len(text) > max_chars:
         shortened = True
-        text = assemble(["(per-hit detail shortened to per-rally summaries)",
-                         *_rally_summaries(record)])  # fmt: skip
+        hit_lines = ["(per-hit detail shortened to per-rally summaries)", *_rally_summaries(record)]
+        text = assemble(hit_lines, rally_lines)
+        # Still too long: leave out the oldest rallies' detail, newest first kept.
+        while len(text) > max_chars and (len(hit_lines) > 1 or rally_lines):
+            if len(hit_lines) > 1:
+                hit_lines = [hit_lines[0], *hit_lines[2:]]
+            else:
+                rally_lines = rally_lines[1:]
+            omitted = len(record.rallies) - len(rally_lines)
+            note = [f"({omitted} earlier rallies left out)"] if omitted else []
+            text = assemble(hit_lines, [*note, *rally_lines])
         text = text[:max_chars]
     return Digest(text=text, moments=moments, shortened=shortened)

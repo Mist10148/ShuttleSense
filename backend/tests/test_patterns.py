@@ -85,3 +85,22 @@ def test_top_fix_count_is_configurable() -> None:
     cfg = pattern_config({"patterns": {"top_fixes": 1, "severity": {"elbow_extension": 2}}})
     assert cfg["top_fixes"] == 1 and cfg["severity"]["stable_feet"] == 1.5
     assert cfg["severity"]["elbow_extension"] == 2
+
+
+def test_uncertain_unconfirmed_calls_are_not_counted_as_shots_out() -> None:
+    """An uncertain call decides no rally, so it must not be blamed on the player."""
+    hits = [_hit(i, "near", "smash", {}, rally=i) for i in range(3)]
+    calls = [
+        LineCall(id=i, rally_index=i, frame=10 * i + 5, time_s=i / 3 + 0.1, call="out",
+                 landing_xy=(2.0, 14.0), margin_cm=-3.0, confidence=0.3, uncertain=True)
+        for i in range(3)
+    ]  # fmt: skip
+    assert not [n for n in build_coaching(_record(hits, calls)).session_notes
+                if n.rule == "shots_out"]  # fmt: skip
+    from shuttlesense.schema import LineCallOverride
+
+    for c in calls[:2]:
+        c.override = LineCallOverride(call="out", at="2026-11-14T10:00:00Z")
+    note = next(n for n in build_coaching(_record(hits, calls)).session_notes
+                if n.rule == "shots_out")  # fmt: skip
+    assert (note.count, note.total) == (2, 2)

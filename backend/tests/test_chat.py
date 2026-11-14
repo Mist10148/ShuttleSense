@@ -267,3 +267,28 @@ def test_limit_counts_an_answer_saved_while_the_next_question_waited(
         assert job_id not in client.app.state.chat_answering
         messages = client.get(f"/jobs/{job_id}/record").json()["chat"]["messages"]
         assert [m["text"] for m in messages] == ["one", "answer"]
+
+
+def test_digest_states_the_match_result_and_games() -> None:
+    from shuttlesense.schema import ScorePair
+
+    record = load_golden()
+    record.score.best_of = 3
+    record.score.games = [ScorePair(near=21, far=15), ScorePair(near=21, far=19)]
+    record.score.games_won = ScorePair(near=2, far=0)
+    record.score.match_winner = "near"
+    for r in record.rallies:
+        r.game = 2
+    text = build_digest(record).text
+    assert "best of 3" in text and "game 1 21-15, game 2 21-19" in text
+    assert "games won 2-0" in text and "Match won by near" in text
+    assert "(game 2)" in text
+
+
+def test_shortened_digest_keeps_the_session_notes() -> None:
+    record = load_golden()
+    assert record.coaching is not None and record.coaching.session_notes
+    full = build_digest(record).text
+    digest = build_digest(record, max_chars=len(full) // 2)
+    assert digest.shortened and len(digest.text) <= len(full) // 2
+    assert record.coaching.session_notes[0].text in digest.text

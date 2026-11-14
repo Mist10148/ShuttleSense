@@ -43,7 +43,7 @@ After the pipeline runs, `feedback/patterns.py` (F21) turns the per-hit results 
 | Note | Counts | Fires when | Example text |
 | --- | --- | --- | --- |
 | `<rule>:<player>`, one per form rule above | Hits of that player the rule was checked on, and the ones that failed | failures ≥ `min_count` (2) **and** failures / checked ≥ `min_rate` (0.5) | "Near player: Bent hitting arm at contact on 3 of 5 smashes" |
-| `shots_out:<player>` | Rallies with a line call whose last shot that player hit, and the ones whose (confirmed or overridden) call is OUT | same thresholds | "Far player: last shot landed out in 3 of 4 rallies they finished" |
+| `shots_out:<player>` | Rallies with a line call whose last shot that player hit, and the ones whose call is OUT. An UNCERTAIN call nobody confirmed or overrode is left out of both counts, since it decides no rally | same thresholds | "Far player: last shot landed out in 3 of 4 rallies they finished" |
 
 - **Moments.** Each note lists up to `max_moments` (5) timeline moments (hit frames, or landing frames for out shots); the app turns them into tap-to-seek chips.
 - **Top fixes.** Notes are ranked by failures × `severity`, then by failure rate, then by id, and the first `top_fixes` (3) are the session summary. Service faults (`contact_below_waist`, `stable_feet`) and `shots_out` have severity 1.5 because they lose the point outright under BWF Laws 9 and 13; the others have 1.0.

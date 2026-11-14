@@ -113,6 +113,9 @@ def out_notes(record: ClipRecord, cfg: dict[str, Any]) -> list[SessionNote]:
     ended: dict[str, list[tuple[Hit, Moment]]] = defaultdict(list)
     out: dict[str, list[Moment]] = defaultdict(list)
     for call in record.line_calls:
+        # An uncertain call nobody confirmed decides no rally, so it says nothing either way.
+        if call.uncertain and call.override is None:
+            continue
         hits = [h for h in record.hits if h.rally_index == call.rally_index]
         if not hits:
             continue
