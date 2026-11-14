@@ -64,3 +64,12 @@ The fake-perception numbers bound everything around the models, not the models: 
 - Speed is a 2D court-plane estimate and is not validated against radar.
 - Line calls come from one camera at 720p and 30 fps: the landing pixel is projected onto the floor, and near the far baseline one pixel covers several centimetres. Calls near a line are expected to be UNCERTAIN often; the evaluation reports that share instead of hiding it. These are automated calls, not certified officiating.
 - Live frames from browsers and Windows webcams arrive as still captures at roughly 5–15 fps, below the 30 fps TrackNetV3 was trained on, so live tracking from those devices is expected to be worse than from uploaded clips. Measure it per device before quoting live accuracy.
+
+
+## Courtside depth verification
+
+Synthetic fixtures exercise duplicate command recovery, interval transitions, goals,
+undo history and replay and export persistence. They do not measure tracking quality,
+line-call accuracy, coaching impact or real device latency. Use the labelled footage
+and device procedures in [Phase 13](phases/phase-13-courtside-depth.md#next-courtside-session)
+to collect those measurements. Goal completion is self-reported.
