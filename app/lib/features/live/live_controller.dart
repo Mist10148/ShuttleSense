@@ -386,7 +386,12 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _captureOrientation = null;
     _clearImages();
     _clearDecision();
+    // A connect still waiting for `started` gives up now instead of after its timeout.
+    final starting = _started;
     _started = null;
+    if (starting != null && !starting.isCompleted) {
+      starting.completeError(_Refused(null, 'cancelled'));
+    }
     _expectedJobId = null;
     final saved = _saved;
     _saved = null;
@@ -477,6 +482,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Future<void> start({List<Corner>? corners, ({int near, int far})? startScore}) async {
     final source = _source;
     if (source == null) return;
+    // A second tap (or a key repeat) while the first start is under way would open a second
+    // session and race the first for the server's single live slot.
+    if (state.phase != LivePhase.ready && state.phase != LivePhase.calibrating) return;
     final generation = _generation;
     _set(
       state.copyWith(
@@ -518,6 +526,11 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     final match = ref.read(liveMatchSetupProvider);
+    // Only a best of 3 on a 1.5 backend can start in a later game.
+    final startGames =
+        match.bestOf == 3 && (ref.read(healthProvider).valueOrNull?.supportsCourtside ?? false)
+        ? ref.read(liveStartGamesProvider)
+        : null;
     final strokeModel = resolveStrokeModel(
       ref.read(pendingJobOptionsProvider).strokeModel,
       ref.read(healthProvider).valueOrNull,
@@ -533,6 +546,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
               for (final c in corners) [c.x, c.y],
             ],
       'start_score': startScore == null ? null : {'near': startScore.near, 'far': startScore.far},
+      if (startGames != null) 'start_games': {'near': startGames.near, 'far': startGames.far},
       'court': match.court,
       ...match.toJson(),
       'stroke_model': ?strokeModel,
@@ -540,6 +554,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (connected.started == null || _disposed || generation != _generation) return;
     // The start score belongs to this session only; kept until now so Try again reuses it.
     if (startScore != null) ref.read(liveStartScoreProvider.notifier).state = null;
+    if (startGames != null) ref.read(liveStartGamesProvider.notifier).state = null;
     _beginStreaming();
   }
 
@@ -855,6 +870,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       'busy' => 'The server is busy with a job or another live session. Try again when it is done.',
       'unauthorized' => 'Wrong or missing access token',
       'rally_in_play' => 'Wait until the rally has ended, then award the point',
+      'match_over' => 'The match is already won: Undo first to change the result',
       _ => e['detail'] as String? ?? 'Live error',
     };
     final starting = _started;
@@ -864,7 +880,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     if (_matchesDecision(e) &&
-        (_decisionAck || const {'not_found', 'bad_message', 'rally_in_play'}.contains(code))) {
+        (_decisionAck ||
+            const {'not_found', 'bad_message', 'rally_in_play', 'match_over'}.contains(code))) {
       _clearDecision();
       _notify(message);
       return;
@@ -877,7 +894,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify(e['detail'] as String? ?? 'The server did not find that rally or call');
       return;
     }
-    if (code == 'capture_gap' || code == 'rally_in_play') {
+    if (code == 'capture_gap' || code == 'rally_in_play' || code == 'match_over') {
       // rally_in_play: an award while a rally is open would count that rally twice.
       _notify(message);
       return;
@@ -889,6 +906,12 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     if (code == 'internal') return;
+    // Only a refusal of the whole session ends it; an error code this app does not know (a
+    // newer server) is shown and the session goes on, as the server keeps it.
+    if (!const {'unauthorized', 'busy'}.contains(code)) {
+      _notify(message);
+      return;
+    }
     _streaming = false;
     _clearDecision();
     // Let go of the socket so the server detaches the session and frees the GPU.
@@ -1015,14 +1038,20 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   void overrideCall(int lineCallId, String call) =>
       _decide({'type': 'override', 'line_call_id': lineCallId, 'call': call});
 
-  /// Set a rally's winner, or clear it ([winner] null) so it does not count.
-  Future<void> correct(int rallyIndex, String? winner) async =>
-      _decide({'type': 'correct', 'rally_index': rallyIndex, 'winner': winner});
+  /// Set a rally's winner, or clear it ([winner] null) so it does not count. A cleared
+  /// rally with [reason] `let` is replayed (clip record 1.5).
+  Future<void> correct(int rallyIndex, String? winner, {String? reason}) async =>
+      _decide({'type': 'correct', 'rally_index': rallyIndex, 'winner': winner, 'reason': ?reason});
 
-  /// A point for a rally the system missed.
-  void award(String winner) => _decide({'type': 'award', 'winner': winner});
+  /// A point for a rally the system missed; [reason] says why (e.g. `fault`, 1.5).
+  void award(String winner, {String? reason}) =>
+      _decide({'type': 'award', 'winner': winner, 'reason': ?reason});
 
-  /// Take back the newest correction or award.
+  /// The other side retired: [winner] wins the match (clip record 1.5, D33).
+  void concede(String winner) => _decide({'type': 'concede', 'winner': winner});
+
+  /// Take back the newest decision: a correction, an award, a concession or a line-call
+  /// override (D32).
   void undo() => _decide({'type': 'undo'});
 
   /// Doubles (D23): who serves and receives first in [game].
@@ -1158,3 +1187,7 @@ final liveMatchSetupProvider = NotifierProvider<LiveMatchSetupNotifier, MatchSet
 /// Score at the start of a live session that joins a game under way (P3 referee). Kept
 /// apart from the session so it survives calibrating the court; cleared once used.
 final liveStartScoreProvider = StateProvider<({int near, int far})?>((ref) => null);
+
+/// Games each side had already won, for a live session that joins a best-of-three match in
+/// game 2 or 3 (clip record 1.5, D33). Cleared once used, like the start score.
+final liveStartGamesProvider = StateProvider<({int near, int far})?>((ref) => null);

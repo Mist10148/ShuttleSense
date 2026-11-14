@@ -20,6 +20,10 @@ class Scoreboard extends StatelessWidget {
     this.onUndo,
     this.onClearLast,
     this.onSetService,
+    this.onAwardReason,
+    this.onLet,
+    this.onConcede,
+    this.doubles = false,
     this.busy = false,
     this.live = false,
     this.showHistory = true,
@@ -40,6 +44,16 @@ class Scoreboard extends StatelessWidget {
 
   /// Doubles (D23): name who serves and receives first in a later game.
   final void Function(int game, String serverId, String receiverId)? onSetService;
+
+  /// Clip record 1.5 (D33): a point with its reason (`fault`, `service_fault`, ...), a let
+  /// (the last rally is replayed) and a retirement ([onConcede] gets the side that wins).
+  /// Null on older backends, so the decision menu is left out.
+  final void Function(String side, String reason)? onAwardReason;
+  final VoidCallback? onLet;
+  final ValueChanged<String>? onConcede;
+
+  /// A doubles job or session, known from its settings even before the record shows it.
+  final bool doubles;
   final bool busy;
 
   /// A live session: the score is always the current one.
@@ -50,6 +64,33 @@ class Scoreboard extends StatelessWidget {
   /// game point, ...) describes what is on screen.
   bool get _atEnd => live || record.rallies.isEmpty || frameIndex >= record.rallies.last.endFrame;
 
+  /// The game on screen: the rally at the playback position, else the last one before it.
+  int _gameAt(Score total) {
+    if (_atEnd) return total.game;
+    Rally? shown = record.rallyAt(frameIndex);
+    if (shown == null) {
+      for (final r in record.rallies) {
+        if (r.endFrame > frameIndex) break;
+        shown = r;
+      }
+    }
+    return shown?.game ?? total.firstGame;
+  }
+
+  /// Games each side had won before [game] started.
+  ScorePair _gamesWonBefore(Score total, int game) {
+    var near = total.startGames?.near ?? 0, far = total.startGames?.far ?? 0;
+    for (var i = 0; i < total.games.length && total.firstGame + i < game; i++) {
+      final g = total.games[i];
+      if (g.near > g.far) {
+        near++;
+      } else {
+        far++;
+      }
+    }
+    return ScorePair(near: near, far: far);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = PlayerColors.of(context);
@@ -59,6 +100,9 @@ class Scoreboard extends StatelessWidget {
     final score = atEnd ? total : record.scoreAt(frameIndex);
     final summary = record.summary;
     final server = atEnd ? total?.server : null;
+    final doubles = this.doubles || record.isDoubles;
+    final game = total == null ? 1 : _gameAt(total);
+    final won = total == null || atEnd ? total?.gamesWon : _gamesWonBefore(total, game);
     return SectionCard(
       title: 'Score and stats',
       child: Column(
@@ -69,10 +113,20 @@ class Scoreboard extends StatelessWidget {
           else ...[
             if (total.bestOf > 1)
               Text(
-                'Game ${total.game} of ${total.bestOf} · games '
-                '${total.gamesWon.near}–${total.gamesWon.far}',
+                'Game $game of ${total.bestOf} · games ${won!.near}–${won.far}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelLarge,
+              ),
+            // Finished games keep their final score once the board resets to 0–0.
+            if (total.games.isNotEmpty)
+              Text(
+                [
+                  for (var i = 0; i < total.games.length; i++)
+                    'G${total.firstGame + i} ${total.games[i].near}–${total.games[i].far}',
+                ].join(' · '),
+                key: const Key('game-scores'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
               ),
             Semantics(
               label: [
@@ -119,7 +173,7 @@ class Scoreboard extends StatelessWidget {
             // Doubles: the game winners chose their server; ask so the order can go on.
             if (atEnd &&
                 onSetService != null &&
-                record.isDoubles &&
+                doubles &&
                 !total.matchOver &&
                 total.game >= 2 &&
                 total.server != null &&
@@ -159,7 +213,14 @@ class Scoreboard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   TextButton.icon(
-                    onPressed: onUndo == null || busy || total.corrections.isEmpty ? null : onUndo,
+                    // Undo also takes back a line-call override (D32), which is not in the
+                    // corrections list, so it stays available whenever there is one.
+                    onPressed:
+                        onUndo == null ||
+                            busy ||
+                            (total.corrections.isEmpty && !record.lineCalls.any((c) => c.reviewed))
+                        ? null
+                        : onUndo,
                     icon: const Icon(Icons.undo, size: 18),
                     label: const Text('Undo'),
                   ),
@@ -167,6 +228,14 @@ class Scoreboard extends StatelessWidget {
                     TextButton(
                       onPressed: busy ? null : onClearLast,
                       child: const Text('Clear last winner'),
+                    ),
+                  if (onAwardReason != null || onLet != null || onConcede != null)
+                    DecisionMenu(
+                      enabled: !busy,
+                      matchOver: total.matchOver,
+                      onAwardReason: onAwardReason,
+                      onLet: onLet,
+                      onConcede: onConcede,
                     ),
                 ],
               ),
@@ -177,6 +246,7 @@ class Scoreboard extends StatelessWidget {
               RallyHistory(
                 record: record,
                 frameIndex: frameIndex,
+                doubles: doubles,
                 onCorrect: busy ? null : onCorrect,
               ),
             ],
@@ -198,24 +268,46 @@ class Scoreboard extends StatelessWidget {
 }
 
 class RallyHistory extends StatelessWidget {
-  const RallyHistory({super.key, required this.record, required this.frameIndex, this.onCorrect});
+  const RallyHistory({
+    super.key,
+    required this.record,
+    required this.frameIndex,
+    this.onCorrect,
+    this.doubles,
+  });
 
   final ClipRecord record;
   final int frameIndex;
   final void Function(int rallyIndex, String? winner)? onCorrect;
 
+  /// Known from the job or session; null: worked out from the record (once, not per row).
+  final bool? doubles;
+
   @override
   Widget build(BuildContext context) {
     final current = record.rallyAt(frameIndex)?.index;
     final corrections = record.score?.corrections ?? const <ScoreCorrection>[];
+    final doubles = this.doubles ?? record.isDoubles;
+    final showGame = (record.score?.bestOf ?? 1) > 1;
+    // The newest winner correction per rally says whether a cleared rally was a let.
+    final lets = <int>{};
+    for (final c in corrections) {
+      if (c.kind != 'winner') continue;
+      if (c.isLet) {
+        lets.add(c.rallyIndex);
+      } else {
+        lets.remove(c.rallyIndex);
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final rally in record.rallies)
           _RallyRow(
             rally: rally,
-            showGame: (record.score?.bestOf ?? 1) > 1,
-            doubles: record.isDoubles,
+            showGame: showGame,
+            doubles: doubles,
+            isLet: rally.winner == null && lets.contains(rally.index),
             current: current == rally.index,
             onCorrect: onCorrect == null ? null : (winner) => onCorrect!(rally.index, winner),
           ),
@@ -227,10 +319,12 @@ class RallyHistory extends StatelessWidget {
 
   static String _changes(List<ScoreCorrection> corrections) {
     final awards = corrections.where((c) => c.isAward).length;
-    final fixes = corrections.length - awards;
+    final concessions = corrections.where((c) => c.isConcede).length;
+    final fixes = corrections.length - awards - concessions;
     return [
       if (fixes > 0) '$fixes correction(s)',
       if (awards > 0) '$awards point(s) awarded',
+      if (concessions > 0) 'retired',
     ].join(' · ');
   }
 }
@@ -251,7 +345,10 @@ class _MatchState extends StatelessWidget {
       if (winner != null)
         Chip(
           avatar: const Icon(Icons.emoji_events_outlined, size: 16),
-          label: Text(score.bestOf > 1 ? 'Match won by ${_name(winner)}' : '${_name(winner)} wins'),
+          label: Text(
+            '${score.bestOf > 1 ? 'Match won by ${_name(winner)}' : '${_name(winner)} wins'}'
+            '${score.conceded ? ' (retired)' : ''}',
+          ),
         )
       else ...[
         if (score.server != null)
@@ -277,7 +374,7 @@ class _MatchState extends StatelessWidget {
         : score.changeEnds
         ? 'Change ends'
         : score.interval
-        ? 'Interval: up to 60 s'
+        ? 'Interval: up to ${score.intervalSeconds ?? 60} s'
         : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -303,7 +400,10 @@ class _MatchState extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                score.changeEnds && score.interval ? 'Interval: change ends' : notice,
+                score.changeEnds && score.interval
+                    ? 'Interval${score.intervalSeconds == null ? '' : ' (${score.intervalSeconds} s)'}'
+                          ': change ends'
+                    : notice,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
               ),
@@ -320,6 +420,7 @@ class _RallyRow extends StatelessWidget {
     required this.current,
     this.showGame = false,
     this.doubles = false,
+    this.isLet = false,
     this.onCorrect,
   });
 
@@ -327,6 +428,9 @@ class _RallyRow extends StatelessWidget {
   final bool current;
   final bool showGame;
   final bool doubles;
+
+  /// Cleared as a let: replayed, so nothing is left to decide.
+  final bool isLet;
   final ValueChanged<String?>? onCorrect;
 
   @override
@@ -335,7 +439,7 @@ class _RallyRow extends StatelessWidget {
     final call = landing == null
         ? 'no landing call'
         : '${landing.inCourt ? 'in' : 'out'}${landing.uncertain ? ' ?' : ''}';
-    final needsConfirm = rally.winner == null;
+    final needsConfirm = rally.winner == null && !isLet;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -347,6 +451,11 @@ class _RallyRow extends StatelessWidget {
               style: TextStyle(fontWeight: current ? FontWeight.w600 : null),
             ),
           ),
+          if (isLet)
+            const Tooltip(
+              message: 'Let: the rally is replayed',
+              child: Chip(label: Text('Let'), visualDensity: VisualDensity.compact),
+            ),
           if (needsConfirm)
             Tooltip(
               message: 'Undecided: pick the winner',
@@ -422,6 +531,93 @@ class _Side extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Referee decisions beyond a plain point (clip record 1.5, D33): a fault or service fault
+/// (the point goes to the other side), a let (the last rally is replayed) and a retirement.
+class DecisionMenu extends StatelessWidget {
+  const DecisionMenu({
+    super.key,
+    required this.enabled,
+    required this.matchOver,
+    this.onAwardReason,
+    this.onLet,
+    this.onConcede,
+  });
+
+  final bool enabled;
+  final bool matchOver;
+  final void Function(String side, String reason)? onAwardReason;
+  final VoidCallback? onLet;
+  final ValueChanged<String>? onConcede;
+
+  static String _other(String side) => side == 'near' ? 'far' : 'near';
+
+  Future<void> _retire(BuildContext context, String retiring) async {
+    final winner = _other(retiring);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${playerLabel(retiring)} retires?'),
+        content: Text(
+          '${playerLabel(winner)} wins the match. Rallies after this do not count. '
+          'Undo takes it back.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Retire')),
+        ],
+      ),
+    );
+    if (ok == true) onConcede?.call(winner);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      key: const Key('decision-menu'),
+      tooltip: 'More referee decisions',
+      enabled: enabled && !matchOver,
+      onSelected: (action) {
+        final [kind, side] = action.split(':');
+        switch (kind) {
+          case 'fault' || 'service_fault':
+            onAwardReason?.call(_other(side), kind);
+          case 'let':
+            onLet?.call();
+          case 'retire':
+            _retire(context, side);
+        }
+      },
+      itemBuilder: (context) => [
+        if (onAwardReason != null)
+          for (final side in const ['near', 'far']) ...[
+            PopupMenuItem(
+              value: 'fault:$side',
+              child: Text('Fault by ${playerLabel(side)} (point ${playerLabel(_other(side))})'),
+            ),
+            PopupMenuItem(
+              value: 'service_fault:$side',
+              child: Text(
+                'Service fault by ${playerLabel(side)} (point ${playerLabel(_other(side))})',
+              ),
+            ),
+          ],
+        if (onLet != null)
+          const PopupMenuItem(value: 'let:-', child: Text('Let: replay the last rally')),
+        if (onConcede != null)
+          for (final side in const ['near', 'far'])
+            PopupMenuItem(value: 'retire:$side', child: Text('${playerLabel(side)} retires')),
+      ],
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [Icon(Icons.more_horiz, size: 18), SizedBox(width: 4), Text('More')],
+        ),
+      ),
     );
   }
 }

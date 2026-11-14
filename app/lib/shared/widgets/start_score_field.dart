@@ -97,3 +97,65 @@ class _StartScoreFieldState extends State<StartScoreField> {
     );
   }
 }
+
+/// Games each side had already won when the session starts, for joining a best-of-three
+/// match in game 2 or 3 (clip record 1.5, D33). Reports null while both are 0.
+class StartGamesField extends StatelessWidget {
+  const StartGamesField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.doubles = false,
+  });
+
+  final StartScore? value;
+  final ValueChanged<StartScore?> onChanged;
+  final bool doubles;
+
+  @override
+  Widget build(BuildContext context) {
+    final games = value ?? (near: 0, far: 0);
+    void update(StartScore next) => onChanged(next.near == 0 && next.far == 0 ? null : next);
+    Widget side(String label, int won, ValueChanged<int> onWon) => Expanded(
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('start-games-$label'),
+        initialValue: won,
+        decoration: InputDecoration(labelText: label, isDense: true),
+        // One game won is the most a side can have in a match still on (best of 3).
+        items: const [
+          DropdownMenuItem(value: 0, child: Text('0')),
+          DropdownMenuItem(value: 1, child: Text('1')),
+        ],
+        onChanged: (v) => onWon(v ?? 0),
+      ),
+    );
+    final game = 1 + games.near + games.far;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text(
+            'Games already won (starts in game $game of 3)',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+        Row(
+          children: [
+            side(
+              doubles ? 'Near pair' : 'Near player',
+              games.near,
+              (v) => update((near: v, far: games.far)),
+            ),
+            const SizedBox(width: 12),
+            side(
+              doubles ? 'Far pair' : 'Far player',
+              games.far,
+              (v) => update((near: games.near, far: v)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}

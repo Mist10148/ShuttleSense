@@ -221,19 +221,34 @@ class ApiClient {
     String jobId, {
     required int rallyIndex,
     required String? winner,
+    String? reason,
   }) => _call(() async {
     final res = await _dio.patch<Json>(
       '/jobs/$jobId/score',
-      data: {'rally_index': rallyIndex, 'winner': winner},
+      data: {'rally_index': rallyIndex, 'winner': winner, 'reason': ?reason},
     );
     return ScoreUpdate.fromJson(res.data!);
   });
 
   /// A point for a rally the referee layer missed, counted from [frame] on (D21).
-  Future<ScoreUpdate> awardPoint(String jobId, {required String winner, int? frame}) =>
+  Future<ScoreUpdate> awardPoint(
+    String jobId, {
+    required String winner,
+    int? frame,
+    String? reason,
+  }) => _call(() async {
+    final res = await _dio.post<Json>(
+      '/jobs/$jobId/score/award',
+      data: {'winner': winner, 'frame': frame, 'reason': ?reason},
+    );
+    return ScoreUpdate.fromJson(res.data!);
+  });
+
+  /// The other side retired: [winner] wins the match at [frame] (clip record 1.5, D33).
+  Future<ScoreUpdate> concedeMatch(String jobId, {required String winner, int? frame}) =>
       _call(() async {
         final res = await _dio.post<Json>(
-          '/jobs/$jobId/score/award',
+          '/jobs/$jobId/score/concede',
           data: {'winner': winner, 'frame': frame},
         );
         return ScoreUpdate.fromJson(res.data!);

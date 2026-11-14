@@ -201,7 +201,8 @@ class FakeApiClient extends ApiClient {
     String jobId, {
     required int rallyIndex,
     required String? winner,
-  }) => _answer('correctScore $jobId $rallyIndex $winner', () {
+    String? reason,
+  }) => _answer('correctScore $jobId $rallyIndex $winner${reason == null ? '' : ' $reason'}', () {
     final after = ScorePair(near: winner == 'near' ? 1 : 0, far: winner == 'far' ? 1 : 0);
     final rallies = [
       for (final r in record.rallies)
@@ -226,23 +227,54 @@ class FakeApiClient extends ApiClient {
   final _beforeAwards = <Score>[];
 
   @override
-  Future<ScoreUpdate> awardPoint(String jobId, {required String winner, int? frame}) =>
-      _answer('awardPoint $jobId $winner $frame', () {
+  Future<ScoreUpdate> awardPoint(
+    String jobId, {
+    required String winner,
+    int? frame,
+    String? reason,
+  }) => _answer('awardPoint $jobId $winner $frame${reason == null ? '' : ' $reason'}', () {
+    final old = record.score ?? const Score(near: 0, far: 0);
+    _beforeAwards.add(old);
+    final score = Score(
+      near: old.near + (winner == 'near' ? 1 : 0),
+      far: old.far + (winner == 'far' ? 1 : 0),
+      corrections: [
+        ...old.corrections,
+        ScoreCorrection(
+          rallyIndex: record.rallies.length,
+          winnerAfter: winner,
+          kind: 'award',
+          frame: frame,
+        ),
+      ],
+      server: winner,
+    );
+    record = record.copyWith(score: score);
+    return ScoreUpdate(score: score, rallies: record.rallies);
+  });
+
+  @override
+  Future<ScoreUpdate> concedeMatch(String jobId, {required String winner, int? frame}) =>
+      _answer('concedeMatch $jobId $winner $frame', () {
         final old = record.score ?? const Score(near: 0, far: 0);
         _beforeAwards.add(old);
         final score = Score(
-          near: old.near + (winner == 'near' ? 1 : 0),
-          far: old.far + (winner == 'far' ? 1 : 0),
+          near: old.near,
+          far: old.far,
+          bestOf: old.bestOf,
+          game: old.game,
+          games: old.games,
+          gamesWon: old.gamesWon,
+          matchWinner: winner,
           corrections: [
             ...old.corrections,
             ScoreCorrection(
               rallyIndex: record.rallies.length,
               winnerAfter: winner,
-              kind: 'award',
+              kind: 'concede',
               frame: frame,
             ),
           ],
-          server: winner,
         );
         record = record.copyWith(score: score);
         return ScoreUpdate(score: score, rallies: record.rallies);

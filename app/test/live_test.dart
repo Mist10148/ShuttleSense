@@ -542,6 +542,37 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('a double tap on Start opens one session (T12.5)', (tester) async {
+    final sockets = await pumpLive(tester);
+    // Both taps land before the screen rebuilds without the button.
+    await tester.tap(find.text('Start without court'));
+    await tester.tap(find.text('Start without court'), warnIfMissed: false);
+    await events(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(sockets, hasLength(1));
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('match_over and an unknown error code do not end the session (T12.5)', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    sockets.single.emit({'type': 'error', 'code': 'match_over', 'detail': 'won'});
+    await events(tester);
+    expect(find.text('The match is already won: Undo first to change the result'), findsOneWidget);
+    sockets.single.emit({'type': 'error', 'code': 'from_a_newer_server', 'detail': 'heads up'});
+    await events(tester);
+    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('heads up'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('an override the server cannot find does not end the session', (tester) async {
     final sockets = await pumpLive(tester);
     await startWithoutCourt(tester);

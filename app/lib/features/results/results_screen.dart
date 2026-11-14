@@ -261,6 +261,29 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   Future<void> _award(String winner) =>
       _changeScore((api) => api.awardPoint(widget.jobId, winner: winner, frame: _frameIndex.value));
 
+  /// D33: a point with its reason (a fault or service fault by the other side).
+  Future<void> _awardReason(String winner, String reason) => _changeScore(
+    (api) => api.awardPoint(widget.jobId, winner: winner, frame: _frameIndex.value, reason: reason),
+  );
+
+  /// D33: a let, so the rally at (or last before) the playback position is replayed.
+  Future<void> _let() {
+    final rally =
+        _record.rallyAt(_frameIndex.value) ??
+        _record.rallies.lastWhere(
+          (r) => r.endFrame <= _frameIndex.value,
+          orElse: () => _record.rallies.last,
+        );
+    return _changeScore(
+      (api) => api.correctScore(widget.jobId, rallyIndex: rally.index, winner: null, reason: 'let'),
+    );
+  }
+
+  /// D33: the other side retired; [winner] wins the match at the playback position.
+  Future<void> _concede(String winner) => _changeScore(
+    (api) => api.concedeMatch(widget.jobId, winner: winner, frame: _frameIndex.value),
+  );
+
   Future<void> _undo() => _changeScore((api) => api.undoScore(widget.jobId));
 
   /// D23: who serves and receives first in a later doubles game.
@@ -274,7 +297,14 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     try {
       final update = await change(ref.read(apiClientProvider));
       if (!mounted) return;
-      setState(() => _record = _record.copyWith(rallies: update.rallies, score: update.score));
+      setState(
+        () => _record = _record.copyWith(
+          rallies: update.rallies,
+          score: update.score,
+          // An undo can take back a line-call override (D32).
+          lineCalls: update.lineCalls,
+        ),
+      );
       // The server also rebuilt summary.json; fetch the record again for the chart.
       ref.invalidate(recordProvider(widget.jobId));
     } on Exception catch (e) {
@@ -342,7 +372,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
       _seekMoment(moment);
       ref.read(seekRequestProvider(widget.jobId).notifier).state = null;
     });
-    final chatAvailable = ref.watch(healthProvider).valueOrNull?.chatAvailable ?? false;
+    final health = ref.watch(healthProvider).valueOrNull;
+    final chatAvailable = health?.chatAvailable ?? false;
+    final courtside = health?.supportsCourtside ?? false;
+    final doublesJob = ref.watch(jobProvider(widget.jobId)).valueOrNull?.court == 'doubles';
     final record = _record;
     final fps = record.fps == 0 ? 30.0 : record.fps;
     final chart = SummaryChart(
@@ -398,6 +431,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onAward: _award,
                   onUndo: _undo,
                   onSetService: _setService,
+                  doubles: doublesJob,
+                  onAwardReason: courtside ? _awardReason : null,
+                  onLet: courtside && record.rallies.isNotEmpty ? _let : null,
+                  onConcede: courtside ? _concede : null,
                 ),
                 const SizedBox(height: 16),
                 chart,

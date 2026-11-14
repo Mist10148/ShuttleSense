@@ -389,6 +389,7 @@ class ScoreCorrection {
     this.winnerAfter,
     this.kind = 'winner',
     this.frame,
+    this.reason,
   });
 
   final int rallyIndex;
@@ -397,11 +398,19 @@ class ScoreCorrection {
   /// null: the rally was made undecided again.
   final String? winnerAfter;
 
-  /// `winner` (a rally's winner set or cleared) or `award` (a point the system missed).
+  /// `winner` (a rally's winner set or cleared), `award` (a point the system missed) or
+  /// `concede` (the other side retired, v1.5).
   final String kind;
   final int? frame;
 
+  /// Why the referee decided it (v1.5): `let`, `fault`, `service_fault` or `misconduct`.
+  final String? reason;
+
   bool get isAward => kind == 'award';
+  bool get isConcede => kind == 'concede';
+
+  /// A rally cleared to be replayed.
+  bool get isLet => kind == 'winner' && winnerAfter == null && reason == 'let';
 
   factory ScoreCorrection.fromJson(Json j) => ScoreCorrection(
     rallyIndex: asInt(j['rally_index'])!,
@@ -409,6 +418,22 @@ class ScoreCorrection {
     winnerAfter: j['winner_after'] as String?,
     kind: j['kind'] as String? ?? 'winner',
     frame: asInt(j['frame']),
+    reason: j['reason'] as String?,
+  );
+}
+
+/// Doubles (v1.3): who serves and receives first in a game after the first (D23).
+class GameService {
+  const GameService({required this.game, required this.serverId, required this.receiverId});
+
+  final int game;
+  final String serverId;
+  final String receiverId;
+
+  factory GameService.fromJson(Json j) => GameService(
+    game: asInt(j['game'])!,
+    serverId: j['server_id'] as String,
+    receiverId: j['receiver_id'] as String,
   );
 }
 
@@ -435,6 +460,9 @@ class Score extends ScorePair {
     this.firstReceiverId,
     this.serverId,
     this.receiverId,
+    this.gameService = const [],
+    this.startGames,
+    this.intervalSeconds,
   });
 
   final List<ScoreCorrection> corrections;
@@ -453,8 +481,17 @@ class Score extends ScorePair {
   final List<String> matchPoint;
   final String? matchWinner;
 
-  /// The last rally took the leader to 11 (60 s interval).
+  /// The leader reached 11 (60 s interval) or a game just ended (120 s).
   final bool interval;
+
+  /// How long that interval is (v1.5); null from older backends.
+  final int? intervalSeconds;
+
+  /// Games each side had already won when the session started (joined mid-match, v1.5).
+  final ScorePair? startGames;
+
+  /// Doubles (v1.3): the first server and receiver the user named for games 2 and 3.
+  final List<GameService> gameService;
 
   /// Players change ends now: after a game, and at 11 in the deciding game.
   final bool changeEnds;
@@ -467,6 +504,12 @@ class Score extends ScorePair {
   final String? receiverId;
 
   bool get matchOver => matchWinner != null;
+
+  /// The other side retired or gave a walkover.
+  bool get conceded => corrections.any((c) => c.isConcede);
+
+  /// The game number of the first game in [games] (later than 1 after a mid-match start).
+  int get firstGame => 1 + (startGames?.near ?? 0) + (startGames?.far ?? 0);
 
   factory Score.fromJson(Json j) => Score(
     near: asInt(j['near'])!,
@@ -490,6 +533,9 @@ class Score extends ScorePair {
     firstReceiverId: j['first_receiver_id'] as String?,
     serverId: j['server_id'] as String?,
     receiverId: j['receiver_id'] as String?,
+    gameService: asList(j['game_service']).map(GameService.fromJson).toList(),
+    startGames: j['start_games'] == null ? null : ScorePair.fromJson(j['start_games'] as Json),
+    intervalSeconds: asInt(j['interval_s']),
   );
 }
 
@@ -584,14 +630,20 @@ class LineCallUpdate {
 
 /// PATCH /jobs/{id}/score response.
 class ScoreUpdate {
-  const ScoreUpdate({required this.score, required this.rallies});
+  const ScoreUpdate({required this.score, required this.rallies, this.lineCalls});
 
   final Score score;
   final List<Rally> rallies;
 
+  /// Set by an undo, which can take back a line-call override (D32).
+  final List<LineCall>? lineCalls;
+
   factory ScoreUpdate.fromJson(Json j) => ScoreUpdate(
     score: Score.fromJson(j['score'] as Json),
     rallies: asList(j['rallies']).map(Rally.fromJson).toList(),
+    lineCalls: j['line_calls'] == null
+        ? null
+        : asList(j['line_calls']).map(LineCall.fromJson).toList(),
   );
 }
 

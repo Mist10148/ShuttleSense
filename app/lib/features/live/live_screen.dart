@@ -201,6 +201,13 @@ class _ReadyView extends ConsumerWidget {
           onChanged: ref.read(liveMatchSetupProvider.notifier).set,
           showCourt: true,
         ),
+        if (ref.watch(liveMatchSetupProvider).bestOf == 3 &&
+            (ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false))
+          StartGamesField(
+            value: ref.watch(liveStartGamesProvider),
+            doubles: ref.watch(liveMatchSetupProvider).doubles,
+            onChanged: (g) => ref.read(liveStartGamesProvider.notifier).state = g,
+          ),
         StrokeModelField(
           value: ref.watch(pendingJobOptionsProvider).strokeModel,
           health: ref.watch(healthProvider).valueOrNull,
@@ -388,6 +395,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final record = state.record;
     final frameIndex = state.frameIndex;
     final lastRally = record.rallies.lastOrNull;
+    final courtside = ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false;
     final decisionBusy = !controller.canDecide;
     final pendingReviews = record.lineCalls.where((call) => call.needsReview).toList()
       ..sort((a, b) {
@@ -535,6 +543,14 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         onClearLast: _coach || lastRally?.winner == null
             ? null
             : () => controller.correct(lastRally!.index, null),
+        doubles: state.doubles,
+        onAwardReason: _coach || !courtside
+            ? null
+            : (side, reason) => controller.award(side, reason: reason),
+        onLet: _coach || !courtside || lastRally == null
+            ? null
+            : () => controller.correct(lastRally.index, null, reason: 'let'),
+        onConcede: _coach || !courtside ? null : controller.concede,
       ),
     ];
     final details = _coach
@@ -558,6 +574,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 : RallyHistory(
                     record: record,
                     frameIndex: frameIndex,
+                    doubles: state.doubles,
                     onCorrect: decisionBusy ? null : controller.correct,
                   ),
           );
@@ -569,7 +586,14 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
     ];
     final analysis = [
-      CourtMinimap(record: record, frameIndex: frameIndex, reviewCall: _coach ? null : review),
+      CourtMinimap(
+        record: record,
+        frameIndex: frameIndex,
+        reviewCall: _coach ? null : review,
+        live: true,
+        rallyStart: state.rallyStartFrame,
+        doubles: state.doubles,
+      ),
       SectionCard(
         title: 'Recent strokes',
         child: Column(

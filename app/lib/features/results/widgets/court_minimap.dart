@@ -28,11 +28,27 @@ const int kHeatRebuildFrames = 30;
 /// the landing of every line call so far (F20: green in, red out, amber still uncertain).
 /// The Heatmap toggle (T5.5) shades where each player stood over the whole clip.
 class CourtMinimap extends StatefulWidget {
-  const CourtMinimap({super.key, required this.record, required this.frameIndex, this.reviewCall});
+  const CourtMinimap({
+    super.key,
+    required this.record,
+    required this.frameIndex,
+    this.reviewCall,
+    this.live = false,
+    this.rallyStart,
+    this.doubles,
+  });
 
   final ClipRecord record;
   final int frameIndex;
   final LineCall? reviewCall;
+
+  /// A live session: its record only holds closed rallies, so the open rally's start comes
+  /// from the session ([rallyStart], null between rallies: no hit marks).
+  final bool live;
+  final int? rallyStart;
+
+  /// Known from the job or session; null: worked out from the record.
+  final bool? doubles;
 
   @override
   State<CourtMinimap> createState() => _CourtMinimapState();
@@ -60,6 +76,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
   Widget build(BuildContext context) {
     final record = widget.record, frameIndex = widget.frameIndex;
     final calibrated = record.courtCorners != null;
+    final doubles = widget.doubles ?? record.isDoubles;
     final heat = calibrated && _heatmap ? _heatGrid() : null;
     return SectionCard(
       title: 'Court',
@@ -80,8 +97,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
                 ?heat?.describe(),
               ].join(' '),
               child: AspectRatio(
-                aspectRatio:
-                    (kCourtWidthM + (record.isDoubles ? 2 * kDoublesAlleyM : 0)) / kCourtLengthM,
+                aspectRatio: (kCourtWidthM + (doubles ? 2 * kDoublesAlleyM : 0)) / kCourtLengthM,
                 child: CustomPaint(
                   painter: CourtPainter.fromRecord(
                     record,
@@ -92,6 +108,9 @@ class _CourtMinimapState extends State<CourtMinimap> {
                     status: StatusColors.of(context),
                     heat: heat,
                     reviewLanding: widget.reviewCall?.landing,
+                    live: widget.live,
+                    rallyStart: widget.rallyStart,
+                    doubles: doubles,
                   ),
                 ),
               ),
@@ -208,20 +227,39 @@ class CourtPainter extends CustomPainter {
     StatusColors status = StatusColors.light,
     HeatGrid? heat,
     CourtPoint? reviewLanding,
+    bool live = false,
+    int? rallyStart,
+    bool? doubles,
   }) {
+    // Worked out once: on a long singles record isDoubles scans every frame.
+    final isDoubles = doubles ?? record.isDoubles;
     final trail = <CourtPoint>[
       for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
         ?record.frame(i)?.shuttlePos,
     ];
-    final rally = record.rallyAt(frameIndex);
-    final start = rally?.startFrame ?? 0;
+    // Marks belong to the rally on screen. Live, that is the open rally (none between
+    // rallies). Offline between rallies: the hits since the last rally ended.
+    int? start;
+    if (live) {
+      start = rallyStart;
+    } else {
+      start = record.rallyAt(frameIndex)?.startFrame;
+      if (start == null) {
+        start = 0;
+        for (final r in record.rallies) {
+          if (r.endFrame >= frameIndex) break;
+          start = r.endFrame + 1;
+        }
+      }
+    }
     // Each hit is marked where the player who made it stood (the partner, in doubles). A
     // doubles hit with no known partner has no single spot: marking it at partner 1 would
     // credit the hit to them.
     final marks = <(String, CourtPoint)>[
-      for (final h in record.hits)
-        if (h.frame >= start && h.frame <= frameIndex && !(record.isDoubles && h.hitter == null))
-          if (record.frame(h.frame)?.positionOf(h.who) case final p?) (h.who, p),
+      if (start != null)
+        for (final h in record.hits)
+          if (h.frame >= start && h.frame <= frameIndex && !(isDoubles && h.hitter == null))
+            if (record.frame(h.frame)?.positionOf(h.who) case final p?) (h.who, p),
     ];
     final landings = [
       for (final c in record.lineCalls)
@@ -239,7 +277,7 @@ class CourtPainter extends CustomPainter {
       players: players,
       status: status,
       heat: heat,
-      doubles: record.isDoubles,
+      doubles: isDoubles,
     );
   }
 
