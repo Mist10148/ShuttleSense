@@ -1,11 +1,15 @@
-# Stroke classifier training (T3.8, T3.9). Used by scripts/train_stroke_classifier.py.
+# 1D CNN stroke classifier (T3.8, T3.9, T11.6). Used by scripts/train_stroke_classifier.py.
 
 seed: 42
+algorithm: cnn
 
 data:
   features_dir: data/features
-  splits: configs/splits.json   # committed match split (T3.4), rewritten by make_splits.py
-  window_frames: 32
+  # The BST ShuttleSet features (scripts/import_bst_features.py, D29). For our own clips
+  # (scripts/extract_features.py --pose-norm bbox_diag) pass --splits configs/splits.json,
+  # the committed match split.
+  splits: configs/splits_bst.json
+  pose_norm: bbox_diag          # how the features were built; stored in the checkpoint
   use_trajectory: true          # false for the pose-only ablation
   classes: [smash, clear, drop, net_shot, lift, serve]
 

@@ -75,7 +75,7 @@ to get weights without team training.
 - [x] Survey released weights and feature sets (table above).
 - [x] DECISIONS: D28 (three selectable models), D29 (train on the BST features), D30 (weights in
       the repo), D31 (scikit-learn).
-- [x] TECH_STACK: scikit-learn, joblib and the BST feature set, with licences.
+- [x] TECH_STACK: scikit-learn and the BST feature set, with licences.
 
 **Acceptance criteria.** The decisions and their alternatives are recorded.
 
@@ -171,11 +171,12 @@ the right message; an unknown algorithm is refused.
       is visible).
 - [ ] `--algorithm rf` with `configs/stroke_rf.yaml`: scikit-learn `RandomForestClassifier`, class
       weights, depth and leaf size limited so the saved file stays small.
-- [ ] Save with joblib; the loader checks the file's SHA-256 against the pinned value before
-      loading, because a joblib file can run code.
+- [ ] `Forest`: copy the trained trees into plain arrays, save them as `.npz` and predict with
+      NumPy. No pickled model: loading the file cannot run code, and the server does not need
+      scikit-learn.
 
-**Tests.** Feature shape and no NaN on empty windows; train, save, load and classify round trip;
-a file with the wrong checksum is refused.
+**Tests.** Feature shape and no NaN on empty windows; the NumPy forest gives scikit-learn's
+probabilities; train, save, load and classify round trip.
 
 **Acceptance criteria.** The tests pass with scikit-learn installed in CI.
 
@@ -189,7 +190,7 @@ a file with the wrong checksum is refused.
 **Steps**
 - [ ] Train CNN, LSTM and Random Forest on the BST train split with 3 seeds each; pick each
       model's best seed on the validation split.
-- [ ] Commit `weights/strokes/stroke_cnn.pt`, `stroke_lstm.pt` and `stroke_rf.joblib`, with their
+- [ ] Commit `weights/strokes/stroke_cnn.pt`, `stroke_lstm.pt` and `stroke_rf.npz`, with their
       SHA-256 values.
 - [ ] `scripts/make_figures.py`: a three-model table (accuracy, macro accuracy, macro F1, per-class
       F1), confusion matrices and a comparison chart in `docs/results/strokes.md`.
@@ -332,5 +333,5 @@ no plugin error.
 | --- | --- | --- |
 | The BST features differ from our own pipeline's output (broadcast footage, another pose build) | Lower accuracy on phone clips | The phone-footage evaluation (T7.2) measures it; retrain on our own clips when T3.1–T3.5 are done, with the same script |
 | The archive cannot be downloaded or extracted | No weights | The code, selector and training script still ship; models without weights are disabled in the app |
-| A joblib file runs code when loaded | Unsafe weights | Only our own file is loaded, and only when its SHA-256 matches the pinned value |
+| A pickled model runs code when loaded | Unsafe weights | Torch checkpoints load with `weights_only=True`; the forest is plain arrays loaded with `allow_pickle=False` |
 | Weights in git grow the repo | Slow clones | The three files are small; larger weights stay on Hugging Face (D4) |

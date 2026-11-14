@@ -55,7 +55,13 @@ stages:
 
   strokes:
     enabled: true
+    algorithm: cnn              # cnn | lstm | rf (D28); a job's stroke_model replaces it
     weights: weights/strokes/stroke_cnn.pt
+    weights_lstm: weights/strokes/stroke_lstm.pt
+    weights_rf: weights/strokes/stroke_rf.npz
+    # The window, the pose rule and the feature layout come from the checkpoint; these two
+    # are only used for a checkpoint that does not say. Live mode waits window_frames / 2
+    # frames after a hit before classifying it.
     window_frames: 32
     use_trajectory: true        # false = pose-only ablation
 

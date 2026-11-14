@@ -90,9 +90,17 @@ def available_stages(config: dict[str, Any] | None = None) -> list[str]:
         requires = spec.requires
         if spec.name == "pose" and cfg.get("backend") == "keypoint_rcnn":
             requires = ("torch", "torchvision")
+        paths = [cfg.get(key) for key in spec.weights]
+        if spec.name == "strokes":  # packages and weights follow the chosen model (D28)
+            from shuttlesense.strokes import registry
+
+            name = registry.algorithm(cfg)
+            if name not in registry.ALGORITHMS:
+                continue
+            requires = registry.REQUIRES[name]
+            paths = [registry.weights_path(cfg, name)]
         if not all(_installed(m) for m in requires):
             continue
-        paths = [cfg.get(key) for key in spec.weights]
         if not all(p and (BACKEND_DIR / p).exists() for p in paths):
             continue
         names.append(spec.name)

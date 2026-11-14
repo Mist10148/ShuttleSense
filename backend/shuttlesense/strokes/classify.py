@@ -1,4 +1,4 @@
-"""Stroke inference stage (F6, FR-6)."""
+"""Stroke inference stage (F6, FR-6): 1D CNN, LSTM or Random Forest (D28)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import numpy as np
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.schema import STROKE_CLASSES, ClipRecord
 from shuttlesense.stage import StageContext, StageSkipped
+from shuttlesense.strokes import registry
 from shuttlesense.strokes.features import POSE_FEATURES, build_window
 
 _MODELS: dict[tuple[str, str, int, int], Any] = {}
@@ -17,8 +18,10 @@ _MODELS: dict[tuple[str, str, int, int], Any] = {}
 def load_classifier(path: str, device: str):
     """(model, checkpoint dict), cached per (path, device) so the API worker loads it once.
 
-    The key also holds the file's size and mtime: replacing the weights while the server
-    runs loads the new ones (the stage cache already notices the change, see cache.py).
+    The checkpoint dict says what the file holds: "kind" is "cnn" (also when missing),
+    "lstm" or "rf". An .npz file is a Random Forest (strokes/rf.py); anything else is a torch
+    checkpoint. The key also holds the file's size and mtime: replacing the weights while the
+    server runs loads the new ones (the stage cache already notices the change, see cache.py).
     """
     weights = BACKEND_DIR / path
     if not weights.exists():
@@ -26,6 +29,12 @@ def load_classifier(path: str, device: str):
     stat = weights.stat()
     key = (path, device, stat.st_size, stat.st_mtime_ns)
     if key in _MODELS:
+        return _MODELS[key]
+    if weights.suffix == ".npz":
+        from shuttlesense.strokes.rf import Forest
+
+        forest = Forest.load(weights)
+        _MODELS[key] = (forest, {**forest.meta, "kind": "rf"})
         return _MODELS[key]
     try:
         import torch
@@ -37,7 +46,8 @@ def load_classifier(path: str, device: str):
     ckpt = torch.load(weights, map_location=device, weights_only=True)
     classes = ckpt.get("classes", list(STROKE_CLASSES))
     model_cfg = ckpt.get("config", {}).get("model", {})
-    model = build_from_config(ckpt["in_features"], model_cfg, len(classes))
+    kind = ckpt.get("kind", "cnn")
+    model = build_from_config(ckpt["in_features"], model_cfg, len(classes), kind)
     model.load_state_dict(ckpt["state_dict"])
     model.to(device).eval()
     _MODELS[key] = (model, ckpt)
@@ -50,12 +60,34 @@ def softmax(logits: np.ndarray) -> np.ndarray:
     return e / e.sum(axis=1, keepdims=True)
 
 
+def predict_proba(model: Any, kind: str, x: np.ndarray, device: str) -> np.ndarray:
+    """[N, classes] probabilities for windows x [N, T, F] from any of the three models."""
+    if kind == "rf":
+        from shuttlesense.strokes.rf import summary_features
+
+        return model.predict_proba(summary_features(x))
+    import torch
+
+    batch = x if kind == "lstm" else np.transpose(x, (0, 2, 1))
+    with torch.inference_mode():
+        logits = model(torch.from_numpy(np.ascontiguousarray(batch)).to(device))
+    return softmax(logits.float().cpu().numpy())
+
+
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill hits[].stroke (argmax), confidence and class_probs."""
     if not record.hits:
         raise StageSkipped("no hits to classify")
     cfg = ctx.stage_config("strokes")
-    model, ckpt = load_classifier(cfg.get("weights", "weights/strokes/stroke_cnn.pt"), ctx.device)
+    name = registry.algorithm(cfg)
+    if name not in registry.ALGORITHMS:
+        raise StageSkipped(f"stroke model {name!r} is not implemented")
+    try:
+        model, ckpt = load_classifier(registry.weights_path(cfg, name), ctx.device)
+    except StageSkipped as exc:
+        if name == registry.DEFAULT_ALGORITHM:
+            raise
+        raise StageSkipped(f"{exc} ({registry.LABELS[name]})") from exc
     # The model was trained on a fixed window and feature layout: take both from the checkpoint.
     window = int(ckpt.get("window_frames", cfg.get("window_frames", 32)))
     if "use_trajectory" in ckpt:
@@ -64,16 +96,15 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         use_traj = int(ckpt["in_features"]) > POSE_FEATURES
     else:
         use_traj = cfg.get("use_trajectory", True)
+    pose_norm = ckpt.get("pose_norm", "bbox_height")
     classes = ckpt.get("classes", list(STROKE_CLASSES))
     x = np.stack(
-        [build_window(record, h.frame, h.player_attr, window, use_traj) for h in record.hits]
+        [
+            build_window(record, h.frame, h.player_attr, window, use_traj, pose_norm)
+            for h in record.hits
+        ]
     )
-
-    import torch
-
-    with torch.inference_mode():
-        logits = model(torch.from_numpy(np.transpose(x, (0, 2, 1)).copy()).to(ctx.device))
-    probs = softmax(logits.float().cpu().numpy())
+    probs = predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device)
     for hit, p in zip(record.hits, probs, strict=True):
         best = int(p.argmax())
         hit.stroke = classes[best]

@@ -1,16 +1,21 @@
-"""Train the 1D CNN stroke classifier (T3.8, T3.9).
+"""Train a stroke classifier: 1D CNN, LSTM or Random Forest (T3.8, T3.9, T11.4-T11.6).
 
-Usage: python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
+Usage: python scripts/train_stroke_classifier.py [--algorithm cnn|lstm|rf] [--config FILE]
                 [--pose-only] [--seed 42 | --seeds 1,2,3] [--epochs N]
-                [--train m01,m02 --val m03]
+                [--splits FILE | --train m01,m02 --val m03]
 
-Reads data/features/<match_id>.npz and the match split (data.splits). For each seed, saves
-the best checkpoint on val macro-F1 as {state_dict, in_features, window_frames, classes,
-config, use_trajectory} to <checkpoint>_seed<seed>.pt, and per-epoch + test metrics to
-<metrics>_seed<seed>.json ("_pose_only" before "_seed" for the ablation). The seed with the
-best val macro-F1 is also copied to <checkpoint>.pt, the file the pipeline loads.
-scripts/make_figures.py turns the metrics files into docs/results/strokes.md (mean +- std
-over seeds, full vs pose-only).
+Without --config, configs/stroke_<algorithm>.yaml is used. Reads data/features/<id>.npz and
+the split file (data.splits). For each seed, saves the best model on val macro-F1 to
+<checkpoint>_seed<seed><ext>, and per-epoch + test metrics to <metrics>_seed<seed>.json
+("_pose_only" before "_seed" for the ablation). The seed with the best val macro-F1 is also
+copied to <checkpoint><ext>, the file the pipeline loads.
+
+- cnn, lstm: a torch checkpoint {state_dict, kind, in_features, window_frames, classes,
+  config, use_trajectory, pose_norm}.
+- rf: scikit-learn trains the forest on summary features (strokes/rf.py); it is saved as
+  plain arrays in an .npz file, which inference reads without scikit-learn.
+
+scripts/make_figures.py turns the metrics files into docs/results/strokes.md.
 """
 
 from __future__ import annotations
@@ -36,7 +41,12 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def predict(model, dataset, batch_size: int, device: str) -> np.ndarray:
+def model_input(xb, kind: str):
+    """Datasets yield (batch, features, time); the LSTM wants (batch, time, features)."""
+    return xb.transpose(1, 2) if kind == "lstm" else xb
+
+
+def predict(model, dataset, batch_size: int, device: str, kind: str = "cnn") -> np.ndarray:
     import torch
 
     model.eval()
@@ -45,13 +55,94 @@ def predict(model, dataset, batch_size: int, device: str) -> np.ndarray:
         for start in range(0, len(dataset), batch_size):
             stop = min(start + batch_size, len(dataset))
             xb = np.stack([dataset[i][0] for i in range(start, stop)])
-            logits = model(torch.from_numpy(xb).to(device))
+            logits = model(model_input(torch.from_numpy(xb).to(device), kind))
             preds.append(logits.argmax(dim=1).cpu().numpy())
     return np.concatenate(preds) if preds else np.zeros(0, int)
 
 
-def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: str) -> dict:
-    """Train with early stopping on val macro-F1; returns metrics plus a "checkpoint" dict."""
+def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajectory: bool) -> dict:
+    """What inference needs to rebuild the feature window a model was trained on."""
+    return {
+        "kind": kind,
+        "in_features": train_ds.in_features,
+        "window_frames": int(train_ds.x.shape[1]),
+        "classes": classes,
+        "use_trajectory": use_trajectory,
+        "pose_norm": cfg["data"].get("pose_norm", "bbox_height"),
+    }
+
+
+def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dict:
+    """Fit a Random Forest on summary features; "checkpoint" is a strokes.rf.Forest."""
+    try:
+        from sklearn.ensemble import RandomForestClassifier
+    except ImportError as exc:
+        raise SystemExit("scikit-learn is needed to train the Random Forest") from exc
+
+    from shuttlesense.strokes.dataset import StrokeDataset
+    from shuttlesense.strokes.features import flip_window
+    from shuttlesense.strokes.metrics import classification_report
+    from shuttlesense.strokes.rf import Forest, summary_features
+
+    classes = list(cfg["data"]["classes"])
+    features_dir = BACKEND_DIR / cfg["data"]["features_dir"]
+    mcfg = cfg.get("model", {})
+    train_ds = StrokeDataset(features_dir, splits["train"], use_trajectory)
+    val_ds = StrokeDataset(features_dir, splits["val"], use_trajectory)
+    if len(train_ds) == 0 or len(val_ds) == 0:
+        raise SystemExit("empty train or val split: check data/features and the split file")
+    x, y = train_ds.x, train_ds.y
+    if cfg.get("train", {}).get("flip_augment", True):  # mirrored copies, as the CNN sees
+        x = np.concatenate([x, np.stack([flip_window(w, use_trajectory) for w in x])])
+        y = np.concatenate([y, y])
+    model = RandomForestClassifier(
+        n_estimators=mcfg.get("trees", 200),
+        max_depth=mcfg.get("max_depth", 18),
+        min_samples_leaf=mcfg.get("min_samples_leaf", 3),
+        max_features=mcfg.get("max_features", "sqrt"),
+        class_weight="balanced_subsample" if mcfg.get("class_weighting", True) else None,
+        n_jobs=-1,
+        random_state=seed,
+    )
+    model.fit(summary_features(x), y)
+    meta = checkpoint_meta(cfg, "rf", train_ds, classes, use_trajectory)
+    meta["config"] = {"model": mcfg}
+    forest = Forest.from_sklearn(model, meta)
+    val_pred = forest.predict_proba(summary_features(val_ds.x)).argmax(1)
+    val = classification_report(val_ds.y, val_pred, classes)
+    print(json.dumps({"val_macro_f1": val["macro_f1"], "val_accuracy": val["accuracy"]}))
+    result: dict = {
+        "seed": seed,
+        "algorithm": "rf",
+        "use_trajectory": use_trajectory,
+        "history": [],
+        "best_val_macro_f1": val["macro_f1"],
+    }
+    if splits.get("test"):
+        test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
+        if len(test_ds):
+            preds = forest.predict_proba(summary_features(test_ds.x)).argmax(1)
+            result["test"] = classification_report(test_ds.y, preds, classes)
+    result["checkpoint"] = forest
+    return result
+
+
+def train(
+    cfg: dict,
+    splits: dict,
+    *,
+    use_trajectory: bool,
+    seed: int,
+    device: str,
+    kind: str | None = None,
+) -> dict:
+    """Train with early stopping on val macro-F1; returns metrics plus a "checkpoint".
+
+    kind is "cnn", "lstm" or "rf" (default: the config's `algorithm`, else "cnn").
+    """
+    kind = kind or cfg.get("algorithm", "cnn")
+    if kind == "rf":
+        return train_rf(cfg, splits, use_trajectory=use_trajectory, seed=seed)
     import torch
     from torch.utils.data import DataLoader
 
@@ -70,7 +161,7 @@ def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: s
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise SystemExit("empty train or val split: check data/features and the split file")
 
-    model = build_from_config(train_ds.in_features, cfg.get("model", {}), len(classes))
+    model = build_from_config(train_ds.in_features, cfg.get("model", {}), len(classes), kind)
     model = model.to(device)
     weights = None
     if tcfg.get("class_weighting") == "inverse_frequency":
@@ -92,12 +183,14 @@ def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: s
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
-            loss = loss_fn(model(xb), yb)
+            loss = loss_fn(model(model_input(xb, kind)), yb)
             loss.backward()
+            if tcfg.get("grad_clip"):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), tcfg["grad_clip"])
             opt.step()
             total += float(loss.detach()) * len(yb)
         sched.step()
-        val = classification_report(val_ds.y, predict(model, val_ds, 512, device), classes)
+        val = classification_report(val_ds.y, predict(model, val_ds, 512, device, kind), classes)
         row = {
             "epoch": epoch,
             "loss": total / len(train_ds),
@@ -117,6 +210,7 @@ def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: s
     model.load_state_dict(best_state)
     result: dict = {
         "seed": seed,
+        "algorithm": kind,
         "use_trajectory": use_trajectory,
         "history": history,
         "best_val_macro_f1": best_f1,
@@ -124,17 +218,24 @@ def train(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int, device: s
     if splits.get("test"):
         test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
         if len(test_ds):
-            preds = predict(model, test_ds, 512, device)
+            preds = predict(model, test_ds, 512, device, kind)
             result["test"] = classification_report(test_ds.y, preds, classes)
     result["checkpoint"] = {
         "state_dict": best_state,
-        "in_features": train_ds.in_features,
-        "window_frames": int(train_ds.x.shape[1]),
-        "classes": classes,
         "config": cfg,
-        "use_trajectory": use_trajectory,
+        **checkpoint_meta(cfg, kind, train_ds, classes, use_trajectory),
     }
     return result
+
+
+def save_checkpoint(checkpoint, path: Path) -> None:
+    """A torch dict goes through torch.save; a Forest writes its own .npz."""
+    if hasattr(checkpoint, "save"):
+        checkpoint.save(path)
+        return
+    import torch
+
+    torch.save(checkpoint, path)
 
 
 def _ids(text: str | None) -> list[str]:
@@ -143,7 +244,9 @@ def _ids(text: str | None) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=BACKEND_DIR / "configs" / "stroke_cnn.yaml")
+    parser.add_argument("--algorithm", choices=["cnn", "lstm", "rf"], default=None)
+    parser.add_argument("--config", type=Path, default=None, help="default: stroke_<algo>.yaml")
+    parser.add_argument("--splits", type=Path, help="split file (overrides data.splits)")
     parser.add_argument("--pose-only", action="store_true", help="ablation: drop shuttle features")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seeds", help="comma-separated seeds, one run each (T3.9: 3 seeds)")
@@ -154,32 +257,40 @@ def main() -> None:
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     args = parser.parse_args()
 
-    import torch
-
-    from shuttlesense.config import detect_device
-
-    cfg = load_config(args.config)
+    config_path = args.config
+    if config_path is None:
+        config_path = BACKEND_DIR / "configs" / f"stroke_{args.algorithm or 'cnn'}.yaml"
+    cfg = load_config(config_path)
+    kind = args.algorithm or cfg.get("algorithm", "cnn")
+    cfg["algorithm"] = kind
     if args.epochs:
-        cfg["train"]["epochs"] = args.epochs
+        cfg.setdefault("train", {})["epochs"] = args.epochs
     if args.train:
         splits = {"train": _ids(args.train), "val": _ids(args.val), "test": _ids(args.test)}
     else:
-        splits = json.loads((BACKEND_DIR / cfg["data"]["splits"]).read_text(encoding="utf-8"))
+        split_file = args.splits or BACKEND_DIR / cfg["data"]["splits"]
+        splits = json.loads(Path(split_file).read_text(encoding="utf-8"))
     use_trajectory = cfg["data"].get("use_trajectory", True) and not args.pose_only
     if args.seeds:
         seeds = [int(s) for s in args.seeds.split(",") if s]
     else:
         seeds = [args.seed if args.seed is not None else cfg.get("seed", 42)]
-    device = detect_device(args.device)
+    device = "cpu"
+    if kind != "rf":
+        from shuttlesense.config import detect_device
+
+        device = detect_device(args.device)
     suffix = "" if use_trajectory else "_pose_only"
     ckpt_base = BACKEND_DIR / cfg["output"]["checkpoint"]
     metrics_base = BACKEND_DIR / cfg["output"]["metrics"]
     best_f1, best_ckpt = -1.0, None
     for seed in seeds:
-        result = train(cfg, splits, use_trajectory=use_trajectory, seed=seed, device=device)
+        result = train(
+            cfg, splits, use_trajectory=use_trajectory, seed=seed, device=device, kind=kind
+        )
         ckpt = output_path(ckpt_base, suffix, seed)
         ckpt.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(result.pop("checkpoint"), ckpt)
+        save_checkpoint(result.pop("checkpoint"), ckpt)
         metrics = output_path(metrics_base, suffix, seed)
         metrics.parent.mkdir(parents=True, exist_ok=True)
         metrics.write_text(json.dumps(result, indent=2), encoding="utf-8")

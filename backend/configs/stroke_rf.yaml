@@ -1,0 +1,26 @@
+# Random Forest stroke classifier (T11.5, T11.6). Used by scripts/train_stroke_classifier.py.
+# scikit-learn trains it; the saved .npz holds plain arrays that inference reads with NumPy.
+
+seed: 42
+algorithm: rf
+
+data:
+  features_dir: data/features
+  splits: configs/splits_bst.json   # see stroke_cnn.yaml
+  pose_norm: bbox_diag          # how the features were built; stored in the checkpoint
+  use_trajectory: true          # false for the pose-only ablation
+  classes: [smash, clear, drop, net_shot, lift, serve]
+
+model:
+  trees: 200
+  max_depth: 18                 # depth and leaf size keep the saved file small
+  min_samples_leaf: 3
+  max_features: sqrt
+  class_weighting: true
+
+train:
+  flip_augment: true            # add a mirrored copy of every window
+
+output:
+  checkpoint: weights/strokes/stroke_rf.npz
+  metrics: outputs/stroke_rf_metrics.json

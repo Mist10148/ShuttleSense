@@ -1,0 +1,30 @@
+# LSTM stroke classifier (T11.4, T11.6). Used by scripts/train_stroke_classifier.py.
+
+seed: 42
+algorithm: lstm
+
+data:
+  features_dir: data/features
+  splits: configs/splits_bst.json   # see stroke_cnn.yaml
+  pose_norm: bbox_diag          # how the features were built; stored in the checkpoint
+  use_trajectory: true          # false for the pose-only ablation
+  classes: [smash, clear, drop, net_shot, lift, serve]
+
+model:
+  hidden: 128
+  layers: 2
+  bidirectional: true
+  dropout: 0.3
+
+train:
+  epochs: 40
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  class_weighting: inverse_frequency
+  early_stopping_patience: 8
+
+output:
+  checkpoint: weights/strokes/stroke_lstm.pt
+  metrics: outputs/stroke_lstm_metrics.json

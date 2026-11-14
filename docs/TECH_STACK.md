@@ -62,8 +62,6 @@ Platform notes:
 | Vision | opencv-python-headless | 5.0.0.93 | Apache-2.0 | Video IO, drawing overlays, homography; headless so it installs on servers/Colab |
 | Tables | pandas | 3.1.0 | BSD-3 | ShuttleSet CSVs, exports |
 | Config | PyYAML | 6.0.3 | MIT | `configs/*.yaml` |
-| Classical ML | scikit-learn | 1.9.1 | BSD-3 | Random Forest stroke model (D28, D31); imported inside functions |
-| Model files | joblib | 1.6.0 | BSD-3 | Saves and loads the Random Forest; the file's SHA-256 is checked first (D30) |
 
 ### Machine learning (requirements/ml.txt — GPU host and Colab only)
 
@@ -77,6 +75,7 @@ Platform notes:
 | Numerics | SciPy | 1.18.1 | BSD-3 | Pulled in by the ML stack (`requirements/ml.txt`); ShuttleSense's own code does not import it (gap filling and smoothing are NumPy, see D9) |
 | Weights hosting | huggingface-hub | 2.3.0 | Apache-2.0 | `scripts/download_weights.py` pulls versioned weights |
 | Progress | tqdm | 4.70.1 | MIT/MPL-2.0 | Progress bars in scripts |
+| Classical ML | scikit-learn | 1.9.1 | BSD-3 | Trains the Random Forest stroke model (D28, D31); also in `dev.txt` so its tests run in CI. Inference reads the saved tree arrays with NumPy and does not import it |
 
 **Rejected:** Ultralytics YOLO / YOLO-pose (AGPL-3.0, would force the whole repo to AGPL); MediaPipe Pose (single-person, needs a separate detector and per-crop calls; kept as a documented alternative); Gradio/Streamlit (replaced by the Flutter app).
 
