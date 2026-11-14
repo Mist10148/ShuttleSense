@@ -210,7 +210,7 @@ def test_live_recovery_decisions_and_saved_replay(tmp_path: Path) -> None:
             assert not frame.shuttle.visible and frame.shuttle_speed_kmh is None
         assert record.line_calls[call["id"]].effective_call == "in"
         digest = build_digest(record)
-        assert f"Final score {corrected['near']}-{corrected['far']}" in digest.text
+        assert f"Current game 1 score {corrected['near']}-{corrected['far']}" in digest.text
         playback = client.get(f"/jobs/{job['id']}/video")
         assert playback.status_code == 200
         replay = tmp_path / "replay.mp4"
