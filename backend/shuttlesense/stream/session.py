@@ -347,6 +347,11 @@ class LiveSession:
                 self._writer.release()
                 self._writer = None
             record = self.analyzer.finalize()
+            from shuttlesense.courtside import sync_interval
+
+            timer = sync_interval(record)
+            if timer and timer.status == "running":
+                timer.status, timer.deadline = "paused", None
             record.source_name = self.request.name or "live session"
             return record
 

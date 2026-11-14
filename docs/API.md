@@ -278,3 +278,46 @@ Cancels a queued/running job or deletes a finished job's outputs. `204`.
 - Poll `GET /jobs/{id}` every 1 s while `running`, every 3 s while `queued`; stop on `done`, `failed` or `cancelled`.
 - Upload timeout: none (progress-driven); other requests: 15 s connect, 30 s receive.
 - On a network error during polling, retry with back-off up to 30 s, then show "Lost connection to server" with a retry button. The job keeps running on the server.
+
+
+## Courtside depth (record 1.6)
+
+`started.courtside_depth` enables goals, decision history and the interval timer.
+`started.decision_dedup` enables exactly-once application of identified control commands
+within the retained live session (including reconnects, not server restarts).
+Send a stable `client_id` (1–128 characters) and increasing `decision_id` with each
+command. Retry a lost acknowledgment with the **same complete command**. Reusing that
+ID with a different payload returns `decision_conflict`; another client has its own
+namespace. Receipts are retained until the session ends, capped at 10,000; further
+identified commands return `command_limit`, so stop and save. Unidentified legacy
+commands retain the old behavior. A duplicate success returns the current snapshot,
+not an old score. Errors retain their original outcome.
+
+`started` and referee `score` replies include `decision_log`, `interval_state` and
+`practice_goals`. Goal/timer replies are also acknowledged `score` events. The client
+applies the resumed snapshot and resolves its pending command before enabling controls.
+
+| Command | Payload | Behavior |
+| --- | --- | --- |
+| `interval` | `action`: `start`, `pause`, `resume`, `reset`, `end` | Only while the score offers an interval; invalid transitions return `bad_request` |
+| `goal` | `goal`: PracticeGoal | Replace the goal for this player filter; invalid player/rally/moment returns `bad_request` |
+
+Timers start explicitly. Reset returns to ready, End dismisses the active clock, and
+expiration never changes the score. Snapshot remaining time is server-owned; the app
+counts down locally between acknowledgments. Undoing an interval's scoring transition
+cancels it. A running timer is paused when its session is saved.
+
+### `PUT /jobs/{job_id}/practice-goal`
+
+Authenticated, serialized under the job edit lock. Body is a PracticeGoal:
+`text` (trimmed, 1–240 characters), `player` (null/Both, near, far, or doubles partner),
+`source` (`personal` default or `cue`), optional `rally_index` and `moment`, and
+`completed` (false default). Completion is self-reported. A moment must reference a
+recorded frame; its time is normalized from the frame and fps. Partner filters require
+a doubles job. Returns the complete updated ClipRecord, 422 for invalid goals, 409
+while a job is active, and 404 for a missing job. A failed render with a saved record
+can still update its goals. Existing goals, decision history
+and chat survive re-rendering. `summary.json` includes `coaching_recap` and `decision_log`.
+
+A session with user decisions/goals but no decodable camera frames keeps a record-only
+History entry with an explicit missing-video error; it does not fabricate footage.

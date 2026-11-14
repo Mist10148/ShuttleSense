@@ -284,3 +284,23 @@ backend/data/
 Feature window per hit: `T = 30` frames centered on the hit frame (`extract_features.py --window`). Per frame `F` = 39: the hitter's 17 keypoints × (x, y), centred on the player's box centre and divided by the box diagonal (`pose_norm: bbox_diag`, the rule of the BST features; `bbox_height` is the older rule), plus the shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features. Every checkpoint stores its `window_frames`, `pose_norm` and `use_trajectory`, and inference builds the window from them, so models trained with either rule keep working.
 
 All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM as `[T, F]`, and the Random Forest reduces it to one row of summary values (`strokes/rf.py`: per-value mean, standard deviation, minimum, maximum and value at the hit; wrist and elbow speed; elbow, shoulder and knee angles; shuttle steps before and after the hit).
+
+
+## Schema v1.6 (courtside depth)
+
+All additions are optional; 1.0–1.5 records migrate without invented history.
+
+- `decision_log[]`: stable sequential `id`, `kind`, UTC `at`, `game`, optional
+  `rally_index` and `frame`, reason/detail, resulting near/far `score`, `undone`, and
+  optional `undoes` pointing to the decision an Undo took back. Existing scoring
+  corrections/overrides remain the scoring source of truth. History is additive.
+- `interval_state`: interval `key`, `duration_s`, `remaining_s`, status
+  (`ready|running|paused|complete|ended`), optional UTC `deadline`. An interval is tied
+  to its game/score transition; it cannot score or start play.
+- `practice_goals[]`: one goal per player filter, `text`, `source` (`personal|cue`),
+  optional rally and Moment, and self-reported `completed`. This user-authored list
+  sits outside derived `coaching`, so recomputing notes cannot erase goals.
+
+Python models, Dart models, schema/OpenAPI snapshots and both golden fixtures use 1.6.
+Derived JSON exports include goals and a deterministic recap of match result, stroke
+counts and the existing evidence-linked top fixes. No goal improvement is inferred.

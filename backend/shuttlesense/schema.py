@@ -1,4 +1,4 @@
-"""Clip record schema v1.4 — the shared per-clip data format.
+"""Clip record schema v1.6 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.5"
+SCHEMA_VERSION = "1.6"
 
 PlayerSide = Literal["near", "far"]
 # v1.5: why a referee awarded a point or cleared a rally (a let replays it).
@@ -297,6 +297,37 @@ class Summary(BaseModel):
     per_player: dict[PlayerSide | PlayerId, PlayerSummary] = Field(default_factory=dict)
 
 
+class DecisionEntry(BaseModel):
+    id: int
+    kind: str
+    at: datetime
+    game: int
+    rally_index: int | None = None
+    frame: int | None = None
+    reason: str | None = None
+    detail: str
+    score: ScorePair
+    undone: bool = False
+    undoes: int | None = None
+
+
+class IntervalState(BaseModel):
+    key: str
+    duration_s: int
+    remaining_s: float
+    status: Literal["ready", "running", "paused", "complete", "ended"] = "ready"
+    deadline: datetime | None = None
+
+
+class PracticeGoal(BaseModel):
+    player: PlayerSide | PlayerId | None = None
+    text: str = Field(min_length=1, max_length=240)
+    source: Literal["personal", "cue"] = "personal"
+    rally_index: int | None = Field(default=None, ge=0)
+    moment: Moment | None = None
+    completed: bool = False
+
+
 class ClipRecord(BaseModel):
     schema_version: str = SCHEMA_VERSION
     clip_id: str
@@ -319,6 +350,9 @@ class ClipRecord(BaseModel):
     # v1.4: the stroke model that labelled the hits ("cnn", "lstm" or "rf", D28); None when
     # no model ran.
     stroke_model: StrokeModel | None = None
+    decision_log: list[DecisionEntry] = Field(default_factory=list, exclude_if=lambda v: not v)
+    interval_state: IntervalState | None = _omit_none()
+    practice_goals: list[PracticeGoal] = Field(default_factory=list, exclude_if=lambda v: not v)
 
 
 def is_doubles(record: ClipRecord) -> bool:

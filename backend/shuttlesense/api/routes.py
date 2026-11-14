@@ -47,6 +47,7 @@ from shuttlesense.api.models import (
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.court import check_court_area, validate_corners
+from shuttlesense.courtside import log_decision, set_goal
 from shuttlesense.feedback import build_coaching
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.referee import (
@@ -69,6 +70,7 @@ from shuttlesense.schema import (
     ChatMessage,
     ClipRecord,
     GameService,
+    PracticeGoal,
     ScoreCorrection,
     load_record,
     migrate,
@@ -400,6 +402,7 @@ def correct_score(
         apply_corrections(record, corrections, job.start_score)
         if changes_finished_match(before, record.score):
             raise HTTPException(status_code=409, detail="the match is already won")
+        log_decision(record, {"type": "correct", **body.model_dump()})
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
@@ -447,6 +450,15 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
         apply_corrections(record, [*record.score.corrections, award], job.start_score)
         if changes_finished_match(before, record.score):
             raise HTTPException(status_code=409, detail="the match is already won")
+        log_decision(
+            record,
+            {
+                "type": "award",
+                "frame": frame,
+                "_game": before.game,
+                **body.model_dump(exclude_none=True),
+            },
+        )
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
@@ -472,6 +484,9 @@ def concede_match(
                                   winner_after=body.winner, at=utcnow(), kind="concede",
                                   frame=frame)  # fmt: skip
         apply_corrections(record, [*record.score.corrections, concede], job.start_score)
+        log_decision(
+            record, {"type": "concede", "frame": frame, **body.model_dump(exclude_none=True)}
+        )
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
@@ -513,6 +528,7 @@ def undo_score(job_id: str, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
         if remaining is None:
             raise HTTPException(status_code=404, detail="no score change to undo")
         save_overrides(job_dir, remaining)
+        log_decision(record, {"type": "undo"})
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies, line_calls=record.line_calls)
 
@@ -540,6 +556,7 @@ def override_line_call(
         apply_user_changes(record, job_dir, job.start_score)
         record.summary = build_summary(record)
         record.coaching = build_coaching(record, _feedback_config(jobs))
+        log_decision(record, {"type": "override", "line_call_id": call_id, "call": body.call})
         write_exports(record, job_dir)
     return LineCallUpdate(line_calls=record.line_calls, score=record.score, rallies=record.rallies)
 
@@ -634,3 +651,21 @@ def delete_job(job_id: str, jobs: JobsDep) -> Response:
     if not jobs.cancel_or_delete(job_id):
         raise HTTPException(status_code=404, detail="job not found")
     return Response(status_code=204)
+
+
+@router.put("/jobs/{job_id}/practice-goal", response_model=ClipRecord)
+def update_practice_goal(
+    job_id: str, body: PracticeGoal, storage: StorageDep, jobs: JobsDep
+) -> ClipRecord:
+    path = _output_or_404(storage, jobs, job_id, "record")
+    with jobs.job_lock(job_id):
+        job = _job_or_404(jobs, job_id)
+        if job.status not in ("done", "failed"):
+            raise HTTPException(status_code=409, detail="wait until the job has finished")
+        record = load_record(path.read_text(encoding="utf-8"))
+        try:
+            set_goal(record, body, doubles=job.court == "doubles")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        write_exports(record, storage.job_dir(job_id))
+        return record

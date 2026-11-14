@@ -178,15 +178,22 @@ def keep_chat(record: ClipRecord, out_dir: Path) -> None:
     from shuttlesense.schema import load_record
 
     path = out_dir / "record.json"
-    if record.chat is not None or not path.exists():
+    if not path.exists():
         return
     # An unreadable old record has no chat worth keeping.
     with contextlib.suppress(OSError, ValueError):
-        record.chat = load_record(path.read_text(encoding="utf-8")).chat
+        previous = load_record(path.read_text(encoding="utf-8"))
+        if record.chat is None:
+            record.chat = previous.chat
+        record.practice_goals = previous.practice_goals
+        record.decision_log = previous.decision_log
+        record.interval_state = previous.interval_state
 
 
 def write_exports(record: ClipRecord, out_dir: Path) -> None:
     """Write record.json, summary.json, hits.csv and rallies.csv to out_dir."""
+    from shuttlesense.courtside import coaching_recap
+
     out_dir.mkdir(parents=True, exist_ok=True)
     atomic_write_text(out_dir / "record.json", record.model_dump_json())
 
@@ -199,6 +206,8 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
         "rallies": [r.model_dump() for r in record.rallies],
         "rally_stats": stats,
         "match": match_stats(record),
+        "coaching_recap": coaching_recap(record),
+        "decision_log": [e.model_dump(mode="json") for e in record.decision_log],
     }
     atomic_write_text(out_dir / "summary.json", json.dumps(summary, indent=2))
 

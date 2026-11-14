@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'json.dart';
+import 'courtside.dart';
+export 'courtside.dart';
 
 typedef CourtPoint = ({double x, double y});
 
@@ -35,6 +37,9 @@ class ClipRecord {
     this.chat = const [],
     this.court,
     this.strokeModel,
+    this.decisionLog = const [],
+    this.practiceGoals = const [],
+    this.intervalState,
   });
 
   final String schemaVersion;
@@ -63,6 +68,9 @@ class ClipRecord {
 
   /// The stroke model that named the hits (cnn, lstm, rf; clip record 1.4), if any ran.
   final String? strokeModel;
+  final List<DecisionEntry> decisionLog;
+  final List<PracticeGoal> practiceGoals;
+  final IntervalState? intervalState;
 
   bool get isLive => mode == 'live';
 
@@ -189,6 +197,9 @@ class ClipRecord {
     chat: chat ?? this.chat,
     court: court,
     strokeModel: strokeModel,
+    decisionLog: decisionLog,
+    practiceGoals: practiceGoals,
+    intervalState: intervalState,
   );
 
   factory ClipRecord.fromJson(Json j) {
@@ -214,6 +225,11 @@ class ClipRecord {
       coaching: j['coaching'] == null ? null : Coaching.fromJson(j['coaching'] as Json),
       chat: asList((j['chat'] as Json?)?['messages']).map(ChatMessage.fromJson).toList(),
       strokeModel: j['stroke_model'] as String?,
+      decisionLog: asList(j['decision_log']).map(DecisionEntry.fromJson).toList(),
+      practiceGoals: asList(j['practice_goals']).map(PracticeGoal.fromJson).toList(),
+      intervalState: j['interval_state'] == null
+          ? null
+          : IntervalState.fromJson(j['interval_state'] as Json),
     );
   }
 }

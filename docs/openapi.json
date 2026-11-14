@@ -15,6 +15,54 @@
         "title": "Body_upload_video_videos_post",
         "type": "object"
       },
+      "Chat": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "title": "Chat",
+        "type": "object"
+      },
+      "ChatMessage": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Moment"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text",
+          "at"
+        ],
+        "title": "ChatMessage",
+        "type": "object"
+      },
       "ChatRequest": {
         "description": "POST /jobs/{id}/chat.",
         "properties": {
@@ -29,6 +77,607 @@
           "message"
         ],
         "title": "ChatRequest",
+        "type": "object"
+      },
+      "ClipRecord": {
+        "properties": {
+          "chat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Chat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "coaching": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Coaching"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "court": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Court"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision_log": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionEntry"
+            },
+            "title": "Decision Log",
+            "type": "array"
+          },
+          "fps": {
+            "title": "Fps",
+            "type": "number"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/Frame"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "interval_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line_calls": {
+            "items": {
+              "$ref": "#/components/schemas/LineCall"
+            },
+            "title": "Line Calls",
+            "type": "array"
+          },
+          "mode": {
+            "default": "upload",
+            "enum": [
+              "upload",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "num_frames": {
+            "title": "Num Frames",
+            "type": "integer"
+          },
+          "practice_goals": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeGoal"
+            },
+            "title": "Practice Goals",
+            "type": "array"
+          },
+          "rallies": {
+            "items": {
+              "$ref": "#/components/schemas/Rally"
+            },
+            "title": "Rallies",
+            "type": "array"
+          },
+          "rally_events": {
+            "items": {
+              "$ref": "#/components/schemas/RallyEvent"
+            },
+            "title": "Rally Events",
+            "type": "array"
+          },
+          "schema_version": {
+            "default": "1.6",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Score"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "stroke_model": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cnn",
+                  "lstm",
+                  "rf"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stroke Model"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Summary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clip_id",
+          "fps",
+          "width",
+          "height",
+          "num_frames"
+        ],
+        "title": "ClipRecord",
+        "type": "object"
+      },
+      "Coaching": {
+        "properties": {
+          "session_notes": {
+            "items": {
+              "$ref": "#/components/schemas/SessionNote"
+            },
+            "title": "Session Notes",
+            "type": "array"
+          },
+          "top_fixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Fixes",
+            "type": "array"
+          }
+        },
+        "title": "Coaching",
+        "type": "object"
+      },
+      "Court": {
+        "properties": {
+          "corners_px": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              }
+            ],
+            "title": "Corners Px",
+            "type": "array"
+          },
+          "court_size_m": {
+            "default": [
+              5.18,
+              13.4
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Court Size M",
+            "type": "array"
+          },
+          "homography": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Homography",
+            "type": "array"
+          }
+        },
+        "required": [
+          "corners_px",
+          "homography"
+        ],
+        "title": "Court",
+        "type": "object"
+      },
+      "CourtPositions": {
+        "properties": {
+          "far": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Far"
+          },
+          "far_2": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Far 2"
+          },
+          "near": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near"
+          },
+          "near_2": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near 2"
+          },
+          "shuttle": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shuttle"
+          }
+        },
+        "title": "CourtPositions",
+        "type": "object"
+      },
+      "DecisionEntry": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "game": {
+            "title": "Game",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "rally_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rally Index"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "score": {
+            "$ref": "#/components/schemas/ScorePair"
+          },
+          "undoes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undoes"
+          },
+          "undone": {
+            "default": false,
+            "title": "Undone",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "at",
+          "game",
+          "detail",
+          "score"
+        ],
+        "title": "DecisionEntry",
+        "type": "object"
+      },
+      "FeedbackItem": {
+        "properties": {
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "tip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tip"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "rule",
+          "passed"
+        ],
+        "title": "FeedbackItem",
+        "type": "object"
+      },
+      "Frame": {
+        "properties": {
+          "court_positions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtPositions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "players": {
+            "$ref": "#/components/schemas/Players"
+          },
+          "rally_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "in_play",
+                  "between_rallies"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rally State"
+          },
+          "shuttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Shuttle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shuttle_speed_kmh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shuttle Speed Kmh"
+          }
+        },
+        "required": [
+          "frame"
+        ],
+        "title": "Frame",
         "type": "object"
       },
       "GameService": {
@@ -188,6 +837,196 @@
           "stages"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "Hit": {
+        "properties": {
+          "class_probs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "smash",
+                    "clear",
+                    "drop",
+                    "net_shot",
+                    "lift",
+                    "serve"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Probs"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "feedback": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackItem"
+            },
+            "title": "Feedback",
+            "type": "array"
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "hitter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitter"
+          },
+          "hitter_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitter Confidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "player": {
+            "enum": [
+              "near",
+              "far"
+            ],
+            "title": "Player",
+            "type": "string"
+          },
+          "rally_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rally Index"
+          },
+          "speed_kmh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Kmh"
+          },
+          "stroke": {
+            "anyOf": [
+              {
+                "enum": [
+                  "smash",
+                  "clear",
+                  "drop",
+                  "net_shot",
+                  "lift",
+                  "serve"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stroke"
+          },
+          "time_s": {
+            "title": "Time S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "frame",
+          "time_s",
+          "player"
+        ],
+        "title": "Hit",
+        "type": "object"
+      },
+      "IntervalState": {
+        "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "duration_s": {
+            "title": "Duration S",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "remaining_s": {
+            "title": "Remaining S",
+            "type": "number"
+          },
+          "status": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "running",
+              "paused",
+              "complete",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "duration_s",
+          "remaining_s"
+        ],
+        "title": "IntervalState",
         "type": "object"
       },
       "Job": {
@@ -823,6 +1662,250 @@
         "title": "LineCallUpdate",
         "type": "object"
       },
+      "Moment": {
+        "description": "A point on the timeline the app can seek to.",
+        "properties": {
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "hit_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Id"
+          },
+          "time_s": {
+            "title": "Time S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "frame",
+          "time_s"
+        ],
+        "title": "Moment",
+        "type": "object"
+      },
+      "Player": {
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "keypoints": {
+            "items": {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Keypoints",
+            "type": "array"
+          },
+          "score": {
+            "default": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bbox"
+        ],
+        "title": "Player",
+        "type": "object"
+      },
+      "PlayerSummary": {
+        "properties": {
+          "hits": {
+            "default": 0,
+            "title": "Hits",
+            "type": "integer"
+          },
+          "peak_speed_kmh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Speed Kmh"
+          },
+          "stroke_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "smash",
+                "clear",
+                "drop",
+                "net_shot",
+                "lift",
+                "serve"
+              ]
+            },
+            "title": "Stroke Counts",
+            "type": "object"
+          }
+        },
+        "title": "PlayerSummary",
+        "type": "object"
+      },
+      "Players": {
+        "properties": {
+          "far": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Player"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "far_2": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Player"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "near": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Player"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "near_2": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Player"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "Players",
+        "type": "object"
+      },
+      "PracticeGoal": {
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "moment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Moment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "player": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player"
+          },
+          "rally_index": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rally Index"
+          },
+          "source": {
+            "default": "personal",
+            "enum": [
+              "personal",
+              "cue"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "PracticeGoal",
+        "type": "object"
+      },
       "Rally": {
         "properties": {
           "end_frame": {
@@ -934,6 +2017,52 @@
           "end_frame"
         ],
         "title": "Rally",
+        "type": "object"
+      },
+      "RallyEvent": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "rally_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rally Index"
+          },
+          "time_s": {
+            "title": "Time S",
+            "type": "number"
+          },
+          "type": {
+            "enum": [
+              "rally_start",
+              "rally_end",
+              "hit",
+              "landing",
+              "score"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "frame",
+          "time_s",
+          "type"
+        ],
+        "title": "RallyEvent",
         "type": "object"
       },
       "RenderRequest": {
@@ -1446,6 +2575,131 @@
         "title": "ScoreUpdate",
         "type": "object"
       },
+      "SessionNote": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/Moment"
+            },
+            "title": "Moments",
+            "type": "array"
+          },
+          "player": {
+            "anyOf": [
+              {
+                "enum": [
+                  "near",
+                  "far"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "near_1",
+                  "near_2",
+                  "far_1",
+                  "far_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "number"
+          },
+          "stroke": {
+            "anyOf": [
+              {
+                "enum": [
+                  "smash",
+                  "clear",
+                  "drop",
+                  "net_shot",
+                  "lift",
+                  "serve"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stroke"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "rule",
+          "text",
+          "count",
+          "total",
+          "severity"
+        ],
+        "title": "SessionNote",
+        "type": "object"
+      },
+      "Shuttle": {
+        "properties": {
+          "visible": {
+            "default": 0,
+            "enum": [
+              0,
+              1
+            ],
+            "title": "Visible",
+            "type": "integer"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          }
+        },
+        "title": "Shuttle",
+        "type": "object"
+      },
       "StageState": {
         "properties": {
           "name": {
@@ -1474,6 +2728,52 @@
           "name"
         ],
         "title": "StageState",
+        "type": "object"
+      },
+      "Summary": {
+        "properties": {
+          "peak_speed_kmh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Speed Kmh"
+          },
+          "per_player": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PlayerSummary"
+            },
+            "title": "Per Player",
+            "type": "object"
+          },
+          "stroke_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "smash",
+                "clear",
+                "drop",
+                "net_shot",
+                "lift",
+                "serve"
+              ]
+            },
+            "title": "Stroke Counts",
+            "type": "object"
+          },
+          "total_hits": {
+            "default": 0,
+            "title": "Total Hits",
+            "type": "integer"
+          }
+        },
+        "title": "Summary",
         "type": "object"
       },
       "ValidationError": {
@@ -2016,6 +3316,73 @@
           }
         },
         "summary": "Override Line Call"
+      }
+    },
+    "/jobs/{job_id}/practice-goal": {
+      "put": {
+        "operationId": "update_practice_goal_jobs__job_id__practice_goal_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeGoal"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Practice Goal"
       }
     },
     "/jobs/{job_id}/rallies.csv": {

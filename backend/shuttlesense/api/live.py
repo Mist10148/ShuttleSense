@@ -27,7 +27,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from shuttlesense.api.models import Job, VideoInfoOut, utcnow
 from shuttlesense.api.storage import Storage, new_id
-from shuttlesense.schema import GameService, ScorePair
+from shuttlesense.courtside import control_interval, courtside_snapshot, log_decision, set_goal
+from shuttlesense.schema import GameService, PracticeGoal, ScorePair
 from shuttlesense.stream.analyzer import MatchOver, RallyInPlay
 from shuttlesense.stream.session import LiveSession, StartRequest
 
@@ -175,7 +176,9 @@ class LiveManager:
         from shuttlesense.render import OVERLAYS
 
         session = entry.session
-        if not session.analyzer.record.frames:  # nothing arrived, or nothing decoded
+        if not session.analyzer.record.frames and not (
+            session.analyzer.record.practice_goals or session.analyzer.record.decision_log
+        ):  # nothing arrived and no user decisions to preserve
             session.close()
             self.storage.delete_video(entry.video_id)
             return None
@@ -183,7 +186,8 @@ class LiveManager:
         source = self.storage.video_dir(entry.video_id) / "source.mp4"
         name = session.request.name or f"Live session {utcnow():%Y-%m-%d %H:%M}"
         self.storage.save_video_meta(VideoInfoOut(
-            id=entry.video_id, filename=f"{name}.mp4", size_bytes=source.stat().st_size,
+            id=entry.video_id, filename=f"{name}.mp4",
+            size_bytes=source.stat().st_size if source.exists() else 0,
             fps=record.fps, width=record.width, height=record.height,
             num_frames=record.num_frames, duration_s=round(record.num_frames / record.fps, 3),
         ))  # fmt: skip
@@ -209,6 +213,11 @@ class LiveManager:
         save_corrections(job_dir, session.analyzer.corrections)
         write_exports(record, job_dir)
         self.state.jobs.add(job)
+        if not record.frames:
+            self.state.jobs.finish_outside(
+                job.id, error="No camera frames were recorded; decisions and goals are saved."
+            )
+            return job
         threading.Thread(target=self._render, args=(job, record, source), daemon=True).start()
         return job
 
@@ -357,7 +366,7 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             "fps": session.fps, "width": session.width, "height": session.height,
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],
-            "decision_ack": True, "decision_dedup": True,
+            "decision_ack": True, "decision_dedup": True, "courtside_depth": True,
             **_snapshot(session),
         })  # fmt: skip
     except Exception:  # the client left before the session started
@@ -379,6 +388,7 @@ def _snapshot(session: LiveSession) -> dict[str, Any]:
         )
         return {
             **session.analyzer.rally_status(),
+            **courtside_snapshot(record),
             "score": record.score.model_dump(mode="json") if record.score else None,
             "rallies": dump(record.rallies),
             "line_calls": dump(record.line_calls),
@@ -485,7 +495,11 @@ async def _serve(ws: WebSocket, manager: LiveManager, entry: _Entry) -> None:
 
 def _frames(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dict]:
     with session.lock:
-        return _frames_locked(session, frames)
+        events = _frames_locked(session, frames)
+        for event in events:
+            if event["type"] == "score":
+                event.update(courtside_snapshot(session.analyzer.record))
+        return events
 
 
 def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> list[dict]:
@@ -558,7 +572,14 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
                         "decision_id": decision_id,
                     }
                 ]
+            before_score = session.analyzer.record.score
+            game = before_score.game if before_score else 1
             events = _control_locked(session, msg)
+            if not any(e["type"] == "error" for e in events):
+                log_decision(session.analyzer.record, {**msg, "_game": game})
+                for event in events:
+                    if event["type"] == "score":
+                        event.update(courtside_snapshot(session.analyzer.record))
             if identified:
                 session.command_receipts[key] = (fingerprint, deepcopy(events))
         if identified:
@@ -573,6 +594,20 @@ REASONS = (None, "let", "fault", "service_fault", "misconduct")
 
 
 def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
+    if msg.get("type") in ("interval", "goal"):
+        try:
+            record = session.analyzer.record
+            if msg["type"] == "interval":
+                control_interval(record, msg.get("action"))
+            else:
+                set_goal(
+                    record,
+                    PracticeGoal.model_validate(msg.get("goal")),
+                    doubles=session.request.court == "doubles",
+                )
+            return [{"type": "score", **_snapshot(session)}]
+        except (ValueError, TypeError) as exc:
+            return [{"type": "error", "code": "bad_request", "detail": str(exc)}]
     try:
         if (
             msg.get("type") == "override"

@@ -282,6 +282,97 @@
       "title": "CourtPositions",
       "type": "object"
     },
+    "DecisionEntry": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "game": {
+          "title": "Game",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "rally_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rally Index"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "score": {
+          "$ref": "#/$defs/ScorePair"
+        },
+        "undoes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Undoes"
+        },
+        "undone": {
+          "default": false,
+          "title": "Undone",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "at",
+        "game",
+        "detail",
+        "score"
+      ],
+      "title": "DecisionEntry",
+      "type": "object"
+    },
     "FeedbackItem": {
       "properties": {
         "passed": {
@@ -575,6 +666,54 @@
         "player"
       ],
       "title": "Hit",
+      "type": "object"
+    },
+    "IntervalState": {
+      "properties": {
+        "deadline": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deadline"
+        },
+        "duration_s": {
+          "title": "Duration S",
+          "type": "integer"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "remaining_s": {
+          "title": "Remaining S",
+          "type": "number"
+        },
+        "status": {
+          "default": "ready",
+          "enum": [
+            "ready",
+            "running",
+            "paused",
+            "complete",
+            "ended"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "duration_s",
+        "remaining_s"
+      ],
+      "title": "IntervalState",
       "type": "object"
     },
     "Landing": {
@@ -889,6 +1028,84 @@
         }
       },
       "title": "Players",
+      "type": "object"
+    },
+    "PracticeGoal": {
+      "properties": {
+        "completed": {
+          "default": false,
+          "title": "Completed",
+          "type": "boolean"
+        },
+        "moment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Moment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "player": {
+          "anyOf": [
+            {
+              "enum": [
+                "near",
+                "far"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "near_1",
+                "near_2",
+                "far_1",
+                "far_2"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Player"
+        },
+        "rally_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rally Index"
+        },
+        "source": {
+          "default": "personal",
+          "enum": [
+            "personal",
+            "cue"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "PracticeGoal",
       "type": "object"
     },
     "Rally": {
@@ -1622,6 +1839,13 @@
       ],
       "default": null
     },
+    "decision_log": {
+      "items": {
+        "$ref": "#/$defs/DecisionEntry"
+      },
+      "title": "Decision Log",
+      "type": "array"
+    },
     "fps": {
       "title": "Fps",
       "type": "number"
@@ -1644,6 +1868,17 @@
       "title": "Hits",
       "type": "array"
     },
+    "interval_state": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IntervalState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "line_calls": {
       "items": {
         "$ref": "#/$defs/LineCall"
@@ -1664,6 +1899,13 @@
       "title": "Num Frames",
       "type": "integer"
     },
+    "practice_goals": {
+      "items": {
+        "$ref": "#/$defs/PracticeGoal"
+      },
+      "title": "Practice Goals",
+      "type": "array"
+    },
     "rallies": {
       "items": {
         "$ref": "#/$defs/Rally"
@@ -1679,7 +1921,7 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "1.5",
+      "default": "1.6",
       "title": "Schema Version",
       "type": "string"
     },
