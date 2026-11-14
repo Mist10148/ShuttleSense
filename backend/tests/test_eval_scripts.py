@@ -412,11 +412,15 @@ def test_speed_report_on_the_golden_record(tmp_path: Path) -> None:
     import sys
     from unittest import mock
 
-    argv = ["speed_report.py", str(path), "--out", str(out), "--plot", str(png)]
+    # The box plot needs matplotlib (requirements/ml.txt), which CI does not install.
+    plot = importlib.util.find_spec("matplotlib") is not None
+    argv = ["speed_report.py", str(path), "--out", str(out)] + (
+        ["--plot", str(png)] if plot else []
+    )
     with mock.patch.object(sys, "argv", argv):
         speed_report.main()
     assert json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))["rows"] == rows
-    assert png.stat().st_size > 0
+    assert not plot or png.stat().st_size > 0
 
 
 def test_check_links_finds_missing_files_and_headings(tmp_path: Path) -> None:
