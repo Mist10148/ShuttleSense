@@ -1,4 +1,4 @@
-"""Clip record schema v1.3 — the shared per-clip data format.
+"""Clip record schema v1.4 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.3"
+SCHEMA_VERSION = "1.4"
 
 PlayerSide = Literal["near", "far"]
 # Doubles (v1.2, D22): one slot per person. near_1/far_1 live in the near/far fields that
@@ -27,6 +27,8 @@ RallyEventType = Literal["rally_start", "rally_end", "hit", "landing", "score"]
 ServiceCourt = Literal["right", "left"]
 
 STROKE_CLASSES: tuple[StrokeClass, ...] = ("smash", "clear", "drop", "net_shot", "lift", "serve")
+# The stroke classifiers a job can choose from (D28): 1D CNN, LSTM, Random Forest.
+StrokeModel = Literal["cnn", "lstm", "rf"]
 NUM_KEYPOINTS = 17  # COCO layout
 
 # Singles court in meters: width (sideline to sideline) x length (baseline to baseline).
@@ -306,6 +308,9 @@ class ClipRecord(BaseModel):
     rally_events: list[RallyEvent] = Field(default_factory=list)
     coaching: Coaching | None = None
     chat: Chat | None = None
+    # v1.4: the stroke model that labelled the hits ("cnn", "lstm" or "rf", D28); None when
+    # no model ran.
+    stroke_model: StrokeModel | None = None
 
 
 def is_doubles(record: ClipRecord) -> bool:
@@ -318,7 +323,8 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
 
     1.0 -> 1.1 only adds optional fields; the defaults fill them, and line calls and rally
     events are derived from the rallies so old jobs show calls in the app. 1.1 -> 1.2 adds
-    optional doubles fields only, and 1.2 -> 1.3 the optional per-game doubles service.
+    optional doubles fields only, 1.2 -> 1.3 the optional per-game doubles service, and
+    1.3 -> 1.4 the optional `stroke_model`.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:

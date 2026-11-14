@@ -39,6 +39,16 @@ def with_court(config: dict[str, Any], court: str) -> dict[str, Any]:
     return {**config, "court": court, "stages": stages}
 
 
+def with_stroke_model(config: dict[str, Any], name: str) -> dict[str, Any]:
+    """A copy of `config` whose strokes stage uses the stroke model `name` (cnn, lstm, rf; D28).
+
+    The choice sits inside stages.strokes, so the stage cache re-runs strokes, and what follows
+    it, when a job is run again with another model."""
+    stages = dict(config.get("stages") or {})
+    stages["strokes"] = {**(stages.get("strokes") or {}), "algorithm": name}
+    return {**config, "stages": stages}
+
+
 def detect_device(preferred: str | None = None) -> str:
     """'cuda' if requested/available, else 'cpu'. Torch is optional."""
     if preferred in ("cpu", "cuda"):

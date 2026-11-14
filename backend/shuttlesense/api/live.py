@@ -84,9 +84,12 @@ class LiveManager:
         return entry
 
     def _session(self, session_id: str, request: StartRequest, recording) -> LiveSession:
+        from shuttlesense.config import with_stroke_model
         from shuttlesense.stream.session import LIVE_DEFAULTS, normalized_size
 
         config = self.state.jobs.config
+        if request.stroke_model:
+            config = with_stroke_model(config, request.stroke_model)
         live = {**LIVE_DEFAULTS, **(config.get("live") or {})}
         size = normalized_size(request.width, request.height, int(live["target_height"]))
         corners = None
@@ -192,6 +195,7 @@ class LiveManager:
             best_of=session.request.best_of, first_server=session.request.first_server,
             court=session.request.court, first_server_id=session.request.first_server_id,
             first_receiver_id=session.request.first_receiver_id,
+            stroke_model=session.request.stroke_model or self.state.jobs.default_stroke_model(),
             game_service=list(record.score.game_service) if record.score else [],
             court_corners_px=list(session.corners) if session.corners else None,
             overlays=list(OVERLAYS),
@@ -272,10 +276,16 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     check_first_service(first_server, server_id, receiver_id, court)
     if server_id and first_server is None:
         first_server = server_id[:-2]
+    stroke_model = msg.get("stroke_model")
+    if stroke_model is not None:
+        from shuttlesense.strokes import registry
+
+        if stroke_model not in registry.ALGORITHMS:
+            raise ValueError("stroke_model must be cnn, lstm or rf")
     return StartRequest(
         fps=fps, width=width, height=height, corners=corners, court=court, name=name,
         start_score=score, best_of=best_of, first_server=first_server,
-        first_server_id=server_id, first_receiver_id=receiver_id,
+        first_server_id=server_id, first_receiver_id=receiver_id, stroke_model=stroke_model,
     )  # fmt: skip
 
 

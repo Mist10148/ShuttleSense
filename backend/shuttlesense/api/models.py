@@ -18,6 +18,7 @@ from shuttlesense.schema import (
     Rally,
     Score,
     ScorePair,
+    StrokeModel,
 )
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
@@ -35,6 +36,8 @@ class Health(BaseModel):
     device: str
     auth_required: bool
     stages: list[str]
+    # Stroke models whose weights and packages are installed: "cnn", "lstm", "rf" (D28).
+    stroke_models: list[str] = Field(default_factory=list)
     chat_available: bool = False  # a Claude API key is configured on this backend
     chat_max_messages: int = 0  # questions allowed per session
 
@@ -97,6 +100,9 @@ class JobCreate(BaseModel):
     # Doubles: who serves and receives the first rally (both or neither, opposite sides).
     first_server_id: PlayerId | None = None
     first_receiver_id: PlayerId | None = None
+    # Which stroke classifier labels the hits (D28). None: the server's default
+    # (`stages.strokes.algorithm` in pipeline.yaml).
+    stroke_model: StrokeModel | None = None
 
     @model_validator(mode="after")
     def _doubles_service(self) -> JobCreate:
@@ -196,4 +202,5 @@ class Job(BaseModel):
     first_receiver_id: PlayerId | None = None
     # Doubles: who serves and receives first in games 2 and 3, named after each game (D23).
     game_service: list[GameService] = Field(default_factory=list)
+    stroke_model: StrokeModel = "cnn"
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)

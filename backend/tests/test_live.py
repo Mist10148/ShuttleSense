@@ -399,6 +399,7 @@ def test_stop_without_frames_saves_nothing(tmp_path: Path) -> None:
     [
         ({"type": "hello"}, "bad_request"),
         ({**START, "fps": 0}, "bad_request"),
+        ({**START, "stroke_model": "svm"}, "bad_request"),
         ({**START, "corners": [[0, 0], [1, 1], [0, 1], [1, 0]]}, "bad_request"),
         ({**START, "corners": [[300, 200], [310, 200], [308, 190], [302, 190]]}, "bad_request"),
         ({**START, "start_score": {"near": -1, "far": 0}}, "bad_request"),
@@ -635,3 +636,12 @@ def test_fake_doubles_session_streams_four_players(tmp_path: Path) -> None:
         record = client.get(f"/jobs/{e['job_id']}/record").json()
         assert record["rallies"][0]["server_id"] == "near_1"
         assert "near_1" in record["summary"]["per_player"]
+
+
+def test_live_start_takes_a_stroke_model() -> None:
+    from shuttlesense.api.live import _start_request
+    from shuttlesense.config import with_stroke_model
+
+    assert _start_request(dict(START)).stroke_model is None  # the server's default
+    assert _start_request({**START, "stroke_model": "rf"}).stroke_model == "rf"
+    assert with_stroke_model({}, "rf") == {"stages": {"strokes": {"algorithm": "rf"}}}

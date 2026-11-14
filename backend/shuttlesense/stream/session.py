@@ -58,6 +58,7 @@ class StartRequest:
     first_server: str | None = None
     first_server_id: str | None = None  # doubles: who serves and receives first
     first_receiver_id: str | None = None
+    stroke_model: str | None = None  # cnn / lstm / rf (D28); None: the server's default
 
 
 def normalized_size(width: int, height: int, target_height: int) -> tuple[int, int]:

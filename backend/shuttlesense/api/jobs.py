@@ -248,9 +248,16 @@ class JobManager:
         with self._lock:
             return self._job_locks.setdefault(job_id, threading.Lock())
 
+    def default_stroke_model(self) -> str:
+        """The stroke model a job gets when it names none: the configured one, else the CNN."""
+        from shuttlesense.strokes import registry
+
+        name = registry.algorithm(self.config.get("stages", {}).get("strokes", {}))
+        return name if name in registry.ALGORITHMS else registry.DEFAULT_ALGORITHM
+
     def job_config(self, job: Job) -> dict[str, Any]:
         """Pipeline config plus this job's own inputs."""
-        from shuttlesense.config import court_type, with_court
+        from shuttlesense.config import court_type, with_court, with_stroke_model
 
         # A job's court is its own: a doubles line-call court in pipeline.yaml must not turn a
         # singles job into doubles. Singles configs without that setting stay as they were.
@@ -267,7 +274,7 @@ class JobManager:
         if job.game_service:
             config["match"]["game_service"] = [g.model_dump() for g in job.game_service]
         config["mode"] = job.mode
-        return config
+        return with_stroke_model(config, job.stroke_model)
 
     def add(self, job: Job) -> Job:
         """Register a job made outside the queue (a saved live session)."""

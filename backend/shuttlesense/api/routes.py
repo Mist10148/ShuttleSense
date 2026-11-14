@@ -108,6 +108,15 @@ CHAT_ANSWER_TIMEOUT_S = 300.0  # longest a streamed coach answer may hold its jo
 # Health -----------------------------------------------------------------------
 
 
+def _stroke_models(request: Request, settings: Settings) -> list[str]:
+    """Checked on each call, so weights dropped in while the server runs show up."""
+    from shuttlesense.strokes import registry
+
+    if settings.fake_pipeline:
+        return list(registry.ALGORITHMS)
+    return registry.installed_models(request.app.state.jobs.config)
+
+
 @public.get("/health", response_model=Health)
 def health(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> Health:
     return Health(
@@ -116,6 +125,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         device=request.app.state.device,
         auth_required=bool(settings.token),
         stages=request.app.state.available_stages,
+        stroke_models=_stroke_models(request, settings),
         chat_available=request.app.state.chat_client is not None,
         chat_max_messages=settings.chat_max_messages,
     )
@@ -273,6 +283,7 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         court=body.court,
         first_server_id=body.first_server_id,
         first_receiver_id=body.first_receiver_id,
+        stroke_model=body.stroke_model or jobs.default_stroke_model(),
     )
     try:
         return jobs.submit(job)

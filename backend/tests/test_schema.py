@@ -9,7 +9,7 @@ from snapshots import assert_matches_snapshot
 from shuttlesense.schema import SCHEMA_VERSION, STROKE_CLASSES, ClipRecord, load_record, migrate
 
 EXAMPLE = {
-    "schema_version": "1.3",
+    "schema_version": "1.4",
     "clip_id": "match03_rally12",
     "mode": "live",
     "source_name": "rally12.mp4",
@@ -185,7 +185,7 @@ def test_migrate_1_1_record_adds_nothing() -> None:
     old["schema_version"] = "1.1"
     old["line_calls"] = []  # 1.1 records keep the calls they have; only 1.0 derives them
     record = load_record(json.dumps(old))
-    assert record.schema_version == SCHEMA_VERSION == "1.3"
+    assert record.schema_version == SCHEMA_VERSION == "1.4"
     assert record.line_calls == []
 
 
@@ -226,3 +226,16 @@ def test_doubles_golden_record_valid() -> None:
     assert [h.hitter for h in record.hits] == ["near_1", "far_1", "near_2"]
     assert record.score.server_id == "near_1" and record.score.receiver_id == "far_2"
     assert record.rallies[0].server_id == "near_1" and record.line_calls[0].court == "doubles"
+
+
+def test_stroke_model_is_optional_and_checked() -> None:
+    """Clip record 1.4: 1.3 records load without it, and only known models are accepted."""
+    import pydantic
+
+    old = {"schema_version": "1.3", "clip_id": "c", "fps": 30, "width": 4, "height": 4,
+           "num_frames": 0}  # fmt: skip
+    record = ClipRecord.model_validate(migrate(dict(old)))
+    assert record.schema_version == "1.4" and record.stroke_model is None
+    assert ClipRecord.model_validate({**old, "stroke_model": "rf"}).stroke_model == "rf"
+    with pytest.raises(pydantic.ValidationError):
+        ClipRecord.model_validate({**old, "stroke_model": "svm"})

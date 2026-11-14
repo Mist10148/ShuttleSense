@@ -224,6 +224,7 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 | `--calibrate` | Opens a window to click the 4 court corners instead of `--corners` (needs `pip install opencv-python`) |
 | `--overlays` | Comma-separated: `trail,pose,boxes,hits,strokes,court,minimap,speed,score` (default: all) |
 | `--no-referee` | Skip the referee layer (rally state, line calls, score) |
+| `--stroke-model` | Stroke classifier: `cnn`, `lstm` or `rf` (default: `stages.strokes.algorithm` in the pipeline YAML) |
 | `--tracking-csv` | Use a TrackNetV3 `predict.py` CSV instead of running the tracker |
 | `--fake` | Return the golden record scaled to the video (no models; for app and demo testing) |
 | `--config` | Pipeline YAML to use instead of `configs/pipeline.yaml` |

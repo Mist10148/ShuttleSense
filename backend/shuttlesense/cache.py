@@ -21,7 +21,7 @@ from typing import Any
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord
 
 # Bump when OWNED changes so caches written with fewer fields miss instead of loading them.
-CACHE_FORMAT = 2
+CACHE_FORMAT = 3
 
 # stage -> (top-level record fields, per-frame fields) it writes; see ARCHITECTURE.md.
 OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
@@ -29,7 +29,7 @@ OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "pose": ((), ("players",)),
     "court": (("court",), ()),
     "hits": (("hits",), ()),
-    "strokes": (("hits",), ()),
+    "strokes": (("hits", "stroke_model"), ()),
     "feedback": (("hits",), ()),
     "analytics": (("hits", "summary"), ("court_positions", "shuttle_speed_kmh")),
     "referee": (("hits", "rallies", "score", "line_calls", "rally_events"), ("rally_state",)),

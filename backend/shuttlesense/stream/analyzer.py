@@ -229,6 +229,7 @@ class StreamAnalyzer:
                 # No classifier installed: hits stay unlabelled, as offline.
                 with contextlib.suppress(StageSkipped, FileNotFoundError, ImportError, OSError):
                     strokes.run(window, ctx)
+                    self.record.stroke_model = window.stroke_model
             feedback.run(window, ctx)
         analytics.run(window, ctx)
         try:

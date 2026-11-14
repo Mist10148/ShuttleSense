@@ -112,6 +112,12 @@ def fake_pipeline(
     )
     record.clip_id = clip_id
     record.source_name = video_path.name
+    if record.hits:  # the golden strokes stand in for the job's chosen model (D28)
+        from shuttlesense.strokes import registry
+
+        record.stroke_model = registry.algorithm(
+            (config or {}).get("stages", {}).get("strokes", {})
+        )
     record.mode = (config or {}).get("mode", "upload")
     if court_corners_px:
         from shuttlesense.court import compute_homography

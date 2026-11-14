@@ -168,6 +168,13 @@
             "title": "Status",
             "type": "string"
           },
+          "stroke_models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stroke Models",
+            "type": "array"
+          },
           "version": {
             "title": "Version",
             "type": "string"
@@ -407,6 +414,16 @@
             "title": "Status",
             "type": "string"
           },
+          "stroke_model": {
+            "default": "cnn",
+            "enum": [
+              "cnn",
+              "lstm",
+              "rf"
+            ],
+            "title": "Stroke Model",
+            "type": "string"
+          },
           "video_id": {
             "title": "Video Id",
             "type": "string"
@@ -542,6 +559,22 @@
                 "type": "null"
               }
             ]
+          },
+          "stroke_model": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cnn",
+                  "lstm",
+                  "rf"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stroke Model"
           },
           "video_id": {
             "title": "Video Id",

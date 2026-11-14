@@ -8,11 +8,11 @@ so the stage cache sees both the choice and a replaced file (cache.py).
 from __future__ import annotations
 
 import importlib.util
-from typing import Any, Literal, get_args
+from typing import Any, get_args
 
 from shuttlesense.config import BACKEND_DIR
+from shuttlesense.schema import StrokeModel
 
-StrokeModel = Literal["cnn", "lstm", "rf"]
 ALGORITHMS: tuple[StrokeModel, ...] = get_args(StrokeModel)
 DEFAULT_ALGORITHM: StrokeModel = "cnn"
 

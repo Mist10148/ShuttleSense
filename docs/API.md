@@ -43,14 +43,19 @@ Liveness and capability check used by the connect screen.
 {
   "status": "ok",
   "version": "0.1.0",
-  "schema_version": "1.3",
+  "schema_version": "1.4",
   "device": "cuda",
   "auth_required": true,
   "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"],
+  "stroke_models": ["cnn", "lstm", "rf"],
   "chat_available": true,
   "chat_max_messages": 20
 }
 ```
+
+`stroke_models` lists the stroke classifiers whose weights and packages are installed on this
+server, in menu order: `cnn` (1D CNN), `lstm` and `rf` (Random Forest). It is checked on every
+call. The app disables a model that is not listed.
 
 `stages` lists the stages whose dependencies and weights are installed on this host, so the app can grey out overlays that cannot be produced.
 
@@ -110,6 +115,7 @@ Start processing.
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 | `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
 | `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game (later games: `POST /jobs/{job_id}/score/service`). `422` if only one is given, both are on one side, the server is not on `first_server`'s side, or `court` is not `"doubles"` |
+| `stroke_model` | no | Which stroke classifier labels the hits: `"cnn"`, `"lstm"` or `"rf"` ([D28](DECISIONS.md)). Default: the server's `stages.strokes.algorithm` (`cnn` as shipped). `422` for any other value. A model that is not installed (`/health` `stroke_models`) leaves the hits unlabelled and the `strokes` stage `skipped`. Running the same video again with another model reuses the cached tracking, pose and hits |
 
 Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 
@@ -147,7 +153,7 @@ Job object, polled by the processing screen every 1 to 2 s.
 }
 ```
 
-`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of`, `first_server`, `court`, `first_server_id`, `first_receiver_id` and `game_service` (doubles slots named for later games) echo the options the job was created with, so the app can retry or re-render with the same settings.
+`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of`, `first_server`, `court`, `first_server_id`, `first_receiver_id`, `stroke_model` and `game_service` (doubles slots named for later games) echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
@@ -207,7 +213,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Message | Format | Notes |
 | --- | --- | --- |
-| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ...}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ..., "stroke_model": "cnn" \| "lstm" \| "rf" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`); `stroke_model` as in `POST /jobs` (`bad_request` for an unknown model). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |

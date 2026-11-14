@@ -45,6 +45,10 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
+## Schema v1.4 (stroke model)
+
+v1.4 (Nov 14, [D28](DECISIONS.md), [T11.7](phases/phase-11-stroke-models.md#t117)) adds one optional top-level field: `stroke_model`, the classifier that labelled `hits[].stroke` (`"cnn"`, `"lstm"` or `"rf"`), or `null` when no stroke model ran. `schema.migrate()` reads 1.0–1.3 records unchanged.
+
 ## Schema v1.3 (doubles service in every game)
 
 v1.3 (Nov 14, [D23](DECISIONS.md), [T10.3](phases/phase-10-hardening.md#t103)) adds one optional field, left out while empty: `score.game_service`, a list of `{"game": 2, "server_id": "far_2", "receiver_id": "near_1"}`. The winners of a game choose who serves and receives first in the next one, so the user names them (`POST /jobs/{id}/score/service` or the live `service` message). With a game's entry, `rallies[].server_id` / `receiver_id` and the service check cover that game too. An entry whose server is not on the side that won the previous game is ignored. `schema.migrate()` reads 1.0–1.2 records unchanged.
@@ -72,7 +76,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
 ```jsonc
 {
-  "schema_version": "1.3",
+  "schema_version": "1.4",
   "clip_id": "match03_rally12",          // unique per processed clip
   "mode": "upload",                       // v1.1: "upload" | "live" (a saved live session)
   "source_name": "rally12.mp4",          // original file name, informational
@@ -211,7 +215,9 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
       {"role": "assistant", "text": "Your elbow was bent at contact on 3 of 5 smashes [t=1.4s]...",
        "at": "2026-11-17T10:30:04Z", "citations": [{"frame": 42, "time_s": 1.4, "hit_id": 0}]}
     ]
-  }
+  },
+
+  "stroke_model": "cnn"                                        // v1.4; cnn, lstm or rf; null if no model ran
 }
 ```
 
@@ -249,7 +255,10 @@ Every speed (`*speed_kmh` in the record, `summary.json` and both CSVs) is an **e
 
 ## Training data layout (stroke classifier)
 
-Produced by `scripts/extract_clips.py` and `scripts/extract_features.py` under `backend/data/` (gitignored, shared via Google Drive):
+Two sources write the same `features/*.npz` layout under `backend/data/` (gitignored):
+
+- `scripts/import_bst_features.py` imports the pre-extracted ShuttleSet features published with BST ([D29](DECISIONS.md)) as `bst_train.npz`, `bst_val.npz` and `bst_test.npz`, split by match by BST (`configs/splits_bst.json`). The shipped CNN, LSTM and Random Forest weights were trained on these.
+- `scripts/extract_clips.py` and `scripts/extract_features.py` build them from our own match videos, one file per match, split by `configs/splits.json` ([D13](DECISIONS.md)).
 
 ```
 backend/data/
@@ -257,7 +266,10 @@ backend/data/
 ├── videos/                     # match videos (not redistributed)
 ├── clips/<match_id>/<set>_<rally>_<stroke>.mp4 + index.csv
 ├── features/<match_id>.npz     # X: [N, T, F] pose+shuttle windows, y: [N], meta
+├── features/bst_<split>.npz    # the same layout, imported from the BST features
 └── splits.json                 # {"train": [match_ids], "val": [...], "test": [...]} — split by match
 ```
 
-Feature window per hit: `T = 32` frames centered on the hit frame (`extract_features.py --window`; the checkpoint stores `window_frames` and inference uses it). Per frame `F` = hitter's 17 keypoints × (x, y) normalized to the player's bbox, plus shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features.
+Feature window per hit: `T = 30` frames centered on the hit frame (`extract_features.py --window`). Per frame `F` = 39: the hitter's 17 keypoints × (x, y), centred on the player's box centre and divided by the box diagonal (`pose_norm: bbox_diag`, the rule of the BST features; `bbox_height` is the older rule), plus the shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features. Every checkpoint stores its `window_frames`, `pose_norm` and `use_trajectory`, and inference builds the window from them, so models trained with either rule keep working.
+
+All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM as `[T, F]`, and the Random Forest reduces it to one row of summary values (`strokes/rf.py`: per-value mean, standard deviation, minimum, maximum and value at the hit; wrist and elbow speed; elbow, shoulder and knee angles; shuttle steps before and after the hit).

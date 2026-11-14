@@ -93,6 +93,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", type=Path, default=None, help="pipeline YAML")
     p.add_argument("--device", choices=["cpu", "cuda"], default=None)
     p.add_argument(
+        "--stroke-model",
+        choices=["cnn", "lstm", "rf"],
+        default=None,
+        help="stroke classifier: 1D CNN, LSTM or Random Forest (default: pipeline YAML)",
+    )
+    p.add_argument(
         "--tracking-csv", type=Path, help="use a TrackNetV3 predict.py CSV instead of the model"
     )
     p.add_argument(
@@ -113,6 +119,10 @@ def main(argv: list[str] | None = None) -> None:
         print(f"[{name:<9}] {status}")
 
     config = load_config(args.config)
+    if args.stroke_model:
+        from shuttlesense.config import with_stroke_model
+
+        config = with_stroke_model(config, args.stroke_model)
     if args.tracking_csv:
         stages = config.setdefault("stages", {})
         stages.setdefault("tracking", {})["precomputed_csv"] = str(args.tracking_csv.resolve())

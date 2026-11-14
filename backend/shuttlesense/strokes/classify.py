@@ -75,7 +75,7 @@ def predict_proba(model: Any, kind: str, x: np.ndarray, device: str) -> np.ndarr
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
-    """Fill hits[].stroke (argmax), confidence and class_probs."""
+    """Fill hits[].stroke (argmax), confidence and class_probs; note the model used."""
     if not record.hits:
         raise StageSkipped("no hits to classify")
     cfg = ctx.stage_config("strokes")
@@ -110,5 +110,6 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         hit.stroke = classes[best]
         hit.confidence = round(float(p[best]), 4)
         hit.class_probs = {c: round(float(v), 4) for c, v in zip(classes, p, strict=True)}
+    record.stroke_model = name
     ctx.progress(1.0)
     return record

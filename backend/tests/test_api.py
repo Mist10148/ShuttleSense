@@ -357,7 +357,7 @@ def test_old_record_is_migrated_when_served(tmp_path: Path, tiny_video: Path) ->
             data.pop(key, None)
         path.write_text(json.dumps(data), encoding="utf-8")
         served = client.get(f"/jobs/{job_id}/record").json()
-        assert served["schema_version"] == "1.3" and served["mode"] == "upload"
+        assert served["schema_version"] == "1.4" and served["mode"] == "upload"
         assert served["line_calls"][0]["call"] == "in"
 
 
@@ -945,3 +945,80 @@ def test_singles_jobs_have_no_service_order(tmp_path: Path, tiny_video: Path) ->
         assert wait_for(client, job["id"])["status"] == "done"
         named = {"game": 2, "server_id": "far_2", "receiver_id": "near_2"}
         assert client.post(f"/jobs/{job['id']}/score/service", json=named).status_code == 409
+
+
+def test_stroke_model_is_a_job_option(tmp_path: Path, tiny_video: Path) -> None:
+    from shuttlesense.api.models import Job
+
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        assert client.get("/health").json()["stroke_models"] == ["cnn", "lstm", "rf"]
+        vid = upload(client, tiny_video).json()["id"]
+        assert client.post("/jobs", json={"video_id": vid}).json()["stroke_model"] == "cnn"
+        job = client.post("/jobs", json={"video_id": vid, "stroke_model": "rf"}).json()
+        assert job["stroke_model"] == "rf"
+        assert wait_for(client, job["id"])["status"] == "done"
+        assert client.get(f"/jobs/{job['id']}/record").json()["stroke_model"] == "rf"
+        assert (
+            client.post("/jobs", json={"video_id": vid, "stroke_model": "svm"}).status_code == 422
+        )
+
+        jobs = client.app.state.jobs
+        config = jobs.job_config(jobs.get(job["id"]))
+        assert config["stages"]["strokes"]["algorithm"] == "rf"
+        assert jobs.config.get("stages", {}).get("strokes", {}).get("algorithm") != "rf"
+    # A job.json written before the option existed loads as a CNN job.
+    old = {"id": "a" * 32, "video_id": "b" * 32}
+    assert Job.model_validate(old).stroke_model == "cnn"
+
+
+def test_job_without_a_stroke_model_uses_the_configured_one(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    config = tmp_path / "pipeline.yaml"
+    config.write_text("stages:\n  strokes:\n    algorithm: lstm\n", encoding="utf-8")
+    with make_client(tmp_path, fake_pipeline=True, config=config) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        assert client.post("/jobs", json={"video_id": vid}).json()["stroke_model"] == "lstm"
+        job = client.post("/jobs", json={"video_id": vid, "stroke_model": "cnn"}).json()
+        assert job["stroke_model"] == "cnn"
+
+
+def test_health_lists_only_installed_stroke_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense.strokes import registry
+
+    monkeypatch.setattr(registry, "BACKEND_DIR", tmp_path)
+    with make_client(tmp_path) as client:
+        assert client.get("/health").json()["stroke_models"] == []
+        (tmp_path / "weights" / "strokes").mkdir(parents=True)
+        (tmp_path / "weights" / "strokes" / "stroke_rf.npz").write_bytes(b"x")
+        assert client.get("/health").json()["stroke_models"] == ["rf"]  # no restart needed
+
+
+def test_switching_the_stroke_model_reruns_only_strokes_onward(tmp_path: Path) -> None:
+    from shuttlesense import cache
+    from shuttlesense.config import with_stroke_model
+
+    base = {"stages": {"tracking": {"a": 1}, "strokes": {"weights": "w.pt"}}}
+    other = with_stroke_model(base, "lstm")
+    assert "algorithm" not in base["stages"]["strokes"]  # the server config is not changed
+    assert cache.key_config("tracking", base["stages"]) == cache.key_config(
+        "tracking", other["stages"]
+    )
+    assert cache.key_config("strokes", base["stages"]) != cache.key_config(
+        "strokes", other["stages"]
+    )
+
+
+def test_cli_stroke_model_flag(tmp_path: Path, tiny_video: Path) -> None:
+    import json
+
+    from shuttlesense.run import build_parser, main
+
+    main(["--video", str(tiny_video), "--out", str(tmp_path / "out"), "--fake",
+          "--stroke-model", "lstm"])  # fmt: skip
+    record = json.loads((tmp_path / "out" / "record.json").read_text(encoding="utf-8"))
+    assert record["stroke_model"] == "lstm"
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--video", "v", "--out", "o", "--stroke-model", "svm"])
