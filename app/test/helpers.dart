@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shuttlesense_app/core/notifications/job_notifier.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
@@ -54,6 +55,8 @@ Future<List<String>> pumpScreen(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(preferences),
         apiClientProvider.overrideWithValue(api ?? FakeApiClient()),
+        // The real notifier would call the notifications plugin, which tests do not have.
+        jobNotifierProvider.overrideWithValue(const NoopJobNotifier()),
         ...overrides,
       ],
       child: MaterialApp.router(

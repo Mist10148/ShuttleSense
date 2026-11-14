@@ -228,6 +228,7 @@ Future<GoRouter> pumpJobRoutes(WidgetTester tester, List<Override> overrides) as
       overrides: [
         sharedPreferencesProvider.overrideWithValue(preferences),
         apiClientProvider.overrideWithValue(FakeApiClient()),
+        jobNotifierProvider.overrideWithValue(const NoopJobNotifier()),
         ...overrides,
       ],
       child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
