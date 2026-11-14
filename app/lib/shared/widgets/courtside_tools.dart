@@ -129,14 +129,14 @@ Future<PracticeGoal?> editPracticeGoal(
   String? player,
   PracticeGoal? current,
 }) async {
-  final text = TextEditingController(text: current?.text);
-  final result = await showDialog<PracticeGoal>(
+  var text = current?.text ?? '';
+  return showDialog<PracticeGoal>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, update) => AlertDialog(
         title: Text('Practice goal · ${player == null ? 'Both' : playerLabel(player)}'),
-        content: TextField(
-          controller: text,
+        content: TextFormField(
+          initialValue: text,
           autofocus: true,
           maxLength: 240,
           maxLines: 3,
@@ -144,25 +144,20 @@ Future<PracticeGoal?> editPracticeGoal(
             labelText: 'What will you practise?',
             helperText: 'Personal goal; not a measured finding.',
           ),
-          onChanged: (_) => update(() {}),
+          onChanged: (value) => update(() => text = value),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
-            onPressed: text.text.trim().isEmpty
+            onPressed: text.trim().isEmpty
                 ? null
-                : () =>
-                      Navigator.pop(context, PracticeGoal(text: text.text.trim(), player: player)),
+                : () => Navigator.pop(context, PracticeGoal(text: text.trim(), player: player)),
             child: const Text('Save goal'),
           ),
         ],
       ),
     ),
   );
-  // The dialog route may still be animating out and using its text controller.
-  await Future<void>.delayed(const Duration(milliseconds: 300));
-  text.dispose();
-  return result;
 }
 
 class PracticeGoalCard extends StatelessWidget {

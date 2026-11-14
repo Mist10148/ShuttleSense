@@ -570,6 +570,27 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 : 'Waiting for the referee decision to be confirmed…',
           ),
         ),
+      Scoreboard(
+        record: record,
+        frameIndex: frameIndex,
+        live: true,
+        busy: !_coach && decisionBusy,
+        showHistory: false,
+        onAward: _coach ? null : controller.award,
+        onUndo: _coach ? null : controller.undo,
+        onSetService: _coach ? null : controller.setService,
+        onClearLast: _coach || lastRally?.winner == null
+            ? null
+            : () => controller.correct(lastRally!.index, null),
+        doubles: state.doubles,
+        onAwardReason: _coach || !courtside
+            ? null
+            : (side, reason) => controller.award(side, reason: reason),
+        onLet: _coach || !courtside || lastRally == null
+            ? null
+            : () => controller.correct(lastRally.index, null, reason: 'let'),
+        onConcede: _coach || !courtside ? null : controller.concede,
+      ),
       if (!_coach && pendingReviews.isNotEmpty)
         Text(
           '${pendingReviews.length} ${pendingReviews.length == 1 ? 'call' : 'calls'} awaiting review',
@@ -598,27 +619,6 @@ class _LiveViewState extends ConsumerState<_LiveView> {
           onDecide: (decision) => controller.overrideCall(call.id, decision),
           busy: decisionBusy,
         ),
-      Scoreboard(
-        record: record,
-        frameIndex: frameIndex,
-        live: true,
-        busy: !_coach && decisionBusy,
-        showHistory: false,
-        onAward: _coach ? null : controller.award,
-        onUndo: _coach ? null : controller.undo,
-        onSetService: _coach ? null : controller.setService,
-        onClearLast: _coach || lastRally?.winner == null
-            ? null
-            : () => controller.correct(lastRally!.index, null),
-        doubles: state.doubles,
-        onAwardReason: _coach || !courtside
-            ? null
-            : (side, reason) => controller.award(side, reason: reason),
-        onLet: _coach || !courtside || lastRally == null
-            ? null
-            : () => controller.correct(lastRally.index, null, reason: 'let'),
-        onConcede: _coach || !courtside ? null : controller.concede,
-      ),
     ];
     final savedGoal = state.practiceGoals.where((g) => g.player == _coachPlayer).firstOrNull;
     Future<void> editGoal() async {
