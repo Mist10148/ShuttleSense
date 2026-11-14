@@ -1,5 +1,9 @@
 # Prompt: live referee mode, line calls, coaching notes and coach chat
 
+> Historical implementation prompt. Its original scope shipped through Phases 8–12.
+> Do not rerun it as a current backlog; use [Phase 13](../phases/phase-13-courtside-depth.md)
+> and the remaining acceptance checks in the phase cards instead.
+
 Paste everything below the line into a fresh Claude Code session opened in the ShuttleSense repo.
 
 ---
