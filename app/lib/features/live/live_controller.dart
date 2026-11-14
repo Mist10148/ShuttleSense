@@ -8,6 +8,7 @@ import '../../data/models/clip_record.dart';
 import '../../data/models/job.dart';
 import '../../data/models/json.dart';
 import '../../core/config/server_config.dart';
+import '../../core/device/screen_awake.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../upload/upload_controller.dart';
 import '../../shared/widgets/match_setup_field.dart';
@@ -360,8 +361,12 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   @override
   LiveState build() {
+    // Kept from here: providers cannot be read while this one is being disposed.
+    final screen = ref.read(screenAwakeProvider);
+    _screen = screen;
     ref.onDispose(() {
       _disposed = true;
+      if (_awake) unawaited(screen.keepOn(false));
       unawaited(_teardown());
     });
     Future.microtask(openCamera);
@@ -369,8 +374,23 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   void _set(LiveState next) {
-    if (!_disposed) state = next;
+    if (_disposed) return;
+    state = next;
+    // The screen stays on from connecting to the end of the save (T12.6).
+    final awake = const {
+      LivePhase.connecting,
+      LivePhase.live,
+      LivePhase.reconnecting,
+      LivePhase.stopping,
+    }.contains(next.phase);
+    if (awake != _awake) {
+      _awake = awake;
+      unawaited(_screen?.keepOn(awake));
+    }
   }
+
+  bool _awake = false;
+  ScreenAwake? _screen;
 
   /// Ends whatever the previous attempt left running: the stream loop, a pending reconnect,
   /// the socket and the camera.

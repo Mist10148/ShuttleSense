@@ -279,6 +279,12 @@ void main() {
       );
 
       await tapText(tester, 'Stop');
+      // A session with rallies or decisions asks before saving (T12.6).
+      final confirm = find.widgetWithText(FilledButton, 'Stop and save');
+      if (confirm.evaluate().isNotEmpty) {
+        await tester.tap(confirm.last); // the dialog, above a match-over card's button
+        await tester.pump();
+      }
       await pumpUntil(tester, find.text('Open results'));
       final saved = live().savedJobId!;
       await tapText(tester, 'History');

@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/config/app_mode.dart';
+import 'package:shuttlesense_app/core/device/screen_awake.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
@@ -68,6 +70,17 @@ Future<void> startWithoutCourt(WidgetTester tester) async {
   await tester.tap(find.text('Start without court'));
   await events(tester);
   await tester.pump(const Duration(milliseconds: 100));
+}
+
+/// Stop, confirming the save when the session has rallies or decisions (T12.6).
+Future<void> tapStop(WidgetTester tester) async {
+  await tester.tap(find.text('Stop'));
+  await tester.pump();
+  final confirm = find.widgetWithText(FilledButton, 'Stop and save');
+  if (confirm.evaluate().isNotEmpty) {
+    await tester.tap(confirm.last);
+    await tester.pump();
+  }
 }
 
 /// Socket events arrive in a microtask; the screen shows them on the next frame.
@@ -149,7 +162,7 @@ void main() {
       expect(tester.widget<Image>(still).key, matched);
       expect(tester.getSize(still).aspectRatio, closeTo(source.width / source.height, 0.001));
       expect(find.textContaining('Waiting for a fresh analysis overlay'), findsOneWidget);
-      await tester.tap(find.text('Stop'));
+      await tapStop(tester);
       await events(tester);
       await tester.pump(const Duration(seconds: 1));
     });
@@ -219,7 +232,7 @@ void main() {
         expect(find.text('Score and stats'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
-        await tester.tap(find.text('Stop'));
+        await tapStop(tester);
         await events(tester);
         await tester.pump(const Duration(milliseconds: 100));
         expect(socket.sent.last['type'], 'stop');
@@ -260,7 +273,7 @@ void main() {
     expect(controller.analyzedImage, isNot(same(image)));
     expect(container.read(liveControllerProvider).players, isEmpty);
     expect(controller.waitingForAnalysis, isFalse);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await tester.pump(const Duration(seconds: 1));
   });
 
@@ -305,7 +318,7 @@ void main() {
     expect(find.text('Rally 2 \u00b7 0:04.0'), findsOneWidget);
     expect(highlighted(), 2);
     expect(find.text('Confirm OUT'), findsOneWidget);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await tester.pump(const Duration(seconds: 1));
   });
 
@@ -359,7 +372,7 @@ void main() {
     final state = container.read(liveControllerProvider);
     expect(state.score!.near, 1);
     expect(state.lineCalls.singleWhere((call) => call.id == 2).reviewed, isTrue);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await tester.pump(const Duration(seconds: 1));
   });
 
@@ -398,7 +411,7 @@ void main() {
     expect(corners, hasLength(4));
     expect((corners.first as List).first, closeTo(1280 * 0.2, 2));
     expect(sockets.single.sent.first['start_score'], isNull);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Open results'), findsOneWidget);
@@ -475,7 +488,7 @@ void main() {
     expect(sockets, hasLength(2));
     expect(sockets.last.sent.first, {'type': 'resume', 'session_id': 's1'});
     expect(find.text('Reconnecting and refreshing the score\u2026'), findsNothing);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Open results'), findsOneWidget);
@@ -524,7 +537,7 @@ void main() {
     expect(sockets, hasLength(2));
     expect(sockets.last.frames, isNotEmpty);
     expect(ByteData.sublistView(sockets.last.frames.first, 0, 4).getUint32(0, Endian.little), 0);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -537,7 +550,7 @@ void main() {
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
     expect(find.text('Wait until the rally has ended, then award the point'), findsOneWidget);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -550,7 +563,7 @@ void main() {
     await events(tester);
     await tester.pump(const Duration(milliseconds: 300));
     expect(sockets, hasLength(1));
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -568,7 +581,7 @@ void main() {
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
     expect(find.text('heads up'), findsOneWidget);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -582,7 +595,7 @@ void main() {
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
     expect(find.text('no such line call'), findsOneWidget); // said, not swallowed
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -649,7 +662,7 @@ void main() {
     state = container.read(liveControllerProvider);
     expect(state.hits.map((h) => h.frame), [10, 20, 30]);
     expect(find.textContaining('analysed 12'), findsOneWidget);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -731,7 +744,7 @@ void main() {
     expect(find.text('Far 1, Clear: Recover to base sooner.'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Stop'));
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -855,7 +868,7 @@ void main() {
     expect(socket.sent.where((m) => m['type'] == 'award').single['winner'], 'far');
     expect(socket.sent.where((m) => m['type'] == 'undo'), hasLength(1));
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -941,7 +954,7 @@ void main() {
     await events(tester);
     expect(pinned, findsNothing);
 
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await tester.pump(const Duration(seconds: 1));
   });
 
@@ -982,7 +995,7 @@ void main() {
     });
     await events(tester);
     expect(controller.canDecide, isTrue);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1015,7 +1028,7 @@ void main() {
       expect(sockets.first.sent.where((e) => e['type'] == 'award'), hasLength(1));
       expect(container.read(liveControllerProvider).score!.near, applied ? 1 : 0);
       expect(controller.canDecide, isTrue);
-      await tester.tap(find.text('Stop'));
+      await tapStop(tester);
       await events(tester);
       await tester.pump(const Duration(seconds: 1));
     });
@@ -1031,7 +1044,7 @@ void main() {
     await tester.pumpAndSettle();
     await startWithoutCourt(tester);
     expect(sockets.single.sent.first['start_score'], {'near': 7, 'far': 0});
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1062,7 +1075,7 @@ void main() {
     await events(tester);
     expect(resumes, 2);
     expect(find.text('Reconnecting and refreshing the score\u2026'), findsNothing);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1093,7 +1106,7 @@ void main() {
     socket.emit({...frameEvent(5, state: 'between_rallies'), 'rally_start_frame': null});
     await events(tester);
     expect(container.read(liveControllerProvider).rallyStartFrame, isNull);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1113,7 +1126,7 @@ void main() {
       final socket = sockets.single..replyToStop = false;
       if (failure == 'send') socket.stopError = StateError('socket closed');
 
-      await tester.tap(find.text('Stop'));
+      await tapStop(tester);
       await events(tester);
       expect(camera.disposed, isTrue);
       if (failure == 'disconnect') await socket.drop();
@@ -1143,7 +1156,7 @@ void main() {
       await startWithoutCourt(tester);
       final socket = sockets.single..replyToStop = false;
       if (outcome == 'offline then present') api.failWith = ApiException('offline');
-      await tester.tap(find.text('Stop'));
+      await tapStop(tester);
       await events(tester);
       await socket.drop();
       await events(tester);
@@ -1181,7 +1194,7 @@ void main() {
       ],
     );
     await startWithoutCourt(tester);
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Open results'), findsOneWidget);
@@ -1243,7 +1256,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(sockets.single.sent.first['start_score'], {'near': 7, 'far': 0});
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1309,7 +1322,7 @@ void main() {
     await tester.ensureVisible(find.text('Start without court'));
     await startWithoutCourt(tester);
     expect(sockets.single.sent.first['stroke_model'], 'rf');
-    await tester.tap(find.text('Stop'));
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -1319,7 +1332,72 @@ void main() {
     expect(find.text('Stroke model'), findsNothing);
     await startWithoutCourt(tester);
     expect(sockets.single.sent.first.containsKey('stroke_model'), isFalse);
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('the screen stays on while live, and Stop asks once rallies exist (T12.6)', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final awake = container.read(screenAwakeProvider) as FakeScreenAwake;
+    expect(awake.on, isFalse);
+    await startWithoutCourt(tester);
+    expect(awake.on, isTrue);
+    sockets.single.emit({
+      'type': 'score',
+      'score': {'near': 1, 'far': 0},
+      'rallies': [
+        {'index': 0, 'start_frame': 0, 'end_frame': 10, 'winner': 'near'},
+      ],
+    });
+    await events(tester);
     await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stop and save this session?'), findsOneWidget);
+    await tester.tap(find.text('Keep going'));
+    await tester.pumpAndSettle();
+    expect(sockets.single.sent.last['type'], isNot('stop'));
+    await tapStop(tester);
+    expect(sockets.single.sent.last['type'], 'stop');
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(awake.on, isFalse);
+  });
+
+  testWidgets('keyboard: N / F award, Z undoes; a won match offers to stop (T12.6)', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester, size: const Size(1280, 800));
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    Future<void> ack(Map<String, dynamic> score) async {
+      socket.emit({'type': 'score', 'score': score, 'rallies': <dynamic>[]});
+      await events(tester);
+    }
+
+    expect(find.byKey(const Key('live-keys')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pump();
+    expect(socket.sent.last, containsPair('winner', 'near'));
+    await ack({'near': 1, 'far': 0});
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+    expect(socket.sent.last, containsPair('winner', 'far'));
+    await ack({'near': 1, 'far': 1});
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.pump();
+    expect(socket.sent.last['type'], 'undo');
+    await ack({'near': 21, 'far': 3, 'match_winner': 'near'});
+    expect(find.byKey(const Key('match-over')), findsOneWidget);
+    // Nothing left to score: N no longer awards.
+    final sent = socket.sent.length;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pump();
+    expect(socket.sent.length, sent);
+    await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });

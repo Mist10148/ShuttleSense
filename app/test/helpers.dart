@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/notifications/job_notifier.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/core/device/screen_awake.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
 
@@ -57,6 +58,7 @@ Future<List<String>> pumpScreen(
         apiClientProvider.overrideWithValue(api ?? FakeApiClient()),
         // The real notifier would call the notifications plugin, which tests do not have.
         jobNotifierProvider.overrideWithValue(const NoopJobNotifier()),
+        screenAwakeProvider.overrideWithValue(FakeScreenAwake()),
         ...overrides,
       ],
       child: MaterialApp.router(

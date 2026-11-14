@@ -37,6 +37,7 @@ flowchart LR
 | Camera | camera (+ camera_windows) | ^0.12 / ^0.3 | BSD-3 | Live mode (F19): preview and still captures on Android, iOS and web; `camera_windows` adds webcams on Windows, which `camera` does not cover. Captures are JPEG stills, so the frame rate depends on the device (about 5 to 15 fps); the live screen reports latency and quality |
 | WebSocket | web_socket_channel | ^3.0 | BSD-3 | `WS /live` on every platform including web (D16) |
 | Notifications | flutter_local_notifications | ^22.3 | BSD-3 | "Analysis ready" when a job finishes in the background (T4.4, T10.4); Android, iOS and Windows, nothing on web. Needs core library desugaring on Android |
+| Screen wake lock | wakelock_plus | ^1.7 | BSD-3 | Keeps the screen on from connecting to the end of a live session, so a phone that locks mid-match does not stop its camera (T12.6). Already in the build through media_kit; now a direct dependency. A platform without a wake lock follows its own screen timeout |
 | Lints | flutter_lints | ^6.0 | BSD-3 | Standard analyzer rules, enforced in CI |
 
 Platform notes:

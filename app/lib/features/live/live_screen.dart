@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -50,6 +51,25 @@ class LiveScreen extends ConsumerWidget {
       LivePhase.reconnecting,
       LivePhase.stopping,
     }.contains(state.phase);
+    // Leaving the screen mid-session would drop the socket without a stop (T12.6).
+    return PopScope(
+      canPop: !streaming,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && state.phase == LivePhase.live) {
+          confirmStop(context, state, controller.stop);
+        }
+      },
+      child: _scaffold(context, state, controller, waiting: waiting, streaming: streaming),
+    );
+  }
+
+  Widget _scaffold(
+    BuildContext context,
+    LiveState state,
+    LiveController controller, {
+    required bool waiting,
+    required bool streaming,
+  }) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live'),
@@ -71,7 +91,9 @@ class LiveScreen extends ConsumerWidget {
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
-                onPressed: state.phase == LivePhase.live ? controller.stop : null,
+                onPressed: state.phase == LivePhase.live
+                    ? () => confirmStop(context, state, controller.stop)
+                    : null,
                 icon: const Icon(Icons.stop),
                 label: const Text('Stop'),
               ),
@@ -98,6 +120,35 @@ class LiveScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Stop saves and ends the session, which cannot be resumed afterwards: once rallies or
+/// decisions exist, ask first (T12.6).
+Future<void> confirmStop(BuildContext context, LiveState state, VoidCallback stop) async {
+  final record = state.record;
+  final worthAsking = record.rallies.isNotEmpty || (record.score?.corrections.isNotEmpty ?? false);
+  if (!worthAsking) {
+    stop();
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Stop and save this session?'),
+      content: const Text(
+        'The recording, score and calls are saved to History. The session cannot be '
+        'continued afterwards.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep going')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Stop and save'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) stop();
 }
 
 class _ErrorView extends StatelessWidget {
@@ -494,6 +545,21 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         peakSpeedKmh: state.peakSpeedKmh,
         strokeCount: state.strokesInRally,
       ),
+      // The match is decided: nothing more to score, so offer to save it (T12.6).
+      if (state.phase == LivePhase.live && (record.score?.matchOver ?? false))
+        Card(
+          key: const Key('match-over'),
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: ListTile(
+            leading: const Icon(Icons.emoji_events_outlined),
+            title: Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
+            subtitle: const Text('Stop to save it, or Undo to change the result.'),
+            trailing: FilledButton(
+              onPressed: () => confirmStop(context, state, controller.stop),
+              child: const Text('Stop and save'),
+            ),
+          ),
+        ),
       if (state.phase == LivePhase.reconnecting || (state.phase == LivePhase.live && decisionBusy))
         Semantics(
           liveRegion: true,
@@ -613,6 +679,41 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         ),
       ),
     ];
+    // Courtside keys on a laptop or tablet keyboard (T12.6): referee role only.
+    final canKey = !_coach && state.phase == LivePhase.live && !decisionBusy;
+    final scoreOpen = !(record.score?.matchOver ?? false);
+    final keyed = call != null && call.needsReview ? call : null;
+    final shortcuts = <ShortcutActivator, VoidCallback>{
+      if (canKey && scoreOpen) ...{
+        const SingleActivator(LogicalKeyboardKey.keyN): () => controller.award('near'),
+        const SingleActivator(LogicalKeyboardKey.keyF): () => controller.award('far'),
+      },
+      if (canKey) ...{
+        const SingleActivator(LogicalKeyboardKey.keyZ): controller.undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): controller.undo,
+      },
+      if (canKey && scoreOpen && courtside && lastRally != null)
+        const SingleActivator(LogicalKeyboardKey.keyL): () =>
+            controller.correct(lastRally.index, null, reason: 'let'),
+      if (canKey && keyed != null) ...{
+        const SingleActivator(LogicalKeyboardKey.keyI): () =>
+            controller.overrideCall(keyed.id, 'in'),
+        const SingleActivator(LogicalKeyboardKey.keyO): () =>
+            controller.overrideCall(keyed.id, 'out'),
+      },
+    };
+    return CallbackShortcuts(
+      bindings: shortcuts,
+      child: Focus(autofocus: true, child: _layout(controls, details, camera, analysis)),
+    );
+  }
+
+  Widget _layout(
+    List<Widget> controls,
+    Widget details,
+    List<Widget> camera,
+    List<Widget> analysis,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         Widget column(List<Widget> children) => Column(
@@ -629,7 +730,20 @@ class _LiveViewState extends ConsumerState<_LiveView> {
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 2, child: column([...controls, details])),
+                    Expanded(
+                      flex: 2,
+                      child: column([
+                        ...controls,
+                        details,
+                        if (!_coach)
+                          Text(
+                            'Keys: N / F point near / far · Z undo · L let · I / O the call '
+                            'under review',
+                            key: const Key('live-keys'),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ]),
+                    ),
                     const SizedBox(width: 16),
                     Expanded(flex: 3, child: column([...camera, ...analysis])),
                   ],
