@@ -684,3 +684,85 @@ def test_deleting_a_live_job_stops_its_render(tmp_path: Path, monkeypatch) -> No
             time.sleep(0.05)
         assert job_id not in jobs._cancelled
         assert not client.app.state.storage.job_dir(job_id).exists()
+
+
+def test_award_after_the_match_is_won_is_refused(tmp_path: Path) -> None:
+    """A decision after the deciding rally changes nothing, so it is refused (match_over)
+    and does not sit on the undo stack."""
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "start_score": {"near": 20, "far": 0}})
+        ws.receive_json()
+        ws.send_json({"type": "award", "winner": "near"})
+        score = ws.receive_json()["score"]
+        assert score["match_winner"] == "near"
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "award", "winner": "far", "decision_id": 7})
+        error = ws.receive_json()
+        assert error["code"] == "match_over" and error["decision_id"] == 7
+        ws.send_json({"type": "undo"})
+        undone = ws.receive_json()["score"]
+        assert (undone["near"], undone["far"], undone["corrections"]) == (20, 0, [])
+
+
+def test_undo_takes_back_a_live_override_before_an_older_award(tmp_path: Path) -> None:
+    """Award, then a line-call override: Undo removes the override and keeps the award."""
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "first_server": "near"})
+        ws.receive_json()
+        ws.send_json({"type": "award", "winner": "far"})
+        assert ws.receive_json()["type"] == "score"
+        assert ws.receive_json()["type"] == "coaching"
+        events = _send_frames(ws, 230)
+        call = next(e for e in events if e["type"] == "line_call")["line_call"]
+        awarded = [e for e in events if e["type"] == "score"][-1]["score"]
+        other = "out" if call["call"] == "in" else "in"
+        ws.send_json({"type": "override", "line_call_id": call["id"], "call": other})
+        assert ws.receive_json()["line_call"]["override"]["call"] == other
+        assert ws.receive_json()["type"] == "score"
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "undo"})
+        restored = ws.receive_json()
+        assert restored["type"] == "line_call" and restored["line_call"]["override"] is None
+        score = ws.receive_json()["score"]
+        assert (score["near"], score["far"]) == (awarded["near"], awarded["far"])
+        assert [c["kind"] for c in score["corrections"]] == ["award"]
+
+
+def test_final_tick_error_still_saves_the_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense.stream.analyzer import StreamAnalyzer
+
+    real = StreamAnalyzer._tick
+
+    def failing(self, end, final=False):  # noqa: ANN001, ANN202
+        if final:
+            raise RuntimeError("stage blew up")
+        return real(self, end, final=final)
+
+    monkeypatch.setattr(StreamAnalyzer, "_tick", failing)
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        _send_frames(ws, 20)
+        ws.send_json({"type": "stop"})
+        while (e := ws.receive_json())["type"] != "saved":
+            assert e["type"] != "error" or e["code"] != "internal"
+        assert client.get(f"/jobs/{e['job_id']}/record").status_code == 200
+
+
+def test_oversized_jpeg_is_refused_without_ending_the_session(tmp_path: Path) -> None:
+    import cv2
+    import numpy as np
+
+    from shuttlesense.stream.session import jpeg_size
+
+    big = cv2.imencode(".jpg", np.zeros((1600, 2600, 3), np.uint8))[1].tobytes()
+    assert jpeg_size(big) == (2600, 1600)
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        ws.send_bytes(encode(np.zeros((1600, 2600, 3), np.uint8), 0, 0.0))
+        assert ws.receive_json()["code"] == "bad_frame"
+        events = _send_frames(ws, 3, first=1)
+        assert any(e["type"] == "frame" for e in events)

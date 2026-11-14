@@ -183,11 +183,11 @@ Correct the winner of a rally (F16). Body:
 
 `"winner": null` makes the rally undecided again, so it does not count.
 
-Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`), or if the referee stage did not run or found no rallies.
+Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `corrections`) and every rally with its recomputed `score_after`. The correction is appended to `score.corrections` in the record, later rallies are re-scored from the job's `start_score`, and `summary.json`, `hits.csv` and `rallies.csv` are regenerated. Corrections to one job are serialized. `404` for an unknown rally; `409` unless the job is `done` (a re-render would rewrite `record.json`), or if the referee stage did not run or found no rallies, or the match is already won and the correction would change nothing.
 
 ### `POST /jobs/{job_id}/score/award`
 
-A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response and exports as `PATCH /jobs/{job_id}/score`. `409` unless the job is `done`, or if the referee stage did not run; unlike a correction, an award needs no detected rally.
+A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response and exports as `PATCH /jobs/{job_id}/score`. `409` unless the job is `done`, if the referee stage did not run, or if the match is already won and the point would come after the deciding rally; unlike a correction, an award needs no detected rally.
 
 ### `POST /jobs/{job_id}/score/service`
 
@@ -195,11 +195,11 @@ Doubles ([D23](DECISIONS.md)): who serves and receives first in game 2 or 3. Bod
 
 ### `POST /jobs/{job_id}/score/undo`
 
-Takes back the newest correction or award; a rally's winner goes back to what it was before that correction. Same response as above; `404` when there is nothing to undo. Line-call overrides are not undone here: override the call again.
+Takes back the referee's newest decision ([D32](DECISIONS.md)): a correction, an award or a line-call override, whichever came last. A rally's winner goes back to what it was before that correction; an undone override puts the earlier override, or the automated call, back. Same response as above plus `line_calls`; `404` when there is nothing to undo.
 
 ### `PATCH /jobs/{job_id}/line-calls/{call_id}`
 
-Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"call": "out"}`; sending the backend's own call confirms it. The decision is stored per rally in `line_call_overrides.json` in the job folder (re-applied after every re-render, like score corrections) and the call gets `override: {"call", "at"}`. A confirmed or overridden call counts as certain, so its rally winner is decided again from the landing side or the last hitter; explicit score corrections still take precedence. Returns `{"line_calls": [...], "score": {...}, "rallies": [...]}` and regenerates the exports. `404` for an unknown call or a job without the referee layer; `409` unless the job is `done`.
+Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"call": "out"}`; sending the backend's own call confirms it. The decision is appended to `line_call_overrides.json` in the job folder (the newest per rally applies, so Undo can restore an earlier one) (re-applied after every re-render, like score corrections) and the call gets `override: {"call", "at"}`. A confirmed or overridden call counts as certain, so its rally winner is decided again from the landing side or the last hitter; a winner correction for that rally given before the override no longer applies, so the newest decision wins (D32). Returns `{"line_calls": [...], "score": {...}, "rallies": [...]}` and regenerates the exports. `404` for an unknown call or a job without the referee layer; `409` unless the job is `done`.
 
 ### `GET /jobs/{job_id}/record` and older records
 
@@ -218,8 +218,8 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |
 | `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided |
-| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling |
-| `undo` | `{"type": "undo"}` | Takes back the newest correction or award (`not_found` when there is none) |
+| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling, and with `match_over` once the match is won |
+| `undo` | `{"type": "undo"}` | Takes back the newest decision: correction, award or line-call override (`not_found` when there is none). An undone override is sent again as a `line_call` event before `score` |
 | `service` | `{"type": "service", "game": 2, "server_id": "far_2", "receiver_id": "near_1"}` | Doubles: who serves and receives first in game 2 or 3, as `POST /jobs/{job_id}/score/service`; answered with `score`. `bad_request` (session kept) in singles or for invalid slots |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |
 
@@ -238,7 +238,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `error` with code `capture_gap` | A capture gap exceeded the resume window and was shortened in playback. The session continues |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `rally_in_play`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `rally_in_play` (an `award` while a rally is open or settling) keeps the session going. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `rally_in_play`, `match_over`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `rally_in_play` (an `award` while a rally is open or settling) and `match_over` (an `award` or `correct` after the match is won that would change nothing) keep the session going. A frame whose JPEG header declares more than four times the session's pixel count gets `bad_frame` without being decoded. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`. The reserved ID does not
 create a job on its own. If the client loses the `saved` reply, it can check

@@ -53,10 +53,11 @@ from shuttlesense.referee import (
     apply_corrections,
     apply_user_changes,
     build_events,
+    changes_finished_match,
     load_overrides,
     save_corrections,
     save_overrides,
-    undo_last_correction,
+    undo_last_decision,
     validate_start_score,
 )
 from shuttlesense.render import OVERLAYS
@@ -390,7 +391,10 @@ def correct_score(
             at=utcnow(),
         )
         corrections = [*record.score.corrections, correction]
+        before = record.score.model_copy(deep=True)
         apply_corrections(record, corrections, job.start_score)
+        if changes_finished_match(before, record.score):
+            raise HTTPException(status_code=409, detail="the match is already won")
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
@@ -433,7 +437,10 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
         before = sum(1 for r in record.rallies if r.end_frame <= frame)
         award = ScoreCorrection(rally_index=before, winner_before=None, winner_after=body.winner,
                                 at=utcnow(), kind="award", frame=frame)  # fmt: skip
+        before = record.score.model_copy(deep=True)
         apply_corrections(record, [*record.score.corrections, award], job.start_score)
+        if changes_finished_match(before, record.score):
+            raise HTTPException(status_code=409, detail="the match is already won")
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 
@@ -465,16 +472,18 @@ def set_game_service(
 
 @router.post("/jobs/{job_id}/score/undo", response_model=ScoreUpdate)
 def undo_score(job_id: str, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
-    """Take back the newest score correction or award."""
+    """Take back the newest decision: a correction, an award or a line-call override (D32)."""
     job, path = _score_record(storage, jobs, job_id)
     with jobs.job_lock(job_id):
         job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
-        overrides = load_overrides(storage.job_dir(job_id))
-        if not undo_last_correction(record, job.start_score, overrides):
+        job_dir = storage.job_dir(job_id)
+        remaining = undo_last_decision(record, job.start_score, load_overrides(job_dir))
+        if remaining is None:
             raise HTTPException(status_code=404, detail="no score change to undo")
+        save_overrides(job_dir, remaining)
         _save_score(record, storage, jobs, job_id)
-    return ScoreUpdate(score=record.score, rallies=record.rallies)
+    return ScoreUpdate(score=record.score, rallies=record.rallies, line_calls=record.line_calls)
 
 
 @router.patch("/jobs/{job_id}/line-calls/{call_id}", response_model=LineCallUpdate)
@@ -491,7 +500,8 @@ def override_line_call(
         call = next((c for c in record.line_calls if c.id == call_id), None)
         if call is None or record.score is None:
             raise HTTPException(status_code=404, detail="line call not found")
-        overrides = [o for o in load_overrides(job_dir) if o.rally_index != call.rally_index]
+        # A log: the newest override per rally applies, so Undo can restore an earlier one.
+        overrides = load_overrides(job_dir)
         overrides.append(
             LineCallOverrideIn(rally_index=call.rally_index, call=body.call, at=utcnow())
         )

@@ -162,6 +162,10 @@ class LiveSession:
     def _decode(self, jpeg: bytes) -> np.ndarray | None:
         import cv2
 
+        # A small JPEG can declare a huge image; check the header before decoding it.
+        size = jpeg_size(jpeg)
+        if size is not None and size[0] * size[1] > MAX_PIXELS_FACTOR * self.width * self.height:
+            return None
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return None
@@ -345,3 +349,34 @@ class LiveSession:
             if self._writer is not None:
                 self._writer.release()
                 self._writer = None
+
+
+# A frame may be at most this many times the session's announced pixel count (2x per side).
+MAX_PIXELS_FACTOR = 4
+
+
+def jpeg_size(data: bytes) -> tuple[int, int] | None:
+    """(width, height) from a JPEG's start-of-frame marker, or None when there is none."""
+    if len(data) < 4 or data[0] != 0xFF or data[1] != 0xD8:
+        return None
+    i = 2
+    while i + 4 <= len(data):
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:  # markers without a length
+            i += 2
+            continue
+        length = int.from_bytes(data[i + 2 : i + 4], "big")
+        # SOF0..SOF15, except DHT (C4), JPG (C8) and DAC (CC)
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            if i + 9 > len(data):
+                return None
+            height = int.from_bytes(data[i + 5 : i + 7], "big")
+            width = int.from_bytes(data[i + 7 : i + 9], "big")
+            return width, height
+        i += 2 + length
+    return None

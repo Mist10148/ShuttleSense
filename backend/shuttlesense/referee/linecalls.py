@@ -184,7 +184,8 @@ def apply_overrides(record: ClipRecord, overrides: Sequence[LineCallOverrideIn])
     """Put the user's calls on the line calls and landings and re-decide the rally winners.
 
     A confirmed or overridden call is certain, so its rally gets a winner again. Score
-    corrections (scoring.apply_corrections) still win over this, since they come later.
+    corrections (scoring.apply_corrections) run after this; a winner correction older than
+    the rally's override is skipped there, so the newest decision wins (D32).
     """
     from shuttlesense.referee.rally import rally_winner
 
@@ -201,5 +202,24 @@ def apply_overrides(record: ClipRecord, overrides: Sequence[LineCallOverrideIn])
             continue
         rally.landing.in_court = o.call == "in"
         rally.landing.confidence = 1.0
+        hits = [h for h in record.hits if h.rally_index == rally.index]
+        rally.winner = rally_winner(rally.landing, hits[-1].player if hits else None, size[1] / 2)
+
+
+def clear_override(record: ClipRecord, rally_index: int) -> None:
+    """Put a rally's call back to the automated one after its override is taken back."""
+    from shuttlesense.referee.rally import rally_winner
+
+    rallies = {r.index: r for r in record.rallies}
+    size = record.court.court_size_m if record.court else COURT_SIZE_M
+    for call in record.line_calls:
+        if call.rally_index != rally_index or call.override is None:
+            continue
+        call.override = None
+        rally = rallies.get(rally_index)
+        if rally is None or rally.landing is None:
+            continue
+        rally.landing.in_court = call.call == "in"
+        rally.landing.confidence = call.confidence
         hits = [h for h in record.hits if h.rally_index == rally.index]
         rally.winner = rally_winner(rally.landing, hits[-1].player if hits else None, size[1] / 2)

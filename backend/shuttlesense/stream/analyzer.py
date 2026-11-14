@@ -19,6 +19,7 @@ and calls (tests/test_stream.py checks this).
 from __future__ import annotations
 
 import contextlib
+import logging
 from collections import deque
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -44,6 +45,8 @@ from shuttlesense.schema import (
 )
 from shuttlesense.stage import StageContext, StageSkipped
 
+log = logging.getLogger(__name__)
+
 Event = dict[str, Any]
 Classifier = Callable[[ClipRecord, int], None]  # (window record, window start frame)
 
@@ -54,6 +57,10 @@ def _dump(model: Any) -> Any:
 
 class RallyInPlay(RuntimeError):
     """A score change that has to wait until the open rally is decided."""
+
+
+class MatchOver(RuntimeError):
+    """A score change after the deciding rally: it would not change the result."""
 
 
 class StreamAnalyzer:
@@ -412,7 +419,7 @@ class StreamAnalyzer:
         target = next((c for c in self.record.line_calls if c.id == line_call_id), None)
         if target is None:
             raise KeyError(line_call_id)
-        self.overrides = [o for o in self.overrides if o.rally_index != target.rally_index]
+        # Kept as a log (the newest per rally applies) so Undo can restore an earlier call.
         self.overrides.append(
             LineCallOverrideIn(rally_index=target.rally_index, call=call, at=datetime.now(UTC))
         )
@@ -428,12 +435,27 @@ class StreamAnalyzer:
         rally = next((r for r in self.record.rallies if r.index == rally_index), None)
         if rally is None:
             raise KeyError(rally_index)
-        self.corrections.append(ScoreCorrection(
+        self._decide(ScoreCorrection(
             rally_index=rally_index, winner_before=rally.winner, winner_after=winner,
             at=datetime.now(UTC),
         ))  # fmt: skip
-        self._rescore()
         return [self._score_event(), self._latest_coaching_event()]
+
+    def _decide(self, correction: ScoreCorrection) -> None:
+        """Log a correction and re-score; MatchOver (and nothing kept) when the match was
+        already won and the decision would change nothing."""
+        from shuttlesense.referee import changes_finished_match
+
+        before = self.record.score.model_copy(deep=True) if self.record.score else None
+        winners = {r.index: r.winner for r in self.record.rallies}
+        self.corrections.append(correction)
+        self._rescore()
+        if changes_finished_match(before, self.record.score):
+            self.corrections.pop()
+            for r in self.record.rallies:
+                r.winner = winners.get(r.index, r.winner)
+            self._rescore()
+            raise MatchOver("the match is already won")
 
     def award(self, winner: PlayerSide) -> list[Event]:
         """A point for a rally the referee layer missed, counted after the rallies so far.
@@ -443,11 +465,10 @@ class StreamAnalyzer:
         """
         if self.state == "in_play":
             raise RallyInPlay("wait until the rally has ended")
-        self.corrections.append(ScoreCorrection(
+        self._decide(ScoreCorrection(
             rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
             at=datetime.now(UTC), kind="award", frame=max(0, len(self.record.frames) - 1),
         ))  # fmt: skip
-        self._rescore()
         return [self._score_event(), self._latest_coaching_event()]
 
     def set_service(self, game: int, service: GameService | None) -> list[Event]:
@@ -460,14 +481,23 @@ class StreamAnalyzer:
         return [self._score_event()]
 
     def undo(self) -> list[Event]:
-        """Take back the newest score correction or award."""
-        from shuttlesense.referee import undo_last_correction
+        """Take back the newest decision: a correction, an award or a line-call override."""
+        from shuttlesense.referee import undo_last_decision
 
-        if not undo_last_correction(self.record, self.start):
+        before = {c.id: c.override for c in self.record.line_calls}
+        remaining = undo_last_decision(self.record, self.start, self.overrides)
+        if remaining is None:
             raise KeyError("nothing to undo")
+        self.overrides = remaining
         self.corrections = list(self.record.score.corrections)
         self._rescore()
-        return [self._score_event(), self._latest_coaching_event()]
+        # An undone override puts the automated call back; the app needs the call again.
+        changed: list[Event] = [
+            {"type": "line_call", "line_call": _dump(c)}
+            for c in self.record.line_calls
+            if before.get(c.id) != c.override
+        ]
+        return [*changed, self._score_event(), self._latest_coaching_event()]
 
     # End of session --------------------------------------------------------------
 
@@ -478,7 +508,10 @@ class StreamAnalyzer:
         from shuttlesense.referee import build_events
 
         if self.record.frames:
-            self._tick(len(self.record.frames) - 1, final=True)
+            try:
+                self._tick(len(self.record.frames) - 1, final=True)
+            except Exception:  # noqa: BLE001 - a stage error must not lose the whole session
+                log.exception("final live tick failed; saving the rallies committed so far")
         record = self.record
         for f in record.frames:
             inside = any(r.start_frame <= f.frame <= r.end_frame for r in record.rallies)

@@ -647,21 +647,42 @@ def test_award_and_undo_over_rest(tmp_path: Path, tiny_video: Path) -> None:
 
 
 def test_undo_keeps_line_call_overrides_like_a_rerender(tmp_path: Path, tiny_video: Path) -> None:
-    """Correction, then override, then undo: the score must equal what a re-render gives."""
+    """Correction, then override, then undo: the newest decision wins, undo takes back the
+    override, and the score equals what a re-render gives (D32)."""
     with make_client(tmp_path, fake_pipeline=True) as client:
         job_id = _referee_job(client, tiny_video)
         call = client.get(f"/jobs/{job_id}/record").json()["line_calls"][0]
         client.patch(f"/jobs/{job_id}/score", json={"rally_index": 0, "winner": None})
         res = client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "out"})
-        assert res.json()["rallies"][0]["winner"] is None  # the correction still wins
+        assert res.json()["rallies"][0]["winner"] == "far"  # the newer override wins
         undone = client.post(f"/jobs/{job_id}/score/undo").json()
-        assert undone["rallies"][0]["winner"] == "far"  # the override decides again
+        assert undone["rallies"][0]["winner"] is None  # the correction applies again
+        assert undone["line_calls"][0]["override"] is None
         client.post(f"/jobs/{job_id}/render", json={"overlays": ["trail"]})
         assert wait_for(client, job_id)["status"] == "done"
         rerendered = client.get(f"/jobs/{job_id}/record").json()
         assert rerendered["score"]["near"] == undone["score"]["near"]
         assert rerendered["score"]["far"] == undone["score"]["far"]
-        assert rerendered["rallies"][0]["winner"] == "far"
+        assert rerendered["rallies"][0]["winner"] is None
+        assert rerendered["line_calls"][0]["override"] is None
+
+
+def test_undo_takes_back_the_newest_decision_not_an_older_award(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    """Award, then override: Undo removes the override and keeps the award (D32)."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        record = client.get(f"/jobs/{job_id}/record").json()
+        call = record["line_calls"][0]
+        awarded = client.post(f"/jobs/{job_id}/score/award", json={"winner": "near"}).json()
+        client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "out"})
+        undone = client.post(f"/jobs/{job_id}/score/undo").json()
+        assert undone["score"]["near"] == awarded["score"]["near"]
+        assert undone["score"]["far"] == awarded["score"]["far"]
+        assert [c["kind"] for c in undone["score"]["corrections"]] == ["award"]
+        assert undone["line_calls"][0]["override"] is None
+        assert client.get(f"/jobs/{job_id}/record").json()["line_calls"][0]["override"] is None
 
 
 def test_rerender_waits_for_a_score_edit_in_progress(tmp_path: Path, tiny_video: Path) -> None:
@@ -1106,3 +1127,20 @@ def test_access_token_is_kept_out_of_the_logs(tmp_path: Path) -> None:
     for name in ("uvicorn.access", "uvicorn.error"):
         filters = logging.getLogger(name).filters
         assert sum(isinstance(f, RedactToken) for f in filters) == 1
+
+
+def test_award_after_the_match_is_won_is_refused(tmp_path: Path, tiny_video: Path) -> None:
+    """Once the match is won, a point given after it changes nothing: 409, nothing logged."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video, start_score={"near": 20, "far": 0})
+        for _ in range(25):
+            res = client.post(f"/jobs/{job_id}/score/award", json={"winner": "near"})
+            if res.status_code == 409:
+                break
+            assert res.status_code == 200
+        assert res.status_code == 409
+        record = client.get(f"/jobs/{job_id}/record").json()
+        assert record["score"]["match_winner"] == "near"
+        logged = len(record["score"]["corrections"])
+        assert client.post(f"/jobs/{job_id}/score/award", json={"winner": "far"}).status_code == 409
+        assert len(client.get(f"/jobs/{job_id}/record").json()["score"]["corrections"]) == logged

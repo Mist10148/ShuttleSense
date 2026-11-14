@@ -143,9 +143,15 @@ def apply_corrections(
     if record.score is None:
         return
     by_index = {r.index: r for r in record.rallies}
+    # A line-call override given after a winner correction on the same rally is the newer
+    # decision, so that correction no longer applies (D32). apply_overrides ran first.
+    overridden = {c.rally_index: c.override.at for c in record.line_calls if c.override}
     for c in corrections:
-        if c.kind == "winner" and c.rally_index in by_index:
-            by_index[c.rally_index].winner = c.winner_after
+        if c.kind != "winner" or c.rally_index not in by_index:
+            continue
+        if c.rally_index in overridden and c.at < overridden[c.rally_index]:
+            continue
+        by_index[c.rally_index].winner = c.winner_after
     awards = [c for c in corrections if c.kind == "award" and c.winner_after is not None]
     final = apply_rallies(record.rallies, start, best_of=record.score.best_of,
                           first_server=record.score.first_server,
@@ -208,30 +214,57 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
             )
 
 
-def undo_last_correction(
+def changes_finished_match(before: Score | None, after: Score | None) -> bool:
+    """True when the match was already won and a new decision left the result untouched.
+
+    Such a decision falls after the deciding rally, so it would sit in the log (and on the
+    undo stack) without doing anything; the API refuses it instead.
+    """
+    if before is None or after is None or before.match_winner is None:
+        return False
+    keep = {"corrections"}
+    return before.model_dump(exclude=keep) == after.model_dump(exclude=keep)
+
+
+def undo_last_decision(
     record: ClipRecord,
     start: ScorePair | None = None,
     overrides: Sequence[LineCallOverrideIn] = (),
-) -> bool:
-    """Take back the newest correction or award and re-score; False when there is none.
+) -> list[LineCallOverrideIn] | None:
+    """Take back the newest referee decision and re-score; None when there is none.
 
-    A rally's winner goes back to what it was before that correction. Line-call overrides
-    saved since then are applied again, as a re-render would (D10), so undo and re-render
-    agree on the score.
+    Score corrections, awards and line-call overrides form one log ordered by time (D32),
+    so Undo always takes back what the referee did last. A rally's winner goes back to what
+    it was before a correction; an undone override puts the automated call back. Returns the
+    line-call overrides still in force, for the caller to keep or save.
     """
-    if record.score is None or not record.score.corrections:
-        return False
-    *rest, last = record.score.corrections
-    if last.kind == "winner":
-        rally = next((r for r in record.rallies if r.index == last.rally_index), None)
-        if rally is not None:
-            rally.winner = last.winner_before
-    if overrides:
-        from shuttlesense.referee.linecalls import apply_overrides
+    from shuttlesense.referee.linecalls import apply_overrides, clear_override
 
-        apply_overrides(record, list(overrides))
-    apply_corrections(record, rest, start)
-    return True
+    corrections = list(record.score.corrections) if record.score is not None else []
+    remaining = sorted(overrides, key=lambda o: o.at)
+    if not corrections and not remaining:
+        return None
+    if record.score is None:
+        return None
+    last_override = remaining[-1] if remaining else None
+    last_correction = corrections[-1] if corrections else None
+    if last_override is not None and (
+        last_correction is None or last_override.at >= last_correction.at
+    ):
+        remaining = remaining[:-1]
+        clear_override(record, last_override.rally_index)
+    else:
+        assert last_correction is not None
+        corrections = corrections[:-1]
+        if last_correction.kind == "winner":
+            rally = next((r for r in record.rallies if r.index == last_correction.rally_index),
+                         None)  # fmt: skip
+            if rally is not None:
+                rally.winner = last_correction.winner_before
+    if remaining:
+        apply_overrides(record, remaining)
+    apply_corrections(record, corrections, start)
+    return remaining
 
 
 def apply_user_changes(record: ClipRecord, out_dir: Path, start: ScorePair | None = None) -> bool:

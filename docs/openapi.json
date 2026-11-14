@@ -1290,8 +1290,22 @@
         "type": "object"
       },
       "ScoreUpdate": {
-        "description": "PATCH /jobs/{id}/score response: the new score and every rally's score_after.",
+        "description": "PATCH /jobs/{id}/score response: the new score and every rally's score_after.\n\n`line_calls` is set by an undo, which can take back a line-call override (D32).",
         "properties": {
+          "line_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LineCall"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Calls"
+          },
           "rallies": {
             "items": {
               "$ref": "#/components/schemas/Rally"
@@ -2264,7 +2278,7 @@
     },
     "/jobs/{job_id}/score/undo": {
       "post": {
-        "description": "Take back the newest score correction or award.",
+        "description": "Take back the newest decision: a correction, an award or a line-call override (D32).",
         "operationId": "undo_score_jobs__job_id__score_undo_post",
         "parameters": [
           {

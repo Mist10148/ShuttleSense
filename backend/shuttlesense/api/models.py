@@ -150,10 +150,13 @@ class ScoreAwardIn(BaseModel):
 
 
 class ScoreUpdate(BaseModel):
-    """PATCH /jobs/{id}/score response: the new score and every rally's score_after."""
+    """PATCH /jobs/{id}/score response: the new score and every rally's score_after.
+
+    `line_calls` is set by an undo, which can take back a line-call override (D32)."""
 
     score: Score
     rallies: list[Rally]
+    line_calls: list[LineCall] | None = None
 
 
 class LineCallOverrideBody(BaseModel):

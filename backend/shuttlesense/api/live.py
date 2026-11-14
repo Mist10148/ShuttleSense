@@ -26,7 +26,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from shuttlesense.api.models import Job, VideoInfoOut, utcnow
 from shuttlesense.api.storage import Storage, new_id
 from shuttlesense.schema import GameService, ScorePair
-from shuttlesense.stream.analyzer import RallyInPlay
+from shuttlesense.stream.analyzer import MatchOver, RallyInPlay
 from shuttlesense.stream.session import LiveSession, StartRequest
 
 log = logging.getLogger(__name__)
@@ -544,6 +544,8 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             return session.set_service(game, service)
     except RallyInPlay as exc:
         return [{"type": "error", "code": "rally_in_play", "detail": str(exc)}]
+    except MatchOver as exc:
+        return [{"type": "error", "code": "match_over", "detail": str(exc)}]
     except (KeyError, TypeError, ValueError):
         detail = "nothing to undo" if msg.get("type") == "undo" else "no such line call or rally"
         return [{"type": "error", "code": "not_found", "detail": detail}]

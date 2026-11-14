@@ -5,6 +5,7 @@ from shuttlesense.referee.linecalls import (
     LineCallOverrideIn,
     apply_overrides,
     call_landing,
+    clear_override,
     derive_from_rallies,
     load_overrides,
     save_overrides,
@@ -21,10 +22,11 @@ from shuttlesense.referee.scoring import (
     apply_corrections,
     apply_rallies,
     apply_user_changes,
+    changes_finished_match,
     game_winner,
     load_corrections,
     save_corrections,
-    undo_last_correction,
+    undo_last_decision,
     validate_start_score,
 )
 
@@ -38,6 +40,8 @@ __all__ = [
     "apply_user_changes",
     "build_events",
     "call_landing",
+    "changes_finished_match",
+    "clear_override",
     "derive_from_rallies",
     "game_winner",
     "landing_call",
@@ -48,6 +52,6 @@ __all__ = [
     "save_corrections",
     "save_overrides",
     "segment_rallies",
-    "undo_last_correction",
+    "undo_last_decision",
     "validate_start_score",
 ]
