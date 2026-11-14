@@ -29,3 +29,10 @@ Anthropic's handling of API data is described in its commercial terms and privac
 ## Not medical or professional advice
 
 Form notes and chat answers are heuristic guidance from pose rules, not professional coaching. The chat refuses to diagnose injuries; see a qualified professional for pain or injury.
+
+
+### Courtside goals and history
+Personal practice goals, completion flags, referee decisions and timestamps are stored
+with the session on the configured backend and included in its JSON exports. They
+follow the existing job deletion lifecycle. No accounts, new cloud service or additional
+chat payload is introduced by these tools. Goals are not medical or measured progress advice.

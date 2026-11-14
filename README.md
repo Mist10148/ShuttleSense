@@ -40,6 +40,11 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 
 ## Features
 
+**Courtside depth (record 1.6):** persistent referee decision history, an explicitly
+controlled interval timer, saved player-filter practice goals and a post-session recap.
+These are code features; real-camera and model-backed acceptance remains open.
+See [Phase 13](docs/phases/phase-13-courtside-depth.md) for verification and remaining work.
+
 ### P1: Core pipeline and app
 - [ ] **Video input:** phone or broadcast footage (MP4, MOV, AVI; 720p or 1080p; 25 to 60 fps)
 - [ ] **Shuttlecock tracking:** per-frame shuttle position with a fading trajectory trail (TrackNetV3)
@@ -75,7 +80,7 @@ The code for every feature above is on `main` with tests. A box is ticked at rel
 
 ## Demo
 
-> Screenshots of the phone and laptop layouts and a demo GIF will be added once the P1 pipeline is complete (task T7.8).
+> Courtside controls rendered with synthetic data: [phone preview](docs/media/courtside-360.png) · [desktop preview](docs/media/courtside-1280.png). The live camera demo remains part of T7.8.
 
 The results screen mirrors the reference demo and adapts to the device:
 

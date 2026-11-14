@@ -242,3 +242,11 @@ To test layouts, resize the Windows/Chrome window or use Chrome DevTools device 
 | Annotated video does not play in the app | Make sure ffmpeg is installed so the export is H.264 (`ffmpeg -version`) |
 | `flutter build windows` fails | Install Visual Studio 2022 "Desktop development with C++"; run `flutter doctor` |
 | Colab URL stopped working | The Colab session ended; re-run the notebook and enter the new URL |
+
+
+## Courtside depth
+Use a 1.6 backend and updated app for persistent goals, decision history and interval
+controls. Older backends keep their existing controls. Pin a cue or set a personal goal
+in Coach; switch to Referee for the timer and decision log. Stop and reopen History to
+review goals and moments. No new dependencies or API key are needed. The camera,
+perception-weight and physical-device acceptance checks still apply.

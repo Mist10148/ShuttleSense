@@ -37,3 +37,14 @@ Design choices that shaped ShuttleSense, in number order. D24–D27 were written
 | D31 | 2026-11-14 | scikit-learn (BSD-3) trains the Random Forest and is a training and test dependency only (`requirements/ml.txt`, `dev.txt`); the server needs no new package to run it | Write the forest training in NumPy; make scikit-learn a server dependency | Hand-written training is not worth the risk, but prediction is a short loop over the tree arrays. The Random Forest therefore also runs on a server without PyTorch | M1 |
 | D32 | 2026-11-14 | Score corrections, awards and line-call overrides form one decision log ordered by time. Undo takes back the newest of them, and an override given after a winner correction on the same rally replaces it. Overrides are appended (the newest per rally applies), so undoing one restores the earlier call. A decision after the deciding rally that would change nothing is refused (`match_over`, `409`) | Keep two separate lists with corrections always winning; a single undo per list | A referee who taps award, then overrides a call by mistake, expects Undo to take back the override, not the award. With corrections always winning, an override made later silently changed nothing | M1 + M3 |
 | D33 | 2026-11-14 | Courtside referee additions in clip record 1.5: a session can join a match under way (`start_games`, games each side already won); a decision can carry a reason (`let`, `fault`, `service_fault`, `misconduct`); a retirement or walkover is a `concede` correction that ends the match; `interval` also covers the 120 s interval between games, with `interval_s` | Points-only start score; free-text decision notes; end a retired match by awarding points | A referee who arrives for game 2 or 3 got the wrong game number, change of ends and match end. Fixed reasons keep exports and the coach digest readable; free text would need moderation and translation. Awarding 21 points to end a retired match corrupts the stats | M1 + M3 |
+
+
+## D34 — Courtside depth, Nov 15
+Record 1.6 adds a user-owned audit log, interval clock and per-filter practice goals.
+Scoring remains in the existing referee engine; Undo logs an event and marks its target
+undone. Timers never score. Live command receipts are scoped by session/client/ID and
+retained across reconnects; conflicting reuse is rejected. Goals survive derived-note
+rebuilds and re-rendering. Completion is self-reported, with no inferred improvement.
+Single-device capture and the existing scoring format remain; multi-device roles and
+longitudinal player profiles are deferred. The expanded scope supersedes the original
+freeze date, but does not waive release evidence. Pose serve cues are not fault calls.

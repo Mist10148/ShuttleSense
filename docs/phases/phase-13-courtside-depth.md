@@ -6,13 +6,13 @@ Release acceptance remains separate from code completion. No v1.0 tag is implied
 | Task | Deliverable | Status |
 | --- | --- | --- |
 | T13.1 | Reconcile phase work and historical instructions | Implemented |
-| T13.2 | Session/client command deduplication and reconnect recovery | Planned |
-| T13.3 | Persistent referee decision history including undo | Planned |
-| T13.4 | Server-owned, explicitly started interval clock | Planned |
-| T13.5 | Persistent practice goals per player filter | Planned |
-| T13.6 | Evidence-based post-session recap and exports | Planned |
-| T13.7 | Courtside layout and accessibility | Planned |
-| T13.8 | Correct heuristic claims, contracts and release evidence | Planned |
+| T13.2 | Session/client command deduplication and reconnect recovery | Implemented · real-world verification pending |
+| T13.3 | Persistent referee decision history including undo | Implemented · real-world verification pending |
+| T13.4 | Server-owned, explicitly started interval clock | Implemented · real-world verification pending |
+| T13.5 | Persistent practice goals per player filter | Implemented · real-world verification pending |
+| T13.6 | Evidence-based post-session recap and exports | Implemented · real-world verification pending |
+| T13.7 | Courtside layout and accessibility | Implemented · real-world verification pending |
+| T13.8 | Correct heuristic claims, contracts and release evidence | Implemented · real-world verification pending |
 
 Statuses distinguish implemented, automated verification complete, real-world
 verification pending, and externally blocked. Synthetic tests do not close device gates.

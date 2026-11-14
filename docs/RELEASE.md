@@ -118,3 +118,13 @@ gh release create vX.Y.Z --title "ShuttleSense vX.Y.Z" --notes-file release-note
 - [ ] Fill in README's Evaluation table and set the status badge to the release.
 - [ ] Bring the docs in line with what actually shipped (T7.12), and add any late decisions to [DECISIONS.md](DECISIONS.md).
 - [ ] Close the release milestone on GitHub.
+
+
+## Phase 13 acceptance additions
+- [ ] Interrupt Wi-Fi after awarding a point; reconnect and verify exactly one award.
+- [ ] Start/pause/resume/reset/end an interval; reconnect without restarting it; undo its triggering point.
+- [ ] Pin and complete a goal, switch players/roles, save, re-render, reopen History and export JSON.
+- [ ] Confirm undone decisions remain visible and recorded moments seek correctly.
+- [ ] Review both roles at arm’s length, both themes and 200% text on physical devices.
+- [ ] Confirm missing-video sessions explain the failure while retaining decisions/goals.
+These checks supplement, rather than replace, the existing real-model and release gates.

@@ -1,6 +1,5 @@
 // Run explicitly to refresh documentation screenshots; not a golden comparison.
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -24,6 +23,16 @@ void main() {
           ),
         );
       await loader.load();
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(
+              ByteData.sublistView(
+                File(
+                  '$root/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+                ).readAsBytesSync(),
+              ),
+            ),
+          ))
+          .load();
       tester.view.physicalSize = Size(width, width == 360 ? 1550 : 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -130,7 +139,9 @@ void main() {
           home: RepaintBoundary(
             key: boundary,
             child: Scaffold(
-              appBar: AppBar(title: const Text('ShuttleSense courtside')),
+              appBar: AppBar(
+                title: const Text('ShuttleSense courtside', style: TextStyle(fontFamily: 'Roboto')),
+              ),
               body: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

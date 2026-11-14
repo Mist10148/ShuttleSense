@@ -129,7 +129,7 @@ void main() {
           MaterialApp(
             theme: ThemeData(brightness: brightness),
             home: MediaQuery(
-              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
               child: Scaffold(
                 body: SingleChildScrollView(
                   child: Column(
