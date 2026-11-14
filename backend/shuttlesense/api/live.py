@@ -211,17 +211,28 @@ class LiveManager:
 
     def _render(self, job: Job, record, source) -> None:
         """Annotated video for the saved session, off the socket's thread."""
+        from shuttlesense.api.jobs import JobCancelled
         from shuttlesense.io import FrameReader
         from shuttlesense.render import render_video
 
+        jobs = self.state.jobs
         try:
             reader = FrameReader(source, target_height=record.height, max_fps=record.fps)
             render_video(record, reader, self.storage.job_dir(job.id) / "annotated.mp4",
-                         overlays=job.overlays, config=self.state.jobs.config)  # fmt: skip
-            self.state.jobs.finish_outside(job.id)
+                         overlays=job.overlays, config=jobs.config,
+                         progress=lambda _p: jobs.check_cancelled(job.id))  # fmt: skip
+            jobs.check_cancelled(job.id)  # deleted while the last frames were written
+            jobs.finish_outside(job.id)
+        except JobCancelled:
+            self.storage.delete_job(job.id)  # the render had files open, or wrote new ones
         except Exception as exc:  # the record is saved; only the video is missing
             log.exception("rendering live session %s failed", job.id)
-            self.state.jobs.finish_outside(job.id, error=f"render failed: {exc}")
+            jobs.finish_outside(job.id, error=f"render failed: {exc}")
+        finally:
+            jobs.forget_cancelled(job.id)
+            # DELETE /videos while this rendered: the recording was open, so finish the delete.
+            if self.storage.video_deleted(job.video_id):
+                self.storage.delete_video(job.video_id)
 
     async def shutdown(self) -> None:
         for entry in list(self.entries.values()):

@@ -72,12 +72,21 @@ class JobManager:
         for job in self._jobs.values():
             if job.status in ("queued", "running"):
                 if self.has_outputs(job.id):
-                    job.status, job.progress, job.current_stage = "done", 1.0, None
+                    # A saved live session is registered before its video is rendered, so its
+                    # outputs were never filled in.
+                    job.outputs = self._outputs_on_disk(job.id)
+                    job.current_stage = None
                     job.finished_at = utcnow()
-                    job.stages = [
-                        StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES
-                    ]
-                    self._restore_previous(job, stages=True)
+                    if job.mode == "live" and not job.outputs.video:
+                        # The record is saved, so the session opens and can be re-rendered.
+                        job.status, job.error = "failed", "render interrupted"
+                        self._restore_previous(job, stages=False)
+                    else:
+                        job.status, job.progress = "done", 1.0
+                        job.stages = [
+                            StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES
+                        ]
+                        self._restore_previous(job, stages=True)
                 else:
                     job.status = "failed"
                     job.error = "server restarted before the job finished"
@@ -168,6 +177,10 @@ class JobManager:
         re-render failed."""
         return self.storage.output_path(job_id, "record").exists()
 
+    def _outputs_on_disk(self, job_id: str) -> JobOutputs:
+        out_dir = self.storage.job_dir(job_id)
+        return JobOutputs(**{k: (out_dir / name).exists() for k, name in OUTPUT_FILES.items()})
+
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -201,6 +214,9 @@ class JobManager:
                 del self._jobs[job_id]
                 self._enqueued.pop(job_id, None)
             self.storage.delete_job(job_id)
+            # Whoever still waits for this lock re-checks the job under it and finds it gone.
+            with self._lock:
+                self._job_locks.pop(job_id, None)
         return True
 
     def delete_for_video(self, video_id: str) -> None:
@@ -246,6 +262,8 @@ class JobManager:
     def job_lock(self, job_id: str) -> threading.Lock:
         """Lock for edits to one job's outputs (score corrections)."""
         with self._lock:
+            if job_id not in self._jobs:  # deleted or unknown: nothing to guard or to keep
+                return threading.Lock()
             return self._job_locks.setdefault(job_id, threading.Lock())
 
     def default_stroke_model(self) -> str:
@@ -285,11 +303,10 @@ class JobManager:
 
     def finish_outside(self, job_id: str, *, error: str | None = None) -> None:
         """Mark a job registered with add() done (or failed) once its outputs are written."""
-        out_dir = self.storage.job_dir(job_id)
-        outputs = {key: (out_dir / name).exists() for key, name in OUTPUT_FILES.items()}
+        outputs = self._outputs_on_disk(job_id)
         if error is not None:
             self._update(job_id, status="failed", error=error, finished_at=utcnow(),
-                         current_stage=None, outputs=JobOutputs(**outputs))  # fmt: skip
+                         current_stage=None, outputs=outputs)  # fmt: skip
             return
         stages = [StageState(name=n, status="done", progress=1.0) for n in STAGE_NAMES]
         self._update(
@@ -298,9 +315,20 @@ class JobManager:
             progress=1.0,
             current_stage=None,
             finished_at=utcnow(),
-            outputs=JobOutputs(**outputs),
+            outputs=outputs,
             stages=stages,
         )
+
+    def check_cancelled(self, job_id: str) -> None:
+        """Raise JobCancelled once a job registered with add() has been deleted."""
+        with self._lock:
+            if job_id in self._cancelled or job_id not in self._jobs:
+                raise JobCancelled
+
+    def forget_cancelled(self, job_id: str) -> None:
+        """The work on a job registered with add() has stopped."""
+        with self._lock:
+            self._cancelled.discard(job_id)
 
     def stage_weight(self, name: str) -> float:
         """Relative cost of a stage for overall progress (stages.<name>.weight)."""
@@ -377,7 +405,6 @@ class JobManager:
         if self.get(job_id) is None:  # deleted while the last stage was finishing
             self.storage.delete_job(job_id)
             return
-        outputs = {key: (out_dir / name).exists() for key, name in OUTPUT_FILES.items()}
         self.storage.previous_path(job_id).unlink(missing_ok=True)
         self._update(
             job_id,
@@ -385,7 +412,7 @@ class JobManager:
             progress=1.0,
             current_stage=None,
             finished_at=utcnow(),
-            outputs=JobOutputs(**outputs),
+            outputs=self._outputs_on_disk(job_id),
         )
 
     def _rerender_live(self, job: Job, source: Path, out_dir: Path) -> None:

@@ -428,6 +428,8 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
         if record.score is None:
             raise HTTPException(status_code=409, detail="referee stage did not run for this job")
         frame = body.frame if body.frame is not None else max(0, record.num_frames - 1)
+        if frame >= max(record.num_frames, 1):
+            raise HTTPException(status_code=400, detail="frame is past the end of the video")
         before = sum(1 for r in record.rallies if r.end_frame <= frame)
         award = ScoreCorrection(rally_index=before, winner_before=None, winner_after=body.winner,
                                 at=utcnow(), kind="award", frame=frame)  # fmt: skip
@@ -521,25 +523,30 @@ async def chat(
     if job.status != "done":
         raise HTTPException(status_code=409, detail="wait until the job has finished")
     path = _output_or_404(storage, jobs, job_id, "record")
-    record = await asyncio.to_thread(lambda: load_record(path.read_text(encoding="utf-8")))
-    history = record.chat.messages if record.chat else []
-    if sum(m.role == "user" for m in history) >= settings.chat_max_messages:
-        raise HTTPException(status_code=429, detail="question limit for this session reached")
-    # One question at a time per job, so parallel requests cannot get past the limit above
+    # One question at a time per job, so parallel requests cannot get past the limit
     # (the history only grows once an answer is saved).
     # The mark expires on its own in case the stream is never started.
     answering: dict[str, float] = request.app.state.chat_answering
 
-    def mark_answering() -> None:
+    def mark_answering() -> ClipRecord:
         # Under the job lock, like rerender's check: a re-render cannot be queued between
-        # this status check and the mark.
+        # this status check and the mark. The history is read under it too, so it includes
+        # an answer that was saved just before, and the limit counts that question.
         with jobs.job_lock(job_id):
             _require_done(jobs, job_id)
+            record = load_record(path.read_text(encoding="utf-8"))
+            asked = sum(m.role == "user" for m in (record.chat.messages if record.chat else []))
+            if asked >= settings.chat_max_messages:
+                raise HTTPException(
+                    status_code=429, detail="question limit for this session reached"
+                )
             if _chat_in_flight(request, job_id):
                 raise HTTPException(status_code=409, detail="a question is already being answered")
             answering[job_id] = time.monotonic()
+            return record
 
-    await asyncio.to_thread(mark_answering)
+    record = await asyncio.to_thread(mark_answering)
+    history = record.chat.messages if record.chat else []
     question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
     digest = build_digest(record, settings.chat_max_digest_chars)
     chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)

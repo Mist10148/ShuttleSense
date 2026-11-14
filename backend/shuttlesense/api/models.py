@@ -141,6 +141,13 @@ class ScoreAwardIn(BaseModel):
     winner: PlayerSide
     frame: int | None = None  # where it happened; None: after the last rally
 
+    @field_validator("frame")
+    @classmethod
+    def _not_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("frame must not be negative")
+        return value
+
 
 class ScoreUpdate(BaseModel):
     """PATCH /jobs/{id}/score response: the new score and every rally's score_after."""

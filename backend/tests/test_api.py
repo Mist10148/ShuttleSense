@@ -1022,3 +1022,87 @@ def test_cli_stroke_model_flag(tmp_path: Path, tiny_video: Path) -> None:
     assert record["stroke_model"] == "lstm"
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--video", "v", "--out", "o", "--stroke-model", "svm"])
+
+
+@pytest.mark.parametrize("rendered", [False, True])
+def test_restart_during_a_live_render_keeps_the_session_openable(
+    tmp_path: Path, rendered: bool
+) -> None:
+    from shuttlesense.api.jobs import JobManager
+    from shuttlesense.api.models import Job
+    from shuttlesense.api.storage import Storage
+
+    storage = Storage(tmp_path / "s")
+    # What LiveManager._save leaves on disk while the annotated video renders.
+    job = Job(id="a" * 12, video_id="b" * 12, status="running", current_stage="render", mode="live")
+    storage.save_job(job)
+    for name in ("record.json", "summary.json", "hits.csv", "rallies.csv"):
+        (storage.job_dir(job.id) / name).write_text("{}")
+    if rendered:
+        (storage.job_dir(job.id) / "annotated.mp4").write_bytes(b"x")
+
+    restarted = JobManager(storage, config={}, device="cpu").get(job.id)
+    assert restarted.status == ("done" if rendered else "failed")
+    assert restarted.error == (None if rendered else "render interrupted")
+    assert restarted.current_stage is None and restarted.finished_at is not None
+    assert restarted.outputs.record and restarted.outputs.summary and restarted.outputs.hits_csv
+    assert restarted.outputs.video is rendered
+    assert storage.load_jobs()[0].outputs.record  # saved, not only in memory
+
+
+def test_award_frame_must_be_inside_the_video(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        frames = client.get(f"/jobs/{job_id}/record").json()["num_frames"]
+
+        def award(frame: int) -> int:
+            body = {"winner": "far", "frame": frame}
+            return client.post(f"/jobs/{job_id}/score/award", json=body).status_code
+
+        assert award(-1) == 422
+        assert award(frames) == 400
+        assert client.get(f"/jobs/{job_id}/record").json()["score"]["corrections"] == []
+        assert award(frames - 1) == 200
+
+
+def test_deleting_a_job_drops_its_edit_lock(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        jobs = client.app.state.jobs
+        assert client.post(f"/jobs/{job_id}/score/award", json={"winner": "far"}).status_code == 200
+        assert job_id in jobs._job_locks
+        assert client.delete(f"/jobs/{job_id}").status_code == 204
+        assert job_id not in jobs._job_locks
+        jobs.job_lock(job_id)  # a late edit of the deleted job, e.g. a coach answer being saved
+        assert client.delete(f"/jobs/{'0' * 12}").status_code == 404
+        assert jobs._job_locks == {}
+
+
+def test_access_token_is_kept_out_of_the_logs(tmp_path: Path) -> None:
+    import logging
+
+    from shuttlesense.api.main import RedactToken
+
+    def logged(msg: str, args: tuple | None) -> str:
+        record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, msg, args, None)
+        assert RedactToken().filter(record)
+        return record.getMessage()
+
+    access = ("127.0.0.1:5000", "GET", "/jobs/abc/video?token=s3cret&download=1", "1.1", 200)
+    assert logged('%s - "%s %s HTTP/%s" %d', access) == (
+        '127.0.0.1:5000 - "GET /jobs/abc/video?token=***&download=1 HTTP/1.1" 200'
+    )
+    socket = ("127.0.0.1:5000", "/live?token=s3cret")
+    assert logged('%s - "WebSocket %s" [accepted]', socket) == (
+        '127.0.0.1:5000 - "WebSocket /live?token=***" [accepted]'
+    )
+    assert logged("GET /videos/abc/frames/0?w=1&token=s3cret done", None) == (
+        "GET /videos/abc/frames/0?w=1&token=*** done"
+    )
+    assert logged("GET /jobs?limit=5", None) == "GET /jobs?limit=5"
+
+    for _ in range(2):  # every app installs it; the loggers must not collect copies
+        create_app(Settings(storage_dir=tmp_path / "storage", device="cpu"))
+    for name in ("uvicorn.access", "uvicorn.error"):
+        filters = logging.getLogger(name).filters
+        assert sum(isinstance(f, RedactToken) for f in filters) == 1

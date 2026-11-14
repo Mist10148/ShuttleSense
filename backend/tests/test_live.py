@@ -645,3 +645,42 @@ def test_live_start_takes_a_stroke_model() -> None:
     assert _start_request(dict(START)).stroke_model is None  # the server's default
     assert _start_request({**START, "stroke_model": "rf"}).stroke_model == "rf"
     assert with_stroke_model({}, "rf") == {"stages": {"strokes": {"algorithm": "rf"}}}
+
+
+def test_deleting_a_live_job_stops_its_render(tmp_path: Path, monkeypatch) -> None:
+    import threading
+
+    import shuttlesense.render
+    from shuttlesense.api.jobs import JobCancelled
+
+    rendering, stopped = threading.Event(), threading.Event()
+
+    def slow_render(record, frames, out_path, *, overlays, config=None, progress=lambda _p: None):
+        rendering.set()
+        try:
+            for _ in range(500):  # 5 s, unless the delete stops it
+                progress(0.5)
+                time.sleep(0.01)
+        except JobCancelled:
+            stopped.set()
+            raise
+
+    monkeypatch.setattr(shuttlesense.render, "render_video", slow_render)
+    with make_client(tmp_path) as client:
+        with client.websocket_connect("/live") as ws:
+            ws.send_json(START)
+            job_id = ws.receive_json()["job_id"]
+            _send_frames(ws, 5)
+            ws.send_json({"type": "stop"})
+            while ws.receive_json()["type"] != "saved":
+                pass
+        assert rendering.wait(5)
+        jobs = client.app.state.jobs
+        assert client.delete(f"/jobs/{job_id}").status_code == 204
+        assert stopped.wait(2)
+        for _ in range(40):  # the render thread forgets the id just after it stops
+            if job_id not in jobs._cancelled:
+                break
+            time.sleep(0.05)
+        assert job_id not in jobs._cancelled
+        assert not client.app.state.storage.job_dir(job_id).exists()

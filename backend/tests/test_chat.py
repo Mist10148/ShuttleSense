@@ -236,3 +236,34 @@ def test_api_errors_become_readable_events(tmp_path: Path, tiny_video: Path) -> 
         detail = "The backend cannot reach the Claude API (offline?)."
         assert events == [{"type": "error", "status": 503, "detail": detail}]
         assert client.get(f"/jobs/{job_id}/record").json()["chat"] is None
+
+
+def test_limit_counts_an_answer_saved_while_the_next_question_waited(
+    tmp_path: Path, tiny_video: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shuttlesense.api import routes
+
+    fake = FakeClient()
+    with _client(tmp_path, fake, chat_max_messages=1) as client:
+        job_id = _done_job(client, tiny_video)
+        jobs, storage = client.app.state.jobs, client.app.state.storage
+        real_lock = jobs.job_lock
+        exchange = [
+            ChatMessage(role="user", text="one", at="2026-10-31T10:00:00Z"),
+            ChatMessage(role="assistant", text="answer", at="2026-10-31T10:00:01Z"),
+        ]
+        saved = []
+
+        def lock_after_the_other_answer(job: str):
+            # Another request's answer is saved just before this one gets the job lock.
+            if not saved:
+                saved.append(True)
+                routes._save_chat(storage, jobs, job_id, exchange)
+            return real_lock(job)
+
+        monkeypatch.setattr(jobs, "job_lock", lock_after_the_other_answer)
+        res = client.post(f"/jobs/{job_id}/chat", json={"message": "two"})
+        assert res.status_code == 429 and fake.requests == []
+        assert job_id not in client.app.state.chat_answering
+        messages = client.get(f"/jobs/{job_id}/record").json()["chat"]["messages"]
+        assert [m["text"] for m in messages] == ["one", "answer"]
