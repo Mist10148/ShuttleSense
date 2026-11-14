@@ -1,6 +1,6 @@
 # Decision log
 
-Design choices that shaped ShuttleSense, newest last. Add a row in the PR that makes the decision; if a later decision replaces an earlier one, add a new row and mark the old one *superseded*.
+Design choices that shaped ShuttleSense, in number order. D24–D27 were written down on Nov 14 with the dates the decisions were made, so their dates are earlier than D23's. Add a row in the PR that makes the decision; if a later decision replaces an earlier one, add a new row and mark the old one *superseded*.
 
 | # | Date | Decision | Alternatives considered | Reason | Owner |
 | --- | --- | --- | --- | --- | --- |

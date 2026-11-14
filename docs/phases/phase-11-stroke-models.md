@@ -7,6 +7,7 @@
 > classifier a choice between three algorithms, **CNN, LSTM and Random Forest**, picked per job in
 > the app, and ships trained weights for all three without the team extracting or labelling
 > anything. It also collects the bugs and stale docs found in a review of `main` on Nov 14.
+> Milestone "Phase 11 — Selectable stroke models", issues #134–#146.
 
 | | |
 | --- | --- |
@@ -14,7 +15,7 @@
 | **Goal** | A user picks CNN, LSTM or Random Forest for a clip or a live session; each has trained weights in the repo and a measured accuracy; the Nov 14 review findings are fixed with tests |
 | **Owners** | M1 (backend, API, docs), M5 (models), M6 (app) |
 | **Entry criteria** | Phase 10 on `main` |
-| **Status** | Draft plan, Nov 14 |
+| **Status** | Done Nov 14: every task below landed with tests (backend 404, app 236). Test macro accuracy on the BST split: 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3% ([results](../results/strokes.md)). Not done here: a run on a real clip with TrackNetV3 and pose installed, and the device check of the selector, which join the T4.3 and T7.2 checks |
 | **Exit gate** | Every task below is ✅; backend `pytest -m "not gpu"` and `ruff`, app `flutter analyze`, `flutter test` and `dart format` pass |
 
 ## What the research found (T11.1)
@@ -47,19 +48,19 @@ sequence models by a few points, but they need no GPU or PyTorch at all.
 
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| [T11.1](#t111) | Research and decisions | M1 | 3 h | — | ✅ | — |
-| [T11.2](#t112) | Import the BST ShuttleSet features | M5 | 4 h | T11.1 | ⬜ | — |
-| [T11.3](#t113) | Stroke model registry | M5 + M1 | 4 h | T3.10 | ⬜ | — |
-| [T11.4](#t114) | LSTM model and training | M5 | 3 h | T11.3 | ⬜ | — |
-| [T11.5](#t115) | Random Forest model and training | M5 | 4 h | T11.3 | ⬜ | — |
-| [T11.6](#t116) | Train all three, weights and comparison | M5 | 4 h | T11.2, T11.4, T11.5 | ⬜ | — |
-| [T11.7](#t117) | API: stroke model per job | M1 | 4 h | T11.3 | ⬜ | — |
-| [T11.8](#t118) | App: stroke model selector | M6 | 4 h | T11.7 | ⬜ | — |
-| [T11.9](#t119) | CLI `--stroke-model` | M1 | 1 h | T11.3 | ⬜ | — |
-| [T11.10](#t1110) | Live job fixes | M1 | 3 h | — | ⬜ | — |
-| [T11.11](#t1111) | API fixes | M1 | 4 h | — | ⬜ | — |
-| [T11.12](#t1112) | Windows re-render and test notifier | M1 + M6 | 2 h | — | ⬜ | — |
-| [T11.13](#t1113) | Docs sweep and link check | M1 | 3 h | — | ⬜ | — |
+| [T11.1](#t111) | Research and decisions | M1 | 3 h | — | ✅ | [#134](https://github.com/Mist10148/ShuttleSense/issues/134) |
+| [T11.2](#t112) | Import the BST ShuttleSet features | M5 | 4 h | T11.1 | ✅ | [#135](https://github.com/Mist10148/ShuttleSense/issues/135) |
+| [T11.3](#t113) | Stroke model registry | M5 + M1 | 4 h | T3.10 | ✅ | [#136](https://github.com/Mist10148/ShuttleSense/issues/136) |
+| [T11.4](#t114) | LSTM model and training | M5 | 3 h | T11.3 | ✅ | [#137](https://github.com/Mist10148/ShuttleSense/issues/137) |
+| [T11.5](#t115) | Random Forest model and training | M5 | 4 h | T11.3 | ✅ | [#138](https://github.com/Mist10148/ShuttleSense/issues/138) |
+| [T11.6](#t116) | Train all three, weights and comparison | M5 | 4 h | T11.2, T11.4, T11.5 | ✅ | [#139](https://github.com/Mist10148/ShuttleSense/issues/139) |
+| [T11.7](#t117) | API: stroke model per job | M1 | 4 h | T11.3 | ✅ | [#140](https://github.com/Mist10148/ShuttleSense/issues/140) |
+| [T11.8](#t118) | App: stroke model selector | M6 | 4 h | T11.7 | ✅ | [#141](https://github.com/Mist10148/ShuttleSense/issues/141) |
+| [T11.9](#t119) | CLI `--stroke-model` | M1 | 1 h | T11.3 | ✅ | [#142](https://github.com/Mist10148/ShuttleSense/issues/142) |
+| [T11.10](#t1110) | Live job fixes | M1 | 3 h | — | ✅ | [#143](https://github.com/Mist10148/ShuttleSense/issues/143) |
+| [T11.11](#t1111) | API fixes | M1 | 4 h | — | ✅ | [#144](https://github.com/Mist10148/ShuttleSense/issues/144) |
+| [T11.12](#t1112) | Windows re-render and test notifier | M1 + M6 | 2 h | — | ✅ | [#145](https://github.com/Mist10148/ShuttleSense/issues/145) |
+| [T11.13](#t1113) | Docs sweep and link check | M1 | 3 h | — | ✅ | [#146](https://github.com/Mist10148/ShuttleSense/issues/146) |
 
 ---
 
@@ -94,17 +95,18 @@ training script work unchanged.
 player, then the same 12 for the bottom player), `strokes/labels.py`, `strokes/features.py`.
 
 **Steps**
-- [ ] `scripts/import_bst_features.py`: read one split folder with `allow_pickle=False`; map the 12
+- [x] `scripts/import_bst_features.py`: read one split folder with `allow_pickle=False`; map the 12
       merged types through `labels.map_label` (drives and unknown are left out, D12); take the
       hitter's joints from the label's Top / Bottom half; build the same 39 values per frame as
       `build_window` (34 pose values, then shuttle `x, y, visible, dx, dy`); write
       `data/features/bst_<split>.npz` with `X`, `y` and `meta`, and a splits file.
-- [ ] `strokes/features.py`: a `pose_norm` option. `bbox_height` is today's rule; `bbox_diag`
+- [x] `strokes/features.py`: a `pose_norm` option. `bbox_height` is today's rule; `bbox_diag`
       divides by the box diagonal as the BST files do. One shared function derives the shuttle's
       `visible`, `dx` and `dy`, used by the importer and by inference.
-- [ ] The checkpoint stores `pose_norm` and `window_frames` (30), and inference reads them.
+- [x] The checkpoint stores `pose_norm` and `window_frames` (30), and inference reads them.
 
-**Outputs.** `data/features/bst_{train,val,test}.npz` (not in git), `configs/splits_bst.json`.
+**Outputs.** `data/features/bst_{train,val,test}.npz` (not in git; 23,723, 3,821 and 3,136
+windows), `configs/splits_bst.json`.
 
 **Tests.** A small synthetic BST folder imports to the expected shapes, labels and hitter; the
 importer's features equal `build_window` on the same data.
@@ -126,12 +128,13 @@ extracted by hand.
 and reports itself as installed or not.
 
 **Steps**
-- [ ] `strokes/registry.py`: the algorithm names, labels, weights paths and required packages.
-- [ ] `strokes/classify.py`: load by algorithm; one `predict_proba` for all three; a missing file
+- [x] `strokes/registry.py`: the algorithm names, labels, weights keys (`weights`, `weights_lstm`,
+      `weights_rf`) and required packages.
+- [x] `strokes/classify.py`: load by algorithm; one `predict_proba` for all three; a missing file
       or package skips the stage with a message that names the model.
-- [ ] `configs/pipeline.yaml`: `algorithm: cnn` and one weights path per algorithm, inside
+- [x] `configs/pipeline.yaml`: `algorithm: cnn` and one weights path per algorithm, inside
       `stages.strokes` so the stage cache notices a change.
-- [ ] `pipeline.py`: the strokes stage is available when the chosen algorithm is; a list of
+- [x] `pipeline.py`: the strokes stage is available when the chosen algorithm is; a list of
       installed stroke models for `/health`.
 
 **Tests.** Classify with each algorithm on the golden record; a missing weights file skips with
@@ -147,9 +150,9 @@ the right message; an unknown algorithm is refused.
 **Owner:** M5 · **Area:** ml · **Priority:** P1 · **Refs:** F6, D28
 
 **Steps**
-- [ ] `strokes/model.py`: a bidirectional LSTM over the window, mean and last-step pooling,
+- [x] `strokes/model.py`: a bidirectional LSTM over the window, mean and last-step pooling,
       dropout and a linear layer.
-- [ ] `scripts/train_stroke_classifier.py --algorithm lstm` with `configs/stroke_lstm.yaml`; same
+- [x] `scripts/train_stroke_classifier.py --algorithm lstm` with `configs/stroke_lstm.yaml`; same
       loss, schedule, early stopping, seeds and checkpoint format as the CNN.
 
 **Tests.** Forward shape; a short training run on synthetic data saves a checkpoint that
@@ -165,13 +168,13 @@ the right message; an unknown algorithm is refused.
 **Owner:** M5 · **Area:** ml · **Priority:** P1 · **Refs:** F6, D28, D31
 
 **Steps**
-- [ ] `strokes/rf.py`: summary features of a window (per-value mean, standard deviation, minimum,
+- [x] `strokes/rf.py`: summary features of a window (per-value mean, standard deviation, minimum,
       maximum and the value at the hit; wrist and elbow speed; elbow, shoulder and knee angles at
       the hit; shuttle direction and speed before and after the hit; how many frames the shuttle
       is visible).
-- [ ] `--algorithm rf` with `configs/stroke_rf.yaml`: scikit-learn `RandomForestClassifier`, class
+- [x] `--algorithm rf` with `configs/stroke_rf.yaml`: scikit-learn `RandomForestClassifier`, class
       weights, depth and leaf size limited so the saved file stays small.
-- [ ] `Forest`: copy the trained trees into plain arrays, save them as `.npz` and predict with
+- [x] `Forest`: copy the trained trees into plain arrays, save them as `.npz` and predict with
       NumPy. No pickled model: loading the file cannot run code, and the server does not need
       scikit-learn.
 
@@ -188,16 +191,21 @@ probabilities; train, save, load and classify round trip.
 **Owner:** M5 · **Area:** ml · **Priority:** P1 · **Refs:** F6, T3.8, T3.9, T3.12, T3.14, D29, D30
 
 **Steps**
-- [ ] Train CNN, LSTM and Random Forest on the BST train split with 3 seeds each; pick each
+- [x] Train CNN, LSTM and Random Forest on the BST train split with 3 seeds each; pick each
       model's best seed on the validation split.
-- [ ] Commit `weights/strokes/stroke_cnn.pt`, `stroke_lstm.pt` and `stroke_rf.npz`, with their
+- [x] Commit `weights/strokes/stroke_cnn.pt`, `stroke_lstm.pt` and `stroke_rf.npz`, with their
       SHA-256 values.
-- [ ] `scripts/make_figures.py`: a three-model table (accuracy, macro accuracy, macro F1, per-class
+- [x] `scripts/make_figures.py`: a three-model table (accuracy, macro accuracy, macro F1, per-class
       F1), confusion matrices and a comparison chart in `docs/results/strokes.md`.
-- [ ] `scripts/bench_strokes.py`: CPU latency for each model.
+- [x] `scripts/bench_strokes.py`: CPU latency for each model.
 
 **Acceptance criteria.** Each model's test-split numbers are in `docs/results/strokes.md`. The
 PRD target is macro accuracy ≥ 70%; a model that misses it is reported as such.
+
+**Result (Nov 14).** 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%; all three pass the target. Ablation: pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). The forest was
+cut from 200 trees of depth 18 (13 MB) to 150 of depth 14 (6 MB) for about one point of
+validation F1. CPU latency for a 1-minute clip is under 0.1 s for each model
+([stroke_latency.md](../results/stroke_latency.md)).
 
 **Risks.** The split is BST's, not `configs/splits.json`, so the numbers are not the T3.9 numbers;
 T3.9 on our own clips stays open.
@@ -210,12 +218,12 @@ T3.9 on our own clips stays open.
 **Owner:** M1 · **Area:** backend · **Priority:** P1 · **Refs:** FR-6, D28 · **Blocks:** T11.8
 
 **Steps**
-- [ ] `POST /jobs` and the live `start` message take `stroke_model` (`cnn`, `lstm`, `rf`; default
+- [x] `POST /jobs` and the live `start` message take `stroke_model` (`cnn`, `lstm`, `rf`; default
       `cnn`); the job echoes it; a bad value is `422` / `bad_request`.
-- [ ] `JobManager.job_config` writes it to `stages.strokes.algorithm`.
-- [ ] `GET /health` lists `stroke_models`, the ones installed on this server.
-- [ ] Clip record 1.4: optional `stroke_model`, the model that labelled the hits.
-- [ ] API.md, DATA_FORMAT.md, `openapi.json` and the schema snapshot.
+- [x] `JobManager.job_config` writes it to `stages.strokes.algorithm`.
+- [x] `GET /health` lists `stroke_models`, the ones installed on this server.
+- [x] Clip record 1.4: optional `stroke_model`, the model that labelled the hits.
+- [x] API.md, DATA_FORMAT.md, `openapi.json` and the schema snapshot.
 
 **Tests.** Create a job with each value; a bad value; the config override; `/health`; a re-render
 with another model re-runs the strokes stage.
@@ -230,11 +238,11 @@ with another model re-runs the strokes stage.
 **Owner:** M6 · **Area:** app · **Priority:** C · **Refs:** C-upload, C-live
 
 **Steps**
-- [ ] Upload options: a three-way "Stroke model" choice (CNN, LSTM, Random Forest), remembered
+- [x] Upload options: a three-way "Stroke model" choice (CNN, LSTM, Random Forest), remembered
       between sessions; a model the server does not have is disabled with "Not installed on this
       server".
-- [ ] `JobOptions`, `Job.fromJson`, `createJob`, the live start message and retry carry it.
-- [ ] Results show which model labelled the strokes.
+- [x] `JobOptions`, `Job.fromJson`, `createJob`, the live start message and retry carry it.
+- [x] Results show which model labelled the strokes.
 
 **Tests.** The selector sends the chosen value; a missing model is disabled; an old server
 (no `stroke_models`) hides the choice.
@@ -250,7 +258,7 @@ check joins the T4.3 checks.
 **Owner:** M1 · **Area:** backend · **Refs:** FR-6
 
 **Steps**
-- [ ] `shuttlesense --stroke-model cnn|lstm|rf`, written to the same config key.
+- [x] `shuttlesense --stroke-model cnn|lstm|rf`, written to the same config key.
 
 **Tests.** The flag reaches the stage config.
 
@@ -262,10 +270,10 @@ check joins the T4.3 checks.
 **Owner:** M1 · **Area:** backend · **Priority:** P3 · **Refs:** T8.6, D24
 
 **Steps**
-- [ ] A server restart while a saved live session renders left a job marked done that the app
+- [x] A server restart while a saved live session renders left a job marked done that the app
       could not open: on startup, set the job's outputs from the files on disk, and mark a live
       job with no video as failed with "render interrupted".
-- [ ] Deleting a live job during its render now stops the render, and its id no longer stays in
+- [x] Deleting a live job during its render now stops the render, and its id no longer stays in
       the cancelled set.
 
 **Tests.** One per step in `tests/test_live.py` / `tests/test_api.py`.
@@ -278,11 +286,12 @@ check joins the T4.3 checks.
 **Owner:** M1 · **Area:** backend · **Priority:** P3
 
 **Steps**
-- [ ] Coach chat: the question limit is checked again once the answer slot is taken, so two
+- [x] Coach chat: the question limit is checked again once the answer slot is taken, so two
       requests at the limit cannot both pass, and the second sees the first one's answer.
-- [ ] `POST /jobs/{id}/score/award`: a negative frame is `422` and a frame past the clip is `400`.
-- [ ] The access log no longer shows the `token` query value.
-- [ ] Per-job locks are removed when the job is deleted.
+- [x] `POST /jobs/{id}/score/award`: a negative frame is `422` and a frame past the clip is `400`.
+- [x] The access log no longer shows the `token` query value (a filter on uvicorn's loggers;
+      tested on constructed log records, not against a running server).
+- [x] Per-job locks are removed when the job is deleted.
 
 **Tests.** One per step.
 
@@ -294,9 +303,9 @@ check joins the T4.3 checks.
 **Owner:** M1 + M6 · **Area:** backend, app
 
 **Steps**
-- [ ] `atomic.py`: replacing the annotated video waits longer when a player still has the old file
-      open on Windows.
-- [ ] App tests use a fake job notifier, so the real notifications plugin is not called.
+- [x] `atomic.py`: replacing the annotated video waits up to 15 s when a player still has the old
+      file open on Windows; a player that holds it longer still fails the render.
+- [x] App tests use a fake job notifier, so the real notifications plugin is not called.
 
 **Tests.** A replace that fails several times and then succeeds; the processing-screen tests print
 no plugin error.
@@ -309,23 +318,25 @@ no plugin error.
 **Owner:** M1 · **Area:** docs
 
 **Steps**
-- [ ] README, SETUP, ARCHITECTURE, PRD, EVALUATION and `docs/results/README.md` describe the three
+- [x] README, SETUP, ARCHITECTURE, PRD, EVALUATION and `docs/results/README.md` describe the three
       models, how to pick one and how to retrain them.
-- [ ] Stale lines: the hitter rule in T3.5 (D14); the form-feedback owner; Phase 10 owners; the
+- [x] Stale lines: the hitter rule in T3.5 (D14); the form-feedback owner; Phase 10 owners; the
       order of the decision log; superseded text in Phase 8; `Phase: 0–11` in the issue template;
       the `make_splits.py` command in SETUP; the training command in README and SETUP; 5 or 10
       early matches; the polling interval; commit scopes in CONTRIBUTING; issue links in Phase 9.
-- [ ] `scripts/check_links.py`: every relative Markdown link and anchor resolves; run in CI.
+- [x] `scripts/check_links.py`: every relative Markdown link and anchor resolves; run in CI.
 
 **Acceptance criteria.** The link check passes; no doc contradicts the code on these points.
 
 ## Gate checklist
 
-- [ ] A clip analysed three times, once per model, gives three records whose `stroke_model`
-      differs and whose perception stages came from the cache.
-- [ ] `/health` lists the three models with the committed weights installed.
-- [ ] `docs/results/strokes.md` has the three-model table.
-- [ ] Backend and app checks pass.
+- [ ] A real clip analysed three times, once per model, gives three records whose `stroke_model`
+      differs and whose perception stages came from the cache. *Open: needs TrackNetV3 and pose
+      weights on the server. Checked so far: each model classifies the golden record, a fake-pipeline
+      job per model stores its `stroke_model`, and only the strokes cache key changes.*
+- [x] `/health` lists the three models with the committed weights installed.
+- [x] `docs/results/strokes.md` has the three-model table.
+- [x] Backend and app checks pass.
 
 ## Risks across the phase
 

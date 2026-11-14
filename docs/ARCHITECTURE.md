@@ -23,12 +23,12 @@ flowchart LR
 
 - **One Flutter codebase** (`app/`) builds for Android, iOS/iPadOS, Web and Windows. It never runs models; it uploads, collects input (court corners, overlay choices, score corrections) and presents results.
 - **One Python backend** (`backend/`) holds the CV pipeline and a FastAPI server. It runs on any NVIDIA GPU machine (primary: the team laptop) or inside Colab, where `scripts/serve_colab.py` opens a cloudflared tunnel.
-- Communication is plain REST + JSON, with file upload/download for videos. Polling (every 1 to 2 s) is used for job progress; it works through tunnels and on every Flutter platform without extra plumbing.
+- Communication is plain REST + JSON, with file upload/download for videos. Polling (every 1 s while a job runs, 3 s while it is queued, D3) is used for job progress; it works through tunnels and on every Flutter platform without extra plumbing.
 - **Live mode** (D16) adds one WebSocket, `WS /live`: the app sends JPEG camera frames and gets JSON events back (see [Live sessions](#live-sessions)). The coach chat (D18) is the only call that leaves the backend: a text digest of the record goes to the Claude API, and only when the backend has an API key ([PRIVACY.md](PRIVACY.md)).
 
 ### Why client/server and not on-device
 
-TrackNetV3, RTMPose and the stroke CNN need a GPU to hit the "1-minute clip in under 5 minutes" target. Porting them to TFLite/Core ML/ONNX-web for four platforms is a project on its own. Keeping inference on one Python backend means the ML team works in one environment and the app team works against a stable contract.
+TrackNetV3 and RTMPose need a GPU to hit the "1-minute clip in under 5 minutes" target. Porting them to TFLite/Core ML/ONNX-web for four platforms is a project on its own. Keeping inference on one Python backend means the ML team works in one environment and the app team works against a stable contract.
 
 ## 2. Pipeline
 
@@ -41,7 +41,7 @@ flowchart TD
     P --> R
     C --> R
     R --> H["hits · F5<br/>direction change near wrist"]
-    H --> S["strokes · F6<br/>1D CNN classifier"]
+    H --> S["strokes · F6<br/>CNN, LSTM or Random Forest"]
     S --> FB["feedback · F8<br/>angle rules"]
     R --> AN["analytics · F10–F13<br/>court-plane positions, speed, counts, export"]
     R --> RF["referee · F14–F16<br/>rally state, landing, score"]
@@ -69,7 +69,7 @@ Rules every stage follows:
 | court | `shuttlesense/court` | `court` | Member 2 | F9 |
 | hits | `shuttlesense/hits` | `hits[]` (frame, player) | Member 5 | F5 |
 | strokes | `shuttlesense/strokes` | `hits[].stroke`, `hits[].confidence`, `hits[].class_probs` | Member 5 | F6 |
-| feedback | `shuttlesense/feedback` | `hits[].feedback` | Member 6 | F8 |
+| feedback | `shuttlesense/feedback` | `hits[].feedback` | Member 3 | F8 |
 | analytics | `shuttlesense/analytics` | `hits[].speed_kmh`, `frames[].court_positions`, `frames[].shuttle_speed_kmh`, `summary` | Member 2 | F10–F13 |
 | referee | `shuttlesense/referee` | `rallies[]`, `score`, `hits[].rally_index`, `frames[].rally_state` | Member 3 | F14–F16 |
 | render | `shuttlesense/render` | writes `annotated.mp4` | Member 2 / Mist | F7 |
@@ -85,7 +85,9 @@ backend/
 │   └── dev.txt                 # pytest, httpx, ruff
 ├── configs/
 │   ├── pipeline.yaml           # stage toggles, thresholds, overlay defaults
-│   └── stroke_cnn.yaml         # classifier training hyperparameters
+│   ├── stroke_cnn.yaml         # training settings, one file per stroke model
+│   ├── stroke_lstm.yaml
+│   └── stroke_rf.yaml
 ├── shuttlesense/
 │   ├── schema.py               # ClipRecord and friends (pydantic) — source of truth
 │   ├── config.py               # YAML loading

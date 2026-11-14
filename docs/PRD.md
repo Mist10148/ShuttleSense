@@ -204,7 +204,7 @@ Every pipeline feature reads from and writes to one shared per-clip record; its 
 | Player detection | RTMDet person detector (via rtmlib); near/far ID by court side | Pretrained (COCO) |
 | Pose estimation | RTMPose (via rtmlib), COCO-17 keypoints; fallback torchvision Keypoint R-CNN | Pretrained |
 | Hit detection | Rules: shuttle direction change within a set distance of a wrist keypoint | No training |
-| Stroke classification | 1D CNN over a window of pose and shuttle features around each hit; pose-only baseline for comparison | Trained from scratch by the team on ShuttleSet |
+| Stroke classification | Three models over the same window of pose and shuttle features around each hit, chosen per clip: 1D CNN, LSTM, Random Forest ([D28](DECISIONS.md)); pose-only baseline for comparison | Trained by the team on the pre-extracted ShuttleSet features published with BST ([D29](DECISIONS.md)); weights committed |
 | Court mapping | OpenCV homography from 4 tapped corners | No training |
 | Speed | Court-plane displacement between frames times fps, smoothed | No training |
 | Scoring | Landing side, in/out and BWF rally scoring rules | No training |
@@ -344,17 +344,17 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 | --- | --- | --- | --- |
 | Mist | Project lead and integration | Repo, data format, API contract, backend job server, pipeline wiring, final merge | Code review, testing, release builds |
 | Member 2 | Shuttle tracking | TrackNetV3 inference, gap filling, trail overlay | Court calibration, minimap, speed |
-| Member 3 | Data pipeline A | Download and cut first half of ShuttleSet matches | Rally state and scoring |
+| Member 3 | Data pipeline A | Download and cut first half of ShuttleSet matches | Form feedback rules, rally state and scoring |
 | Member 4 | Data pipeline B | Cut second half, merge 18 labels into 6 classes | Evaluation set from team footage |
-| Member 5 | Pose and stroke classifier | Pose extraction, hit detection, 1D CNN, ablation | Results tables for the write-up |
-| Member 6 | Flutter app, feedback and docs | Flutter app (all screens, responsive layouts), form rules, slides | Backup demo video |
+| Member 5 | Pose and stroke classifier | Pose extraction, hit detection, stroke models (CNN, LSTM, Random Forest), ablation | Results tables for the write-up |
+| Member 6 | Flutter app and docs | Flutter app (all screens, responsive layouts), slides | Backup demo video |
 
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | Domain gap: models trained on broadcast footage perform worse on side-view phone clips | High | Film demo clips elevated and behind the baseline; report phone accuracy separately; fine-tune on a small labeled set if time allows |
-| Clip extraction from ShuttleSet takes longer than planned | High | Two people on the data pipeline; start with 10 matches, add more only if on schedule |
+| Clip extraction from ShuttleSet takes longer than planned | High | Two people on the data pipeline; start with 5 matches (T3.1), add more only if on schedule |
 | Similar strokes (smash vs clear, drop vs net shot) get confused | Medium | Merge to 6 classes; add shuttle trajectory features; show confidence |
 | Shuttle lost during fast smashes or occlusion | Medium | Use TrackNetV3's trajectory rectification; interpolate short gaps |
 | In/out calls wrong near lines | High | Uncertainty band from homography and tracking error; UNCERTAIN calls need user confirmation; overrides re-score; never labelled official |
@@ -387,7 +387,7 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 | v1.0 open question | Decision | Why |
 | --- | --- | --- |
 | Which pose model? | rtmlib (RTMDet + RTMPose, Apache-2.0); fallback torchvision Keypoint R-CNN (BSD) | Multi-person in one pass, fast on ONNX Runtime, permissive license compatible with MIT; to be confirmed by the Phase 1 pose spike (T1.5, D6 pending) |
-| Train a CNN from scratch or fine-tune? | The stroke 1D CNN is trained from scratch; perception models are pretrained | Satisfies either course interpretation; pretrained trackers would not be retrainable in 3 weeks |
+| Train a CNN from scratch or fine-tune? | The stroke models (1D CNN, LSTM, Random Forest) are trained from scratch; perception models are pretrained | Satisfies either course interpretation; pretrained trackers would not be retrainable in 3 weeks |
 | Gradio or Streamlit for the demo? | Neither: Flutter app, so the demo runs on phone, tablet and laptop | User requirement for cross-device use; the backend still exposes a CLI for development |
 | Where to share weights and data? | Hugging Face Hub for weights (scripted download), Google Drive for processed datasets | Versioned, scriptable weights; Drive is familiar and free for large data |
 
@@ -398,7 +398,7 @@ The plan assumes work starts Monday, Nov 2, 2026 and ends with the demo on Frida
 - On-device processing on phones and edge devices (live mode streams to the backend)
 - Multi-camera line calls for close-to-line accuracy
 - Fine-tuning on local amateur footage from Philippine courts
-- Learned hit detector and a transformer-based stroke model
+- Learned hit detector, and a transformer stroke model: the released BST weights take the same pose and shuttle sources but also need bones, both players and court positions
 - App store releases and in-app recording
 
 ## References

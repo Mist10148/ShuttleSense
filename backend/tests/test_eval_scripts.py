@@ -417,3 +417,24 @@ def test_speed_report_on_the_golden_record(tmp_path: Path) -> None:
         speed_report.main()
     assert json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))["rows"] == rows
     assert png.stat().st_size > 0
+
+
+def test_check_links_finds_missing_files_and_headings(tmp_path: Path) -> None:
+    links = load_script("check_links")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "b.md").write_text(
+        '# Title\n\n## Stroke models (D28)\n\n<a id="t111"></a>\n', encoding="utf-8"
+    )
+    (tmp_path / "a.md").write_text(
+        "[ok](docs/b.md) [ok](docs/b.md#stroke-models-d28) [ok](docs/b.md#t111) [self](#top)\n"
+        "# Top\n"
+        "[web](https://example.com/x.md) `[code](missing.md)`\n"
+        "```\n[fenced](missing.md)\n```\n"
+        "[gone](docs/c.md) and [bad](docs/b.md#nope)\n",
+        encoding="utf-8",
+    )
+    problems = links.check(tmp_path)
+    assert len(problems) == 2
+    assert "a.md:7: docs/c.md (file not found)" in problems[0]
+    assert "docs/b.md#nope (no such heading)" in problems[1]
+    assert links.slug("Phase 11 — Selectable stroke models") == "phase-11--selectable-stroke-models"

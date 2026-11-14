@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | **Dates** | Tue Nov 3 – Fri Nov 13, 2026 |
-| **Goal** | Detect every hit and classify it into 6 stroke classes with a 1D CNN trained from scratch on ShuttleSet, with a pose-only ablation |
+| **Goal** | Detect every hit and classify it into 6 stroke classes with a 1D CNN trained from scratch on ShuttleSet, with a pose-only ablation (since Phase 11 also an LSTM and a Random Forest, [D28](../DECISIONS.md)) |
 | **Owners** | M3 + M4 (data pipeline, evaluation support), M5 (hits, classifier), M2 (render labels) |
 | **Entry criteria** | T1.9 annotations downloaded; T2.2 and T2.5 produce shuttle + pose |
 | **Exit gate** | Hit F1 ≥ 0.75 (±3 frames) and stroke macro accuracy ≥ 70% on held-out ShuttleSet matches, or documented gaps; ablation numbers recorded; strokes appear in `record.json`, the video and the app |
@@ -28,7 +28,7 @@
 | [T3.9](#t39) | Full training + pose-only ablation | M5 | 8 h | T3.8 | ⬜ | [#43](https://github.com/Mist10148/ShuttleSense/issues/43) |
 | [T3.10](#t310) | Stroke inference stage | M5 | 5 h | T3.9, T2.8 | ⬜ | [#44](https://github.com/Mist10148/ShuttleSense/issues/44) |
 | [T3.11](#t311) | Hit marker and stroke label overlays | M2 | 4 h | T3.10, T2.6 | ⬜ | [#45](https://github.com/Mist10148/ShuttleSense/issues/45) |
-| [T3.12](#t312) | Confusion matrix and results figures | M4 | 4 h | T3.9 | ⬜ | [#46](https://github.com/Mist10148/ShuttleSense/issues/46) |
+| [T3.12](#t312) | Confusion matrix and results figures | M4 | 4 h | T3.9 | ✅ | [#46](https://github.com/Mist10148/ShuttleSense/issues/46) |
 | [T3.13](#t313) | Dataset statistics and class balance report | M4 | 3 h | T3.3, T3.4 | ⬜ | [#47](https://github.com/Mist10148/ShuttleSense/issues/47) |
 | [T3.14](#t314) | Classifier inference latency and fallback | M3 | 2 h | T3.10 | ⬜ | [#48](https://github.com/Mist10148/ShuttleSense/issues/48) |
 
@@ -114,8 +114,8 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 - [x] Put the shared feature code in `backend/shuttlesense/strokes/features.py` so training and inference use the *same* function: `build_window(record_or_arrays, hit_frame, player, T, use_trajectory) -> np.ndarray[T, F]`.
 - [x] Per frame: hitter's 17 keypoints (x, y) normalized to the hitter's bbox (centre-subtract, divide by bbox height) → 34 values; keypoint scores optional (+17).
 - [x] Shuttle: (x, y) normalized to frame size, visible, dx, dy → 5 values. Missing frames → zeros + visible=0.
-- [x] Hitter = the ShuttleSet player who hit the stroke (map A/B to near/far using the position in the hit frame).
-- [x] `extract_features.py`: run tracking + pose on each clip (batch on GPU), build windows (`T=32` from `configs/stroke_cnn.yaml`), save `data/features/<match_id>.npz` with `X [N,T,F]`, `y [N]` (class index in `STROKE_CLASSES` order), `meta` (clip names).
+- [x] Hitter = the player whose wrist is closest to the shuttle at the hit frame ([D14](../DECISIONS.md)); ShuttleSet's A/B label is not used.
+- [x] `extract_features.py`: run tracking + pose on each clip (batch on GPU), build windows (`--window`, 30 frames since Phase 11; `--pose-norm bbox_diag`), save `data/features/<match_id>.npz` with `X [N,T,F]`, `y [N]` (class index in `STROKE_CLASSES` order), `meta` (clip names).
 - [ ] Run on Colab across team accounts if needed; upload `.npz` files to Drive `features/`.
 
 **Tests.** `tests/test_features.py::test_window_shape`, `::test_pose_only_drops_shuttle_columns`, `::test_missing_frames_are_zero_with_visible_flag`, `::test_normalization_is_bbox_relative`.
@@ -168,7 +168,8 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 - [x] Use `strokes/model.py::build_model(in_features)` (exists); tune depth from config.
 - [x] Implement `scripts/train_stroke_classifier.py` (stub exists): seeds (`random`, `numpy`, `torch`), AdamW, cross-entropy with inverse-frequency class weights, cosine LR, early stopping on val macro-F1, save best checkpoint with `{state_dict, in_features, classes, config}`.
 - [x] Log per-epoch metrics to `outputs/stroke_cnn_metrics.json` and stdout.
-- [ ] **Week 1 baseline:** train on 5 matches, evaluate on 1, post the number on the issue.
+- [x] **Week 1 baseline:** train on 5 matches, evaluate on 1, post the number on the issue. *Replaced on
+      Nov 14 by the full runs on the BST features ([Phase 11](phase-11-stroke-models.md#t116)).*
 
 **Tests.** `tests/test_strokes.py::test_model_forward_shape` (`@pytest.mark.skipif` no torch), `::test_dataset_reads_npz` (tiny synthetic npz), `::test_flip_swaps_left_right_joints`.
 
@@ -182,10 +183,11 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M5 · **Estimate:** 8 h · **Priority:** P1 · **Area:** ml · **Refs:** F6, Success metrics (≥ 70% macro accuracy; ablation) · **Depends on:** T3.8 · **Blocks:** T3.10, T3.12, T7.3
 
 **Steps**
-- [ ] Train the full model (pose + trajectory) on train, select on val, evaluate once on test; 3 seeds, report mean ± std.
-- [ ] Same with `--pose-only`.
-- [ ] Upload the best full checkpoint to Hugging Face `strokes/stroke_cnn.pt`; add its checksum to `download_weights.py`.
-- [ ] Write `docs/results/strokes.md` with the results table and training settings.
+- [x] Train the full model (pose + trajectory) on train, select on val, evaluate once on test; 3 seeds, report mean ± std. *Done on the BST features and split (D29): test macro accuracy 89.5% ± 1.2%.*
+- [x] Same with `--pose-only`: 77.1% ± 0.1%.
+- [ ] The same two runs on our own clips and `configs/splits.json` (needs T3.1, T3.2 and T3.5).
+- [x] Publish the best full checkpoint with its checksum in `download_weights.py`. *Committed under `backend/weights/strokes/` instead of Hugging Face ([D30](../DECISIONS.md)).*
+- [x] Write `docs/results/strokes.md` with the results table and training settings.
 
 **Acceptance criteria.** Test macro accuracy and per-class F1 for both variants recorded; best model ≥ 70% or analysis of confusions.
 
@@ -230,7 +232,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 
 **Steps**
 - [x] Notebook `backend/notebooks/stroke_results.ipynb` (outputs cleared before commit): normalized confusion matrix, per-class F1 bars, ablation comparison, examples of the most confused pairs. Done as `scripts/make_figures.py` instead of a notebook, so the figures regenerate from the metrics files.
-- [ ] Export PNGs to `docs/results/` (small files only).
+- [x] Export PNGs to `docs/results/` (small files only).
 
 **Acceptance criteria.** Figures committed and referenced from `docs/results/strokes.md`.
 
@@ -255,7 +257,7 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M3 · **Estimate:** 2 h · **Priority:** P2 · **Area:** ml · **Refs:** NFR Performance · **Depends on:** T3.10 · **Blocks:** —
 
 **Steps**
-- [x] Measure the strokes stage on CPU (`scripts/bench_strokes.py`, untrained model: [stroke_latency.md](../results/stroke_latency.md)).
+- [x] Measure the strokes stage on CPU with the trained weights of all three models (`scripts/bench_strokes.py --models cnn,lstm,rf`: [stroke_latency.md](../results/stroke_latency.md)).
 - [ ] Measure it on the GPU with trained weights for a 1-minute rally; add to `timings.json`.
 - [x] Ensure CPU inference works (map checkpoint to CPU) so laptops without CUDA still classify.
 

@@ -3,10 +3,10 @@ name: backend
 on:
   push:
     branches: [main]
-    # test_openapi_snapshot reads docs/openapi.json.
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml"]
+    # test_openapi_snapshot reads docs/openapi.json; check_links.py reads every Markdown file.
+    paths: ["backend/**", "docs/**", "*.md", ".github/workflows/backend-ci.yml"]
   pull_request:
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "docs/**", "*.md", ".github/workflows/backend-ci.yml"]
 
 defaults:
   run:
@@ -33,6 +33,8 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
+      - name: Docs links
+        run: python scripts/check_links.py
       - name: Test
         # gpu tests need CUDA, weights and the team's sample clips.
         run: pytest -m "not gpu"

@@ -103,7 +103,7 @@ Platform notes:
 | Video encoding | OpenCV writer + ffmpeg (H.264, yuv420p, `+faststart`) | Plays on every Flutter target; ffmpeg is preinstalled on Colab, install on Windows via `winget install Gyan.FFmpeg` |
 | Weights | Hugging Face Hub repo `shuttlesense/weights` (private until release) | TrackNetV3, InpaintNet, stroke CNN checkpoints |
 | Datasets | Google Drive shared folder | ShuttleSet annotations, cut clips, feature `.npz` files |
-| Source control | GitHub (`Mist10148/ShuttleSense`) | Issues + Projects board mirrors [PHASES.md](PHASES.md) |
+| Source control | GitHub (`Mist10148/ShuttleSense`) | Issues and milestones mirror [PHASES.md](PHASES.md); the Projects board is not set up yet (T0.6) |
 | CI | GitHub Actions | Backend: ruff + pytest. App: analyze + test + web build |
 
 ## Third-party licenses

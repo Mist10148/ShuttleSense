@@ -39,7 +39,7 @@ docs: add results table for stroke classifier
 | `chore` | Tooling, deps, config |
 | `ci` | GitHub Actions |
 
-Scopes: `backend`, `api`, `tracking`, `pose`, `court`, `hits`, `strokes`, `feedback`, `analytics`, `referee`, `render`, `app`, `data`.
+Scopes: `backend`, `api`, `tracking`, `pose`, `court`, `hits`, `strokes`, `ml`, `feedback`, `analytics`, `referee`, `live`, `coach`, `render`, `eval`, `app`, `data`.
 
 Keep commits small and focused; reference the task in the body (`Refs T2.2`).
 

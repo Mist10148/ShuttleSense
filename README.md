@@ -102,7 +102,7 @@ flowchart LR
         B --> E[(Clip record)]
         C --> E
         D --> E
-        E --> F[Hits] --> G[Stroke CNN] --> H[Form feedback]
+        E --> F[Hits] --> G[Stroke model<br/>CNN, LSTM or Random Forest] --> H[Form feedback]
         E --> I[Minimap + speed + stats]
         E --> L[Rally state + in/out + score]
         H --> O[Annotated MP4 · JSON · CSV]
@@ -235,13 +235,18 @@ python -m shuttlesense.run --video ../samples/rally01.mp4 --out outputs/rally01
 
 ```bash
 cd backend
-python scripts/download_shuttleset.py      # annotations + match list
-python scripts/extract_clips.py            # cut per-stroke clips (videos in data/videos/)
-python scripts/extract_features.py         # pose + shuttle features per clip
-python scripts/train_stroke_classifier.py --seeds 1,2,3          # split: configs/splits.json
-python scripts/train_stroke_classifier.py --seeds 1,2,3 --pose-only   # ablation
+# The shipped weights: pre-extracted ShuttleSet features published with BST (no videos needed).
+# Download and extract dataset_npy.rar first, see docs/SETUP.md section 6.
+python scripts/import_bst_features.py --src data/bst_download/extracted/dataset_npy
+python scripts/train_stroke_classifier.py --algorithm cnn  --seeds 1,2,3
+python scripts/train_stroke_classifier.py --algorithm lstm --seeds 1,2,3
+python scripts/train_stroke_classifier.py --algorithm rf   --seeds 1,2,3
+python scripts/train_stroke_classifier.py --algorithm cnn  --seeds 1,2,3 --pose-only   # ablation
 python scripts/make_figures.py             # docs/results/strokes.md + figures
 ```
+
+To train on your own clips instead, cut and extract them first (`download_shuttleset.py`,
+`extract_clips.py`, `extract_features.py`) and add `--splits configs/splits.json`.
 
 ---
 
@@ -265,7 +270,7 @@ Datasets and match videos are **not** included in this repository. Use the downl
 | Player detection | RTMDet person detector with near/far ID assignment | Pretrained (COCO) |
 | Pose estimation | RTMPose, COCO-17 keypoints (via rtmlib) | Pretrained |
 | Hit detection | Shuttle direction change near a wrist keypoint | Rule-based |
-| Stroke classification | 1D CNN over pose + shuttle features around each hit | Trained from scratch by the team |
+| Stroke classification | A choice per clip: 1D CNN, LSTM or Random Forest, all over the same pose + shuttle window around each hit | Trained by the team on public ShuttleSet features; weights in the repo |
 | Court mapping | OpenCV homography from 4 tapped corners | Rule-based |
 | Speed and scoring | Court-plane displacement; BWF rally scoring rules | Rule-based |
 
@@ -279,7 +284,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | --- | --- | --- | --- |
 | Shuttle detection accuracy (within 4 px) | Trajectory test clips | ≥ 85% | TBD |
 | Hit detection F1 (±3 frames) | ShuttleSet test matches | ≥ 0.75 | TBD |
-| Stroke accuracy, 6 classes | ShuttleSet test matches | ≥ 70% | TBD |
+| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3% ([strokes.md](docs/results/strokes.md)) |
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
@@ -289,13 +294,13 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
-**Ablation:** pose-only vs pose + shuttle trajectory for stroke classification (TBD).
+**Ablation:** pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). These numbers are on broadcast matches; accuracy on phone footage is not measured yet.
 
 ---
 
 ## Roadmap
 
-Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task in Phases 0–10 is also a GitHub issue under its phase milestone.
+Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, workload, critical path, cut lines) and one file per phase in [docs/phases/](docs/phases/). Every task in Phases 0–11 is also a GitHub issue under its phase milestone.
 
 - [ ] **Phase 0 (Oct 29 – Nov 1):** repo structure, docs, backend and app skeletons, CI are in place; team setup, shared assets and the phase gate remain
 - [ ] **Phase 1 (Nov 2 – 3):** freeze data format and API, TrackNetV3 + pose running, app connects on all platforms
@@ -315,7 +320,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - On-device processing on phones and edge devices (live mode streams to the backend)
 - Multi-camera line calls
 - Fine-tuning on amateur footage from local courts
-- Transformer-based stroke model and a learned hit detector
+- A transformer stroke model (the released BST weights fit our pose and shuttle data) and a learned hit detector
 
 ---
 
@@ -367,10 +372,10 @@ BSCS 2-A
 | --- | --- |
 | Mist | Project lead, integration, backend API |
 | Member 2 | Shuttle tracking, court calibration, minimap, speed |
-| Member 3 | Data pipeline, rally state and scoring |
+| Member 3 | Data pipeline, form feedback rules, rally state and scoring |
 | Member 4 | Data pipeline, label mapping, evaluation set |
 | Member 5 | Pose estimation, hit detection, stroke classifier |
-| Member 6 | Flutter app, form feedback, documentation |
+| Member 6 | Flutter app, documentation |
 
 ---
 

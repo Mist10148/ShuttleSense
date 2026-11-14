@@ -66,19 +66,19 @@ class Hit(BaseModel):
 
 | ID | Task | Owner | Est. | Depends | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| [T9.1](#t91) | Decision record and clip record v1.2 | M1 | 4 h | — | ✅ | #113 |
-| [T9.2](#t92) | Record and label doubles clips | M4 | 12 h | — | ⬜ | #114 |
-| [T9.3](#t93) | Four-player filter and per-side tracker | M2 | 16 h | T9.1 | ✅ | #115 |
-| [T9.4](#t94) | Appearance cue for partner identity | M2 | 10 h | T9.3 | ⬜ | #116 |
-| [T9.5](#t95) | Hitter attribution within a side | M5 | 8 h | T9.3 | ⬜ | #117 |
-| [T9.6](#t96) | Doubles service order and receiver | M3 + M1 | 8 h | T9.1 | ✅ | #118 |
-| [T9.7](#t97) | Strokes in doubles: drive class and confidence | M5 | 16 h | T9.2 | ⬜ | #119 |
-| [T9.8](#t98) | Doubles feedback rules and per-player analytics | M3 | 8 h | T9.5 | ✅ | #120 |
-| [T9.9](#t99) | Live mode with four players | M1 + M2 | 10 h | T9.3, T9.5 | ⬜ | #121 |
-| [T9.10](#t910) | Court choice in upload (app and API), doubles match setup | M6 + M1 | 7 h | T9.6 | ✅ | #122 |
-| [T9.11](#t911) | App: four players in overlays, minimap, stats | M6 + M4 | 12 h | T9.1, T9.8 | ✅ | #123 |
-| [T9.12](#t912) | Doubles evaluation scripts and report | M4 | 10 h | T9.2–T9.6 | ⬜ | #124 |
-| [T9.13](#t913) | Docs: PRD, README, API, data format | M1 | 4 h | T9.12 | ⬜ | #125 |
+| [T9.1](#t91) | Decision record and clip record v1.2 | M1 | 4 h | — | ✅ | [#113](https://github.com/Mist10148/ShuttleSense/issues/113) |
+| [T9.2](#t92) | Record and label doubles clips | M4 | 12 h | — | ⬜ | [#114](https://github.com/Mist10148/ShuttleSense/issues/114) |
+| [T9.3](#t93) | Four-player filter and per-side tracker | M2 | 16 h | T9.1 | ✅ | [#115](https://github.com/Mist10148/ShuttleSense/issues/115) |
+| [T9.4](#t94) | Appearance cue for partner identity | M2 | 10 h | T9.3 | ⬜ | [#116](https://github.com/Mist10148/ShuttleSense/issues/116) |
+| [T9.5](#t95) | Hitter attribution within a side | M5 | 8 h | T9.3 | ⬜ | [#117](https://github.com/Mist10148/ShuttleSense/issues/117) |
+| [T9.6](#t96) | Doubles service order and receiver | M3 + M1 | 8 h | T9.1 | ✅ | [#118](https://github.com/Mist10148/ShuttleSense/issues/118) |
+| [T9.7](#t97) | Strokes in doubles: drive class and confidence | M5 | 16 h | T9.2 | ⬜ | [#119](https://github.com/Mist10148/ShuttleSense/issues/119) |
+| [T9.8](#t98) | Doubles feedback rules and per-player analytics | M3 | 8 h | T9.5 | ✅ | [#120](https://github.com/Mist10148/ShuttleSense/issues/120) |
+| [T9.9](#t99) | Live mode with four players | M1 + M2 | 10 h | T9.3, T9.5 | ⬜ | [#121](https://github.com/Mist10148/ShuttleSense/issues/121) |
+| [T9.10](#t910) | Court choice in upload (app and API), doubles match setup | M6 + M1 | 7 h | T9.6 | ✅ | [#122](https://github.com/Mist10148/ShuttleSense/issues/122) |
+| [T9.11](#t911) | App: four players in overlays, minimap, stats | M6 + M4 | 12 h | T9.1, T9.8 | ✅ | [#123](https://github.com/Mist10148/ShuttleSense/issues/123) |
+| [T9.12](#t912) | Doubles evaluation scripts and report | M4 | 10 h | T9.2–T9.6 | ⬜ | [#124](https://github.com/Mist10148/ShuttleSense/issues/124) |
+| [T9.13](#t913) | Docs: PRD, README, API, data format | M1 | 4 h | T9.12 | ⬜ | [#125](https://github.com/Mist10148/ShuttleSense/issues/125) |
 
 **Critical path:** T9.1 → T9.3 → T9.4 → T9.5 → T9.12. T9.2 (data) starts on day 1 because
 everything measurable waits on it. T9.6 and T9.10 can run in parallel with tracking.

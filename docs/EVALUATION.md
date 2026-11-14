@@ -26,7 +26,7 @@ Written evaluation of ShuttleSense (T7.9). Each section names the report in [doc
 ## 3. Method
 
 - **Hits:** rule-based, a sharp turn of the shuttle near a wrist. Thresholds are tuned on val matches only (`eval_hits.py --grid`).
-- **Strokes:** a 1D CNN over 32-frame windows of pose and shuttle features. Training uses 3 seeds and reports mean ± std. The pose-only ablation uses the same seeds.
+- **Strokes:** three models over the same 30-frame window of pose and shuttle features (39 values per frame): a 1D CNN, a bidirectional LSTM, and a Random Forest on summary statistics of the window. Each is trained with 3 seeds, selected on the validation split and evaluated once on the test split; results are mean ± std. The pose-only ablation uses the same seeds. They were trained on the pre-extracted ShuttleSet features published with BST (D29): 30 train, 5 validation and 5 test matches as split by BST, 23,723 / 3,821 / 3,136 strokes after the drive and unknown types are left out.
 - **Phone footage:** processed with the frozen pipeline and calibration.
 - **Line calls:** each labelled rally is matched to a predicted rally (start and end within ±1 s, as for rally boundaries). Only certain calls count towards precision and recall; UNCERTAIN calls are the ones the app hands to the user, and their share is reported next to the scores so a low false-call rate cannot hide behind many uncertain calls. The near-line false-call rate uses the labelled landing position when the label has one, otherwise the predicted margin, and the report states which. ShuttleSet labels come from `lose_reason` (out, or landed in); net faults and other reasons are skipped, and the mapping must be checked against the downloaded CSVs before reporting.
 - **Live latency:** `scripts/bench_live.py` sends frames one at a time and waits for each frame's event, so the number is the processing path without queueing (network on localhost, JPEG decode, perception, windowed analysis). Events that need look-ahead lag by design: hits by 17 frames (0.57 s at 30 fps) plus at most one 5-frame tick, line calls and rally ends until the rest rule and the settle window have passed. The benchmark measures this event lag per event type, in frames after the frame the event is about (contact, landing, rally end), which does not depend on the machine.
@@ -37,6 +37,9 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 
 | What | Result | Report |
 | --- | --- | --- |
+| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%. Target ≥ 70% | [results/strokes.md](results/strokes.md) |
+| Ablation: shuttle trajectory features (1D CNN) | pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN) | [results/strokes.md](results/strokes.md) |
+| Stroke stage latency, CPU, 40 hits in a 1-minute clip | Under 0.1 s for each of the three models | [results/stroke_latency.md](results/stroke_latency.md) |
 | Live pipeline overhead with fake perception (420 frames paced at 30 fps) | p50 12.9 ms and p95 26.2 ms frame round trip, with p95 22.9 ms on the server | [results/live_latency.md](results/live_latency.md) |
 | The same, 300 frames on Nov 12 | p50 15.7 ms and p95 36.7 ms round trip, p95 31.0 ms on the server; hits 0.74 s and line calls 1.73 s at p95 | [results/live_latency_fake.md](results/live_latency_fake.md) |
 | Live event lag in the same run | p95 0.736 s for hits, 1.733 s for line calls and 1.734 s for rally ends | [results/live_latency.md](results/live_latency.md) |

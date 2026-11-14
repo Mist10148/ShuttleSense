@@ -145,7 +145,7 @@ Overload plan:
 - **M2:** if Phase 2 runs late, M1 takes T5.3 court outline and T5.14 minimap overlay.
 - If more is needed, apply the cut lines below. Re-check this table at every phase gate.
 
-Phases 8 (about 70 h), 9 (about 150 h, mostly after the release) and 10 (about 39 h) are not in the table above. Phase 8 code landed with the scope change on Oct 31 and Phase 9 code on Nov 12; what remains there is evaluation (M4), device checks (M6) and tuning (M3). Phase 10 is review fixes and code-only steps (M1, M3, M6). Re-balance at the Nov 13 gate.
+Phases 8 (about 70 h), 9 (about 150 h, mostly after the release), 10 (about 39 h) and 11 are not in the table above. Phase 8 code landed with the scope change on Oct 31 and Phase 9 code on Nov 12; what remains there is evaluation (M4), device checks (M6) and tuning (M3). Phase 10 is review fixes and code-only steps (M1–M4, M6). Phase 11 (about 43 h) is the stroke models and a second review pass (M1, M5, M6). Re-balance at the Nov 13 gate.
 
 ## Cut lines
 
@@ -522,17 +522,53 @@ Nov 13 redesign. All eight tasks are done:
 - **Not verified:** the notification and the game-service picker on a phone, tablet or Windows
   desktop; they join the device checklists.
 
+### Phase 11 pass (Nov 14, later)
+
+[Phase 11](phases/phase-11-stroke-models.md) makes the stroke classifier a choice between three
+models and ships trained weights for all of them. All thirteen tasks are done:
+
+- **Research (T11.1, D28–D31):** no pre-trained LSTM or Random Forest stroke classifier exists for
+  COCO keypoints. The one solid pre-trained model, the BST transformer, is none of the three and
+  needs inputs the pipeline does not build. The BST repository's pre-extracted ShuttleSet features
+  use our pose and shuttle models, so the three models were trained on those.
+- **Models (T11.2–T11.6):** `scripts/import_bst_features.py`; an LSTM; a Random Forest on summary
+  features, saved as plain arrays so the server needs neither scikit-learn nor a pickled file;
+  `train_stroke_classifier.py --algorithm cnn|lstm|rf`. Test macro accuracy on the BST split, three
+  seeds: 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%. Ablation: pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). Weights are committed under `backend/weights/strokes/`.
+- **Choice per job (T11.7–T11.9):** `stroke_model` on `POST /jobs` and the live start, `stroke_models`
+  in `/health`, clip record 1.4 (`stroke_model`), `--stroke-model` on the CLI, and a selector in the
+  app's upload options and live setup. Running a clip again with another model reuses the cached
+  tracking, pose and hits.
+- **Fixes, each with a test (T11.10–T11.12):**
+  - a restart during a saved live session's render left a job that could not be opened;
+  - deleting a live job did not stop its render;
+  - two chat questions at the limit could both pass;
+  - `POST /jobs/{id}/score/award` accepted any frame;
+  - the access token appeared in the server logs;
+  - a re-render failed on Windows while the old video was still playing;
+  - per-job locks were never removed;
+  - app tests called the real notifications plugin.
+- **Docs (T11.13):** stale lines fixed (list in the task card) and `scripts/check_links.py` added to CI.
+- **Verified:** backend `ruff check`, `ruff format --check` and `pytest -m "not gpu"` pass (404 tests);
+  app `flutter analyze`, `dart format` and `flutter test` pass (236 tests).
+- **Not verified:**
+  - the three models on our own clips or phone footage. The numbers above are on broadcast matches
+    from BST's split, not `configs/splits.json`, so T3.9 on our own clips and T7.2 stay open;
+  - a full pipeline run with the stroke models on a real clip (no TrackNetV3 or pose weights here);
+  - the selector on a phone, tablet or Windows desktop;
+  - release builds, which were not re-run.
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |
 | --- | --- | --- |
 | T0.6–T0.10, T1.1, T1.2, T1.4–T1.9 | M1 and team | Provision shared storage, record consented clips, review schema and API, and document GPU/Colab setup and device connections. Record teammate sign-offs, artifact checksums and platform results. |
-| T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.14 | M2–M5 | Install weights, agree on labels, extract features and train on the documented splits. Report tracking, hits, strokes, ablation and timings. |
+| T2.2–T2.3, T2.9–T2.11, T3.1–T3.3, T3.5–T3.11, T3.13, T3.14 | M2–M5 | Install weights, agree on labels, extract features and train on the documented splits (the shipped stroke models were trained on the BST features instead, D29; T3.12 is done). Report tracking, hits, strokes, ablation and timings. |
 | T4.1–T4.7, T4.9, T4.11, T4.13, T5.1, T5.3–T5.14 | M4, M6, M2 | Verify target devices in both themes and at 200% text size, sign off on the artwork, and publish the calibrated speed check on team clips. |
 | T6.7, T8.3, T8.6, T8.8–T8.12, T8.14–T8.15 | M1–M4, M6 | Label rallies and landings, measure model latency and accuracy, and verify camera, chat and courtside controls. Save commands, metrics and the device checklist. |
 | T9.2, T9.4, T9.5, T9.7, T9.9, T9.12, T9.13 | M1–M6 | Doubles ([Phase 9](phases/phase-9-doubles.md)): code tasks land first; record and label doubles rallies (T9.2), then measure ID switches, hitter attribution and service order (T9.12). |
-| T10.1–T10.8 | M4, M6 | Done Nov 14 ([Phase 10](phases/phase-10-hardening.md)); only device checks of the notification and the game-service picker remain, with the T4.4 and T8.14 checks. |
-| T11.1–T11.13 | M1, M5, M6 | [Phase 11](phases/phase-11-stroke-models.md): import the public BST features, train CNN, LSTM and Random Forest, add the per-job choice to the API and app, and fix the Nov 14 review findings. |
+| T10.1–T10.8 | M1–M4, M6 | Done Nov 14 ([Phase 10](phases/phase-10-hardening.md)); only device checks of the notification and the game-service picker remain, with the T4.4 and T8.14 checks. |
+| T11.1–T11.13 | M1, M5, M6 | Done Nov 14 ([Phase 11](phases/phase-11-stroke-models.md)); what remains is a run on a real clip with the perception models installed and the device check of the selector, with the T4.3 and T7.2 checks. |
 | T7.1–T7.13 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
 Verified on Nov 3 (an earlier pass, kept for the record):
@@ -550,7 +586,7 @@ Verified on Nov 3 (an earlier pass, kept for the record):
 - **Weights and data:**
   - HF repo and Drive folder (T0.9), with links in SETUP.md.
   - Upload the TrackNetV3 weights and fill `CHECKSUMS` (T1.4).
-  - The laptop venv (Nov 12) also lacks torchvision (so the Keypoint R-CNN pose fallback cannot run), scikit-learn and huggingface_hub. The ShuttleSet annotations are already local in `backend/data/shuttleset/` (m01–m44).
+  - The laptop venv (Nov 12) also lacks torchvision (so the Keypoint R-CNN pose fallback cannot run) and huggingface_hub; scikit-learn was added on Nov 14. The ShuttleSet annotations are already local in `backend/data/shuttleset/` (m01–m44).
 - **ML stack and benchmarks:**
   - Install CUDA torch, onnxruntime-gpu and rtmlib, and record the versions (T1.6).
   - Run the Colab tunnel (T1.7).

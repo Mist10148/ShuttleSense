@@ -127,8 +127,17 @@ Expected layout after download:
 backend/weights/
 ├── tracknet/TrackNet_best.pt
 ├── tracknet/InpaintNet_best.pt
-└── strokes/stroke_cnn.pt        # after Phase 3 training
+└── strokes/                     # committed with the repo (D30), not downloaded
+    ├── stroke_cnn.pt            # 1D CNN
+    ├── stroke_lstm.pt           # LSTM
+    └── stroke_rf.npz            # Random Forest (plain NumPy arrays)
 ```
+
+The three stroke models come with `git clone`; `download_weights.py --only strokes` only checks
+them against the pinned checksums and never deletes a file you retrained. Pick the model per
+clip in the app's upload options, with `--stroke-model` on the CLI, or set the server default
+in `configs/pipeline.yaml` (`stages.strokes.algorithm`). The CNN and LSTM need PyTorch; the
+Random Forest runs with the base requirements alone.
 
 RTMDet/RTMPose ONNX files are downloaded and cached by rtmlib on first use.
 
@@ -141,11 +150,33 @@ cd backend
 python scripts/download_shuttleset.py                 # annotations + match list -> data/shuttleset/
 python scripts/extract_clips.py --matches 1-22        # Member 3
 python scripts/extract_clips.py --matches 23-44       # Member 4
-python scripts/make_splits.py                         # -> data/splits.json, configs/splits.json
 python scripts/extract_features.py                    # -> data/features/*.npz
-python scripts/train_stroke_classifier.py --config configs/stroke_cnn.yaml
+python scripts/train_stroke_classifier.py --algorithm cnn --seeds 1,2,3 --splits configs/splits.json
 python scripts/dataset_stats.py                       # -> docs/results/dataset.md
 ```
+
+The match split is committed as `configs/splits.json` (D13). Do not run `make_splits.py` without
+`--from-annotations` unless you mean to change it: it rewrites that file.
+
+**Retraining the shipped models.** The committed weights were trained on the pre-extracted
+ShuttleSet features published with BST (D29), which need no match videos:
+
+```bash
+# 1. Download dataset_npy.rar (440 MB) from the Google Drive link in
+#    https://github.com/Va6lue/BST-Badminton-Stroke-type-Transformer and extract it
+#    into backend/data/bst_download/extracted/ (7-Zip or WinRAR).
+python scripts/import_bst_features.py --src data/bst_download/extracted/dataset_npy
+python scripts/train_stroke_classifier.py --algorithm cnn  --seeds 1,2,3
+python scripts/train_stroke_classifier.py --algorithm lstm --seeds 1,2,3
+python scripts/train_stroke_classifier.py --algorithm rf   --seeds 1,2,3   # needs scikit-learn
+python scripts/train_stroke_classifier.py --algorithm cnn  --seeds 1,2,3 --pose-only
+python scripts/make_figures.py                        # -> docs/results/strokes.md + figures
+python scripts/bench_strokes.py --models cnn,lstm,rf  # -> docs/results/stroke_latency.md
+```
+
+All of it runs on a CPU: about 2 minutes for the Random Forest, 10 for the CNN and 50 for the
+LSTM with three seeds each. After committing new weights, update their SHA-256 values in
+`scripts/download_weights.py`.
 
 Evaluation scripts (each writes a table to `docs/results/`; see each script's docstring for its label format): `benchmark.py` (T2.9), `eval_tracking.py` (T2.10), `eval_hits.py` (T3.7), `eval_rallies.py` (T6.7).
 

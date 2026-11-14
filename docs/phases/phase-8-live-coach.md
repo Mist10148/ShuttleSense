@@ -41,8 +41,8 @@ T8.13–T8.16 came out of a review of what a referee or coach courtside needs an
 Re-rendering a saved live session now draws from its saved record, preserving the original
 singles or doubles calls, score corrections and coaching. Skipped perception frames are treated
 as unobserved when detecting a rally end; prolonged skipping can delay a decision and still
-miss hits. Capture-time-based playback and portrait camera alignment remain open, as do the
-real-camera, device, accuracy and latency checks in the task cards below. Doubles partners and
+miss hits. Capture-time-based playback and portrait camera alignment were open at the time (*superseded on
+Nov 5: frames are placed by capture time, [D25](../DECISIONS.md)*), as are the real-camera, device, accuracy and latency checks in the task cards below. Doubles partners and
 individual service order came later in [Phase 9](phase-9-doubles.md); 2D pose does not establish serve height.
 
 ### Live decision and clock follow-up on Nov 5
@@ -50,9 +50,10 @@ individual service order came later in [Phase 9](phase-9-doubles.md); 2D pose do
 Referee corrections, point awards, undo and line-call overrides refresh the live coaching
 summary; reconnecting restores the latest rally summary. A correction without a `winner`
 field is rejected instead of silently clearing a winner. The app now sends monotonic capture
-times across reconnects, and the server rejects backwards timestamps. This does **not** fix
-the fixed-fps recording timeline: dropped or irregular frames can still compress playback and
-analysis time. Preview-to-still alignment and the real-device checks also remain open.
+times across reconnects, and the server rejects backwards timestamps. At that point the recording
+timeline still used a fixed fps, so dropped or irregular frames could compress playback and
+analysis time (*superseded later on Nov 5 by capture-time frame slots, [D25](../DECISIONS.md)*).
+Preview-to-still alignment and the real-device checks remain open.
 
 ### Courtside review and coaching follow-up on Nov 10
 
