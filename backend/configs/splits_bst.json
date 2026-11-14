@@ -1,0 +1,11 @@
+{
+  "train": [
+    "bst_train"
+  ],
+  "val": [
+    "bst_val"
+  ],
+  "test": [
+    "bst_test"
+  ]
+}

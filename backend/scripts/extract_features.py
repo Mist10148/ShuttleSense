@@ -1,11 +1,14 @@
 """Build pose + shuttle feature windows for the stroke classifier (T3.5).
 
-Usage: python scripts/extract_features.py [--matches m01,m02] [--window 32] [--device cuda]
+Usage: python scripts/extract_features.py [--matches m01,m02] [--window 30] [--pose-norm bbox_diag]
+       [--device cuda]
 Input:  data/clips/<match_id>/index.csv and its clips (extract_clips.py)
 Output: data/features/<match_id>.npz with X [N, T, F] (pose + shuttle), y [N] (index in
         STROKE_CLASSES) and meta [N] (clip names). Train with --pose-only to drop the shuttle
         columns; the file always holds both.
-Splits are made separately by scripts/make_splits.py (T3.4).
+The defaults (30 frames, poses divided by the box diagonal) match the BST features that the
+shipped models were trained on (scripts/import_bst_features.py, D29), so both sets can be
+mixed. Splits are made separately by scripts/make_splits.py (T3.4).
 """
 
 from __future__ import annotations
@@ -48,7 +51,7 @@ def perceive(clip: Path, device: str):
     return run_pipeline(clip, out, clip_id=clip.stem, config=config, device=device)
 
 
-def extract_match(match_dir: Path, window: int, device: str) -> int:
+def extract_match(match_dir: Path, window: int, device: str, pose_norm: str = "bbox_diag") -> int:
     from shuttlesense.io import probe
     from shuttlesense.schema import STROKE_CLASSES
     from shuttlesense.strokes.features import build_window
@@ -66,7 +69,7 @@ def extract_match(match_dir: Path, window: int, device: str) -> int:
         # Clips are cut at source fps, but the pipeline keeps every step-th frame (<= 30 fps).
         step = max(1, round(probe(clip).fps / record.fps)) if record.fps else 1
         hit = min(int(row["hit_frame_in_clip"]) // step, max(len(record.frames) - 1, 0))
-        X.append(build_window(record, hit, hitter_side(record, hit), window, use_trajectory=True))
+        X.append(build_window(record, hit, hitter_side(record, hit), window, True, pose_norm))
         y.append(STROKE_CLASSES.index(label))
         meta.append(row["clip"])
     out = DATA_DIR / "features" / f"{match_dir.name}.npz"
@@ -78,7 +81,8 @@ def extract_match(match_dir: Path, window: int, device: str) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--window", type=int, default=32, help="frames per window")
+    parser.add_argument("--window", type=int, default=30, help="frames per window")
+    parser.add_argument("--pose-norm", choices=["bbox_diag", "bbox_height"], default="bbox_diag")
     parser.add_argument("--matches", help="comma-separated match ids (default: all)")
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     args = parser.parse_args()
@@ -94,7 +98,8 @@ def main() -> None:
     if not match_dirs:
         raise SystemExit(f"no clips under {clips}; run extract_clips.py first")
     for match_dir in match_dirs:
-        print(f"{match_dir.name}: {extract_match(match_dir, args.window, device)} windows")
+        count = extract_match(match_dir, args.window, device, args.pose_norm)
+        print(f"{match_dir.name}: {count} windows")
 
 
 if __name__ == "__main__":
