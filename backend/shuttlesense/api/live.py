@@ -12,12 +12,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hmac
+import json
 import logging
 import math
 import struct
 import threading
 import time
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -355,7 +357,7 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             "fps": session.fps, "width": session.width, "height": session.height,
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],
-            "decision_ack": True,
+            "decision_ack": True, "decision_dedup": True,
             **_snapshot(session),
         })  # fmt: skip
     except Exception:  # the client left before the session started
@@ -510,14 +512,60 @@ def _frames_locked(session: LiveSession, frames: list[tuple[bytes, float]]) -> l
 
 
 def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
-    with session.lock:
-        events = _control_locked(session, msg)
     decision_id = msg.get("decision_id")
-    if type(decision_id) is int and 0 <= decision_id <= 2**53 - 1:
-        for event in events:
-            if event["type"] in ("score", "error"):
-                event["decision_id"] = decision_id
-    return events
+    client_id = msg.get("client_id", "legacy")
+    identified = type(decision_id) is int and 0 <= decision_id <= 2**53 - 1
+    if not isinstance(client_id, str) or not 1 <= len(client_id) <= 128:
+        return [
+            {
+                "type": "error",
+                "code": "bad_request",
+                "detail": "invalid client_id",
+                "decision_id": decision_id,
+            }
+        ]
+    with session.lock:
+        key = (client_id, decision_id)
+        fingerprint = json.dumps(msg, sort_keys=True, separators=(",", ":"))
+        previous = session.command_receipts.get(key) if identified else None
+        if previous is not None:
+            if previous[0] != fingerprint:
+                return [
+                    {
+                        "type": "error",
+                        "code": "decision_conflict",
+                        "detail": "decision ID already used for a different command",
+                        "decision_id": decision_id,
+                    }
+                ]
+            # A duplicate must not roll the screen back to an old score.
+            errors = [e for e in previous[1] if e["type"] == "error"]
+            events = (
+                deepcopy(errors)
+                if errors
+                else [
+                    {"type": "score", **_snapshot(session)},
+                ]
+            )
+        else:
+            # Never evict receipts and silently allow an old command to execute twice.
+            if identified and len(session.command_receipts) >= 10000:
+                return [
+                    {
+                        "type": "error",
+                        "code": "command_limit",
+                        "detail": "session command limit reached; stop and save",
+                        "decision_id": decision_id,
+                    }
+                ]
+            events = _control_locked(session, msg)
+            if identified:
+                session.command_receipts[key] = (fingerprint, deepcopy(events))
+        if identified:
+            for event in events:
+                if event["type"] in ("score", "error"):
+                    event["decision_id"] = decision_id
+        return events
 
 
 # A decision's optional reason (v1.5); None when the referee gave none.

@@ -108,6 +108,7 @@ class LiveSession:
         resume_window_s: float = 60,
     ) -> None:
         self.id = session_id
+        self.command_receipts: dict[tuple[str, int], tuple[str, list[dict]]] = {}
         self.request = request
         live = {**LIVE_DEFAULTS, **(config.get("live") or {})}
         self.live = live

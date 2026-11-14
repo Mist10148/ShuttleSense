@@ -327,6 +327,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool _waitingForAnalysis = true;
   Duration? _lastAnalysisAt;
   bool _decisionAck = false;
+  bool _decisionDedup = false;
+  final String _clientId = DateTime.now().microsecondsSinceEpoch.toString();
+  Json? _pendingCommand;
   int _decisionSequence = 0;
   int? _pendingDecision;
   int? _pendingReviewId;
@@ -665,6 +668,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// gets back every hit, rally and call it missed while away.
   void _seed(Json started) {
     _decisionAck = started['decision_ack'] == true;
+    _decisionDedup = started['decision_dedup'] == true;
     _padFrames(asInt(started['frames']) ?? 0);
     if (!started.containsKey('rallies')) return; // an older backend
     state.hits
@@ -678,7 +682,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
     final coaching = started['coaching'] as Json?;
     final summary = started['rally_summary'] as Json?;
-    _clearDecision();
+    final retry = _decisionDedup ? _pendingCommand : null;
+    if (retry == null) _clearDecision();
+    if (retry != null) _socket?.sendJson(retry);
     _set(
       state.copyWith(
         speedKmh: state.speedKmh,
@@ -962,6 +968,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _decisionTimeout?.cancel();
     _decisionTimeout = null;
     _pendingDecision = null;
+    _pendingCommand = null;
     _pendingReviewId = null;
   }
 
@@ -985,7 +992,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify('Decision unconfirmed. Check the score before trying again.');
     });
     try {
-      socket.sendJson({...message, if (_decisionAck) 'decision_id': id});
+      final command = {
+        ...message,
+        if (_decisionAck) 'decision_id': id,
+        if (_decisionDedup) 'client_id': _clientId,
+      };
+      _pendingCommand = command;
+      socket.sendJson(command);
     } on Object {
       _clearDecision();
       _notify('Could not send the decision. Check the connection and try again.');
@@ -1016,6 +1029,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   Future<void> _reconnect(int generation) async {
+    if (_disposed || generation != _generation || state.phase == LivePhase.reconnecting) return;
     _clearImages();
     _decisionTimeout?.cancel();
     if (!_decisionAck) _clearDecision();
