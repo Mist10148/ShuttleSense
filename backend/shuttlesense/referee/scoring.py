@@ -59,17 +59,20 @@ def apply_rallies(
     first_receiver_id: PlayerId | None = None,
     awards: Sequence[ScoreCorrection] = (),
     game_service: Sequence[GameService] = (),
+    start_games: ScorePair | None = None,
 ) -> Score:
     """Set each rally's game and score_after from the winners and return the match score.
 
     Rallies without a winner (open or uncertain) keep the score. Once the match is won
     (the game, with best_of=1), later rallies get score_after = None and do not count.
-    Awarded points count before the rally whose index they carry.
+    Awarded points (and a concession, which ends the match) count before the rally whose
+    index they carry.
     """
     pairs, result = _rally_steps(rallies, start, best_of=best_of, first_server=first_server,
                                  first_server_id=first_server_id,
                                  first_receiver_id=first_receiver_id, awards=awards,
-                                 game_service=game_service)  # fmt: skip
+                                 game_service=game_service,
+                                 start_games=start_games)  # fmt: skip
     for rally, step in pairs:
         rally.game, rally.score_after = step.game, step.score_after
         rally.server_id, rally.receiver_id = step.server_id, step.receiver_id
@@ -86,24 +89,35 @@ def _rally_steps(
     first_receiver_id: PlayerId | None,
     awards: Sequence[ScoreCorrection],
     game_service: Sequence[GameService] = (),
+    start_games: ScorePair | None = None,
 ) -> tuple[list[tuple[Rally, Step]], MatchPlay]:
     """Play the match over the rallies and awards: each rally's step, and the result."""
     from shuttlesense.referee.match import play
 
     winners: list[PlayerSide | None] = []
     slots: list[Rally | None] = []  # the rally behind each winner, None for an award
+    concessions: dict[int, PlayerSide] = {}
+
+    def add(decision: ScoreCorrection) -> None:
+        if decision.kind == "concede" and decision.winner_after is not None:
+            concessions[len(winners)] = decision.winner_after
+            winners.append(None)
+        else:
+            winners.append(decision.winner_after)
+        slots.append(None)
+
     pending = sorted(awards, key=lambda a: a.rally_index)  # stable: given order within a slot
     for rally in rallies:
         while pending and pending[0].rally_index <= rally.index:
-            winners.append(pending.pop(0).winner_after)
-            slots.append(None)
+            add(pending.pop(0))
         winners.append(rally.winner)
         slots.append(rally)
-    winners += [a.winner_after for a in pending]
-    slots += [None] * len(pending)
+    for decision in pending:
+        add(decision)
     result = play(winners, start, best_of=best_of, first_server=first_server,
                   first_server_id=first_server_id, first_receiver_id=first_receiver_id,
-                  game_service=game_service)  # fmt: skip
+                  game_service=game_service, start_games=start_games,
+                  concessions=concessions)  # fmt: skip
     pairs = [(r, step) for r, step in zip(slots, result.steps, strict=True) if r is not None]
     return pairs, result
 
@@ -118,6 +132,7 @@ def match_config(config: dict[str, Any]) -> dict[str, Any]:
         "first_server_id": match.get("first_server_id"),
         "first_receiver_id": match.get("first_receiver_id"),
         "game_service": [GameService.model_validate(g) for g in match.get("game_service") or []],
+        "start_games": ScorePair(**match["start_games"]) if match.get("start_games") else None,
     }
 
 
@@ -152,12 +167,13 @@ def apply_corrections(
         if c.rally_index in overridden and c.at < overridden[c.rally_index]:
             continue
         by_index[c.rally_index].winner = c.winner_after
-    awards = [c for c in corrections if c.kind == "award" and c.winner_after is not None]
+    awards = [c for c in corrections if c.kind != "winner" and c.winner_after is not None]
     final = apply_rallies(record.rallies, start, best_of=record.score.best_of,
                           first_server=record.score.first_server,
                           first_server_id=record.score.first_server_id,
                           first_receiver_id=record.score.first_receiver_id,
-                          awards=awards, game_service=record.score.game_service)  # fmt: skip
+                          awards=awards, game_service=record.score.game_service,
+                          start_games=record.score.start_games)  # fmt: skip
     final.corrections = list(corrections)
     record.score = final
     flag_service(record, start)
@@ -180,12 +196,13 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
     # The score before each rally comes from the same match steps that set server_id, so
     # awarded points (which are steps but not rallies) count.
     awards = [c for c in record.score.corrections
-              if c.kind == "award" and c.winner_after is not None]  # fmt: skip
+              if c.kind != "winner" and c.winner_after is not None]  # fmt: skip
     pairs, _ = _rally_steps(record.rallies, start, best_of=record.score.best_of,
                             first_server=record.score.first_server,
                             first_server_id=record.score.first_server_id,
                             first_receiver_id=record.score.first_receiver_id,
-                            awards=awards, game_service=record.score.game_service)  # fmt: skip
+                            awards=awards, game_service=record.score.game_service,
+                            start_games=record.score.start_games)  # fmt: skip
     before_of = {r.index: step.score_before for r, step in pairs}
     for rally in record.rallies:
         before = before_of.get(rally.index)

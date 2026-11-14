@@ -193,7 +193,8 @@ class LiveManager:
             id=job_id, video_id=entry.video_id, status="running", current_stage="render",
             started_at=utcnow(), progress=0.9, mode="live", referee=True, start_score=start,
             best_of=session.request.best_of, first_server=session.request.first_server,
-            court=session.request.court, first_server_id=session.request.first_server_id,
+            start_games=session.request.start_games, court=session.request.court,
+            first_server_id=session.request.first_server_id,
             first_receiver_id=session.request.first_receiver_id,
             stroke_model=session.request.stroke_model or self.state.jobs.default_stroke_model(),
             game_service=list(record.score.game_service) if record.score else [],
@@ -272,6 +273,10 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     best_of = msg.get("best_of", 1)
     if type(best_of) is not int or best_of not in (1, 3):  # not true or 1.0
         raise ValueError("best_of must be 1 or 3")
+    start_games = ScorePair(**msg["start_games"]) if msg.get("start_games") else None
+    from shuttlesense.referee import validate_start_games
+
+    validate_start_games(start_games, best_of)
     name = msg.get("name")
     if name is not None and (not isinstance(name, str) or len(name) > MAX_NAME_LENGTH):
         raise ValueError(f"name must be text of at most {MAX_NAME_LENGTH} characters")
@@ -295,7 +300,7 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
             raise ValueError("stroke_model must be cnn, lstm or rf")
     return StartRequest(
         fps=fps, width=width, height=height, corners=corners, court=court, name=name,
-        start_score=score, best_of=best_of, first_server=first_server,
+        start_score=score, best_of=best_of, first_server=first_server, start_games=start_games,
         first_server_id=server_id, first_receiver_id=receiver_id, stroke_model=stroke_model,
     )  # fmt: skip
 
@@ -515,6 +520,10 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     return events
 
 
+# A decision's optional reason (v1.5); None when the referee gave none.
+REASONS = (None, "let", "fault", "service_fault", "misconduct")
+
+
 def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
     try:
         if (
@@ -530,10 +539,17 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             and msg["rally_index"] >= 0
             and "winner" in msg
             and msg["winner"] in ("near", "far", None)
+            and msg.get("reason") in REASONS
         ):
-            return session.correct(msg["rally_index"], msg.get("winner"))
-        if msg.get("type") == "award" and msg.get("winner") in ("near", "far"):
-            return session.award(msg["winner"])
+            return session.correct(msg["rally_index"], msg.get("winner"), msg.get("reason"))
+        if (
+            msg.get("type") == "award"
+            and msg.get("winner") in ("near", "far")
+            and msg.get("reason") in REASONS
+        ):
+            return session.award(msg["winner"], msg.get("reason"))
+        if msg.get("type") == "concede" and msg.get("winner") in ("near", "far"):
+            return session.concede(msg["winner"])
         if msg.get("type") == "undo":
             return session.undo()
         if msg.get("type") == "service":

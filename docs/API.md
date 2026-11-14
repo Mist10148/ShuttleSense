@@ -111,7 +111,8 @@ Start processing.
 | `overlays` | no | Subset of `trail, pose, boxes, hits, strokes, court, minimap, speed, score`; default all nine (overlays whose stage did not run are simply not drawn) |
 | `referee` | no | Run the referee layer (rally state, line calls, score); default `false` |
 | `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative, already a finished game (e.g. 21–15) or above 29 |
-| `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of game 1 |
+| `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of the first game played |
+| `start_games` | no | `{"near": 1, "far": 0}`: games each side had already won when the clip starts (v1.5, [D33](DECISIONS.md)), so a clip of game 2 or 3 numbers its games and ends the match correctly. `400` if negative or already a won match (2 in a best of 3, any in a best of 1) |
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 | `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
 | `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game (later games: `POST /jobs/{job_id}/score/service`). `422` if only one is given, both are on one side, the server is not on `first_server`'s side, or `court` is not `"doubles"` |
@@ -153,7 +154,7 @@ Job object, polled by the processing screen every 1 to 2 s.
 }
 ```
 
-`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of`, `first_server`, `court`, `first_server_id`, `first_receiver_id`, `stroke_model` and `game_service` (doubles slots named for later games) echo the options the job was created with, so the app can retry or re-render with the same settings.
+`court_corners_px`, `overlays`, `referee`, `start_score`, `best_of`, `start_games`, `first_server`, `court`, `first_server_id`, `first_receiver_id`, `stroke_model` and `game_service` (doubles slots named for later games) echo the options the job was created with, so the app can retry or re-render with the same settings.
 
 `status` is one of `queued`, `running`, `done`, `failed`, `cancelled`. `queue_position` is the 0-based place in the queue while `queued` (a re-rendered job goes to the back) and `null` otherwise. `DELETE /jobs/{id}` removes a job at once, so polling a cancelled job returns 404 rather than `cancelled`. Stage `status` is one of `pending`, `running`, `done`, `skipped`, `failed`.
 
@@ -189,6 +190,12 @@ Returns `{"score": {...}, "rallies": [...]}`: the updated score (with `correctio
 
 A point for a rally the referee layer missed. Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places the point after the rallies that ended by then. Stored in `score.corrections` with `"kind": "award"` (and in `corrections.json`, so re-renders keep it). Same response and exports as `PATCH /jobs/{job_id}/score`. `409` unless the job is `done`, if the referee stage did not run, or if the match is already won and the point would come after the deciding rally; unlike a correction, an award needs no detected rally.
 
+### `POST /jobs/{job_id}/score/concede`
+
+The other side retired or gave a walkover (v1.5, [D33](DECISIONS.md)). Body `{"winner": "near", "frame": 1234}`; `frame` (optional, default the last frame) places it like an award. Stored in `score.corrections` with `"kind": "concede"`; `winner` wins the match there and later rallies do not count. Same response and exports as `PATCH /jobs/{job_id}/score`; Undo takes it back. `409` unless the job is `done`, if the referee stage did not run, or if the match is already won.
+
+`PATCH /jobs/{job_id}/score` and `POST /jobs/{job_id}/score/award` also take an optional `reason` (`let`, `fault`, `service_fault`, `misconduct`; `422` otherwise), kept on the correction.
+
 ### `POST /jobs/{job_id}/score/service`
 
 Doubles ([D23](DECISIONS.md)): who serves and receives first in game 2 or 3. Body `{"game": 2, "server_id": "far_2", "receiver_id": "near_1"}`; send only `{"game": 2}` to forget that game's slots. The server must be on the side that won the previous game (otherwise the entry is kept but has no effect). Stored in `score.game_service` and on the job, so re-renders keep it. Same response and exports as `PATCH /jobs/{job_id}/score`. `422` if only one id is given or both are on one side; `409` for a singles job, unless the job is `done`, or if the referee stage did not run.
@@ -213,12 +220,13 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 
 | Message | Format | Notes |
 | --- | --- | --- |
-| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ..., "stroke_model": "cnn" \| "lstm" \| "rf" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`); `stroke_model` as in `POST /jobs` (`bad_request` for an unknown model). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
+| `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "start_games": {"near": 1, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ..., "stroke_model": "cnn" \| "lstm" \| "rf" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`); `stroke_model` as in `POST /jobs` (`bad_request` for an unknown model). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
 | `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |
-| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided |
-| `award` | `{"type": "award", "winner": "near"}` | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling, and with `match_over` once the match is won |
+| `correct` | `{"type": "correct", "rally_index": 0, "winner": "far", "reason": "let"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided (with `"reason": "let"` it is a let, replayed). `reason` is optional, as for `award`; an unknown reason gets `bad_message` |
+| `concede` | `{"type": "concede", "winner": "near"}` | The other side retired: `winner` wins the match after the rallies so far (v1.5). Refused with `match_over` once the match is won; Undo takes it back |
+| `award` | `{"type": "award", "winner": "near", "reason": "fault"}` (`reason` optional: `let`, `fault`, `service_fault`, `misconduct`) | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling, and with `match_over` once the match is won |
 | `undo` | `{"type": "undo"}` | Takes back the newest decision: correction, award or line-call override (`not_found` when there is none). An undone override is sent again as a `line_call` event before `score` |
 | `service` | `{"type": "service", "game": 2, "server_id": "far_2", "receiver_id": "near_1"}` | Doubles: who serves and receives first in game 2 or 3, as `POST /jobs/{job_id}/score/service`; answered with `score`. `bad_request` (session kept) in singles or for invalid slots |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |

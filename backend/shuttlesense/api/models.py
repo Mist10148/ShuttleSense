@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from shuttlesense.schema import (
     Call,
     CourtType,
+    DecisionReason,
     GameService,
     LineCall,
     Mode,
@@ -95,6 +96,7 @@ class JobCreate(BaseModel):
     referee: bool = False
     start_score: ScorePair | None = None  # for clips that start mid-game
     best_of: Literal[1, 3] = 1  # games in the match
+    start_games: ScorePair | None = None  # games each side already won (joined mid-match)
     first_server: PlayerSide | None = None  # who serves the first rally, if known
     court: CourtType = "singles"  # doubles: four players and the doubles lines (Phase 9)
     # Doubles: who serves and receives the first rally (both or neither, opposite sides).
@@ -119,6 +121,7 @@ class RenderRequest(BaseModel):
 class ScoreCorrectionIn(BaseModel):
     rally_index: int
     winner: PlayerSide | None  # None: the rally is undecided again
+    reason: DecisionReason | None = None  # e.g. "let" when clearing a rally to replay it
 
 
 class GameServiceIn(BaseModel):
@@ -140,6 +143,21 @@ class ScoreAwardIn(BaseModel):
 
     winner: PlayerSide
     frame: int | None = None  # where it happened; None: after the last rally
+    reason: DecisionReason | None = None  # e.g. "fault", "service_fault"
+
+    @field_validator("frame")
+    @classmethod
+    def _not_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("frame must not be negative")
+        return value
+
+
+class ScoreConcedeIn(BaseModel):
+    """The other side retired or gave a walkover: `winner` wins the match at `frame`."""
+
+    winner: PlayerSide
+    frame: int | None = None  # None: after the last rally
 
     @field_validator("frame")
     @classmethod
@@ -206,6 +224,7 @@ class Job(BaseModel):
     referee: bool = False
     start_score: ScorePair | None = None
     best_of: Literal[1, 3] = 1
+    start_games: ScorePair | None = None
     first_server: PlayerSide | None = None
     court: CourtType = "singles"
     first_server_id: PlayerId | None = None

@@ -38,6 +38,7 @@ from shuttlesense.api.models import (
     LineCallUpdate,
     RenderRequest,
     ScoreAwardIn,
+    ScoreConcedeIn,
     ScoreCorrectionIn,
     ScoreUpdate,
     VideoInfoOut,
@@ -58,6 +59,7 @@ from shuttlesense.referee import (
     save_corrections,
     save_overrides,
     undo_last_decision,
+    validate_start_games,
     validate_start_score,
 )
 from shuttlesense.render import OVERLAYS
@@ -261,11 +263,12 @@ def _check_overlays(names: list[str] | None) -> list[str]:
 @router.post("/jobs", response_model=Job, status_code=202)
 def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
     video = _video_or_404(storage, body.video_id)
-    if body.start_score is not None:
-        try:
+    try:
+        if body.start_score is not None:
             validate_start_score(body.start_score)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        validate_start_games(body.start_games, body.best_of)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.court_corners_px is not None:
         try:
             validate_corners(body.court_corners_px)
@@ -280,6 +283,7 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         referee=body.referee,
         start_score=body.start_score,
         best_of=body.best_of,
+        start_games=body.start_games,
         first_server=body.first_server or (body.first_server_id or "")[:-2] or None,
         court=body.court,
         first_server_id=body.first_server_id,
@@ -389,6 +393,7 @@ def correct_score(
             winner_before=rally.winner,
             winner_after=body.winner,
             at=utcnow(),
+            reason=body.reason,
         )
         corrections = [*record.score.corrections, correction]
         before = record.score.model_copy(deep=True)
@@ -436,11 +441,37 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
             raise HTTPException(status_code=400, detail="frame is past the end of the video")
         before = sum(1 for r in record.rallies if r.end_frame <= frame)
         award = ScoreCorrection(rally_index=before, winner_before=None, winner_after=body.winner,
-                                at=utcnow(), kind="award", frame=frame)  # fmt: skip
+                                at=utcnow(), kind="award", frame=frame,
+                                reason=body.reason)  # fmt: skip
         before = record.score.model_copy(deep=True)
         apply_corrections(record, [*record.score.corrections, award], job.start_score)
         if changes_finished_match(before, record.score):
             raise HTTPException(status_code=409, detail="the match is already won")
+        _save_score(record, storage, jobs, job_id)
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+@router.post("/jobs/{job_id}/score/concede", response_model=ScoreUpdate)
+def concede_match(
+    job_id: str, body: ScoreConcedeIn, storage: StorageDep, jobs: JobsDep
+) -> ScoreUpdate:
+    """The other side retired: `winner` wins the match at `frame` (default: the end)."""
+    job, path = _score_record(storage, jobs, job_id)
+    with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
+        record = load_record(path.read_text(encoding="utf-8"))
+        if record.score is None:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        if record.score.match_winner is not None:
+            raise HTTPException(status_code=409, detail="the match is already won")
+        frame = body.frame if body.frame is not None else max(0, record.num_frames - 1)
+        if frame >= max(record.num_frames, 1):
+            raise HTTPException(status_code=400, detail="frame is past the end of the video")
+        before = sum(1 for r in record.rallies if r.end_frame <= frame)
+        concede = ScoreCorrection(rally_index=before, winner_before=None,
+                                  winner_after=body.winner, at=utcnow(), kind="concede",
+                                  frame=frame)  # fmt: skip
+        apply_corrections(record, [*record.score.corrections, concede], job.start_score)
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 

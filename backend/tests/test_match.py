@@ -235,3 +235,45 @@ def test_a_one_game_match_changes_ends_at_11() -> None:
     score = play(["near"] * 11).score
     assert score.interval and score.change_ends
     assert not play(["near"] * 12).score.change_ends
+
+
+def test_joining_in_the_deciding_game() -> None:
+    """start_games 1-1: game 3, ends change at 11, and one more game wins the match."""
+    games = ScorePair(near=1, far=1)
+    result = play(["near"] * 11, best_of=3, start_games=games)
+    assert result.score.game == 3 and result.score.change_ends and result.score.interval
+    assert result.score.interval_s == 60
+    assert result.score.start_games == games
+    result = play(["far"] * 21, best_of=3, start_games=games)
+    assert result.score.match_winner == "far"
+    assert result.score.games_won == ScorePair(near=1, far=2)
+
+
+def test_joining_in_game_two_counts_the_game_already_won() -> None:
+    result = play(["near"] * 21, best_of=3, start_games=ScorePair(near=1))
+    assert result.score.match_winner == "near" and result.score.games == [ScorePair(near=21)]
+
+
+@pytest.mark.parametrize(
+    ("games", "best_of"),
+    [(ScorePair(near=-1), 3), (ScorePair(near=2), 3), (ScorePair(far=1), 1)],
+)
+def test_start_games_must_fit_a_match_still_on(games: ScorePair, best_of: int) -> None:
+    with pytest.raises(ValueError, match="start_games"):
+        play([], best_of=best_of, start_games=games)
+
+
+def test_interval_between_games_is_two_minutes() -> None:
+    score = play(["near"] * 21, best_of=3).score
+    assert score.game == 2 and score.interval and score.change_ends
+    assert score.interval_s == 120
+    score = play(["near"] * 22, best_of=3).score  # the next rally ends it
+    assert not score.interval and score.interval_s is None
+
+
+def test_a_concession_ends_the_match_without_a_point() -> None:
+    result = play(["near", "far", None, "near"], best_of=3, concessions={2: "far"})
+    assert result.score.match_winner == "far"
+    assert (result.score.near, result.score.far) == (1, 1)  # the game being played
+    assert result.steps[3].score_after is None  # nothing counts after it
+    assert result.score.games_won == ScorePair()

@@ -289,6 +289,8 @@ class JobManager:
         if job.first_server_id:  # doubles; singles configs stay as they were
             config["match"]["first_server_id"] = job.first_server_id
             config["match"]["first_receiver_id"] = job.first_receiver_id
+        if job.start_games is not None:
+            config["match"]["start_games"] = job.start_games.model_dump()
         if job.game_service:
             config["match"]["game_service"] = [g.model_dump() for g in job.game_service]
         config["mode"] = job.mode

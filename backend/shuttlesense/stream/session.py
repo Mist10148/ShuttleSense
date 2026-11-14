@@ -55,6 +55,7 @@ class StartRequest:
     court: str = "singles"
     name: str | None = None
     best_of: int = 1
+    start_games: ScorePair | None = None  # games each side already won (joined mid-match)
     first_server: str | None = None
     first_server_id: str | None = None  # doubles: who serves and receives first
     first_receiver_id: str | None = None
@@ -133,7 +134,7 @@ class LiveSession:
             clip_id=session_id, fps=self.fps, width=self.width, height=self.height, court=court,
             config=self.config, device=device, start_score=request.start_score,
             best_of=request.best_of, first_server=request.first_server,
-            first_server_id=request.first_server_id,
+            start_games=request.start_games, first_server_id=request.first_server_id,
             first_receiver_id=request.first_receiver_id,
             classify=classify, tick_every=int(live["tick_every"]),
             max_window_frames=int(live["max_window_frames"]),
@@ -320,11 +321,16 @@ class LiveSession:
     def override(self, line_call_id: int, call: str) -> list[Event]:
         return self.analyzer.override(line_call_id, call)
 
-    def correct(self, rally_index: int, winner: str | None) -> list[Event]:
-        return self.analyzer.correct(rally_index, winner)
+    def correct(
+        self, rally_index: int, winner: str | None, reason: str | None = None
+    ) -> list[Event]:
+        return self.analyzer.correct(rally_index, winner, reason)
 
-    def award(self, winner: str) -> list[Event]:
-        return self.analyzer.award(winner)
+    def award(self, winner: str, reason: str | None = None) -> list[Event]:
+        return self.analyzer.award(winner, reason)
+
+    def concede(self, winner: str) -> list[Event]:
+        return self.analyzer.concede(winner)
 
     def undo(self) -> list[Event]:
         return self.analyzer.undo()

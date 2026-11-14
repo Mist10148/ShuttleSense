@@ -5,8 +5,12 @@ BWF Laws of Badminton, rally scoring (singles):
 - a match is one game or the best of three;
 - the rally winner serves next; the winner of a game serves first in the next one;
 - the server serves from the right service court when their score is even, else the left;
-- a 60 s interval when the leading side first reaches 11, a change of ends after each game
-  and at 11 in the deciding game.
+- a 60 s interval when the leading side first reaches 11 and a 120 s interval between
+  games; a change of ends after each game and at 11 in the deciding game;
+- a side that retires concedes the match (a `concede` correction, v1.5).
+
+A session can join a match under way: `start` is the score of the current game and
+`start_games` the games each side had already won, which set the game number.
 
 Everything is a pure function of the rally winners in order, so a correction or a
 line-call override re-derives the whole match. Undecided rallies (no winner) change
@@ -28,12 +32,14 @@ correction can change who won the game.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from shuttlesense.schema import GameService, PlayerId, PlayerSide, Score, ScorePair, side_of
 
 INTERVAL_AT = 11
+INTERVAL_S = 60  # at 11 (BWF Laws 16.2.1)
+GAME_INTERVAL_S = 120  # between games (Laws 16.2.2)
 OTHER: dict[PlayerSide, PlayerSide] = {"near": "far", "far": "near"}
 
 
@@ -92,6 +98,16 @@ class DoublesCourts:
             self.serving = side  # nobody moves
 
 
+def validate_start_games(start_games: ScorePair | None, best_of: int) -> None:
+    """Raise ValueError unless the games already won fit a match that is still on."""
+    if start_games is None:
+        return
+    if min(start_games.near, start_games.far) < 0:
+        raise ValueError("start_games cannot be negative")
+    if max(start_games.near, start_games.far) > best_of // 2:
+        raise ValueError("start_games is already a finished match")
+
+
 def _wins_game(near: int, far: int) -> PlayerSide | None:
     from shuttlesense.referee.scoring import game_winner
 
@@ -107,16 +123,21 @@ def play(
     first_server_id: PlayerId | None = None,
     first_receiver_id: PlayerId | None = None,
     game_service: Sequence[GameService] = (),
+    start_games: ScorePair | None = None,
+    concessions: Mapping[int, PlayerSide] | None = None,
 ) -> MatchPlay:
     """Run the match over the rally winners and return each step and the final state.
 
     With `first_server_id` and `first_receiver_id` (doubles, on opposite sides) every step
     and the score also say who serves and receives; `game_service` does the same for games
-    after the first.
+    after the first. `concessions` maps a step index to the side that wins the match there
+    because the other retired; that step plays no point.
     """
     later = {g.game: g for g in game_service}
     if best_of not in (1, 3):
         raise ValueError("best_of must be 1 or 3")
+    validate_start_games(start_games, best_of)
+    concessions = concessions or {}
     start = start or ScorePair()
     near, far = start.near, start.far
     courts = None
@@ -127,19 +148,28 @@ def play(
         if side_of(first_server_id) != first_server:
             raise ValueError("first_server_id must be on the first_server side")
         courts = DoublesCourts(first_server_id, first_receiver_id, near, far)
-    game, games = 1, []
+    games: list[ScorePair] = []
     won: dict[PlayerSide, int] = {"near": 0, "far": 0}
+    if start_games is not None:
+        won = {"near": start_games.near, "far": start_games.far}
+    game = 1 + won["near"] + won["far"]
+    conceded = False
     server = first_server
     match_winner: PlayerSide | None = None
     interval = change_ends = False
     reached_interval = max(near, far) >= INTERVAL_AT  # joined after the interval
     steps: list[Step] = []
-    for w in winners:
+    for i, w in enumerate(winners):
         if match_winner is not None:
             steps.append(Step(game=game, score_after=None))
             continue
         ids = courts.pair(near, far) if courts else (None, None)
         before = ScorePair(near=near, far=far)
+        if i in concessions:
+            match_winner, conceded = concessions[i], True
+            interval = change_ends = False
+            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
+            continue
         if w is None:
             # No point played: an interval or change of ends still stands.
             steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
@@ -163,7 +193,7 @@ def play(
             match_winner = w
             change_ends = False
             continue
-        change_ends = True
+        change_ends = interval = True  # the 120 s interval between games
         game += 1
         near, far = 0, 0
         reached_interval = False
@@ -178,14 +208,20 @@ def play(
     score = Score(near=near, far=far, best_of=best_of, first_server=first_server, game=game,
                   first_server_id=first_server_id, first_receiver_id=first_receiver_id,
                   game_service=sorted(later.values(), key=lambda g: g.game))  # fmt: skip
-    if match_winner is not None:
-        # The match is over: the score shows the last game, games lists every game.
+    if match_winner is not None and not conceded:
+        # The match is over: the score shows the last game, games lists every game. After
+        # a concession it shows the game that was being played.
         last = games[-1]
         score.near, score.far = last.near, last.far
+    score.start_games = (
+        start_games if start_games and (start_games.near or start_games.far) else None
+    )
     score.games = games
     score.games_won = ScorePair(near=won["near"], far=won["far"])
     score.match_winner = match_winner
     score.interval, score.change_ends = interval, change_ends
+    if interval:
+        score.interval_s = GAME_INTERVAL_S if near == far == 0 else INTERVAL_S
     if match_winner is None:
         score.server = server
         if courts:

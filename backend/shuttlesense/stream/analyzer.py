@@ -32,6 +32,7 @@ from shuttlesense.schema import (
     ClipRecord,
     Court,
     CourtPositions,
+    DecisionReason,
     Frame,
     GameService,
     Player,
@@ -77,6 +78,7 @@ class StreamAnalyzer:
         start_score: ScorePair | None = None,
         best_of: int = 1,
         first_server: PlayerSide | None = None,
+        start_games: ScorePair | None = None,
         first_server_id: PlayerId | None = None,
         first_receiver_id: PlayerId | None = None,
         classify: Classifier | None = None,
@@ -96,7 +98,8 @@ class StreamAnalyzer:
             court=court,
             score=apply_rallies([], self.start, best_of=best_of, first_server=first_server,
                                 first_server_id=first_server_id,
-                                first_receiver_id=first_receiver_id),
+                                first_receiver_id=first_receiver_id,
+                                start_games=start_games),
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})
@@ -430,14 +433,17 @@ class StreamAnalyzer:
             self._latest_coaching_event(),
         ]
 
-    def correct(self, rally_index: int, winner: PlayerSide | None) -> list[Event]:
-        """Set a rally's winner, or clear it (None) so the rally does not count."""
+    def correct(
+        self, rally_index: int, winner: PlayerSide | None, reason: DecisionReason | None = None
+    ) -> list[Event]:
+        """Set a rally's winner, or clear it (None) so the rally does not count; a cleared
+        rally with reason "let" is replayed."""
         rally = next((r for r in self.record.rallies if r.index == rally_index), None)
         if rally is None:
             raise KeyError(rally_index)
         self._decide(ScoreCorrection(
             rally_index=rally_index, winner_before=rally.winner, winner_after=winner,
-            at=datetime.now(UTC),
+            at=datetime.now(UTC), reason=reason,
         ))  # fmt: skip
         return [self._score_event(), self._latest_coaching_event()]
 
@@ -457,7 +463,7 @@ class StreamAnalyzer:
             self._rescore()
             raise MatchOver("the match is already won")
 
-    def award(self, winner: PlayerSide) -> list[Event]:
+    def award(self, winner: PlayerSide, reason: DecisionReason | None = None) -> list[Event]:
         """A point for a rally the referee layer missed, counted after the rallies so far.
 
         Raises RallyInPlay while a rally is open or still settling: that rally would be
@@ -468,6 +474,18 @@ class StreamAnalyzer:
         self._decide(ScoreCorrection(
             rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
             at=datetime.now(UTC), kind="award", frame=max(0, len(self.record.frames) - 1),
+            reason=reason,
+        ))  # fmt: skip
+        return [self._score_event(), self._latest_coaching_event()]
+
+    def concede(self, winner: PlayerSide) -> list[Event]:
+        """The other side retired: `winner` wins the match after the rallies so far. A rally
+        still open is committed after it and does not count."""
+        if self.record.score is not None and self.record.score.match_winner is not None:
+            raise MatchOver("the match is already won")
+        self._decide(ScoreCorrection(
+            rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
+            at=datetime.now(UTC), kind="concede", frame=max(0, len(self.record.frames) - 1),
         ))  # fmt: skip
         return [self._score_event(), self._latest_coaching_event()]
 

@@ -766,3 +766,31 @@ def test_oversized_jpeg_is_refused_without_ending_the_session(tmp_path: Path) ->
         assert ws.receive_json()["code"] == "bad_frame"
         events = _send_frames(ws, 3, first=1)
         assert any(e["type"] == "frame" for e in events)
+
+
+def test_live_start_games_reason_and_concede(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "best_of": 3, "start_games": {"near": 2, "far": 0}})
+        assert ws.receive_json()["code"] == "bad_request"
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "best_of": 3, "start_games": {"near": 1, "far": 1}})
+        started = ws.receive_json()
+        assert started["score"]["game"] == 3
+        ws.send_json({"type": "award", "winner": "near", "reason": "nope"})
+        assert ws.receive_json()["code"] == "bad_message"
+        ws.send_json({"type": "award", "winner": "near", "reason": "fault"})
+        score = ws.receive_json()["score"]
+        assert score["corrections"][-1]["reason"] == "fault"
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "concede", "winner": "far"})
+        score = ws.receive_json()["score"]
+        assert score["match_winner"] == "far" and score["corrections"][-1]["kind"] == "concede"
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "concede", "winner": "near"})
+        assert ws.receive_json()["code"] == "match_over"
+        _send_frames(ws, 5)
+        ws.send_json({"type": "stop"})
+        while (e := ws.receive_json())["type"] != "saved":
+            pass
+        job = _wait_done(client, e["job_id"])
+        assert job["start_games"] == {"near": 1, "far": 1}

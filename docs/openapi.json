@@ -380,6 +380,16 @@
             "title": "Stages",
             "type": "array"
           },
+          "start_games": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "start_score": {
             "anyOf": [
               {
@@ -549,6 +559,16 @@
             "default": false,
             "title": "Referee",
             "type": "boolean"
+          },
+          "start_games": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "start_score": {
             "anyOf": [
@@ -1044,6 +1064,17 @@
             "title": "Interval",
             "type": "boolean"
           },
+          "interval_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval S"
+          },
           "match_point": {
             "items": {
               "enum": [
@@ -1138,6 +1169,16 @@
               }
             ],
             "title": "Service Court"
+          },
+          "start_games": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScorePair"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "Score",
@@ -1145,6 +1186,52 @@
       },
       "ScoreAwardIn": {
         "description": "A point for a rally the referee layer missed.",
+        "properties": {
+          "frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "let",
+                  "fault",
+                  "service_fault",
+                  "misconduct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "winner": {
+            "enum": [
+              "near",
+              "far"
+            ],
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "winner"
+        ],
+        "title": "ScoreAwardIn",
+        "type": "object"
+      },
+      "ScoreConcedeIn": {
+        "description": "The other side retired or gave a walkover: `winner` wins the match at `frame`.",
         "properties": {
           "frame": {
             "anyOf": [
@@ -1169,11 +1256,11 @@
         "required": [
           "winner"
         ],
-        "title": "ScoreAwardIn",
+        "title": "ScoreConcedeIn",
         "type": "object"
       },
       "ScoreCorrection": {
-        "description": "A user's score change: a rally's winner set or cleared, or a point awarded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given).",
+        "description": "A user's score change: a rally's winner set or cleared, a point awarded, or a match\nconceded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given). A concession\n(v1.5) ends the match there: `winner_after` wins because the other side retired.",
         "properties": {
           "at": {
             "format": "date-time",
@@ -1195,7 +1282,8 @@
             "default": "winner",
             "enum": [
               "winner",
-              "award"
+              "award",
+              "concede"
             ],
             "title": "Kind",
             "type": "string"
@@ -1203,6 +1291,23 @@
           "rally_index": {
             "title": "Rally Index",
             "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "let",
+                  "fault",
+                  "service_fault",
+                  "misconduct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "winner_after": {
             "anyOf": [
@@ -1249,6 +1354,23 @@
           "rally_index": {
             "title": "Rally Index",
             "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "let",
+                  "fault",
+                  "service_fault",
+                  "misconduct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "winner": {
             "anyOf": [
@@ -2206,6 +2328,74 @@
           }
         },
         "summary": "Award Point"
+      }
+    },
+    "/jobs/{job_id}/score/concede": {
+      "post": {
+        "description": "The other side retired: `winner` wins the match at `frame` (default: the end).",
+        "operationId": "concede_match_jobs__job_id__score_concede_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreConcedeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Concede Match"
       }
     },
     "/jobs/{job_id}/score/service": {

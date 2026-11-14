@@ -45,6 +45,17 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
+## Schema v1.5 (courtside referee)
+
+v1.5 (Nov 14, [D33](DECISIONS.md), [T12.3](phases/phase-12-courtside.md#t123)) adds optional fields only, each left out of the JSON while it is `null`, so older records load unchanged:
+
+| Where | Field | Meaning |
+| --- | --- | --- |
+| `score` | `start_games` | `{"near": 1, "far": 0}`: games each side had already won when the session started (joined mid-match). The game number follows from it; `score.games` lists only the games played in the session |
+| `score` | `interval_s` | While `interval` is true: `60` (the leader reached 11) or `120` (between games, Laws 16.2). `interval` is now also true right after a game that does not end the match |
+| `score.corrections[]` | `reason` | Why the referee decided it: `"let"` (a cleared rally to replay), `"fault"`, `"service_fault"` or `"misconduct"` |
+| `score.corrections[]` | `kind: "concede"` | The other side retired or gave a walkover: `winner_after` wins the match there, and later rallies do not count. The score shows the game being played |
+
 ## Schema v1.4 (stroke model)
 
 v1.4 (Nov 14, [D28](DECISIONS.md), [T11.7](phases/phase-11-stroke-models.md#t117)) adds one optional top-level field: `stroke_model`, the classifier that labelled `hits[].stroke` (`"cnn"`, `"lstm"` or `"rf"`), or `null` when no stroke model ran. `schema.migrate()` reads 1.0–1.3 records unchanged.
@@ -76,7 +87,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
 
 ```jsonc
 {
-  "schema_version": "1.4",
+  "schema_version": "1.5",
   "clip_id": "match03_rally12",          // unique per processed clip
   "mode": "upload",                       // v1.1: "upload" | "live" (a saved live session)
   "source_name": "rally12.mp4",          // original file name, informational
@@ -161,7 +172,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
     "game_point": [],                                        // sides one point from the game
     "match_point": [],
     "match_winner": null,
-    "interval": false,                                       // the last rally took the leader to 11
+    "interval": false,                                       // the leader reached 11, or a game just ended (interval_s 60 / 120, v1.5)
     "change_ends": false                                     // after a game, and at 11 in the deciding game or a one-game match
   },
 

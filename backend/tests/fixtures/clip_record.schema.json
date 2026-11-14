@@ -1172,6 +1172,18 @@
           "title": "Interval",
           "type": "boolean"
         },
+        "interval_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interval S"
+        },
         "match_point": {
           "items": {
             "enum": [
@@ -1271,13 +1283,24 @@
           ],
           "default": null,
           "title": "Service Court"
+        },
+        "start_games": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorePair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "Score",
       "type": "object"
     },
     "ScoreCorrection": {
-      "description": "A user's score change: a rally's winner set or cleared, or a point awarded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given).",
+      "description": "A user's score change: a rally's winner set or cleared, a point awarded, or a match\nconceded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given). A concession\n(v1.5) ends the match there: `winner_after` wins because the other side retired.",
       "properties": {
         "at": {
           "format": "date-time",
@@ -1300,7 +1323,8 @@
           "default": "winner",
           "enum": [
             "winner",
-            "award"
+            "award",
+            "concede"
           ],
           "title": "Kind",
           "type": "string"
@@ -1308,6 +1332,24 @@
         "rally_index": {
           "title": "Rally Index",
           "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "let",
+                "fault",
+                "service_fault",
+                "misconduct"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
         },
         "winner_after": {
           "anyOf": [
@@ -1637,7 +1679,7 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "1.4",
+      "default": "1.5",
       "title": "Schema Version",
       "type": "string"
     },

@@ -357,7 +357,7 @@ def test_old_record_is_migrated_when_served(tmp_path: Path, tiny_video: Path) ->
             data.pop(key, None)
         path.write_text(json.dumps(data), encoding="utf-8")
         served = client.get(f"/jobs/{job_id}/record").json()
-        assert served["schema_version"] == "1.4" and served["mode"] == "upload"
+        assert served["schema_version"] == "1.5" and served["mode"] == "upload"
         assert served["line_calls"][0]["call"] == "in"
 
 
@@ -1144,3 +1144,33 @@ def test_award_after_the_match_is_won_is_refused(tmp_path: Path, tiny_video: Pat
         logged = len(record["score"]["corrections"])
         assert client.post(f"/jobs/{job_id}/score/award", json={"winner": "far"}).status_code == 409
         assert len(client.get(f"/jobs/{job_id}/record").json()["score"]["corrections"]) == logged
+
+
+def test_job_joins_a_match_under_way_and_takes_reasons(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS, "best_of": 3}
+        bad = client.post("/jobs", json={**body, "start_games": {"near": 2, "far": 0}})
+        assert bad.status_code == 400
+        job = client.post("/jobs", json={**body, "start_games": {"near": 1, "far": 0}}).json()
+        assert job["start_games"] == {"near": 1, "far": 0}
+        assert wait_for(client, job["id"])["status"] == "done"
+        score = client.get(f"/jobs/{job['id']}/record").json()["score"]
+        assert score["game"] >= 2 and score["start_games"] == {"near": 1, "far": 0}
+        res = client.post(f"/jobs/{job['id']}/score/award",
+                          json={"winner": "far", "reason": "service_fault"})  # fmt: skip
+        assert res.json()["score"]["corrections"][-1]["reason"] == "service_fault"
+        bad = client.post(f"/jobs/{job['id']}/score/award", json={"winner": "far", "reason": "x"})
+        assert bad.status_code == 422
+
+
+def test_concede_ends_the_match_and_undo_takes_it_back(tmp_path: Path, tiny_video: Path) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video)
+        before = client.get(f"/jobs/{job_id}/record").json()["score"]
+        res = client.post(f"/jobs/{job_id}/score/concede", json={"winner": "far"})
+        assert res.status_code == 200 and res.json()["score"]["match_winner"] == "far"
+        assert client.post(f"/jobs/{job_id}/score/concede", json={"winner": "near"}).status_code \
+            == 409  # fmt: skip
+        undone = client.post(f"/jobs/{job_id}/score/undo").json()["score"]
+        assert undone["match_winner"] == before["match_winner"]

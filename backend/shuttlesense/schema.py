@@ -11,9 +11,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.4"
+SCHEMA_VERSION = "1.5"
 
 PlayerSide = Literal["near", "far"]
+# v1.5: why a referee awarded a point or cleared a rally (a let replays it).
+DecisionReason = Literal["let", "fault", "service_fault", "misconduct"]
 # Doubles (v1.2, D22): one slot per person. near_1/far_1 live in the near/far fields that
 # singles already uses; a slot follows the person, not a half of the court.
 PlayerId = Literal["near_1", "near_2", "far_1", "far_2"]
@@ -157,18 +159,21 @@ class Rally(BaseModel):
 
 
 class ScoreCorrection(BaseModel):
-    """A user's score change: a rally's winner set or cleared, or a point awarded.
+    """A user's score change: a rally's winner set or cleared, a point awarded, or a match
+    conceded.
 
     An award is a point for a rally the referee layer missed; it counts after the detected
-    rallies before rally_index (the number of rallies when it was given).
+    rallies before rally_index (the number of rallies when it was given). A concession
+    (v1.5) ends the match there: `winner_after` wins because the other side retired.
     """
 
     rally_index: int
     winner_before: PlayerSide | None
     winner_after: PlayerSide | None  # None: the rally is undecided again
     at: datetime
-    kind: Literal["winner", "award"] = "winner"
-    frame: int | None = None  # where an award was given
+    kind: Literal["winner", "award", "concede"] = "winner"
+    frame: int | None = None  # where an award or concession was given
+    reason: DecisionReason | None = _omit_none()  # v1.5: why the referee decided it
 
 
 class GameService(BaseModel):
@@ -195,7 +200,8 @@ class Score(ScorePair):
     game_point: list[PlayerSide] = Field(default_factory=list)  # one point from the game
     match_point: list[PlayerSide] = Field(default_factory=list)
     match_winner: PlayerSide | None = None
-    interval: bool = False  # the last rally took the leader to 11: 60 s interval
+    interval: bool = False  # the leader reached 11 (60 s) or a game ended (120 s)
+    interval_s: int | None = _omit_none()  # v1.5: how long that interval is
     change_ends: bool = False  # after a game, and at 11 in the deciding game
     # Doubles (v1.2): the user names who serves and receives first; the rest follows.
     first_server_id: PlayerId | None = _omit_none()
@@ -204,6 +210,8 @@ class Score(ScorePair):
     receiver_id: PlayerId | None = _omit_none()
     # Doubles (v1.3): the first server and receiver of later games, as the user named them.
     game_service: list[GameService] = Field(default_factory=list, exclude_if=lambda v: not v)
+    # v1.5: games each side had already won when the session started (joined mid-match).
+    start_games: ScorePair | None = _omit_none()
 
 
 class Moment(BaseModel):
@@ -324,7 +332,8 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
     1.0 -> 1.1 only adds optional fields; the defaults fill them, and line calls and rally
     events are derived from the rallies so old jobs show calls in the app. 1.1 -> 1.2 adds
     optional doubles fields only, 1.2 -> 1.3 the optional per-game doubles service, and
-    1.3 -> 1.4 the optional `stroke_model`.
+    1.3 -> 1.4 the optional `stroke_model`, and 1.4 -> 1.5 the optional mid-match start,
+    decision reasons, concessions and interval length.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:

@@ -185,7 +185,7 @@ def test_migrate_1_1_record_adds_nothing() -> None:
     old["schema_version"] = "1.1"
     old["line_calls"] = []  # 1.1 records keep the calls they have; only 1.0 derives them
     record = load_record(json.dumps(old))
-    assert record.schema_version == SCHEMA_VERSION == "1.4"
+    assert record.schema_version == SCHEMA_VERSION == "1.5"
     assert record.line_calls == []
 
 
@@ -235,7 +235,7 @@ def test_stroke_model_is_optional_and_checked() -> None:
     old = {"schema_version": "1.3", "clip_id": "c", "fps": 30, "width": 4, "height": 4,
            "num_frames": 0}  # fmt: skip
     record = ClipRecord.model_validate(migrate(dict(old)))
-    assert record.schema_version == "1.4" and record.stroke_model is None
+    assert record.schema_version == "1.5" and record.stroke_model is None
     assert ClipRecord.model_validate({**old, "stroke_model": "rf"}).stroke_model == "rf"
     with pytest.raises(pydantic.ValidationError):
         ClipRecord.model_validate({**old, "stroke_model": "svm"})
