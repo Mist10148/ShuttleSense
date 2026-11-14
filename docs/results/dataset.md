@@ -20,4 +20,4 @@ Every class has well over 500 training samples, so none needs flagging for T3.8.
 
 ## Extracted clips
 
-After `scripts/extract_clips.py`, run `python scripts/dataset_stats.py`. It replaces this file with the clip-level tables: per class, per split and per player, plus the strokes lost at rally boundaries and in failed extractions.
+After `scripts/extract_clips.py`, run `python scripts/dataset_stats.py`. It rewrites this file with the clip-level tables (pass `--out` to keep the annotation tables below and write the clip counts elsewhere): per class, per split and per player, plus the strokes lost at rally boundaries and in failed extractions.

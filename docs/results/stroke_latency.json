@@ -1,15 +1,36 @@
 {
-  "model": "random init (configs/stroke_cnn.yaml)",
   "hits": 40,
   "duration_s": 60.0,
-  "devices": [
+  "models": [
     {
       "device": "cpu",
       "runs": 5,
-      "median_s": 0.0169,
-      "max_s": 0.0182,
-      "first_run_s": 0.1062,
-      "load_s": null
+      "median_s": 0.0435,
+      "max_s": 0.0494,
+      "first_run_s": 0.0495,
+      "load_s": 0.0154,
+      "model": "1D CNN",
+      "file_mb": 0.43
+    },
+    {
+      "device": "cpu",
+      "runs": 5,
+      "median_s": 0.0524,
+      "max_s": 0.0619,
+      "first_run_s": 0.0683,
+      "load_s": 0.0171,
+      "model": "LSTM",
+      "file_mb": 2.68
+    },
+    {
+      "device": "cpu",
+      "runs": 5,
+      "median_s": 0.0861,
+      "max_s": 0.0871,
+      "first_run_s": 0.0895,
+      "load_s": 0.1156,
+      "model": "Random Forest",
+      "file_mb": 6.03
     }
   ]
 }

@@ -1,8 +1,11 @@
 """Stroke classifier latency on CPU and GPU (T3.14).
 
-Usage: python scripts/bench_strokes.py [--weights weights/strokes/stroke_cnn.pt]
+Usage: python scripts/bench_strokes.py [--models cnn,lstm,rf | --weights FILE]
                 [--record out/record.json] [--duration-s 60] [--hits-per-min 40]
                 [--runs 5] [--devices cpu,cuda] [--out ../docs/results/stroke_latency.md]
+
+--models times each installed stroke model (D28) from its default weights file and writes one
+row per model and device; the Random Forest runs on the CPU only.
 
 Times the strokes stage (strokes.classify.run: feature windows, one batched forward pass,
 softmax) the way the pipeline calls it. Latency does not depend on what the model learned,
@@ -56,7 +59,7 @@ def random_model(use_trajectory: bool = True):
     ckpt = {
         "in_features": in_features,
         "use_trajectory": use_trajectory,
-        "window_frames": cfg["data"]["window_frames"],
+        "window_frames": cfg["data"].get("window_frames", 30),
         "classes": list(cfg["data"]["classes"]),
     }
     return model.eval(), ckpt
@@ -110,8 +113,54 @@ def time_device(
     }
 
 
+TARGETS = {"cpu": 30.0, "cuda": 5.0}
+
+
+def time_models(
+    record: ClipRecord, names: list[str], devices: list[str], runs: int = 5
+) -> list[dict[str, Any]]:
+    """One row per installed model and device, timed from its default weights file."""
+    from shuttlesense.strokes import registry
+
+    rows = []
+    for name in names:
+        path = registry.DEFAULT_WEIGHTS[name]
+        if not (BACKEND_DIR / path).is_file():
+            print(f"{name}: {path} not found, skipped")
+            continue
+        for device in devices if registry.REQUIRES[name] else ["cpu"]:
+            row = time_device(record, device, runs, path)
+            row["model"] = registry.LABELS[name]
+            row["file_mb"] = round((BACKEND_DIR / path).stat().st_size / 1e6, 2)
+            rows.append(row)
+    return rows
+
+
+def models_markdown(result: dict[str, Any]) -> str:
+    lines = [
+        "# Stroke classifier latency",
+        "",
+        f"{result['hits']} hits in a {result['duration_s']:.0f} s clip, trained weights from "
+        "`backend/weights/strokes/`. The time covers building the feature windows and one "
+        "batched prediction, as the pipeline's strokes stage does.",
+        "",
+        "| Model | Device | Median (s) | Max (s) | First run (s) | Load (s) | File (MB) | Target |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for r in result["models"]:
+        target = TARGETS.get(r["device"])
+        ok = "met" if target and r["median_s"] < target else "missed"
+        lines.append(
+            f"| {r['model']} | {r['device']} | {r['median_s']:.3f} | {r['max_s']:.3f} | "
+            f"{r['first_run_s']:.3f} | {r['load_s']:.3f} | {r['file_mb']:.2f} | "
+            f"< {target:g} s ({ok}) |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def to_markdown(result: dict[str, Any]) -> str:
-    targets = {"cpu": 30.0, "cuda": 5.0}
+    targets = TARGETS
     lines = [
         "# Stroke classifier latency",
         "",
@@ -135,6 +184,7 @@ def to_markdown(result: dict[str, Any]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weights", default=None, help="checkpoint, relative to backend/")
+    parser.add_argument("--models", default=None, help="comma-separated: cnn,lstm,rf")
     parser.add_argument("--record", type=Path, default=None)
     parser.add_argument("--duration-s", type=float, default=60.0)
     parser.add_argument("--hits-per-min", type=float, default=40.0)
@@ -152,13 +202,20 @@ def main() -> None:
     else:
         record = synthetic_record(args.duration_s, args.hits_per_min)
     devices = available_devices([d for d in args.devices.split(",") if d])
-    result = {
-        "model": args.weights or "random init (configs/stroke_cnn.yaml)",
+    result: dict[str, Any] = {
         "hits": len(record.hits),
         "duration_s": record.num_frames / (record.fps or 30.0),
-        "devices": [time_device(record, d, args.runs, args.weights) for d in devices],
     }
-    markdown = to_markdown(result)
+    if args.models:
+        names = [m for m in args.models.split(",") if m]
+        result["models"] = time_models(record, names, devices, args.runs)
+        if not result["models"]:
+            raise SystemExit("none of the models is installed: train or download the weights")
+        markdown = models_markdown(result)
+    else:
+        result["model"] = args.weights or "random init (configs/stroke_cnn.yaml)"
+        result["devices"] = [time_device(record, d, args.runs, args.weights) for d in devices]
+        markdown = to_markdown(result)
     print(markdown)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(markdown, encoding="utf-8")

@@ -12,9 +12,9 @@ data:
   classes: [smash, clear, drop, net_shot, lift, serve]
 
 model:
-  trees: 200
-  max_depth: 18                 # depth and leaf size keep the saved file small
-  min_samples_leaf: 3
+  trees: 150
+  max_depth: 14                 # depth and leaf size keep the saved file small
+  min_samples_leaf: 5
   max_features: sqrt
   class_weighting: true
 

@@ -302,3 +302,62 @@ def test_installed_models_follow_weights_and_packages(
     assert "strokes" in pipeline.available_stages(config)
     strokes["algorithm"] = "svm"
     assert "strokes" not in pipeline.available_stages(config)
+
+
+# --- reports --------------------------------------------------------------------------
+
+
+def test_figures_compare_the_models(tmp_path: Path) -> None:
+    from shuttlesense.strokes.metrics import classification_report
+
+    figures = load_script("make_figures")
+    classes = list(STROKE_CLASSES)
+    rng = np.random.default_rng(0)
+    y = np.repeat(np.arange(6), 20)
+    names = [
+        ("stroke_cnn_metrics_seed1", 0.1),
+        ("stroke_cnn_metrics_seed2", 0.1),
+        ("stroke_rf_metrics_seed1", 0.3),
+        ("stroke_cnn_metrics_pose_only_seed1", 0.4),
+    ]
+    for name, noise in names:
+        pred = np.where(rng.random(len(y)) < noise, (y + 1) % 6, y)
+        report = {"test": classification_report(y, pred, classes)}
+        (tmp_path / f"{name}.json").write_text(json.dumps(report), encoding="utf-8")
+
+    runs, found = figures.collect_models(["cnn", "lstm", "rf"], tmp_path)
+    assert list(runs) == ["cnn", "rf", "cnn_pose_only"] and found == classes  # no LSTM runs
+    summary = figures.summarize(runs, classes)
+    text = figures.to_markdown(summary, [], note="Trained on the BST features.")
+    assert "| 1D CNN | 1, 2 |" in text and "| Random Forest | 1 |" in text
+    assert "| 1D CNN, pose only | 1 |" in text and "Trained on the BST features." in text
+
+    pytest.importorskip("matplotlib")
+    written = figures.plot(summary, tmp_path / "results")
+    assert written == [
+        "strokes_confusion_cnn.png",
+        "strokes_confusion_rf.png",
+        "strokes_per_class_f1.png",
+        "strokes_models.png",
+    ]
+
+
+def test_bench_times_installed_models(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("sklearn")
+    trainer = load_script("train_stroke_classifier")
+    bench = load_script("bench_strokes")
+    monkeypatch.setattr(trainer, "BACKEND_DIR", tmp_path)
+    write_npz(tmp_path / "a.npz", 60)
+    result = trainer.train(
+        train_cfg("rf"), {"train": ["a"], "val": ["a"]}, use_trajectory=True, seed=1, device="cpu"
+    )
+    (tmp_path / "weights" / "strokes").mkdir(parents=True)
+    trainer.save_checkpoint(result["checkpoint"], tmp_path / registry.DEFAULT_WEIGHTS["rf"])
+    monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
+    monkeypatch.setattr(bench, "BACKEND_DIR", tmp_path)
+
+    record = bench.synthetic_record(duration_s=5, hits_per_min=60)
+    rows = bench.time_models(record, ["cnn", "rf"], ["cpu", "cuda"], runs=1)
+    assert [(r["model"], r["device"]) for r in rows] == [("Random Forest", "cpu")]  # no CNN file
+    text = bench.models_markdown({"hits": 5, "duration_s": 5.0, "models": rows})
+    assert "| Random Forest | cpu |" in text and "< 30 s (met)" in text

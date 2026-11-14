@@ -242,6 +242,12 @@ samples/*
 *.pth
 *.ckpt
 *.onnx
+# The three trained stroke models are small and committed (docs/DECISIONS.md D30).
+!backend/weights/strokes/
+backend/weights/strokes/*
+!backend/weights/strokes/stroke_cnn.pt
+!backend/weights/strokes/stroke_lstm.pt
+!backend/weights/strokes/stroke_rf.npz
 
 # Flutter / Dart
 .dart_tool/

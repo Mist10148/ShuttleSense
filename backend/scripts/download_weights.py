@@ -1,6 +1,10 @@
 """Download pretrained weights into backend/weights/ and verify their checksums (task T1.4).
 
 Usage: python scripts/download_weights.py [--only tracknet|strokes] [--force]
+
+The three stroke models (CNN, LSTM, Random Forest) are committed under weights/strokes/
+(D30), so for them this only checks the files against the pinned checksums. A stroke file
+that differs is reported and kept: it is most likely a model you retrained.
 """
 
 from __future__ import annotations
@@ -16,13 +20,21 @@ HF_REPO = "shuttlesense/weights"
 
 FILES = {
     "tracknet": ["tracknet/TrackNet_best.pt", "tracknet/InpaintNet_best.pt"],
-    "strokes": ["strokes/stroke_cnn.pt"],
+    "strokes": ["strokes/stroke_cnn.pt", "strokes/stroke_lstm.pt", "strokes/stroke_rf.npz"],
 }
+# Committed with the repo (D30): checked, never downloaded or deleted.
+IN_REPO = frozenset(FILES["strokes"])
 
 # SHA-256 of each file. Fill in when the file is uploaded to HF_REPO
 # (`sha256sum FILE`, or `certutil -hashfile FILE SHA256` on Windows).
 # A missing entry means "not pinned yet": the file is downloaded but not verified.
-CHECKSUMS: dict[str, str] = {}
+# The stroke entries are the files trained on Nov 14 (docs/results/strokes.md); update them
+# when you commit retrained weights.
+CHECKSUMS: dict[str, str] = {
+    "strokes/stroke_cnn.pt": "c9176cc6780f0f390888454ae70064303a61379e9d69ec2e5b3d8c07578cb6c3",
+    "strokes/stroke_lstm.pt": "58e0eba4c6208280c0e3624032146f530044c9e50e639e4225020aafd6e2eb2e",
+    "strokes/stroke_rf.npz": "e773350e92e2000cdb43578c3b19dd0c39696431f54e213788f8847b72420782",
+}
 
 
 class ChecksumError(RuntimeError):
@@ -52,6 +64,12 @@ def verify(path: Path, name: str) -> bool:
 def fetch(name: str, *, force: bool = False, download=None) -> str:
     """Download one file if needed and verify it. Returns a status word for the log."""
     target = WEIGHTS_DIR / name
+    if name in IN_REPO and download is None:
+        if not target.exists():
+            return "missing: restore it with git, or train it (docs/SETUP.md)"
+        if CHECKSUMS.get(name) in (None, sha256(target)):
+            return "verified" if name in CHECKSUMS else "exists"
+        return "differs from the committed file (retrained?)"
     if target.exists() and not force:
         return "verified" if verify(target, name) else "exists"
     if download is None:
