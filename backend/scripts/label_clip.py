@@ -1,6 +1,7 @@
 """Label hits, strokes and rallies on a team phone clip (T7.1).
 
 Usage: python scripts/label_clip.py --video ../samples/rally01.mp4 [--out labels/rally01.csv]
+       python scripts/label_clip.py --video ../samples/doubles01.mp4 --boxes [--every 10]
 
 Opens the clip in an OpenCV window (needs `pip install opencv-python`, not the headless
 build). Labels are kept in seconds, so they hold for any fps the pipeline normalizes to.
@@ -29,6 +30,12 @@ is a slot (near_1, near_2, far_1, far_2); a rally's server is the slot of its fi
 receiver the slot of its second (the receiver always returns the serve). An existing file
 is loaded first, so labelling can resume; columns this tool does not edit
 (such as landing_x_m / landing_y_m from label_landings.py) are kept as they are.
+
+With --boxes (doubles, T9.2) the tool steps through every --every-th frame instead and asks
+for the four player boxes, one slot at a time: drag a box and press Enter, or press c (or
+Enter with no box) when that player is not in view. Boxes go to labels/<video stem>_boxes.csv
+(frame, time_s, slot, x, y, w, h in source pixels), read by eval_doubles.py --boxes for ID
+switches and IDF1. Frames already labelled for all four slots are skipped, so it resumes too.
 """
 
 from __future__ import annotations
@@ -174,6 +181,91 @@ LEFT_KEYS = {2424832, 65361, 81, ord(",")}
 RIGHT_KEYS = {2555904, 65363, 83, ord(".")}
 
 
+BOX_COLUMNS = ("frame", "time_s", "slot", "x", "y", "w", "h")
+Box = tuple[float, float, float, float]
+
+
+@dataclass
+class BoxLabels:
+    """Player boxes per (frame, slot) for doubles identity evaluation (T9.2). A slot with
+    `None` was looked at and is not in view."""
+
+    fps: float = 30.0
+    boxes: dict[tuple[int, str], Box | None] = field(default_factory=dict)
+
+    def set(self, frame: int, slot: str, box: Box | None) -> None:
+        if slot not in SLOTS:
+            raise ValueError(f"unknown slot {slot!r}")
+        self.boxes[(frame, slot)] = box
+
+    def frames_to_label(self, total: int, every: int) -> list[int]:
+        """Every `every`-th frame that still misses one of the four slots."""
+        return [
+            f
+            for f in range(0, total, max(1, every))
+            if any((f, slot) not in self.boxes for slot in SLOTS)
+        ]
+
+    @classmethod
+    def load(cls, path: Path, fps: float = 30.0) -> BoxLabels:
+        labels = cls(fps=fps)
+        if not path.exists():
+            return labels
+        with path.open(newline="", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                box = None
+                if row.get("w") and row.get("h"):
+                    box = tuple(float(row[k]) for k in ("x", "y", "w", "h"))
+                labels.boxes[(int(row["frame"]), row["slot"])] = box  # type: ignore[assignment]
+        return labels
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(BOX_COLUMNS)
+            for (frame, slot), box in sorted(self.boxes.items()):
+                xywh = ["", "", "", ""] if box is None else [f"{v:.1f}" for v in box]
+                writer.writerow([frame, f"{frame / self.fps:.3f}", slot, *xywh])
+
+
+def run_boxes(video: Path, out: Path, every: int) -> None:  # pragma: no cover - needs a display
+    import cv2
+
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        raise SystemExit(f"cannot open {video}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+    labels = BoxLabels.load(out, fps)
+    window = f"boxes {video.name}"
+    try:
+        for frame_index in labels.frames_to_label(total, every):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ok, frame = cap.read()
+            if not ok:
+                break
+            for slot in SLOTS:
+                if (frame_index, slot) in labels.boxes:
+                    continue
+                shown = frame.copy()
+                text = f"frame {frame_index}: box {slot} (Enter: ok, c: not in view, Esc: quit)"
+                for color, thickness in (((0, 0, 0), 4), ((255, 255, 255), 1)):
+                    cv2.putText(shown, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color,
+                                thickness)  # fmt: skip
+                x, y, w, h = cv2.selectROI(window, shown, showCrosshair=False)
+                if cv2.waitKey(1) == 27:
+                    raise KeyboardInterrupt
+                labels.set(frame_index, slot, (x, y, w, h) if w and h else None)
+            labels.save(out)
+    except KeyboardInterrupt:
+        pass
+    labels.save(out)
+    cap.release()
+    cv2.destroyAllWindows()
+    print(f"saved {len(labels.boxes)} slot labels to {out}")
+
+
 def run_window(video: Path, out: Path) -> None:  # pragma: no cover - needs a display
     import cv2
 
@@ -236,8 +328,14 @@ def main() -> None:
     )
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--out", type=Path, default=None, help="default labels/<video stem>.csv")
+    parser.add_argument("--boxes", action="store_true", help="doubles: label player boxes")
+    parser.add_argument("--every", type=int, default=10, help="--boxes: every n-th frame")
     args = parser.parse_args()
-    run_window(args.video, args.out or Path("labels") / f"{args.video.stem}.csv")
+    if args.boxes:
+        out = args.out or Path("labels") / f"{args.video.stem}_boxes.csv"
+        run_boxes(args.video, out, args.every)
+    else:
+        run_window(args.video, args.out or Path("labels") / f"{args.video.stem}.csv")
 
 
 if __name__ == "__main__":

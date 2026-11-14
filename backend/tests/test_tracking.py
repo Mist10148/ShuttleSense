@@ -197,3 +197,41 @@ def test_tracknet_follows_the_shuttle_on_rally01(tmp_path: Path) -> None:
     visible = sum(1 for f in record.frames if f.shuttle and f.shuttle.visible)
     assert visible > 0.5 * len(record.frames)
     assert (tmp_path / "tracking.csv").exists()
+
+
+def test_tracknet_runs_on_cpu_from_a_checkpoint(tmp_path: Path) -> None:
+    """T2.2 "CPU fallback works": a real TrackNet (random weights, no download) is loaded
+    from a checkpoint file with map_location="cpu" and run on CPU, without autocast."""
+    torch = pytest.importorskip("torch")
+    tracknet._tracknet_path()
+    from model import TrackNet  # the pinned TrackNetV3 submodule
+
+    seq_len = 2
+    torch.manual_seed(0)
+    model = TrackNet(in_dim=seq_len * 3, out_dim=seq_len)
+    weights = tmp_path / "tracknet_random.pt"
+    torch.save({"param_dict": {"seq_len": seq_len, "bg_mode": ""},
+                "model": model.state_dict()}, weights)  # fmt: skip
+
+    class Reader:
+        width, height = 320, 180
+
+        def __len__(self):
+            return 3  # one full window and a partial one
+
+        def batch(self, start, size):
+            rng = np.random.default_rng(start)
+            return [rng.integers(0, 255, (180, 320, 3), dtype=np.uint8)
+                    for _ in range(min(size, 3 - start))]  # fmt: skip
+
+    ctx = StageContext(
+        video_path=tmp_path / "v.mp4",
+        out_dir=tmp_path,
+        config={"stages": {"tracking": {"batch_size": 1, "use_inpaintnet": False}}},
+        reader=Reader(),
+        device="cpu",
+    )
+    xy, visible, source = tracknet.predict(ctx, weights)
+    assert xy.shape == (3, 2) and visible.shape == (3,)
+    assert set(visible.tolist()) <= {0, 1} and len(source) == 3
+    assert np.isfinite(xy).all()

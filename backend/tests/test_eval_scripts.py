@@ -442,3 +442,44 @@ def test_check_links_finds_missing_files_and_headings(tmp_path: Path) -> None:
     assert "a.md:7: docs/c.md (file not found)" in problems[0]
     assert "docs/b.md#nope (no such heading)" in problems[1]
     assert links.slug("Phase 11 — Selectable stroke models") == "phase-11--selectable-stroke-models"
+
+
+def test_box_labels_give_id_switches_and_idf1(tmp_path: Path) -> None:
+    """T9.2 box labels (label_clip.py --boxes) and T9.12 ID switches and IDF1."""
+    import argparse
+
+    from shuttlesense.fake import load_golden
+    from shuttlesense.schema import slot_attr
+
+    label_clip = load_script("label_clip")
+    eval_doubles = load_script("eval_doubles")
+    record = load_golden("doubles")
+    boxes = label_clip.BoxLabels(fps=record.fps)
+    assert boxes.frames_to_label(60, 10) == [0, 10, 20, 30, 40, 50]
+    for frame in range(0, 60, 10):
+        players = record.frames[frame].players
+        for slot in label_clip.SLOTS:
+            box = getattr(players, slot_attr(slot)).bbox
+            # From frame 30 on the labeller says the two near partners swapped boxes.
+            if frame >= 30 and slot.startswith("near"):
+                other = "near_2" if slot == "near_1" else "near_1"
+                box = getattr(players, slot_attr(other)).bbox
+            boxes.set(frame, slot, tuple(box))
+    boxes.set(50, "far_2", None)  # not in view: left out of the counts
+    path = tmp_path / "doubles_boxes.csv"
+    boxes.save(path)
+    again = label_clip.BoxLabels.load(path, record.fps)
+    assert again.boxes == boxes.boxes and again.frames_to_label(60, 10) == []
+
+    rallies = [{"start_s": 0.0, "end_s": 55 / record.fps}]
+    metrics = eval_doubles.identity_metrics(record, eval_doubles.read_boxes(path), rallies)
+    assert metrics["box_frames"] == 6 and metrics["labelled_boxes"] == 23
+    assert metrics["id_switches"] == 2 and metrics["id_switches_per_rally"] == 2.0
+    # Best fixed assignment: 17 of 23 labelled boxes; 24 tracked boxes on those frames.
+    assert metrics["idf1"] == pytest.approx(2 * 17 / (2 * 17 + 7 + 6))
+
+    labels = tmp_path / "doubles.csv"
+    label_clip.ClipLabels().save(labels)
+    args = argparse.Namespace(tolerance=3, rally_tolerance=1.0, max_step_m=1.5, min_iou=0.5)
+    assert eval_doubles.evaluate(record, labels, args)["idf1"] is None
+    assert eval_doubles.evaluate(record, labels, args, path)["id_switches"] == 2
