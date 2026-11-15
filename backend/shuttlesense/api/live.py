@@ -578,10 +578,20 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
                 ]
             before_score = session.analyzer.record.score
             game = before_score.game if before_score else 1
-            events = _control_locked(session, msg)
+            # Refuse a malformed decision before it changes the score: a failure after the
+            # change would lose the receipt and let the client's retry apply it twice.
+            problem = _decision_problem(msg)
+            events = (
+                [{"type": "error", "code": "bad_request", "detail": problem}]
+                if problem
+                else _control_locked(session, msg)
+            )
             errors = [e for e in events if e["type"] == "error"]
             if not errors:
-                log_decision(session.analyzer.record, {**msg, "_game": game})
+                try:
+                    log_decision(session.analyzer.record, {**msg, "_game": game})
+                except Exception:  # the decision stands; only its history entry is lost
+                    log.exception("live session %s could not log a decision", session.id)
                 for event in events:
                     if event["type"] == "score":
                         event.update(courtside_snapshot(session.analyzer.record))
@@ -596,6 +606,30 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
 
 # A decision's optional reason (v1.5); None when the referee gave none.
 REASONS = (None, "let", "fault", "service_fault", "misconduct")
+DECISIONS = ("award", "correct", "override", "concede", "undo")
+
+
+def _decision_problem(msg: dict[str, Any]) -> str | None:
+    """What is wrong with a decision's optional history fields, or None.
+
+    _control_locked checks the fields a decision acts on; these only reach the decision log.
+    """
+    kind = msg.get("type")
+    if kind not in DECISIONS:
+        return None
+    frame = msg.get("frame")
+    if frame is not None and (type(frame) is not int or frame < 0):
+        return "frame must be a non-negative integer"
+    if kind in ("override", "concede", "undo") and msg.get("reason") not in REASONS:
+        return "unknown reason"
+    rally_index = msg.get("rally_index")
+    if (
+        kind != "correct"
+        and rally_index is not None
+        and (type(rally_index) is not int or rally_index < 0)
+    ):
+        return "rally_index must be a non-negative integer"
+    return None
 
 
 def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:

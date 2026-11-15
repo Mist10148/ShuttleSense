@@ -794,3 +794,32 @@ def test_live_start_games_reason_and_concede(tmp_path: Path) -> None:
             pass
         job = _wait_done(client, e["job_id"])
         assert job["start_games"] == {"near": 1, "far": 1}
+
+
+@pytest.mark.parametrize(
+    "extra", [{"frame": "x"}, {"frame": -1}, {"frame": True}, {"rally_index": "0"}]
+)
+def test_malformed_decision_fields_are_refused_before_the_score_changes(
+    tmp_path: Path, extra: dict
+) -> None:
+    """A bad history field used to fail after the award was applied and before its receipt
+    was stored, so the client's retry scored the point twice."""
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        bad = {"type": "award", "winner": "near", "decision_id": 7, **extra}
+        for _ in range(2):  # the retry gets the same answer and still scores nothing
+            ws.send_json(bad)
+            error = ws.receive_json()
+            assert (error["code"], error["decision_id"]) == ("bad_request", 7)
+        good = {"type": "award", "winner": "near", "decision_id": 8, "frame": 0}
+        ws.send_json(good)
+        assert ws.receive_json()["score"]["near"] == 1
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json(good)
+        again = ws.receive_json()
+        assert (again["type"], again["score"]["near"]) == ("score", 1)
+        ws.send_json({"type": "concede", "winner": "far", "reason": {"a": 1}})
+        assert ws.receive_json()["code"] == "bad_request"
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "saved"
