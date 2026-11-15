@@ -202,6 +202,7 @@ class LiveManager:
             started_at=utcnow(), progress=0.9, mode="live", referee=True, start_score=start,
             best_of=session.request.best_of, first_server=session.request.first_server,
             start_games=session.request.start_games, court=session.request.court,
+            auto_change_ends=session.request.auto_change_ends,
             first_server_id=session.request.first_server_id,
             first_receiver_id=session.request.first_receiver_id,
             stroke_model=session.request.stroke_model or self.state.jobs.default_stroke_model(),
@@ -290,6 +291,11 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
     from shuttlesense.referee import validate_start_games
 
     validate_start_games(start_games, best_of)
+    # v1.7. A client that does not send it gets the rules, and still shows the right
+    # score: near and far in every event are the ends as they are.
+    auto_change_ends = msg.get("auto_change_ends", True)
+    if type(auto_change_ends) is not bool:
+        raise ValueError("auto_change_ends must be true or false")
     name = msg.get("name")
     if name is not None and (not isinstance(name, str) or len(name) > MAX_NAME_LENGTH):
         raise ValueError(f"name must be text of at most {MAX_NAME_LENGTH} characters")
@@ -315,6 +321,7 @@ def _start_request(msg: dict[str, Any]) -> StartRequest:
         fps=fps, width=width, height=height, corners=corners, court=court, name=name,
         start_score=score, best_of=best_of, first_server=first_server, start_games=start_games,
         first_server_id=server_id, first_receiver_id=receiver_id, stroke_model=stroke_model,
+        auto_change_ends=auto_change_ends,
     )  # fmt: skip
 
 
@@ -369,6 +376,7 @@ async def live(ws: WebSocket, token: str | None = None) -> None:
             "frames": len(session.analyzer.record.frames), "stages": session.perception.available,
             "corners": session.corners, "budget_ms": session.live["budget_ms"],
             "decision_ack": True, "decision_dedup": True, "courtside_depth": True,
+            "change_ends": True,
             **_snapshot(session),
         })  # fmt: skip
     except Exception:  # the client left before the session started
@@ -606,7 +614,7 @@ def _control(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
 
 # A decision's optional reason (v1.5); None when the referee gave none.
 REASONS = (None, "let", "fault", "service_fault", "misconduct")
-DECISIONS = ("award", "correct", "override", "concede", "undo")
+DECISIONS = ("award", "correct", "override", "concede", "undo", "ends")
 
 
 def _decision_problem(msg: dict[str, Any]) -> str | None:
@@ -620,7 +628,7 @@ def _decision_problem(msg: dict[str, Any]) -> str | None:
     frame = msg.get("frame")
     if frame is not None and (type(frame) is not int or frame < 0):
         return "frame must be a non-negative integer"
-    if kind in ("override", "concede", "undo") and msg.get("reason") not in REASONS:
+    if kind in ("override", "concede", "undo", "ends") and msg.get("reason") not in REASONS:
         return "unknown reason"
     rally_index = msg.get("rally_index")
     if (
@@ -674,6 +682,8 @@ def _control_locked(session: LiveSession, msg: dict[str, Any]) -> list[dict]:
             return session.concede(msg["winner"])
         if msg.get("type") == "undo":
             return session.undo()
+        if msg.get("type") == "ends":
+            return session.change_ends()
         if msg.get("type") == "service":
             try:
                 game, service = _game_service(session, msg)

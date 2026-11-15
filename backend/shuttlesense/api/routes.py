@@ -40,6 +40,7 @@ from shuttlesense.api.models import (
     ScoreAwardIn,
     ScoreConcedeIn,
     ScoreCorrectionIn,
+    ScoreEndsIn,
     ScoreUpdate,
     VideoInfoOut,
     utcnow,
@@ -287,6 +288,7 @@ def create_job(body: JobCreate, storage: StorageDep, jobs: JobsDep) -> Job:
         start_score=body.start_score,
         best_of=body.best_of,
         start_games=body.start_games,
+        auto_change_ends=body.auto_change_ends,
         first_server=body.first_server or (body.first_server_id or "")[:-2] or None,
         court=body.court,
         first_server_id=body.first_server_id,
@@ -460,6 +462,32 @@ def award_point(job_id: str, body: ScoreAwardIn, storage: StorageDep, jobs: Jobs
                 **body.model_dump(exclude_none=True),
             },
         )
+        _save_score(record, storage, jobs, job_id)
+    return ScoreUpdate(score=record.score, rallies=record.rallies)
+
+
+@router.post("/jobs/{job_id}/score/ends", response_model=ScoreUpdate)
+def change_ends(job_id: str, body: ScoreEndsIn, storage: StorageDep, jobs: JobsDep) -> ScoreUpdate:
+    """The players changed ends at `frame` (default: the end): the points, games and server
+    go with them from there on. Given a second time at the same place it cancels the first,
+    so it also takes back an automatic change the players did not make."""
+    job, path = _score_record(storage, jobs, job_id)
+    with jobs.job_lock(job_id):
+        job = _require_done(jobs, job_id)
+        record = load_record(path.read_text(encoding="utf-8"))
+        if record.score is None:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        frame = body.frame if body.frame is not None else max(0, record.num_frames - 1)
+        if frame >= max(record.num_frames, 1):
+            raise HTTPException(status_code=400, detail="frame is past the end of the video")
+        placed = sum(1 for r in record.rallies if r.end_frame <= frame)
+        swap = ScoreCorrection(rally_index=placed, winner_before=None, winner_after=None,
+                               at=utcnow(), kind="ends", frame=frame)  # fmt: skip
+        before = record.score.model_copy(deep=True)
+        apply_corrections(record, [*record.score.corrections, swap], job.start_score)
+        if changes_finished_match(before, record.score):
+            raise HTTPException(status_code=409, detail="the match is already won")
+        log_decision(record, {"type": "ends", "frame": frame, "_game": before.game})
         _save_score(record, storage, jobs, job_id)
     return ScoreUpdate(score=record.score, rallies=record.rallies)
 

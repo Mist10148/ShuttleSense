@@ -97,6 +97,10 @@ class JobCreate(BaseModel):
     start_score: ScorePair | None = None  # for clips that start mid-game
     best_of: Literal[1, 3] = 1  # games in the match
     start_games: ScorePair | None = None  # games each side already won (joined mid-match)
+    # v1.7: the players change ends by the rules and the score goes with them. Send
+    # false for players who stay put; a change by hand (POST .../score/ends) works
+    # either way.
+    auto_change_ends: bool = True
     first_server: PlayerSide | None = None  # who serves the first rally, if known
     court: CourtType = "singles"  # doubles: four players and the doubles lines (Phase 9)
     # Doubles: who serves and receives the first rally (both or neither, opposite sides).
@@ -144,6 +148,19 @@ class ScoreAwardIn(BaseModel):
     winner: PlayerSide
     frame: int | None = None  # where it happened; None: after the last rally
     reason: DecisionReason | None = None  # e.g. "fault", "service_fault"
+
+    @field_validator("frame")
+    @classmethod
+    def _not_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("frame must not be negative")
+        return value
+
+
+class ScoreEndsIn(BaseModel):
+    """The players changed ends at `frame`: early, late, or against the automatic change."""
+
+    frame: int | None = None  # None: after the last rally
 
     @field_validator("frame")
     @classmethod
@@ -225,6 +242,8 @@ class Job(BaseModel):
     start_score: ScorePair | None = None
     best_of: Literal[1, 3] = 1
     start_games: ScorePair | None = None
+    # False for jobs stored before clip record 1.7, so a re-render scores them as before.
+    auto_change_ends: bool = False
     first_server: PlayerSide | None = None
     court: CourtType = "singles"
     first_server_id: PlayerId | None = None

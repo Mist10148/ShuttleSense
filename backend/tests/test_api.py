@@ -946,18 +946,20 @@ def test_doubles_service_for_a_later_game_is_kept_through_a_rerender(
         while score["game"] == 1:  # far wins game 1 on awarded points
             score = client.post(f"{url}/award", json={"winner": "far"}).json()["score"]
         assert score.get("server_id") is None  # game 2: unknown until named
-        named = {"game": 2, "server_id": "far_2", "receiver_id": "near_2"}
+        # The game winners crossed to the near end (v1.7) and serve first from there.
+        assert score["ends_swapped"] and score["server"] == "near"
+        named = {"game": 2, "server_id": "near_2", "receiver_id": "far_2"}
         score = client.post(f"{url}/service", json=named).json()["score"]
-        assert (score["server_id"], score["receiver_id"]) == ("far_2", "near_2")
+        assert (score["server_id"], score["receiver_id"]) == ("near_2", "far_2")
         assert score["game_service"] == [named]
         assert client.get(f"/jobs/{job['id']}").json()["game_service"] == [named]
         for bad in ({**named, "game": 1}, {**named, "receiver_id": None},
-                    {**named, "receiver_id": "far_1"}):  # fmt: skip
+                    {**named, "receiver_id": "near_1"}):  # fmt: skip
             assert client.post(f"{url}/service", json=bad).status_code == 422
         client.post(f"/jobs/{job['id']}/render", json={"overlays": ["score"]})
         assert wait_for(client, job["id"])["status"] == "done"
         score = client.get(f"/jobs/{job['id']}/record").json()["score"]
-        assert score["game_service"] == [named] and score["server_id"] == "far_2"
+        assert score["game_service"] == [named] and score["server_id"] == "near_2"
         cleared = client.post(f"{url}/service", json={"game": 2}).json()["score"]
         assert cleared.get("server_id") is None and "game_service" not in cleared
 
@@ -1171,6 +1173,60 @@ def test_override_after_the_match_is_won_is_refused(tmp_path: Path, tiny_video: 
         job_dir = tmp_path / "storage" / "jobs" / job_id
         saved = json.loads((job_dir / "line_call_overrides.json").read_text(encoding="utf-8"))
         assert [o["call"] for o in saved] == ["out"]  # the refused one was never written
+
+
+def test_the_score_follows_the_players_and_a_change_by_hand(
+    tmp_path: Path, tiny_video: Path
+) -> None:
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        vid = upload(client, tiny_video).json()["id"]
+        body = {"video_id": vid, "referee": True, "court_corners_px": CORNERS, "best_of": 3,
+                "start_score": {"near": 20, "far": 0}}  # fmt: skip
+        job = client.post("/jobs", json=body).json()
+        assert job["auto_change_ends"] is True  # the rules, unless the request says otherwise
+        assert wait_for(client, job["id"])["status"] == "done"
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        score = record["score"]
+        # The near end won game 1; the players crossed, so its winners are at the far end.
+        assert score["ends_swapped"] and score["change_ends"] and score["game"] == 2
+        assert score["games_won"] == {"near": 0, "far": 1}
+        assert score["games"] == [{"near": 0, "far": 21}] and score["server"] == "far"
+        assert record["rallies"][0]["change_ends"] is True
+        assert record["rallies"][0]["score_after"] == {"near": 21, "far": 0}
+
+        # They did not cross after all: a change by hand cancels the automatic one.
+        res = client.post(f"/jobs/{job['id']}/score/ends", json={})
+        assert res.status_code == 200, res.text
+        score = res.json()["score"]
+        assert "ends_swapped" not in score and score["games_won"] == {"near": 1, "far": 0}
+        assert score["corrections"][-1]["kind"] == "ends" and not score["change_ends"]
+        record = client.get(f"/jobs/{job['id']}/record").json()
+        assert record["decision_log"][-1]["kind"] == "ends"
+        assert record["decision_log"][-1]["detail"] == "change of ends"
+        # A re-render keeps the change by hand.
+        client.post(f"/jobs/{job['id']}/render", json={"overlays": []})
+        assert wait_for(client, job["id"])["status"] == "done"
+        again = client.get(f"/jobs/{job['id']}/record").json()["score"]
+        assert again["games_won"] == {"near": 1, "far": 0} and "ends_swapped" not in again
+        # Undo takes it back; a frame past the end and a negative one are refused.
+        undone = client.post(f"/jobs/{job['id']}/score/undo").json()["score"]
+        assert undone["ends_swapped"] and undone["games_won"] == {"near": 0, "far": 1}
+        url = f"/jobs/{job['id']}/score/ends"
+        assert client.post(url, json={"frame": 10**6}).status_code == 400
+        assert client.post(url, json={"frame": -1}).status_code == 422
+
+        # Switched off: the old scoring, with only the notice.
+        off = client.post("/jobs", json={**body, "auto_change_ends": False}).json()
+        assert off["auto_change_ends"] is False
+        assert wait_for(client, off["id"])["status"] == "done"
+        score = client.get(f"/jobs/{off['id']}/record").json()["score"]
+        assert score["games_won"] == {"near": 1, "far": 0} and score["change_ends"]
+        assert "ends_swapped" not in score and "auto_change_ends" not in score
+
+        # Once the match is won a change of ends changes nothing.
+        one = client.post("/jobs", json={**body, "best_of": 1}).json()
+        assert wait_for(client, one["id"])["status"] == "done"
+        assert client.post(f"/jobs/{one['id']}/score/ends", json={}).status_code == 409
 
 
 def test_job_joins_a_match_under_way_and_takes_reasons(tmp_path: Path, tiny_video: Path) -> None:

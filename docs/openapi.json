@@ -1031,6 +1031,11 @@
       },
       "Job": {
         "properties": {
+          "auto_change_ends": {
+            "default": false,
+            "title": "Auto Change Ends",
+            "type": "boolean"
+          },
           "best_of": {
             "default": 1,
             "enum": [
@@ -1287,6 +1292,11 @@
       },
       "JobCreate": {
         "properties": {
+          "auto_change_ends": {
+            "default": true,
+            "title": "Auto Change Ends",
+            "type": "boolean"
+          },
           "best_of": {
             "default": 1,
             "enum": [
@@ -2545,6 +2555,24 @@
         "title": "ScoreCorrectionIn",
         "type": "object"
       },
+      "ScoreEndsIn": {
+        "description": "The players changed ends at `frame`: early, late, or against the automatic change.",
+        "properties": {
+          "frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          }
+        },
+        "title": "ScoreEndsIn",
+        "type": "object"
+      },
       "ScorePair": {
         "properties": {
           "far": {
@@ -3784,6 +3812,74 @@
           }
         },
         "summary": "Concede Match"
+      }
+    },
+    "/jobs/{job_id}/score/ends": {
+      "post": {
+        "description": "The players changed ends at `frame` (default: the end): the points, games and server\ngo with them from there on. Given a second time at the same place it cancels the first,\nso it also takes back an automatic change the players did not make.",
+        "operationId": "change_ends_jobs__job_id__score_ends_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreEndsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreUpdate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Ends"
       }
     },
     "/jobs/{job_id}/score/service": {

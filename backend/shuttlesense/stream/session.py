@@ -56,6 +56,7 @@ class StartRequest:
     name: str | None = None
     best_of: int = 1
     start_games: ScorePair | None = None  # games each side already won (joined mid-match)
+    auto_change_ends: bool = True  # v1.7: the score follows the players across
     first_server: str | None = None
     first_server_id: str | None = None  # doubles: who serves and receives first
     first_receiver_id: str | None = None
@@ -136,6 +137,7 @@ class LiveSession:
             config=self.config, device=device, start_score=request.start_score,
             best_of=request.best_of, first_server=request.first_server,
             start_games=request.start_games, first_server_id=request.first_server_id,
+            auto_change_ends=request.auto_change_ends,
             first_receiver_id=request.first_receiver_id,
             classify=classify, tick_every=int(live["tick_every"]),
             max_window_frames=int(live["max_window_frames"]),
@@ -333,6 +335,9 @@ class LiveSession:
 
     def concede(self, winner: str) -> list[Event]:
         return self.analyzer.concede(winner)
+
+    def change_ends(self) -> list[Event]:
+        return self.analyzer.change_ends()
 
     def undo(self) -> list[Event]:
         return self.analyzer.undo()

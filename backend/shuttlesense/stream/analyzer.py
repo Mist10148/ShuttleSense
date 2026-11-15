@@ -81,6 +81,7 @@ class StreamAnalyzer:
         start_games: ScorePair | None = None,
         first_server_id: PlayerId | None = None,
         first_receiver_id: PlayerId | None = None,
+        auto_change_ends: bool = False,
         classify: Classifier | None = None,
         tick_every: int = 5,
         max_window_frames: int = 900,
@@ -99,7 +100,8 @@ class StreamAnalyzer:
             score=apply_rallies([], self.start, best_of=best_of, first_server=first_server,
                                 first_server_id=first_server_id,
                                 first_receiver_id=first_receiver_id,
-                                start_games=start_games),
+                                start_games=start_games,
+                                auto_change_ends=auto_change_ends),
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})
@@ -488,6 +490,19 @@ class StreamAnalyzer:
         self._decide(ScoreCorrection(
             rally_index=len(self.record.rallies), winner_before=None, winner_after=winner,
             at=datetime.now(UTC), kind="concede", frame=max(0, len(self.record.frames) - 1),
+        ))  # fmt: skip
+        return [self._score_event(), self._latest_coaching_event()]
+
+    def change_ends(self) -> list[Event]:
+        """The players changed ends now, after the rallies so far: the score goes with them.
+
+        Raises RallyInPlay while a rally is open: its winner would be read at the wrong end.
+        """
+        if self.state == "in_play":
+            raise RallyInPlay("wait until the rally has ended")
+        self._decide(ScoreCorrection(
+            rally_index=len(self.record.rallies), winner_before=None, winner_after=None,
+            at=datetime.now(UTC), kind="ends", frame=max(0, len(self.record.frames) - 1),
         ))  # fmt: skip
         return [self._score_event(), self._latest_coaching_event()]
 
