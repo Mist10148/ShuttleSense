@@ -282,4 +282,35 @@ void main() {
       });
     }
   }
+
+  testWidgets('a rebuilt interval panel goes on counting from the server state', (tester) async {
+    final age = TestStopwatch()..milliseconds = 20000; // the state arrived 20 s ago
+    final clock = IntervalState.fromJson({
+      'key': 'g1',
+      'status': 'running',
+      'remaining_s': 60,
+      'duration_s': 60,
+    }, age: age);
+    Widget view() => MaterialApp(
+      home: Scaffold(
+        body: IntervalPanel(interval: clock, onAction: (_) {}),
+      ),
+    );
+    await tester.pumpWidget(view());
+    expect(find.text('Interval · 40 s'), findsOneWidget);
+    // Referee -> Coach -> Referee: the panel is thrown away and built again.
+    await tester.pumpWidget(const SizedBox());
+    age.milliseconds = 25000;
+    await tester.pumpWidget(view());
+    expect(find.text('Interval · 35 s'), findsOneWidget);
+    expect(clock.remainingNow, 35);
+    final paused = IntervalState.fromJson({
+      'key': 'g1',
+      'status': 'paused',
+      'remaining_s': 35,
+      'duration_s': 60,
+    }, age: TestStopwatch()..milliseconds = 9000);
+    expect(paused.remainingNow, 35); // only a running clock counts down
+    await tester.pumpWidget(const SizedBox());
+  });
 }

@@ -20,14 +20,25 @@ class DecisionEntry {
 }
 
 class IntervalState {
-  IntervalState.fromJson(Json j)
+  /// [age] measures the time since the server sent this state; it starts now. (The server's
+  /// `deadline` is not used: the phone's clock and the server's need not agree.)
+  IntervalState.fromJson(Json j, {Stopwatch? age})
     : key = j['key'] as String,
       status = j['status'] as String,
       remaining = asDouble(j['remaining_s']) ?? 0,
-      duration = asInt(j['duration_s']) ?? 60;
+      duration = asInt(j['duration_s']) ?? 60,
+      age = (age ?? Stopwatch())..start();
   final String key, status;
   final double remaining;
   final int duration;
+
+  /// Running since this state arrived. It belongs to the state, not to a widget, so the
+  /// countdown goes on correctly when the panel showing it is rebuilt from scratch.
+  final Stopwatch age;
+
+  /// Seconds left now: a running clock has counted down since the state arrived.
+  double get remainingNow =>
+      status == 'running' ? remaining - age.elapsedMilliseconds / 1000 : remaining;
 }
 
 class PracticeGoal {

@@ -146,11 +146,11 @@ class IntervalPanel extends StatefulWidget {
 }
 
 class _IntervalPanelState extends State<IntervalPanel> {
-  late final Stopwatch _elapsed = (widget.elapsedClock ?? Stopwatch())..start();
   Timer? _ticker;
   @override
   void initState() {
     super.initState();
+    widget.elapsedClock?.start();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -159,23 +159,26 @@ class _IntervalPanelState extends State<IntervalPanel> {
   @override
   void didUpdateWidget(IntervalPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.interval, widget.interval)) _elapsed.reset();
+    if (!identical(oldWidget.interval, widget.interval)) widget.elapsedClock?.reset();
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
-    _elapsed.stop();
+    widget.elapsedClock?.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final clock = widget.interval;
-    final remaining = max(
-      0,
-      clock.remaining - (clock.status == 'running' ? _elapsed.elapsedMilliseconds / 1000 : 0),
-    ).ceil();
+    // The time since the state arrived, not since this widget was built: switching role
+    // or layout builds a new panel, which must not start the countdown again.
+    final injected = widget.elapsedClock;
+    final left = injected == null || clock.status != 'running'
+        ? clock.remainingNow
+        : clock.remaining - injected.elapsedMilliseconds / 1000;
+    final remaining = max(0, left).ceil();
     final finished = clock.status == 'complete' || (clock.status == 'running' && remaining == 0);
     final status = finished
         ? 'Interval complete'
