@@ -292,3 +292,21 @@ def test_shortened_digest_keeps_the_session_notes() -> None:
     digest = build_digest(record, max_chars=len(full) // 2)
     assert digest.shortened and len(digest.text) <= len(full) // 2
     assert record.coaching.session_notes[0].text in digest.text
+
+
+def test_a_question_that_cannot_start_does_not_block_the_job(
+    tmp_path: Path, tiny_video: Path, monkeypatch
+) -> None:
+    from shuttlesense.coach import digest
+
+    def broken(*_: object) -> str:
+        raise RuntimeError("digest failed")
+
+    with _client(tmp_path, FakeClient()) as client:
+        job_id = _done_job(client, tiny_video)
+        monkeypatch.setattr(digest, "build_digest", broken)
+        with pytest.raises(RuntimeError):
+            client.post(f"/jobs/{job_id}/chat", json={"message": "q"})
+        assert job_id not in client.app.state.chat_answering
+        monkeypatch.undo()
+        assert client.post(f"/jobs/{job_id}/chat", json={"message": "q"}).status_code == 200

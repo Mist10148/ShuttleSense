@@ -604,10 +604,16 @@ async def chat(
             return record
 
     record = await asyncio.to_thread(mark_answering)
-    history = record.chat.messages if record.chat else []
-    question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
-    digest = build_digest(record, settings.chat_max_digest_chars)
-    chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)
+    try:
+        history = record.chat.messages if record.chat else []
+        question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
+        digest = build_digest(record, settings.chat_max_digest_chars)
+        chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)
+    except Exception:
+        # The stream never starts, so its `finally` would not clear the mark: without this
+        # the job refuses questions and re-renders until the mark times out.
+        answering.pop(job_id, None)
+        raise
 
     async def events() -> AsyncIterator[str]:
         try:
