@@ -1420,4 +1420,100 @@ void main() {
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
   });
+
+  testWidgets('a silent connection is resumed instead of waited on', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    final first = sockets.single;
+    expect(first.frames, isNotEmpty); // frames are on their way and nothing comes back
+    await tester.pump(kStallTimeout - const Duration(seconds: 1));
+    expect(sockets, hasLength(1));
+    await tester.pump(const Duration(seconds: 1));
+    await events(tester);
+    expect(find.text('Reconnecting and refreshing the score…'), findsOneWidget);
+    expect(first.closed, isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    await events(tester);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(sockets, hasLength(2));
+    expect(sockets.last.sent.first, {'type': 'resume', 'session_id': 's1'});
+    // An answering server is left alone.
+    for (var i = 0; i < 30; i++) {
+      sockets.last.emit(frameEvent(sockets.last.frames.length - 1));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(sockets, hasLength(2));
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('captures are skipped while the server is behind', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    await tester.pump(const Duration(seconds: 3)); // 45 captures at 15 fps if unlimited
+    expect(socket.frames, hasLength(kMaxFramesInFlight));
+    socket.emit(frameEvent(kMaxFramesInFlight - 1)); // the server caught up
+    await events(tester);
+    await tester.pump(const Duration(seconds: 3));
+    expect(socket.frames, hasLength(2 * kMaxFramesInFlight));
+    // A refused frame has no frame event; it must not block the stream for good.
+    socket.emit({'type': 'error', 'code': 'bad_frame', 'detail': 'frame too short'});
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(socket.frames.length, greaterThan(2 * kMaxFramesInFlight));
+    socket.emit(frameEvent(socket.frames.length - 1));
+    await events(tester);
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('leaving the screen mid-session tells the server to save it', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    socket.emit(frameEvent(0));
+    await events(tester);
+    expect(socket.sent.where((m) => m['type'] == 'stop'), isEmpty);
+    await tester.pumpWidget(const SizedBox()); // another mode or server replaces the screen
+    await tester.pump(const Duration(seconds: 1));
+    expect(socket.sent.last, {'type': 'stop'});
+    expect(socket.closed, isTrue);
+  });
+
+  testWidgets('a session already stopped is not stopped again on the way out', (tester) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
+    expect(sockets.single.sent.where((m) => m['type'] == 'stop'), hasLength(1));
+  });
+
+  testWidgets('a live event the app cannot read is dropped and the session goes on', (
+    tester,
+  ) async {
+    final sockets = await pumpLive(tester);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    socket.emit({'type': 'frame'}); // no frame number
+    socket.emit({'type': 'hit'}); // no hit
+    socket.emit({'type': 'coaching', 'coaching': 7});
+    socket.emit(startedEvent()); // a second `started`
+    socket.emit(frameEvent(0));
+    await events(tester);
+    expect(tester.takeException(), isNull);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    final state = container.read(liveControllerProvider);
+    expect(state.phase, LivePhase.live);
+    expect(state.frames, hasLength(1));
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Open results'), findsOneWidget);
+  });
 }

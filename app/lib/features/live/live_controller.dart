@@ -301,6 +301,16 @@ const kReconnectDelays = [
   Duration(seconds: 15),
 ];
 
+/// With frames on their way and no event from the server for this long, the connection is
+/// taken as dead (a Wi-Fi roam or a stalled tunnel leaves the socket open but silent) and
+/// the session is resumed on a new one.
+const kStallTimeout = Duration(seconds: 10);
+
+/// Frames sent but not yet answered before the app skips a capture. On a slow uplink the
+/// socket would otherwise queue stills without limit and the picture would fall ever
+/// further behind the court.
+const kMaxFramesInFlight = 8;
+
 /// The rate to announce after [captures] stills took [elapsed]: at most [kLiveTargetFps],
 /// rounded down to 0.1 fps so the app never sends faster than it said.
 double liveFps(Duration elapsed, int captures) {
@@ -358,6 +368,15 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Completer<String?>? _saved;
   String? _expectedJobId;
   Completer<Json>? _started;
+
+  /// A session the server has started and has not been told to stop.
+  bool _sessionOpen = false;
+
+  /// Fires when frames are in flight and the server has been silent for [kStallTimeout].
+  Timer? _stall;
+
+  /// The newest frame the server has answered; later ones are still in flight.
+  int _answeredFrame = -1;
 
   /// Bumped by [_teardown]; loops and reconnects of an older session stop when it changes.
   int _generation = 0;
@@ -443,6 +462,18 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final events = _events, socket = _socket;
     _events = null;
     _socket = null;
+    _stopWatchingForStall();
+    if (socket != null && _sessionOpen) {
+      // The screen went away (another mode, another server) with a session running: tell
+      // the server to save it now. Without this it holds the session and the GPU until the
+      // resume window runs out.
+      try {
+        socket.sendJson({'type': 'stop'});
+      } on Object {
+        // The socket is already gone; the server saves the session after its timeout.
+      }
+    }
+    _sessionOpen = false;
     // Cancelling stops delivery at once, but its future and the close (which waits for the
     // server's close handshake) may take long or never finish: do not block on either.
     if (events != null) unawaited(events.cancel());
@@ -646,6 +677,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
       _expectedJobId = event['job_id'] as String?;
+      _sessionOpen = true;
+      _answeredFrame = _nextFrame - 1; // nothing is in flight on a new connection
       final snapshot = _seed(event).copyWith(
         phase: LivePhase.live,
         courtsideDepth: event['courtside_depth'] == true,
@@ -766,6 +799,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         await Future<void>.delayed(interval);
         continue;
       }
+      if (_nextFrame - 1 - _answeredFrame >= kMaxFramesInFlight) {
+        // The server (or the uplink) is behind: skip this capture instead of queueing it.
+        clock.reset();
+        first = _nextFrame;
+        await Future<void>.delayed(interval);
+        continue;
+      }
       try {
         final frame = await source.capture();
         if (!current() || state.phase != LivePhase.live || socket != _socket) continue;
@@ -777,6 +817,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         _pendingImages[index] = frame.jpeg;
         if (_pendingImages.length > 12) _pendingImages.remove(_pendingImages.keys.first);
         socket.sendFrame(index, _captureClock.elapsedMicroseconds / 1000.0, frame.jpeg);
+        _stall ??= Timer(kStallTimeout, () {
+          _stall = null;
+          if (state.phase == LivePhase.live) unawaited(_reconnect(generation));
+        });
         _set(state.copyWith(sentFrames: state.sentFrames + 1, speedKmh: state.speedKmh));
       } on Object catch (e) {
         if (!current() || socket != _socket) continue;
@@ -785,10 +829,28 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     }
   }
 
+  void _stopWatchingForStall() {
+    _stall?.cancel();
+    _stall = null;
+  }
+
+  /// One event from the server. A malformed one (a newer or faulty server) is dropped:
+  /// thrown from a stream listener it would surface as an uncaught error and take the
+  /// events after it down with it.
   void _onEvent(Json e) {
+    _stopWatchingForStall(); // the server is alive
+    try {
+      _handleEvent(e);
+    } on Object catch (error) {
+      debugPrint('Ignored a live event the app could not read (${e['type']}): $error');
+    }
+  }
+
+  void _handleEvent(Json e) {
     switch (e['type']) {
       case 'started':
-        _started?.complete(e);
+        final starting = _started;
+        if (starting != null && !starting.isCompleted) starting.complete(e);
       case 'frame':
         _onFrame(e);
       case 'hit':
@@ -872,10 +934,14 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _analyzedImage = matchingImage;
       _lastAnalysisAt = _captureClock.elapsed;
     }
-    if (clientFrame != null) _pendingImages.removeWhere((index, _) => index <= clientFrame);
+    if (clientFrame != null) {
+      _pendingImages.removeWhere((index, _) => index <= clientFrame);
+      if (clientFrame > _answeredFrame) _answeredFrame = clientFrame;
+    }
     final court = e['court'] as Json?;
     final speed = asDouble(e['speed_kmh']);
-    final frame = asInt(e['frame'])!;
+    final frame = asInt(e['frame']);
+    if (frame == null) return;
     // The list index is the server's frame number, which hits, rallies and line calls refer
     // to: frames whose events were lost in a drop are padded with empty entries, and a frame
     // event repeated after a resume replaces its entry.
@@ -965,7 +1031,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       _notify(message);
       return;
     }
-    if (const {'bad_frame', 'bad_message'}.contains(code)) return;
+    if (code == 'bad_frame') {
+      // A refused frame gets no `frame` event; count it as answered or the in-flight
+      // limit would stop the stream for good.
+      _answeredFrame = _nextFrame - 1;
+      return;
+    }
+    if (code == 'bad_message') return;
     if (state.phase == LivePhase.stopping) {
       final saved = _saved;
       if (saved != null && !saved.isCompleted) saved.completeError(StateError(message));
@@ -979,6 +1051,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       return;
     }
     _streaming = false;
+    _sessionOpen = false;
+    _stopWatchingForStall();
     _clearDecision();
     // Let go of the socket so the server detaches the session and frees the GPU.
     final socket = _socket;
@@ -1078,6 +1152,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Future<void> _reconnect(int generation) async {
     if (_disposed || generation != _generation || state.phase == LivePhase.reconnecting) return;
     _clearImages();
+    _stopWatchingForStall();
     _decisionTimeout?.cancel();
     if (!_decisionAck) _clearDecision();
     final socket = _socket;
@@ -1159,6 +1234,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     if (socket == null || state.phase != LivePhase.live) return;
     final generation = _generation;
     _streaming = false;
+    _sessionOpen = false; // told to stop below; a teardown must not send a second stop
+    _stopWatchingForStall();
     _clearImages();
     _decisionTimeout?.cancel();
     final cameraReleased = _releaseCamera();
