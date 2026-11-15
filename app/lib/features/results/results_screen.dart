@@ -437,13 +437,17 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onLet: courtside && record.rallies.isNotEmpty ? _let : null,
                   onConcede: courtside ? _concede : null,
                 ),
-                DecisionHistory(record: record, onSeek: _seekMoment),
+                DecisionHistory(
+                  record: record,
+                  onSeek: widget.videoAvailable == true ? _seekMoment : null,
+                ),
                 const SizedBox(height: 16),
                 chart,
               ],
             ),
             coach: SessionSummary(
               record: record,
+              videoAvailable: widget.videoAvailable == true,
               onGoalChanged: record.schemaVersion == '1.6'
                   ? (goal, done) async {
                       try {

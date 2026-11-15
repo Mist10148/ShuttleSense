@@ -19,26 +19,25 @@ class DecisionHistory extends StatelessWidget {
             'New referee decisions appear here. Older records may have no audit history.',
           ),
         ),
-      for (final entry in record.decisionLog)
-        ListTile(
-          leading: Icon(entry.undone ? Icons.undo : Icons.sports),
-          title: Text('${entry.detail}${entry.undone ? ' · Undone' : ''}'),
-          subtitle: Text(
-            'Game ${entry.game}${entry.rally == null ? '' : ' · Rally ${entry.rally! + 1}'}'
-            ' · ${entry.near}–${entry.far}\n${entry.at.toLocal()}',
-          ),
-          trailing: onSeek != null && entry.frame != null ? const Icon(Icons.play_arrow) : null,
-          onTap: onSeek == null || entry.frame == null
-              ? null
-              : () => onSeek!(
-                  Moment(
-                    frame: entry.frame!,
-                    timeS: record.fps > 0 ? entry.frame! / record.fps : 0,
-                  ),
-                ),
-        ),
+      for (final entry in record.decisionLog) _entry(entry),
     ],
   );
+
+  Widget _entry(DecisionEntry entry) {
+    final frame = entry.frame;
+    final seek =
+        onSeek != null && record.fps > 0 && frame != null && frame >= 0 && frame < record.numFrames;
+    return ListTile(
+      leading: Icon(entry.undone ? Icons.undo : Icons.sports),
+      title: Text('${entry.detail}${entry.undone ? ' · Undone' : ''}'),
+      subtitle: Text(
+        'Game ${entry.game}${entry.rally == null ? '' : ' · Rally ${entry.rally! + 1}'}'
+        ' · ${entry.near}–${entry.far}\n${entry.at.toLocal()}',
+      ),
+      trailing: seek ? const Icon(Icons.play_arrow) : null,
+      onTap: seek ? () => onSeek!(Moment(frame: frame, timeS: frame / record.fps)) : null,
+    );
+  }
 }
 
 class IntervalPanel extends StatefulWidget {

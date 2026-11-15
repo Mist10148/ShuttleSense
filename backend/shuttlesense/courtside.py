@@ -82,7 +82,9 @@ def log_decision(record: ClipRecord, command: dict) -> None:
         call = next((c for c in record.line_calls if c.id == command.get("line_call_id")), None)
         rally_index = call.rally_index if call else None
     rally = next((r for r in record.rallies if r.index == rally_index), None)
-    frame = command.get("frame", rally.end_frame if rally else max(0, record.num_frames - 1))
+    frame = command.get("frame", rally.end_frame if rally else record.num_frames - 1)
+    if frame is not None and not 0 <= frame < record.num_frames:
+        frame = None
     detail = " ".join(
         str(v)
         for v in [kind, command.get("winner"), command.get("call"), command.get("reason")]

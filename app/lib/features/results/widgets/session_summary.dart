@@ -16,6 +16,7 @@ class SessionSummary extends StatelessWidget {
     super.key,
     required this.record,
     required this.onSeek,
+    this.videoAvailable = true,
     this.onAskCoach,
     this.chatAvailable = false,
     this.onGoalChanged,
@@ -23,6 +24,7 @@ class SessionSummary extends StatelessWidget {
 
   final ClipRecord record;
   final ValueChanged<Moment> onSeek;
+  final bool videoAvailable;
   final VoidCallback? onAskCoach;
   final bool chatAvailable;
   final void Function(PracticeGoal, bool)? onGoalChanged;
@@ -57,7 +59,16 @@ class SessionSummary extends StatelessWidget {
           for (final goal in record.practiceGoals)
             PracticeGoalCard(
               goal: goal,
-              onSeek: onSeek,
+              onSeek:
+                  videoAvailable &&
+                      goal.frame != null &&
+                      goal.frame! >= 0 &&
+                      goal.frame! < record.numFrames &&
+                      goal.timeS != null &&
+                      goal.timeS!.isFinite &&
+                      goal.timeS! >= 0
+                  ? onSeek
+                  : null,
               onComplete: onGoalChanged == null ? null : (done) => onGoalChanged!(goal, done),
             ),
           if (record.practiceGoals.isEmpty) const Text('No saved practice goals.'),

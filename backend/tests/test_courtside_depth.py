@@ -184,6 +184,9 @@ def test_stop_preserves_decisions_and_goals_without_decodable_frames(tmp_path):
         with client.websocket_connect("/live") as ws:
             ws.send_json(START)
             job_id = ws.receive_json()["job_id"]
+            ws.send_json({"type": "award", "winner": "near"})
+            assert ws.receive_json()["decision_log"][0]["frame"] is None
+            assert ws.receive_json()["type"] == "coaching"
             ws.send_json({"type": "goal", "goal": {"text": "Recover to base"}})
             assert ws.receive_json()["practice_goals"]
             ws.send_json({"type": "stop"})
@@ -193,3 +196,4 @@ def test_stop_preserves_decisions_and_goals_without_decodable_frames(tmp_path):
         record = client.get(f"/jobs/{job_id}/record").json()
         assert record["num_frames"] == 0
         assert record["practice_goals"][0]["text"] == "Recover to base"
+        assert record["decision_log"][0]["frame"] is None

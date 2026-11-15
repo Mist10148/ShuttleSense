@@ -118,6 +118,47 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('decision history seeks only to a recorded frame with available video', (
+    tester,
+  ) async {
+    final record = ClipRecord.fromJson({
+      'schema_version': '1.6',
+      'clip_id': 'test',
+      'fps': 30,
+      'width': 640,
+      'height': 360,
+      'num_frames': 30,
+      'decision_log': [
+        for (final frame in [10, 30])
+          {
+            'id': frame,
+            'kind': 'award',
+            'detail': 'Award at frame $frame',
+            'game': 1,
+            'frame': frame,
+            'at': '2026-11-15T00:00:00Z',
+            'score': {'near': 1, 'far': 0},
+          },
+      ],
+    });
+    final moments = <Moment>[];
+    Widget view({required bool available}) => MaterialApp(
+      home: Scaffold(
+        body: DecisionHistory(record: record, onSeek: available ? moments.add : null),
+      ),
+    );
+    await tester.pumpWidget(view(available: true));
+    await tester.tap(find.text('Decision history (2)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Award at frame 30'));
+    await tester.tap(find.text('Award at frame 10'));
+    expect(moments.single.frame, 10);
+    expect(moments.single.timeS, closeTo(1 / 3, 0.001));
+    await tester.pumpWidget(view(available: false));
+    await tester.tap(find.text('Award at frame 10'));
+    expect(moments, hasLength(1));
+  });
+
   for (final width in [360.0, 800.0, 1280.0]) {
     for (final brightness in Brightness.values) {
       testWidgets('courtside tools at $width / $brightness / 200% text', (tester) async {
