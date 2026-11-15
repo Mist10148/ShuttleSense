@@ -49,7 +49,7 @@ def _load_model(path: Path, device: str, kind: str) -> tuple[Any, int, str]:
     _tracknet_path()
     from model import InpaintNet, TrackNet
 
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
+    checkpoint = torch.load(path, map_location=device, weights_only=True)
     params = checkpoint["param_dict"]
     seq_len = int(params["seq_len"])
     bg_mode = str(params.get("bg_mode", "")) if kind == "tracknet" else ""

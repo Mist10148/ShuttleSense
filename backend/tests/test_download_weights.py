@@ -40,5 +40,19 @@ def test_checksum_match_and_unpinned(dw) -> None:
     dw.CHECKSUMS["strokes/stroke_cnn.pt"] = hashlib.sha256(b"good").hexdigest()
     assert dw.fetch("strokes/stroke_cnn.pt", download=fake_download(b"good")) == "fetched+verified"
     assert dw.fetch("strokes/stroke_cnn.pt") == "verified"
+    del dw.CHECKSUMS["tracknet/TrackNet_best.pt"]
     status = dw.fetch("tracknet/TrackNet_best.pt", download=fake_download(b"x"))
     assert status.startswith("fetched (no checksum")
+
+
+def test_invalid_tracknet_download_preserves_installed_weights(dw, tmp_path: Path) -> None:
+    name = "tracknet/TrackNet_best.pt"
+    target = tmp_path / name
+    target.parent.mkdir()
+    target.write_bytes(b"local checkpoint")
+
+    with pytest.raises(dw.ChecksumError):
+        dw.fetch(name)
+    with pytest.raises(dw.ChecksumError):
+        dw.fetch(name, force=True, download=fake_download(b"tampered"))
+    assert target.read_bytes() == b"local checkpoint"

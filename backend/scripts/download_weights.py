@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "weights"
 
@@ -25,12 +26,13 @@ FILES = {
 # Committed with the repo (D30): checked, never downloaded or deleted.
 IN_REPO = frozenset(FILES["strokes"])
 
-# SHA-256 of each file. Fill in when the file is uploaded to HF_REPO
-# (`sha256sum FILE`, or `certutil -hashfile FILE SHA256` on Windows).
-# A missing entry means "not pinned yet": the file is downloaded but not verified.
-# The stroke entries are the files trained on Nov 14 (docs/results/strokes.md); update them
-# when you commit retrained weights.
+# TrackNetV3 hashes are from the public ckpts archive linked in the pinned submodule.
+# The stroke entries are the files trained on Nov 14 (docs/results/strokes.md).
 CHECKSUMS: dict[str, str] = {
+    "tracknet/TrackNet_best.pt": "df867641a02712b021f04548ff4b1208ddfdb47f629ab2094ceb978667e83b1a",
+    "tracknet/InpaintNet_best.pt": (
+        "5749b66b8002f3ad9e0af841604004706fc796df30599e6bf01952696009688c"
+    ),
     "strokes/stroke_cnn.pt": "c9176cc6780f0f390888454ae70064303a61379e9d69ec2e5b3d8c07578cb6c3",
     "strokes/stroke_lstm.pt": "58e0eba4c6208280c0e3624032146f530044c9e50e639e4225020aafd6e2eb2e",
     "strokes/stroke_rf.npz": "e773350e92e2000cdb43578c3b19dd0c39696431f54e213788f8847b72420782",
@@ -50,14 +52,13 @@ def sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def verify(path: Path, name: str) -> bool:
-    """True if verified, False if no checksum is pinned. Deletes the file on mismatch."""
+    """True if verified, False if no checksum is pinned. Raises on mismatch."""
     expected = CHECKSUMS.get(name)
     if expected is None:
         return False
     actual = sha256(path)
     if actual != expected:
-        path.unlink(missing_ok=True)
-        raise ChecksumError(f"{name}: sha256 {actual} != expected {expected}; file deleted")
+        raise ChecksumError(f"{name}: sha256 {actual} != expected {expected} for {path.name}")
     return True
 
 
@@ -76,8 +77,14 @@ def fetch(name: str, *, force: bool = False, download=None) -> str:
         from huggingface_hub import hf_hub_download  # requirements/ml.txt
 
         download = hf_hub_download
-    download(HF_REPO, name, local_dir=WEIGHTS_DIR, force_download=force)
-    return "fetched+verified" if verify(target, name) else "fetched (no checksum pinned)"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=target.parent) as staging:
+        local_dir = Path(staging)
+        download(HF_REPO, name, local_dir=local_dir, force_download=force)
+        downloaded = local_dir / name
+        verified = verify(downloaded, name)
+        downloaded.replace(target)
+    return "fetched+verified" if verified else "fetched (no checksum pinned)"
 
 
 def main() -> None:

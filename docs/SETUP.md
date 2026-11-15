@@ -110,7 +110,8 @@ The session (and its uploads) disappears when Colab disconnects. Download result
 
 ## 5. Weights
 
-Weights are not committed (`backend/weights/` is gitignored).
+Stroke weights come with the repository. TrackNetV3 and InpaintNet checkpoints are
+stored outside Git and verified against hashes from the pinned upstream release.
 
 ```bash
 cd backend
@@ -119,7 +120,12 @@ python scripts/download_weights.py --only tracknet
 python scripts/download_weights.py --force    # re-download, e.g. after a checksum error
 ```
 
-Each file is checked against the SHA-256 in `CHECKSUMS` (in the script); a mismatching file is deleted and the script stops with an error.
+If the team Hugging Face repository needs credentials, use the
+[pinned TrackNetV3 README](https://github.com/qaz812345/TrackNetV3/blob/6eda442ada1740573f200f836d93edc9a541ee86/README.md)
+to download the public checkpoint archive. Copy the two `.pt` files from `ckpts/`
+to `backend/weights/tracknet/` and run `python scripts/download_weights.py --only tracknet`.
+The script checks each file against its pinned SHA-256. A failed verification reports
+the mismatch and preserves any existing checkpoint.
 
 Expected layout after download:
 
