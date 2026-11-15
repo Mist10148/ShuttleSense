@@ -528,9 +528,13 @@ void main() {
     await startWithoutCourt(tester);
     await tester.pump(const Duration(milliseconds: 200));
     cameras.single.captureError = Exception('camera unplugged');
-    await tester.pump(const Duration(milliseconds: 200));
-    await events(tester);
-    expect(find.textContaining('Camera stopped'), findsOneWidget);
+    final stopped = find.textContaining('Camera stopped');
+    // The capture schedule uses a wall-clock Stopwatch while pump advances Flutter's
+    // fake clock. Wait for the next capture instead of assuming it falls in one pump.
+    for (var i = 0; i < 10 && stopped.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(stopped, findsOneWidget);
     // The session so far is saved and the connection let go, so the GPU is free again.
     expect(sockets.single.sent.last['type'], 'stop');
     expect(sockets.single.closed, isTrue);
