@@ -1,0 +1,25 @@
+{
+  "frames": 120,
+  "stages": {
+    "tracking": true,
+    "pose": true
+  },
+  "round_trip_ms": {
+    "p50": 109.8,
+    "p95": 201.4,
+    "p99": 249.7
+  },
+  "server_ms": {
+    "p50": 107.8,
+    "p95": 199.7,
+    "p99": 236.3
+  },
+  "throughput_fps": 7.6,
+  "event_lag": {},
+  "fps": 30.0,
+  "events": {
+    "frame": 120,
+    "stats": 4
+  },
+  "job_id": "f06048e086de"
+}

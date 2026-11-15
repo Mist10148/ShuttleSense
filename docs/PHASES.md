@@ -1,10 +1,13 @@
 # Phased task plan
 
-**Expansion (Nov 15):** [Phase 13 — Courtside depth](phases/phase-13-courtside-depth.md)
-adds eight tasks beyond the original build. Feature expansion now takes priority over
-the original freeze; real-world acceptance and release gates remain open.
+**Courtside update (Nov 15).** [Phase 13 — Courtside depth](phases/phase-13-courtside-depth.md)
+tracks the live recovery, referee review and coach recap changes, plus the device
+and model evidence the team needs for release.
 
-The 3-week build is split into 13 phases (0–12) and **154 tasks**. This page is the overview. Each phase has its own file with a full **task card** per task: goal, inputs, implementation steps, outputs, tests, acceptance criteria and risks. Every task is also a GitHub issue titled `[T<id>] <title>`, labelled with its phase, owner and area, under the phase milestone (Phase 8: #97–#112; Phase 9: #113–#125; Phase 10: #126–#133; Phase 11: #134–#146). Phase 12 issues are still to be opened.
+The plan covers 14 phases (0–13) and **162 tasks**. The phase files document owners,
+implementation, tests and acceptance criteria. Published GitHub issues use
+`[T<id>] <title>` and link to their phase and owner. Phases 12 and 13 are tracked
+in their phase files.
 
 | Phase | File | Dates (2026) | Tasks | Gate to exit |
 | --- | --- | --- | --- | --- |
@@ -21,8 +24,11 @@ The 3-week build is split into 13 phases (0–12) and **154 tasks**. This page i
 | 10 | [Hardening and courtside follow-ups](phases/phase-10-hardening.md) | Nov 14 – Nov 17 | 8 | Nov 14 review findings fixed with tests; doubles service order in every game; code-only steps of Phases 4, 5 and 7 done |
 | 11 | [Selectable stroke models](phases/phase-11-stroke-models.md) | Nov 14 – Nov 17 | 13 | CNN, LSTM and Random Forest can be picked per job, each with trained weights and measured accuracy; Nov 14 review findings fixed with tests |
 | 12 | [Courtside referee and coach](phases/phase-12-courtside.md) | Nov 14 | 8 | Live referee and coach review findings fixed with tests; join mid-match, let, fault, retirement, one Undo; code-only steps of Phases 2, 4 and 9 done |
+| 13 | [Courtside depth](phases/phase-13-courtside-depth.md) | Nov 15 | 8 | Command recovery, review history, interval clock, goals and recap verified courtside |
 
-**Key dates:** work starts Mon Nov 2 · Week 1 baseline classifier Fri Nov 6 · **feature freeze Wed Nov 18** · final demo Fri Nov 20. Since PRD v1.2 the referee layer is committed scope; the old P3 go/no-go on Nov 16 is gone ([D17](DECISIONS.md)).
+The original schedule targeted Nov 18 for feature freeze and Nov 20 for the final
+demo. Phase 13 extends the feature scope. Release acceptance follows the
+[release checklist](RELEASE.md), including its real-camera and physical-device checks.
 
 ---
 

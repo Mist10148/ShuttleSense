@@ -76,7 +76,7 @@
 - [x] Call `ctx.progress(done / total)` at least every batch.
 - [x] Write `frames[i].shuttle` and `ctx.out_dir / "tracking.csv"` with columns `frame,visible,x,y` (same as upstream).
 - [x] Use `torch.inference_mode()` and `torch.autocast("cuda")` when on CUDA; free GPU memory at the end (`torch.cuda.empty_cache()`).
-- [ ] CPU fallback works (slowly) for short clips. (The CPU path is tested with a random-weight TrackNet loaded from a checkpoint, [T12.7](phase-12-courtside.md#t127); a run with the published weights remains.)
+- [x] CPU fallback processed a generated 24-frame clip with the published TrackNetV3 checkpoint. The visual and coordinate checks on labelled footage remain open.
 
 **Outputs.** Filled shuttle field, `tracking.csv`.
 

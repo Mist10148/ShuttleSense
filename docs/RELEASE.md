@@ -121,6 +121,10 @@ gh release create vX.Y.Z --title "ShuttleSense vX.Y.Z" --notes-file release-note
 
 
 ## Phase 13 acceptance additions
+
+See the [Nov 15 verification results](phases/phase-13-courtside-depth.md#verified-on-nov-15)
+for automated coverage. Use a physical setup to complete the checks below.
+
 - [ ] Interrupt Wi-Fi after awarding a point; reconnect and verify exactly one award.
 - [ ] Start/pause/resume/reset/end an interval; reconnect without restarting it; undo its triggering point.
 - [ ] Pin and complete a goal, switch players/roles, save, re-render, reopen History and export JSON.

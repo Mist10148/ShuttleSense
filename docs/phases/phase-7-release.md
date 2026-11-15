@@ -229,7 +229,8 @@ Labelling (T7.1) can start earlier, as soon as the team clips exist.
 - [x] Confirm no videos, faces of non-consenting people, datasets or weights are committed (`git ls-files` scan for media extensions).
 - [x] Confirm the backend deletes uploads on `DELETE`: `backend/tests/test_api.py::test_full_round_trip`, `test_video_deleted_during_its_job_is_removed_when_the_job_stops` and `test_storage_sweeps_leftovers_of_interrupted_deletes` (Nov 12).
 - [ ] Wipe the demo server's storage after the demo.
-- [ ] Record the licences of the bundled media_kit libmpv/FFmpeg native libraries and scan the GPU ML venv (open in TECH_STACK.md). Upstream sources and the remaining gap are recorded (T10.8, Nov 14); the source offer and the GPU venv scan remain.
+- [x] Inspect package metadata in the isolated Windows GPU smoke environment. [ML runtime license evidence](../TECH_STACK.md#windows-ml-runtime-evidence)
+- [ ] Finish the audit for the team release environment and obtain the bundled media_kit libmpv/FFmpeg corresponding source materials. See the T10.8 notes in [TECH_STACK.md](../TECH_STACK.md).
 
 **Acceptance criteria.** Audit table merged; no media in the repo.
 

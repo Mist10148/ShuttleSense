@@ -101,15 +101,16 @@
 **Owner:** M2 · **Estimate:** 3 h · **Priority:** P1 · **Area:** ml · **Refs:** F2, NFR Reproducibility · **Depends on:** T1.3, T0.9 · **Blocks:** T2.2
 
 **Steps**
-- [ ] Download TrackNetV3's released checkpoints (`TrackNet_best.pt`, `InpaintNet_best.pt`) from the upstream README links.
-- [ ] Upload them to the team Hugging Face repo under `tracknet/`; compute SHA-256 for each.
-- [x] In `backend/scripts/download_weights.py`, add a `CHECKSUMS = {path: sha256}` dict and verify after each download (delete and fail on mismatch).
+- [x] Download TrackNetV3's released checkpoints (`TrackNet_best.pt`, `InpaintNet_best.pt`) from the pinned upstream README.
+- [x] Compute and pin SHA-256 for both upstream checkpoints. Verify them locally through the same checksum function used after download.
+- [ ] Verify the copies under `tracknet/` in the team Hugging Face repo. That endpoint returned HTTP 401 from the verification machine.
+- [x] Verify downloads in a temporary directory and replace a local checkpoint only after verification succeeds.
 - [x] Add `--force` to re-download.
 - [x] Document the expected layout in SETUP.md §5 (already listed) and the source/licence of the weights in TECH_STACK.md.
 
 **Tests.** `tests/test_download_weights.py::test_checksum_mismatch_raises` using a temp file and a monkeypatched `hf_hub_download`.
 
-**Acceptance criteria.** On a fresh clone, `python scripts/download_weights.py --only tracknet` produces both files with matching checksums.
+**Acceptance criteria.** On a fresh clone, `python scripts/download_weights.py --only tracknet` produces both files with matching checksums. The upstream archive also supports manual installation followed by checksum verification. [Setup](../SETUP.md#5-weights)
 
 ---
 
@@ -144,7 +145,8 @@
 **Owner:** M1 · **Estimate:** 4 h · **Priority:** P1 · **Area:** infra · **Refs:** NFR Reproducibility · **Depends on:** — · **Blocks:** T1.7, T2.2
 
 **Steps**
-- [ ] Laptop (Windows, RTX 4050): install the CUDA torch wheel per [SETUP.md §3](../SETUP.md#3-backend-on-a-laptop-primary), then `pip install -r requirements/ml.txt`.
+- [x] Laptop (Windows, RTX 4050): PyTorch 2.15.0+cu132 installed in an isolated verification environment and ran a TrackNet window on CUDA.
+- [ ] Verify every pinned ML dependency in the team environment. Follow the separate RTMLib install step in [Setup](../SETUP.md#3-backend-on-a-laptop-primary).
 - [ ] Colab: run the notebook's install cell; note Colab's preinstalled torch/CUDA versions.
 - [ ] Fix any pins in `requirements/ml.txt` that fail on either platform (`onnxruntime-gpu` must match the CUDA major version that torch uses).
 - [ ] Verify: `python -c "import torch, onnxruntime as ort, rtmlib; print(torch.cuda.is_available(), ort.get_available_providers())"` shows CUDA on both.

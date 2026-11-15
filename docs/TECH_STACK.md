@@ -119,7 +119,7 @@ License audit for T7.13. ShuttleSense is MIT.
 | --- | --- | --- |
 | ffmpeg (with libx264 for H.264) | Run as a separate program by `render/writer.py`. It is not linked or shipped. | Fine as long as releases do not bundle an ffmpeg binary. Many builds with libx264 are GPL. |
 | media_kit_libs_video | Bundles libmpv and FFmpeg inside the app builds | Identify each packaged build and collect its notices and corresponding source materials. Windows evidence is below. |
-| TrackNetV3 and InpaintNet weights | Downloaded from Hugging Face, never committed | Keep upstream's MIT notice next to the weights. |
+| TrackNetV3 and InpaintNet weights | Public upstream archive or team Hugging Face mirror. SHA-256 pinned in the downloader. | Keep upstream's MIT notice next to the weights. |
 | BST pre-extracted ShuttleSet features (`dataset_npy.rar`) | Downloaded by hand into gitignored `backend/data/` and read by `import_bst_features.py`; used to train the committed stroke weights (D29). Never redistributed. | The BST repository is MIT; cite the BST paper (arXiv 2502.21085) and ShuttleSet (KDD 2023). |
 | Stroke weights (`backend/weights/strokes/`) | Trained by us and committed (D30) | MIT like the rest of the repo; the training data terms above apply. |
 | ShuttleSet annotations and match videos | Downloaded by `download_shuttleset.py` into gitignored `backend/data/`. Videos are never redistributed. | Follow the dataset's terms of use. |
@@ -150,8 +150,21 @@ notices for the release package as part of T7.13.
 
 **Nov 12 release check.** The rebuilt Windows app contains the same `libmpv-2.dll`
 SHA-256 listed above. `pip-licenses --from=mixed --summary` ran against the local CPU
-environment, and this change adds no packages. T7.13 still needs the audit against the
-GPU environment and the matching native library notices and source materials.
+environment.
+
+### Windows ML runtime evidence
+
+The Nov 15 GPU smoke environment reported the following license fields through
+`importlib.metadata`. The release audit still needs the full team or Colab
+environment and the packaged native media notices and corresponding sources.
+
+| Installed distribution | License from package metadata |
+| --- | --- |
+| PyTorch 2.15.0+cu132 | Apache-2.0, Apache-2.0 with LLVM exception, BSD-2-Clause, BSD-3-Clause, BSL-1.0, ISC, MIT and Zlib |
+| ONNX Runtime GPU 1.31.1 | MIT |
+| RTMLib 0.0.16 and OpenCV Headless 5.0.0.93 | Apache-2.0 |
+| tqdm 4.70.1 | MPL-2.0 and MIT |
+| FlatBuffers 25.12.19 and protobuf 7.36.2 | Apache-2.0 and BSD-3-Clause respectively |
 
 **Upstream sources for the native libraries (checked 2026-11-14, T10.8).**
 

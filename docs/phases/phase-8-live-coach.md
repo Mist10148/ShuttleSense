@@ -278,7 +278,8 @@ Code for every task is on `main` with tests (backend `pytest -m "not gpu"`, app 
 - [ ] Landing labels: ShuttleSet landing positions converted to court metres where the court is calibrated, plus team phone clips labelled with `scripts/label_landings.py`. (The conversion is in `eval_line_calls.py --gt-format shuttleset` since Nov 13; the team clips are still to label.)
 - [x] `scripts/eval_line_calls.py`: precision/recall for IN and OUT, false-call rate for landings within 20 cm of a line, share of UNCERTAIN calls.
 - [x] `scripts/bench_live.py`: frame-to-event latency p50/p95 and event lag per event type; fake run in `docs/results/live_latency.md` (Nov 3).
-- [ ] The same with TrackNetV3 and pose on the team GPU.
+- [x] Run a model-backed smoke test on the RTX 4050 using a generated clip. TrackNetV3, YOLOX and RTMPose loaded with CUDA. [Nov 15 benchmark](../results/live_latency_courtside_model_smoke.md)
+- [ ] Repeat with a calibrated team clip containing real rallies. Measure hit and line-call event lag, which the generated clip does not exercise.
 - [x] Report in `docs/EVALUATION.md` only what was run.
 
 ---

@@ -15,6 +15,8 @@ Every number in the README's Evaluation section comes from one of these reports.
 | `speed.md` (+ `speed.png`) | `scripts/speed_report.py RECORD.json ... --plot speed.png` (T10.5) | T5.13 | Script ready; needs calibrated team clips |
 | [live_latency.md](live_latency.md) | `scripts/bench_live.py` (`--fake`, or `--url` against a server with weights) | T8.12 | Fake-perception overhead measured; use `--require-models` for the GPU run. Default outputs separate fake, model-backed, and unverified runs. |
 | [live_latency_fake.md](live_latency_fake.md) | `scripts/bench_live.py --fake --frames 300 --realtime` | T8.12 | Paced synthetic smoke run on Nov 12; no models or camera |
+| [live_latency_courtside_fake.md](live_latency_courtside_fake.md) | `scripts/bench_live.py --fake --frames 300 --realtime` | T8.12, T13.8 | Nov 15 paced synthetic smoke run |
+| [live_latency_courtside_model_smoke.md](live_latency_courtside_model_smoke.md) | `scripts/bench_live.py --require-models --realtime` | T8.12, T13.8 | Nov 15 RTX 4050 run with TrackNetV3 and pose on a generated clip |
 | `line_calls.md` | `scripts/eval_line_calls.py` (T7.1 labels with `in_out`, or `--gt-format shuttleset`) | T8.12 | Needs labelled landings |
 
 Keep PNGs small (< 300 KB each); no video frames of people who did not consent.

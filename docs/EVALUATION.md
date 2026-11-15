@@ -42,13 +42,21 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 | Stroke stage latency, CPU, 40 hits in a 1-minute clip | Under 0.1 s for each of the three models | [results/stroke_latency.md](results/stroke_latency.md) |
 | Live pipeline overhead with fake perception (420 frames paced at 30 fps) | p50 12.9 ms and p95 26.2 ms frame round trip, with p95 22.9 ms on the server | [results/live_latency.md](results/live_latency.md) |
 | The same, 300 frames on Nov 12 | p50 15.7 ms and p95 36.7 ms round trip, p95 31.0 ms on the server; hits 0.74 s and line calls 1.73 s at p95 | [results/live_latency_fake.md](results/live_latency_fake.md) |
+| Courtside update, 300 frames with fake perception on Nov 15 | p50 11.7 ms and p95 23.0 ms frame round trip, with p95 20.1 ms on the server | [results/live_latency_courtside_fake.md](results/live_latency_courtside_fake.md) |
 | Live event lag in the same run | p95 0.736 s for hits, 1.733 s for line calls and 1.734 s for rally ends | [results/live_latency.md](results/live_latency.md) |
 | Offline vs live on synthetic rallies | Identical hits (10), rallies (3), line calls (IN, OUT, UNCERTAIN) and score | `pytest tests/test_stream.py` |
 | Saved live replay after reconnect | Fake session with two missing capture slots, an uncertain call resolved, and a point awarded and undone. All coach citations seek to readable frames in the rendered MP4; the saved score matches the live decision. | `pytest tests/test_live.py -k saved_replay` |
-| Live latency with TrackNetV3 and pose on the RTX 4050 | **Not measured**: the weights are not installed yet. Run `scripts/bench_live.py --url ... --video <team clip>` against a server with `stages` both true | – |
+| Live latency with TrackNetV3 and pose on the RTX 4050, generated 640×360 clip | p50 109.8 ms and p95 201.4 ms round trip, with p95 199.7 ms on the server and 7.6 fps sequential throughput | [results/live_latency_courtside_model_smoke.md](results/live_latency_courtside_model_smoke.md) |
+| Live latency with TrackNetV3 and pose on labelled courtside footage | Pending a calibrated team clip. Use `scripts/bench_live.py --url ... --video <team clip> --require-models`. | – |
 | Line-call precision / recall / near-line false calls | **Not measured**: no labelled landings yet | – |
 
-The fake-perception numbers bound everything around the models, not the models: TrackNetV3 on one window and RTMPose per frame come on top. Whether the 300 ms budget holds with them is open until the GPU run.
+The GPU smoke run used the first 120 frames of a 30 fps, 640×360 generated clip
+with a static court outline and a moving dot. The server used PyTorch 2.15.0+cu132,
+the upstream TrackNetV3 checkpoint, RTMLib 0.0.16 in balanced mode and ONNX
+Runtime GPU 1.31.1. YOLOX and RTMPose both selected the CUDA provider. The
+sequential throughput was below the camera rates targeted by the app. Run the
+benchmark on a real court to measure load with players, frame drops and event
+timing during rallies.
 
 ## 5. Error analysis
 
