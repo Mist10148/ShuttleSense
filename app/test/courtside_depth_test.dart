@@ -134,8 +134,9 @@ void main() {
             'id': frame,
             'kind': 'award',
             'detail': 'Award at frame $frame',
-            'game': 1,
+            'game': frame == 10 ? 1 : 2,
             'frame': frame,
+            'undone': frame == 10,
             'at': '2026-11-15T00:00:00Z',
             'score': {'near': 1, 'far': 0},
           },
@@ -151,12 +152,25 @@ void main() {
     await tester.tap(find.text('Decision history (2)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Award at frame 30'));
-    await tester.tap(find.text('Award at frame 10'));
+    await tester.tap(find.text('Award at frame 10 · Undone'));
     expect(moments.single.frame, 10);
     expect(moments.single.timeS, closeTo(1 / 3, 0.001));
     await tester.pumpWidget(view(available: false));
-    await tester.tap(find.text('Award at frame 10'));
+    await tester.tap(find.text('Award at frame 10 · Undone'));
     expect(moments, hasLength(1));
+    expect(
+      tester.getTopLeft(find.text('Award at frame 30')).dy,
+      lessThan(tester.getTopLeft(find.text('Award at frame 10 · Undone')).dy),
+    );
+    await tester.tap(find.text('All games'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Game 2').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 2 decisions'), findsOneWidget);
+    expect(find.text('Award at frame 10 · Undone'), findsNothing);
+    await tester.tap(find.text('Undone only'));
+    await tester.pumpAndSettle();
+    expect(find.text('No matching decisions'), findsOneWidget);
   });
 
   for (final width in [360.0, 800.0, 1280.0]) {

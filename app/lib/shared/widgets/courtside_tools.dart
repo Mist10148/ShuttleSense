@@ -3,28 +3,80 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../data/models/clip_record.dart';
 
-class DecisionHistory extends StatelessWidget {
+class DecisionHistory extends StatefulWidget {
   const DecisionHistory({super.key, required this.record, this.onSeek});
   final ClipRecord record;
   final ValueChanged<Moment>? onSeek;
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text('Decision history (${record.decisionLog.length})'),
-    children: [
-      if (record.decisionLog.isEmpty)
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'New referee decisions appear here. Older records may have no audit history.',
+  State<DecisionHistory> createState() => _DecisionHistoryState();
+}
+
+class _DecisionHistoryState extends State<DecisionHistory> {
+  int? _game;
+  bool _undoneOnly = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = widget.record.decisionLog;
+    final games = entries.map((entry) => entry.game).toSet().toList()..sort();
+    final game = games.contains(_game) ? _game : null;
+    final visible = entries.reversed
+        .where((entry) => (game == null || entry.game == game) && (!_undoneOnly || entry.undone))
+        .toList();
+    return ExpansionTile(
+      title: Text('Decision history (${entries.length})'),
+      children: [
+        if (entries.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'New referee decisions appear here. Older records may have no audit history.',
+            ),
+          )
+        else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                DropdownButton<int>(
+                  value: game ?? 0,
+                  items: [
+                    const DropdownMenuItem(value: 0, child: Text('All games')),
+                    for (final game in games)
+                      DropdownMenuItem(value: game, child: Text('Game $game')),
+                  ],
+                  onChanged: (game) => setState(() => _game = game == 0 ? null : game),
+                ),
+                FilterChip(
+                  label: const Text('Undone only'),
+                  selected: _undoneOnly,
+                  onSelected: (selected) => setState(() => _undoneOnly = selected),
+                ),
+              ],
+            ),
           ),
-        ),
-      for (final entry in record.decisionLog) _entry(entry),
-    ],
-  );
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              visible.isEmpty
+                  ? 'No matching decisions'
+                  : '${visible.length} of ${entries.length} decisions',
+            ),
+          ),
+          for (final entry in visible) _entry(entry),
+        ],
+      ],
+    );
+  }
 
   Widget _entry(DecisionEntry entry) {
     final frame = entry.frame;
+    final record = widget.record;
+    final onSeek = widget.onSeek;
     final seek =
         onSeek != null && record.fps > 0 && frame != null && frame >= 0 && frame < record.numFrames;
     return ListTile(
@@ -35,7 +87,7 @@ class DecisionHistory extends StatelessWidget {
         ' · ${entry.near}–${entry.far}\n${entry.at.toLocal()}',
       ),
       trailing: seek ? const Icon(Icons.play_arrow) : null,
-      onTap: seek ? () => onSeek!(Moment(frame: frame, timeS: frame / record.fps)) : null,
+      onTap: seek ? () => onSeek(Moment(frame: frame, timeS: frame / record.fps)) : null,
     );
   }
 }
