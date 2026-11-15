@@ -20,6 +20,7 @@ from shuttlesense.referee.rally import (
 )
 from shuttlesense.referee.scoring import (
     CORRECTIONS_FILE,
+    after_the_match,
     apply_corrections,
     apply_rallies,
     apply_user_changes,
@@ -35,6 +36,7 @@ __all__ = [
     "CORRECTIONS_FILE",
     "OVERRIDES_FILE",
     "LineCallOverrideIn",
+    "after_the_match",
     "apply_corrections",
     "apply_overrides",
     "apply_rallies",

@@ -704,6 +704,26 @@ def test_award_after_the_match_is_won_is_refused(tmp_path: Path) -> None:
         assert (undone["near"], undone["far"], undone["corrections"]) == (20, 0, [])
 
 
+def test_live_override_after_the_match_is_won_is_refused(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "start_score": {"near": 20, "far": 0}})
+        ws.receive_json()
+        ws.send_json({"type": "award", "winner": "near"})
+        assert ws.receive_json()["score"]["match_winner"] == "near"
+        assert ws.receive_json()["type"] == "coaching"
+        events = _send_frames(ws, 230)
+        call = next(e for e in events if e["type"] == "line_call")["line_call"]
+        other = "out" if call["call"] == "in" else "in"
+        ws.send_json(
+            {"type": "override", "line_call_id": call["id"], "call": other, "decision_id": 3}
+        )
+        error = ws.receive_json()
+        assert (error["code"], error["decision_id"]) == ("match_over", 3)
+        ws.send_json({"type": "undo"})  # the award is still the newest decision
+        undone = ws.receive_json()
+        assert undone["type"] == "score" and undone["score"]["corrections"] == []
+
+
 def test_undo_takes_back_a_live_override_before_an_older_award(tmp_path: Path) -> None:
     """Award, then a line-call override: Undo removes the override and keeps the award."""
     with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:

@@ -417,11 +417,13 @@ class StreamAnalyzer:
         return self.coaching_event(index)
 
     def override(self, line_call_id: int, call: Call) -> list[Event]:
-        from shuttlesense.referee import LineCallOverrideIn
+        from shuttlesense.referee import LineCallOverrideIn, after_the_match
 
         target = next((c for c in self.record.line_calls if c.id == line_call_id), None)
         if target is None:
             raise KeyError(line_call_id)
+        if after_the_match(self.record, target.rally_index):
+            raise MatchOver("the match is already won")
         # Kept as a log (the newest per rally applies) so Undo can restore an earlier call.
         self.overrides.append(
             LineCallOverrideIn(rally_index=target.rally_index, call=call, at=datetime.now(UTC))

@@ -52,6 +52,7 @@ from shuttlesense.feedback import build_coaching
 from shuttlesense.io import SUPPORTED_SUFFIXES, check_duration, probe, read_frame
 from shuttlesense.referee import (
     LineCallOverrideIn,
+    after_the_match,
     apply_corrections,
     apply_user_changes,
     build_events,
@@ -545,8 +546,13 @@ def override_line_call(
         job = _require_done(jobs, job_id)
         record = load_record(path.read_text(encoding="utf-8"))
         call = next((c for c in record.line_calls if c.id == call_id), None)
-        if call is None or record.score is None:
+        if call is None:
             raise HTTPException(status_code=404, detail="line call not found")
+        if record.score is None:
+            raise HTTPException(status_code=409, detail="referee stage did not run for this job")
+        if after_the_match(record, call.rally_index):
+            # Refused before anything is saved, like an award after the deciding rally (D32).
+            raise HTTPException(status_code=409, detail="the match is already won")
         # A log: the newest override per rally applies, so Undo can restore an earlier one.
         overrides = load_overrides(job_dir)
         overrides.append(

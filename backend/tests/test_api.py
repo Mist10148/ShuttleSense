@@ -1150,6 +1150,29 @@ def test_award_after_the_match_is_won_is_refused(tmp_path: Path, tiny_video: Pat
         assert len(client.get(f"/jobs/{job_id}/record").json()["score"]["corrections"]) == logged
 
 
+def test_override_after_the_match_is_won_is_refused(tmp_path: Path, tiny_video: Path) -> None:
+    """A call on a rally after the deciding point cannot change the result: 409, nothing
+    saved. A call on the rally that decided the match can still be overridden."""
+    with make_client(tmp_path, fake_pipeline=True) as client:
+        job_id = _referee_job(client, tiny_video, start_score={"near": 20, "far": 0})
+        record = client.get(f"/jobs/{job_id}/record").json()
+        call = record["line_calls"][0]
+        assert record["score"]["match_winner"] == "near"  # the rally itself was match point
+        res = client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "out"})
+        assert res.status_code == 200 and res.json()["score"]["match_winner"] is None
+        # An award before the rally now wins the match first: the rally no longer counts.
+        won = client.post(f"/jobs/{job_id}/score/award", json={"winner": "near", "frame": 0})
+        assert won.status_code == 200 and won.json()["rallies"][0]["score_after"] is None
+        res = client.patch(f"/jobs/{job_id}/line-calls/{call['id']}", json={"call": "in"})
+        assert res.status_code == 409 and "already won" in res.json()["detail"]
+        after = client.get(f"/jobs/{job_id}/record").json()
+        assert after["line_calls"][0]["override"]["call"] == "out"  # the earlier one stands
+        assert [d["kind"] for d in after["decision_log"]] == ["override", "award"]
+        job_dir = tmp_path / "storage" / "jobs" / job_id
+        saved = json.loads((job_dir / "line_call_overrides.json").read_text(encoding="utf-8"))
+        assert [o["call"] for o in saved] == ["out"]  # the refused one was never written
+
+
 def test_job_joins_a_match_under_way_and_takes_reasons(tmp_path: Path, tiny_video: Path) -> None:
     with make_client(tmp_path, fake_pipeline=True) as client:
         vid = upload(client, tiny_video).json()["id"]

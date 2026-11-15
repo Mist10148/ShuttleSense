@@ -243,6 +243,19 @@ def changes_finished_match(before: Score | None, after: Score | None) -> bool:
     return before.model_dump(exclude=keep) == after.model_dump(exclude=keep)
 
 
+def after_the_match(record: ClipRecord, rally_index: int) -> bool:
+    """True when the match is won and this rally fell after the deciding one.
+
+    Such a rally does not count (its score_after is None), so a line-call override on it
+    cannot change the result; the API refuses it like any other decision there (D32). A
+    call on a rally that did count can still be confirmed or overridden after the match.
+    """
+    if record.score is None or record.score.match_winner is None:
+        return False
+    rally = next((r for r in record.rallies if r.index == rally_index), None)
+    return rally is not None and rally.score_after is None
+
+
 def undo_last_decision(
     record: ClipRecord,
     start: ScorePair | None = None,
