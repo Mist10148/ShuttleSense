@@ -1209,6 +1209,10 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// The other side retired: [winner] wins the match (clip record 1.5, D33).
   void concede(String winner) => _decide({'type': 'concede', 'winner': winner});
 
+  /// The players changed ends now (clip record 1.7): early, late, or not when the rules
+  /// said so. The score goes with them.
+  void swapEnds() => _decide({'type': 'ends'});
+
   /// Take back the newest decision: a correction, an award, a concession or a line-call
   /// override (D32).
   void undo() => _decide({'type': 'undo'});
@@ -1320,8 +1324,8 @@ class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
   @override
   MatchSetup build() {
     final saved = ref.read(sharedPreferencesProvider).getStringList(_key);
-    // 3 items before doubles service order (Phase 9), 5 since.
-    if (saved == null || (saved.length != 3 && saved.length != 5)) return kDefaultMatchSetup;
+    // 3 items before doubles service order (Phase 9), 5 since, 6 with change of ends.
+    if (saved == null || !const {3, 5, 6}.contains(saved.length)) return kDefaultMatchSetup;
     const slots = {'near_1', 'near_2', 'far_1', 'far_2'};
     String? slot(int i) => saved.length > i && slots.contains(saved[i]) ? saved[i] : null;
     return MatchSetup(
@@ -1330,6 +1334,7 @@ class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
       court: saved[2] == 'doubles' ? 'doubles' : 'singles',
       firstServerId: slot(3),
       firstReceiverId: slot(4),
+      autoChangeEnds: saved.length < 6 || saved[5] != '0',
     );
   }
 
@@ -1341,6 +1346,7 @@ class LiveMatchSetupNotifier extends Notifier<MatchSetup> {
       setup.court,
       setup.firstServerId ?? '',
       setup.firstReceiverId ?? '',
+      setup.autoChangeEnds ? '1' : '0',
     ]);
   }
 }

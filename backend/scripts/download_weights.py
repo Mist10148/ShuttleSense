@@ -27,15 +27,15 @@ FILES = {
 IN_REPO = frozenset(FILES["strokes"])
 
 # TrackNetV3 hashes are from the public ckpts archive linked in the pinned submodule.
-# The stroke entries are the files trained on Nov 14 (docs/results/strokes.md).
+# The stroke entries are the files trained on Nov 15 (docs/results/strokes.md, D35).
 CHECKSUMS: dict[str, str] = {
     "tracknet/TrackNet_best.pt": "df867641a02712b021f04548ff4b1208ddfdb47f629ab2094ceb978667e83b1a",
     "tracknet/InpaintNet_best.pt": (
         "5749b66b8002f3ad9e0af841604004706fc796df30599e6bf01952696009688c"
     ),
-    "strokes/stroke_cnn.pt": "c9176cc6780f0f390888454ae70064303a61379e9d69ec2e5b3d8c07578cb6c3",
-    "strokes/stroke_lstm.pt": "58e0eba4c6208280c0e3624032146f530044c9e50e639e4225020aafd6e2eb2e",
-    "strokes/stroke_rf.npz": "e773350e92e2000cdb43578c3b19dd0c39696431f54e213788f8847b72420782",
+    "strokes/stroke_cnn.pt": "814b5f2f35af0797fd31eb7e86492944bd6acf72909b17980a2278ff4c33f2ea",
+    "strokes/stroke_lstm.pt": "49ba571fefe4fd4a18d6b28a2f739c4454b15f9902c4f03142ba433fcf80a4ac",
+    "strokes/stroke_rf.npz": "02a65fb1f091545bd4b4ffe7bd954099276edc2a45ccc4db6c00c60ef2bdf264",
 }
 
 

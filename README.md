@@ -326,7 +326,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | --- | --- | --- | --- |
 | Shuttle detection accuracy (within 4 px) | Trajectory test clips | ≥ 85% | TBD |
 | Hit detection F1 (±3 frames) | ShuttleSet test matches | ≥ 0.75 | TBD |
-| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3% ([strokes.md](docs/results/strokes.md)) |
+| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2% ([strokes.md](docs/results/strokes.md)) |
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
@@ -336,7 +336,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
-**Ablation:** pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). These numbers are on broadcast matches; accuracy on phone footage is not measured yet.
+**Ablation:** pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN). These numbers are on broadcast matches; accuracy on phone footage is not measured yet.
 
 ---
 
@@ -355,6 +355,11 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - [ ] **Phase 7 (Nov 18 – 20):** feature freeze, evaluation, release builds, final demo
 - [ ] **Phase 9 (from Nov 12):** doubles support: four-player tracking, hitter attribution, doubles service order, four players in the app ([plan](docs/phases/phase-9-doubles.md))
 - [x] **Phase 10 (Nov 14):** review fixes, the doubles service order in every game, a job-finished notification and the remaining code-only steps ([plan](docs/phases/phase-10-hardening.md))
+- [ ] **Phase 11 (Nov 14 – 17):** the stroke classifier as a choice of 1D CNN, LSTM or Random Forest per job; code and trained weights are in, a run on a real clip with the perception models remains ([plan](docs/phases/phase-11-stroke-models.md))
+- [ ] **Phase 12 (Nov 14):** courtside referee and coach fixes, joining a match under way, let, fault and retirement; code is in, device checks remain ([plan](docs/phases/phase-12-courtside.md))
+- [ ] **Phase 13 (Nov 15):** live command recovery, decision history, interval clock, practice goals and the saved recap; code is in, courtside verification remains ([plan](docs/phases/phase-13-courtside-depth.md))
+
+What is left needs footage, devices, accounts or the team: [the owner's list](docs/PHASES.md#left-for-the-owner-needs-github-admin-hardware-data-or-the-team).
 
 ### Future work
 - Automatic court line detection (no taps)
@@ -397,7 +402,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 | [docs/API.md](docs/API.md) | REST endpoints between the app and the backend |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Every library and tool, versions, licenses, rationale |
 | [docs/SETUP.md](docs/SETUP.md) | Installing and running backend and app, weights, datasets, connecting devices |
-| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 133 tasks (steps, tests, acceptance criteria) |
+| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 162 tasks (steps, tests, acceptance criteria) |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | What stays on your backend and exactly what the coach chat sends to the Claude API |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |

@@ -153,6 +153,7 @@ def test_match_stats_and_referee_columns(tmp_path) -> None:
     match = json.loads((tmp_path / "summary.json").read_text())["match"]
     assert match["best_of"] == record.score.best_of
     assert match["decisions"] == {"corrections": 1, "awards": 1, "line_call_overrides": 1,
+                                  "changes_of_ends": 0,
                                   "reasons": {"let": 1, "fault": 1}}  # fmt: skip
     serve = match["points_won_on_serve"]
     assert sum(v["served"] for v in serve.values()) <= len(record.rallies)

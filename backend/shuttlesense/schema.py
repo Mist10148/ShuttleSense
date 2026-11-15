@@ -158,6 +158,10 @@ class Rally(BaseModel):
     server_id: PlayerId | None = _omit_none()  # doubles (v1.2): server and receiver
     receiver_id: PlayerId | None = _omit_none()
     review: str | None = _omit_none()  # why the user should check this rally
+    # v1.7: the players had changed ends when this rally was played (near / far are
+    # the ends at that moment), and they changed ends by rule right after it.
+    ends_swapped: bool = Field(default=False, exclude_if=lambda v: not v)
+    change_ends: bool = Field(default=False, exclude_if=lambda v: not v)
 
 
 class ScoreCorrection(BaseModel):
@@ -167,14 +171,16 @@ class ScoreCorrection(BaseModel):
     An award is a point for a rally the referee layer missed; it counts after the detected
     rallies before rally_index (the number of rallies when it was given). A concession
     (v1.5) ends the match there: `winner_after` wins because the other side retired.
+    `ends` (v1.7) says the players changed ends there, early, late or against the automatic
+    change: it sits where an award would and has no winner.
     """
 
     rally_index: int
     winner_before: PlayerSide | None
     winner_after: PlayerSide | None  # None: the rally is undecided again
     at: datetime
-    kind: Literal["winner", "award", "concede"] = "winner"
-    frame: int | None = None  # where an award or concession was given
+    kind: Literal["winner", "award", "concede", "ends"] = "winner"
+    frame: int | None = None  # where an award, concession or change of ends was given
     reason: DecisionReason | None = _omit_none()  # v1.5: why the referee decided it
 
 
@@ -189,7 +195,11 @@ class GameService(BaseModel):
 
 
 class Score(ScorePair):
-    """The current game's score (the last game's once the match is over) and match state."""
+    """The current game's score (the last game's once the match is over) and match state.
+
+    `near` and `far` are the ends of the court as they are now (v1.7): when the players
+    change ends, the points, games and server move with them and `ends_swapped` flips.
+    """
 
     corrections: list[ScoreCorrection] = Field(default_factory=list)
     best_of: int = 1  # games in the match: 1 or 3
@@ -214,6 +224,10 @@ class Score(ScorePair):
     game_service: list[GameService] = Field(default_factory=list, exclude_if=lambda v: not v)
     # v1.5: games each side had already won when the session started (joined mid-match).
     start_games: ScorePair | None = _omit_none()
+    # v1.7: change ends by the rules (after a game; at 11 in the deciding or only game),
+    # and whether the side that started at the near end is at the far end now.
+    auto_change_ends: bool = Field(default=False, exclude_if=lambda v: not v)
+    ends_swapped: bool = Field(default=False, exclude_if=lambda v: not v)
 
 
 class Moment(BaseModel):
@@ -369,7 +383,9 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
     events are derived from the rallies so old jobs show calls in the app. 1.1 -> 1.2 adds
     optional doubles fields only, 1.2 -> 1.3 the optional per-game doubles service, and
     1.3 -> 1.4 the optional `stroke_model`, and 1.4 -> 1.5 the optional mid-match start,
-    decision reasons, concessions and interval length.
+    decision reasons, concessions and interval length. 1.5 -> 1.6 adds the optional decision
+    log, interval clock and practice goals, and 1.6 -> 1.7 the optional change of ends: an
+    older record has none, so its `near` and `far` read as they always did.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:

@@ -300,6 +300,12 @@ class ApiClient {
         return ScoreUpdate.fromJson(res.data!);
       });
 
+  /// Clip record 1.7: the players changed ends at [frame]; the score goes with them.
+  Future<ScoreUpdate> swapEnds(String jobId, {int? frame}) => _call(() async {
+    final res = await _dio.post<Json>('/jobs/$jobId/score/ends', data: {'frame': frame});
+    return ScoreUpdate.fromJson(res.data!);
+  });
+
   /// Doubles (D23): who serves and receives first in [game] (2 or 3).
   Future<ScoreUpdate> setGameService(
     String jobId, {

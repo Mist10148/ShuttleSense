@@ -68,7 +68,7 @@ def set_goal(record: ClipRecord, goal: PracticeGoal, *, doubles: bool = False) -
 def log_decision(record: ClipRecord, command: dict) -> None:
     score = record.score
     kind = command.get("type")
-    if score is None or kind not in {"award", "correct", "override", "concede", "undo"}:
+    if score is None or kind not in {"award", "correct", "override", "concede", "undo", "ends"}:
         return
     target = None
     if kind == "undo":
@@ -90,6 +90,8 @@ def log_decision(record: ClipRecord, command: dict) -> None:
         for v in [kind, command.get("winner"), command.get("call"), command.get("reason")]
         if v is not None
     )
+    if kind == "ends":
+        detail = "change of ends"
     game = rally.game if rally else (target.game if target else command.get("_game", score.game))
     result = ScorePair(near=score.near, far=score.far)
     offset = score.start_games.near + score.start_games.far if score.start_games else 0

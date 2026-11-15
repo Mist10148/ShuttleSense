@@ -258,6 +258,7 @@ class _ReadyView extends ConsumerWidget {
           value: ref.watch(liveMatchSetupProvider),
           onChanged: ref.read(liveMatchSetupProvider.notifier).set,
           showCourt: true,
+          showChangeEnds: ref.watch(healthProvider).valueOrNull?.supportsChangeEnds ?? false,
         ),
         if (ref.watch(liveMatchSetupProvider).bestOf == 3 &&
             (ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false))
@@ -454,6 +455,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final frameIndex = state.frameIndex;
     final lastRally = record.rallies.lastOrNull;
     final courtside = ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false;
+    final changeEnds = ref.watch(healthProvider).valueOrNull?.supportsChangeEnds ?? false;
     final decisionBusy = !controller.canDecide;
     final pendingReviews = record.lineCalls.where((call) => call.needsReview).toList()
       ..sort((a, b) {
@@ -552,6 +554,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
           ? null
           : () => controller.correct(lastRally.index, null, reason: 'let'),
       onConcede: _coach || !courtside ? null : controller.concede,
+      onSwapEnds: _coach || !changeEnds ? null : controller.swapEnds,
     );
     final controls = [
       SegmentedButton<bool>(
@@ -772,6 +775,8 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       if (canKey && scoreOpen && courtside && lastRally != null)
         const SingleActivator(LogicalKeyboardKey.keyL): () =>
             controller.correct(lastRally.index, null, reason: 'let'),
+      if (canKey && scoreOpen && changeEnds)
+        const SingleActivator(LogicalKeyboardKey.keyE): controller.swapEnds,
       if (canKey && keyed != null) ...{
         const SingleActivator(LogicalKeyboardKey.keyI): () =>
             controller.overrideCall(keyed.id, 'in'),

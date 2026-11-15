@@ -44,6 +44,8 @@ RALLIES_CSV_COLUMNS = (
     "call",
     "margin_cm",
     "decision",
+    # v1.7: 1 when the players had changed ends, so near / far in this row are the ends then.
+    "ends_swapped",
 )
 # UTF-8 with a byte-order mark so Excel on Windows detects the encoding.
 CSV_ENCODING = "utf-8-sig"
@@ -148,6 +150,8 @@ def match_stats(record: ClipRecord) -> dict | None:
         "games": [g.model_dump() for g in score.games],
         "games_won": score.games_won.model_dump(),
         "match_winner": score.match_winner,
+        # v1.7: near / far are the ends as they stand at the end of the session.
+        "ends_swapped": score.ends_swapped,
         "conceded": kinds.get("concede", 0) > 0,
         "points_won_on_serve": {side: {"won": held[side], "served": served[side]}
                                 for side in ("near", "far")},  # fmt: skip
@@ -159,6 +163,7 @@ def match_stats(record: ClipRecord) -> dict | None:
         "decisions": {
             "corrections": kinds.get("winner", 0),
             "awards": kinds.get("award", 0),
+            "changes_of_ends": kinds.get("ends", 0),
             "line_call_overrides": sum(1 for c in record.line_calls if c.override is not None),
             "reasons": dict(Counter(c.reason for c in score.corrections if c.reason)),
         },
@@ -238,6 +243,7 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
                     "" if call is None else call.effective_call,
                     "" if call is None else f"{call.margin_cm:.1f}",
                     decisions.get(r.index, ""),
+                    int(r.ends_swapped),
                 ]
             )
 

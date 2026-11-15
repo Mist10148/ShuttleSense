@@ -76,7 +76,7 @@ Liveness and capability check used by the connect screen.
 {
   "status": "ok",
   "version": "0.1.0",
-  "schema_version": "1.4",
+  "schema_version": "1.7",
   "device": "cuda",
   "auth_required": true,
   "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"],
@@ -146,6 +146,7 @@ Start processing.
 | `start_score` | no | `{"near": 10, "far": 12}` when the clip starts mid-game; default 0–0. `400` if negative, already a finished game (e.g. 21–15) or above 29 |
 | `best_of` | no | `1` (default) or `3`: games in the match ([D21](DECISIONS.md)). `start_score` is the score of the first game played |
 | `start_games` | no | `{"near": 1, "far": 0}`: games each side had already won when the clip starts (v1.5, [D33](DECISIONS.md)), so a clip of game 2 or 3 numbers its games and ends the match correctly. `400` if negative or already a won match (2 in a best of 3, any in a best of 1) |
+| `auto_change_ends` | no | `true` (default) or `false` (v1.7, [D36](DECISIONS.md)): the score follows the players when they change ends by the rules. Send `false` for players who stay at their ends; a change marked by hand works either way |
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 | `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
 | `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game (later games: `POST /jobs/{job_id}/score/service`). `422` if only one is given, both are on one side, the server is not on `first_server`'s side, or `court` is not `"doubles"` |
@@ -233,13 +234,17 @@ The other side retired or gave a walkover (v1.5, [D33](DECISIONS.md)). Body `{"w
 
 Doubles ([D23](DECISIONS.md)): who serves and receives first in game 2 or 3. Body `{"game": 2, "server_id": "far_2", "receiver_id": "near_1"}`; send only `{"game": 2}` to forget that game's slots. The server must be on the side that won the previous game (otherwise the entry is kept but has no effect). Stored in `score.game_service` and on the job, so re-renders keep it. Same response and exports as `PATCH /jobs/{job_id}/score`. `422` if only one id is given or both are on one side; `409` for a singles job, unless the job is `done`, or if the referee stage did not run.
 
+### `POST /jobs/{job_id}/score/ends`
+
+The players changed ends (v1.7, [D36](DECISIONS.md)): early, late, or not when the rules said so. Body `{"frame": 1234}` (optional; default: the end of the video). From there on the points, games, server and doubles slots are at the other end; given where an automatic change happened, it cancels it. It is a decision like an award: logged, taken back by Undo, `409` when the job has no referee layer or the match is already won, `400` for a frame past the end. Same response as an award.
+
 ### `POST /jobs/{job_id}/score/undo`
 
 Takes back the referee's newest decision ([D32](DECISIONS.md)): a correction, an award or a line-call override, whichever came last. A rally's winner goes back to what it was before that correction; an undone override puts the earlier override, or the automated call, back. Same response as above plus `line_calls`; `404` when there is nothing to undo.
 
 ### `PATCH /jobs/{job_id}/line-calls/{call_id}`
 
-Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"call": "out"}`; sending the backend's own call confirms it. The decision is appended to `line_call_overrides.json` in the job folder (the newest per rally applies, so Undo can restore an earlier one) (re-applied after every re-render, like score corrections) and the call gets `override: {"call", "at"}`. A confirmed or overridden call counts as certain, so its rally winner is decided again from the landing side or the last hitter; a winner correction for that rally given before the override no longer applies, so the newest decision wins (D32). Returns `{"line_calls": [...], "score": {...}, "rallies": [...]}` and regenerates the exports. `404` for an unknown call or a job without the referee layer; `409` unless the job is `done`.
+Confirm or override an automated line call (F20). Body `{"call": "in"}` or `{"call": "out"}`; sending the backend's own call confirms it. The decision is appended to `line_call_overrides.json` in the job folder (the newest per rally applies, so Undo can restore an earlier one) (re-applied after every re-render, like score corrections) and the call gets `override: {"call", "at"}`. A confirmed or overridden call counts as certain, so its rally winner is decided again from the landing side or the last hitter; a winner correction for that rally given before the override no longer applies, so the newest decision wins (D32). Returns `{"line_calls": [...], "score": {...}, "rallies": [...]}` and regenerates the exports. `404` for an unknown call; `409` unless the job is `done`, for a job without the referee layer, and for a call on a rally that fell after the deciding point of a match already won (it cannot change the result, D32; nothing is saved). A call on a rally that counted can still be confirmed or overridden after the match.
 
 ### `GET /jobs/{job_id}/record` and older records
 
@@ -256,10 +261,11 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `start` | `{"type": "start", "fps": 30, "width": 1280, "height": 720, "corners": [[x,y]×4] \| null, "start_score": {"near": 0, "far": 0} \| null, "start_games": {"near": 1, "far": 0} \| null, "court": "singles" \| "doubles", "name": "Court 2", "best_of": 1 \| 3, "first_server": "near" \| "far" \| null, "first_server_id": "near_1" \| ... \| null, "first_receiver_id": ..., "stroke_model": "cnn" \| "lstm" \| "rf" \| null}` | First message. Corners are in the pixels of the frames the app will send; `best_of`, `first_server`, `court`, `first_server_id` and `first_receiver_id` as in `POST /jobs` (`bad_request` for service slots without `"court": "doubles"`); `stroke_model` as in `POST /jobs` (`bad_request` for an unknown model). In doubles, frame events carry `near_2` and `far_2` players and hits a `hitter` |
 | `resume` | `{"type": "resume", "session_id": "..."}` | First message after a dropped connection, within the TTL |
 | frame | binary: `uint32` frame index + `float64` capture time in ms (little-endian, 12 bytes), then one JPEG | Capture times must be finite and nondecreasing across reconnects; the clock origin is arbitrary. Frames larger than 720p are scaled down |
-| `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer |
+| `override` | `{"type": "override", "line_call_id": 0, "call": "out"}` | Confirm (same call) or override; the ID must be a nonnegative JSON integer. Refused with `match_over` for a call on a rally after the deciding point of a match already won |
 | `correct` | `{"type": "correct", "rally_index": 0, "winner": "far", "reason": "let"}` | Score correction; the index must be a nonnegative JSON integer; `"winner": null` makes the rally undecided (with `"reason": "let"` it is a let, replayed). `reason` is optional, as for `award`; an unknown reason gets `bad_message` |
 | `concede` | `{"type": "concede", "winner": "near"}` | The other side retired: `winner` wins the match after the rallies so far (v1.5). Refused with `match_over` once the match is won; Undo takes it back |
 | `award` | `{"type": "award", "winner": "near", "reason": "fault"}` (`reason` optional: `let`, `fault`, `service_fault`, `misconduct`) | A point for a rally the system missed, counted after the rallies so far. Refused with `rally_in_play` while a rally is open or settling, and with `match_over` once the match is won |
+| `ends` | `{"type": "ends"}` | The players changed ends now (v1.7): the score goes with them from the rallies so far. Refused with `rally_in_play` while a rally is open and `match_over` once the match is won; Undo takes it back |
 | `undo` | `{"type": "undo"}` | Takes back the newest decision: correction, award or line-call override (`not_found` when there is none). An undone override is sent again as a `line_call` event before `score` |
 | `service` | `{"type": "service", "game": 2, "server_id": "far_2", "receiver_id": "near_1"}` | Doubles: who serves and receives first in game 2 or 3, as `POST /jobs/{job_id}/score/service`; answered with `score`. `bad_request` (session kept) in singles or for invalid slots |
 | `stop` | `{"type": "stop"}` | Ends and saves the session |
@@ -279,7 +285,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | `error` with code `capture_gap` | A capture gap exceeded the resume window and was shortened in playback. The session continues |
 | `degraded` | `level` (0 full, 1, 2), `scale`, `reason` |
 | `saved` | `job_id` and `video_id` of the saved session (null when no frame arrived), final `stats` |
-| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `rally_in_play`, `match_over`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `rally_in_play` (an `award` while a rally is open or settling) and `match_over` (an `award` or `correct` after the match is won that would change nothing) keep the session going. A frame whose JPEG header declares more than four times the session's pixel count gets `bad_frame` without being decoded. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
+| `error` | `code` (`unauthorized`, `busy`, `not_found`, `bad_request`, `bad_frame`, `bad_message`, `rally_in_play`, `match_over`, `internal`) and `detail`; the first four close the socket (4401, 4409, 4404, 4400) when they answer `start` or `resume`; mid-session, `not_found` (an `override` or `correct` for an unknown line call or rally, or an `undo` with nothing to undo) keeps the session going. `bad_message` (a text frame that is not a JSON object, or an unknown control message) keeps the session going. `rally_in_play` (an `award` while a rally is open or settling) and `match_over` (an `award` or `correct` after the match is won that would change nothing, or an `override` of a call on a rally after the deciding point) keep the session going. A frame whose JPEG header declares more than four times the session's pixel count gets `bad_frame` without being decoded. `internal` means a server-side failure: at start or save it closes the socket (1011); mid-session the server closes the socket (1011) and keeps the session for a resume |
 
 Only one live session runs at a time and none while a job is running (`busy`). The saved job has `"mode": "live"` and appears in `GET /jobs`. The reserved ID does not
 create a job on its own. If the client loses the `saved` reply, it can check
@@ -312,6 +318,10 @@ Cancels a queued/running job or deletes a finished job's outputs. `204`.
 - Upload timeout: none (progress-driven); other requests: 15 s connect, 30 s receive.
 - On a network error during polling, retry with back-off up to 30 s, then show "Lost connection to server" with a retry button. The job keeps running on the server.
 
+
+## Change of ends (record 1.7)
+
+`start` takes `"auto_change_ends": true | false` (default `true`; anything else is `bad_request`), and `started.change_ends` says the server follows the players. In every `score` event `near` and `far` are the ends as they are now, with `score.ends_swapped` when the side that started near is at the far end, so a client that knows nothing of this still shows the right numbers at the right end. After a game with the setting on, a doubles pair serves first from the end it crossed to: name later-game service (`service`) with the slots at those ends.
 
 ## Courtside depth (record 1.6)
 

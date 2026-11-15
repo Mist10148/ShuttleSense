@@ -155,4 +155,81 @@ void main() {
     await tester.pumpWidget(field(false));
     expect(find.text('Near player'), findsOneWidget);
   });
+
+  test('change of ends is on unless switched off, and every edit keeps it', () {
+    const setup = MatchSetup();
+    expect(setup.autoChangeEnds, isTrue);
+    expect(setup.toJson()['auto_change_ends'], isTrue);
+    final off = setup.withAutoChangeEnds(false);
+    expect(off.toJson()['auto_change_ends'], isFalse);
+    expect(off, isNot(setup));
+    for (final edited in [
+      off.withBestOf(3),
+      off.withFirstServer('far'),
+      off.withCourt('doubles'),
+      off.withService(serverId: 'far_1', receiverId: 'near_1'),
+    ]) {
+      expect(edited.autoChangeEnds, isFalse);
+    }
+    final options = const JobOptions(overlays: {}).withMatch(off);
+    expect(options.match.autoChangeEnds, isFalse);
+    expect(options.withStartScore((near: 1, far: 0)).match.autoChangeEnds, isFalse);
+    expect(options.copyWith(referee: true).withStrokeModel('rf').autoChangeEnds, isFalse);
+    expect(const JobOptions(overlays: {}).autoChangeEnds, isTrue);
+  });
+
+  testWidgets('the change-of-ends switch shows only for a server that follows the players', (
+    tester,
+  ) async {
+    var value = const MatchSetup(bestOf: 3);
+    Widget form({required bool show}) => MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) => SingleChildScrollView(
+            child: MatchSetupField(
+              value: value,
+              showChangeEnds: show,
+              onChanged: (m) => setState(() => value = m),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(form(show: false));
+    expect(find.byKey(const Key('auto-change-ends')), findsNothing);
+    await tester.pumpWidget(form(show: true));
+    expect(find.textContaining('The score moves with the players'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('auto-change-ends')));
+    await tester.pumpAndSettle();
+    expect(value.autoChangeEnds, isFalse);
+    expect(value.bestOf, 3);
+    expect(find.textContaining('Use Players changed ends'), findsOneWidget);
+  });
+
+  test('the saved live setup keeps the change-of-ends choice', () async {
+    SharedPreferences.setMockInitialValues({
+      'live.match': ['3', 'near', 'singles', '', '', '0'],
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(container.dispose);
+    expect(container.read(liveMatchSetupProvider).autoChangeEnds, isFalse);
+    await container
+        .read(liveMatchSetupProvider.notifier)
+        .set(const MatchSetup(bestOf: 3, firstServer: 'far'));
+    expect(prefs.getStringList('live.match'), ['3', 'far', 'singles', '', '', '1']);
+    // A setup saved before this choice existed follows the rules.
+    SharedPreferences.setMockInitialValues({
+      'live.match': ['1', 'far', 'doubles', 'far_1', 'near_2'],
+    });
+    final older = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(await SharedPreferences.getInstance()),
+      ],
+    );
+    addTearDown(older.dispose);
+    expect(older.read(liveMatchSetupProvider).autoChangeEnds, isTrue);
+  });
 }

@@ -277,3 +277,115 @@ def test_a_concession_ends_the_match_without_a_point() -> None:
     assert (result.score.near, result.score.far) == (1, 1)  # the game being played
     assert result.steps[3].score_after is None  # nothing counts after it
     assert result.score.games_won == ScorePair()
+
+
+# --- change of ends (v1.7) ----------------------------------------------------------------
+
+
+def test_the_score_follows_the_players_between_games() -> None:
+    """One side wins game 1 at the near end and game 2 at the far end: 2-0, not 1-1."""
+    game_one = ["near"] * 21
+    result = play(game_one, best_of=3, auto_change_ends=True)
+    score = result.score
+    assert score.ends_swapped and score.change_ends and score.auto_change_ends
+    assert score.games_won == ScorePair(near=0, far=1)  # the game winners are at the far end
+    assert score.games == [ScorePair(near=0, far=21)] and score.server == "far"
+    assert result.steps[-1].change_ends and not result.steps[-1].ends_swapped
+    assert result.steps[-1].score_after == ScorePair(near=21, far=0)  # as it was played
+
+    result = play(game_one + ["far"] * 21, best_of=3, auto_change_ends=True)
+    assert result.score.match_winner == "far"
+    assert result.score.games_won == ScorePair(near=0, far=2)
+    assert result.score.games == [ScorePair(near=0, far=21), ScorePair(near=0, far=21)]
+    assert all(step.ends_swapped for step in result.steps[21:])
+    # Without the setting the same rallies are one game each, as before 1.7.
+    plain = play(game_one + ["far"] * 21, best_of=3).score
+    assert plain.games_won == ScorePair(near=1, far=1) and not plain.ends_swapped
+    assert plain.change_ends  # the notice still shows
+
+
+def test_ends_change_at_11_in_the_deciding_and_the_only_game() -> None:
+    result = play(["near"] * 11 + ["far"], auto_change_ends=True)
+    assert result.steps[10].score_after == ScorePair(near=11, far=0)
+    assert result.steps[10].change_ends and result.steps[11].ends_swapped
+    assert result.steps[11].score_before == ScorePair(near=0, far=11)
+    # The same people led 11-0 and now stand at the far end; the far end won the next rally.
+    assert result.score.near == 0 and result.score.far == 12 and result.score.ends_swapped
+    assert result.score.server == "far" and not result.score.change_ends
+
+    at_11 = play(["near"] * 11, auto_change_ends=True).score
+    assert at_11.change_ends and at_11.interval and (at_11.near, at_11.far) == (0, 11)
+    assert at_11.server == "far" and at_11.service_court == "left"  # 11 is odd
+
+    decider = ["near"] * 21 + ["near"] * 21 + ["near"] * 11  # game 2 goes to the other side
+    score = play(decider, best_of=3, auto_change_ends=True).score
+    # Ends changed after game 1, after game 2 and at 11 in game 3: three times.
+    assert score.game == 3 and score.ends_swapped
+    assert (score.near, score.far) == (0, 11)
+    assert score.games_won == ScorePair(near=1, far=1)
+    # Not at 11 in game 1 or 2 of a best of three.
+    assert not play(["near"] * 11, best_of=3, auto_change_ends=True).score.ends_swapped
+    # Joined past 11: the change at 11 has already happened.
+    late = play(["near"], ScorePair(near=12, far=3), auto_change_ends=True).score
+    assert not late.ends_swapped
+
+
+def test_a_change_of_ends_by_hand() -> None:
+    # Automatic changes off: the referee marks the change after game 1 (step 21).
+    rallies = ["near"] * 21 + [None] + ["far"] * 21
+    score = play(rallies, best_of=3, swaps={21}).score
+    assert score.match_winner == "far" and score.games_won == ScorePair(near=0, far=2)
+    # The players did not change: a swap by hand cancels the automatic one.
+    stayed = play(rallies, best_of=3, auto_change_ends=True, swaps={21}).score
+    assert stayed.games_won == ScorePair(near=1, far=1)
+    one_game = play(rallies[:22], best_of=3, auto_change_ends=True, swaps={21}).score
+    assert not one_game.ends_swapped and one_game.games_won == ScorePair(near=1, far=0)
+    # They changed late, two rallies into game 2 (the automatic change is off).
+    late = play(["near"] * 21 + ["near", "near", None, "far"], best_of=3, swaps={23})
+    assert (late.score.near, late.score.far) == (0, 3) and late.score.ends_swapped
+    assert late.score.games == [ScorePair(near=0, far=21)]
+    # A change by hand answers the notice and plays no point.
+    answered = play(["near"] * 21 + [None], best_of=3, swaps={21}).score
+    assert not answered.change_ends and answered.interval and answered.server == "far"
+    # After the match nothing changes.
+    done = play(["near"] * 21 + [None], swaps={21}).score
+    assert done.match_winner == "near" and not done.ends_swapped
+
+
+def test_a_concession_and_joined_games_keep_their_side_across_a_change() -> None:
+    games = ScorePair(near=1, far=0)
+    score = play(["far"] * 21, best_of=3, start_games=games, auto_change_ends=True).score
+    # 1-1 in games; the side that held the first game is now at the far end.
+    assert score.games_won == ScorePair(near=1, far=1) and score.game == 3
+    assert score.ends_swapped
+    conceded = play(["near"] * 21 + [None], best_of=3, auto_change_ends=True,
+                    concessions={21: "near"}).score  # fmt: skip
+    assert conceded.match_winner == "near" and conceded.games_won == ScorePair(near=0, far=1)
+
+
+def test_doubles_slots_cross_with_the_players_at_11() -> None:
+    kwargs = {"first_server_id": "near_1", "first_receiver_id": "far_1",
+              "auto_change_ends": True}  # fmt: skip
+    before = play(["near"] * 10, **kwargs).score
+    assert (before.server_id, before.receiver_id) == ("near_1", "far_1")
+    after = play(["near"] * 11, **kwargs).score
+    # The same person serves on from the far end, under the slot with the same number, at
+    # 11 (odd): from the left court, to the partner who was not receiving at 10-0.
+    assert (after.server, after.server_id, after.service_court) == ("far", "far_1", "left")
+    assert after.receiver_id == "near_2"
+    plain = play(["near"] * 11, first_server_id="near_1", first_receiver_id="far_1").score
+    assert (plain.server_id, plain.receiver_id) == ("near_1", "far_2")  # mirrored above
+
+
+def test_a_later_game_is_named_at_the_ends_the_pairs_stand_at() -> None:
+    from shuttlesense.schema import GameService
+
+    named = [GameService(game=2, server_id="far_2", receiver_id="near_1")]
+    score = play(["near"] * 21, best_of=3, first_server_id="near_1", first_receiver_id="far_1",
+                 game_service=named, auto_change_ends=True).score  # fmt: skip
+    # The game winners crossed to the far end and serve first from there.
+    assert (score.server, score.server_id, score.receiver_id) == ("far", "far_2", "near_1")
+    wrong = [GameService(game=2, server_id="near_2", receiver_id="far_1")]
+    score = play(["near"] * 21, best_of=3, first_server_id="near_1", first_receiver_id="far_1",
+                 game_service=wrong, auto_change_ends=True).score  # fmt: skip
+    assert score.server_id is None  # the losers cannot serve first: ignored

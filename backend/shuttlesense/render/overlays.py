@@ -367,13 +367,24 @@ def score_at(record: ClipRecord, i: int) -> tuple[int, int] | None:
         if first is None or a.rally_index <= first.index:
             current = shift(current, a.winner_after, -1)
     last = None
+    # v1.7: near / far are the ends at that moment. `shown` is how the ends stood when
+    # `current` was true, `now` how they stand at frame i; the pair is turned when they differ.
+    shown = first.ends_swapped if first is not None else False
+    now = shown
     for r in record.rallies:
         if r.end_frame <= i and r.score_after is not None:
             current, last = (r.score_after.near, r.score_after.far), r.index
+            shown, now = r.ends_swapped, r.ends_swapped != r.change_ends
     for a in awards:
         if (last is None or a.rally_index > last) and (a.frame or 0) <= i:
             current = shift(current, a.winner_after, 1)
-    return current
+    for c in record.score.corrections:  # changes of ends made by hand since then
+        if c.kind == "ends" and (c.frame or 0) <= i and (
+            c.rally_index > last if last is not None
+            else first is None or c.rally_index <= first.index
+        ):  # fmt: skip
+            now = not now
+    return current if now == shown else (current[1], current[0])
 
 
 def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:

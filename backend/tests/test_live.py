@@ -594,10 +594,12 @@ def test_live_service_message_names_a_later_games_server(tmp_path: Path) -> None
             score = ws.receive_json()["score"]
             assert ws.receive_json()["type"] == "coaching"
         assert score["game"] == 2 and score.get("server_id") is None
-        ws.send_json({"type": "service", "game": 2, "server_id": "near_2",
-                      "receiver_id": "far_1"})  # fmt: skip
+        # The game winners crossed to the far end (v1.7) and serve first from there.
+        assert score["ends_swapped"] and score["server"] == "far"
+        ws.send_json({"type": "service", "game": 2, "server_id": "far_2",
+                      "receiver_id": "near_1"})  # fmt: skip
         score = ws.receive_json()["score"]
-        assert (score["server_id"], score["receiver_id"]) == ("near_2", "far_1")
+        assert (score["server_id"], score["receiver_id"]) == ("far_2", "near_1")
         ws.send_json({"type": "stop"})
         while ws.receive_json()["type"] != "saved":
             pass
@@ -702,6 +704,26 @@ def test_award_after_the_match_is_won_is_refused(tmp_path: Path) -> None:
         ws.send_json({"type": "undo"})
         undone = ws.receive_json()["score"]
         assert (undone["near"], undone["far"], undone["corrections"]) == (20, 0, [])
+
+
+def test_live_override_after_the_match_is_won_is_refused(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**START, "start_score": {"near": 20, "far": 0}})
+        ws.receive_json()
+        ws.send_json({"type": "award", "winner": "near"})
+        assert ws.receive_json()["score"]["match_winner"] == "near"
+        assert ws.receive_json()["type"] == "coaching"
+        events = _send_frames(ws, 230)
+        call = next(e for e in events if e["type"] == "line_call")["line_call"]
+        other = "out" if call["call"] == "in" else "in"
+        ws.send_json(
+            {"type": "override", "line_call_id": call["id"], "call": other, "decision_id": 3}
+        )
+        error = ws.receive_json()
+        assert (error["code"], error["decision_id"]) == ("match_over", 3)
+        ws.send_json({"type": "undo"})  # the award is still the newest decision
+        undone = ws.receive_json()
+        assert undone["type"] == "score" and undone["score"]["corrections"] == []
 
 
 def test_undo_takes_back_a_live_override_before_an_older_award(tmp_path: Path) -> None:
@@ -839,3 +861,59 @@ def test_a_frame_that_is_not_jpeg_is_refused_undecoded(tmp_path: Path) -> None:
         assert ws.receive_json()["code"] == "bad_frame"
         events = _send_frames(ws, 3, first=1)
         assert any(e["type"] == "frame" for e in events)
+
+
+def _award(ws, winner: str) -> dict:
+    ws.send_json({"type": "award", "winner": winner})
+    score = ws.receive_json()
+    assert score["type"] == "score", score
+    assert ws.receive_json()["type"] == "coaching"
+    return score["score"]
+
+
+def test_live_score_follows_the_players_across_games(tmp_path: Path) -> None:
+    """The near end wins game 1, the players cross, the far end wins game 2: 2-0."""
+    start = {**START, "best_of": 3, "start_score": {"near": 20, "far": 0}}
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(start)
+        started = ws.receive_json()
+        assert started["change_ends"] is True and started["score"]["auto_change_ends"] is True
+        score = _award(ws, "near")
+        assert score["ends_swapped"] and score["games_won"] == {"near": 0, "far": 1}
+        assert (score["near"], score["far"], score["game"]) == (0, 0, 2)
+        for _ in range(21):
+            score = _award(ws, "far")
+        assert score["match_winner"] == "far" and score["games_won"] == {"near": 0, "far": 2}
+        ws.send_json({"type": "ends", "decision_id": 9})
+        error = ws.receive_json()
+        assert (error["code"], error["decision_id"]) == ("match_over", 9)
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "saved"
+
+
+def test_live_change_of_ends_by_hand_and_the_setting_off(tmp_path: Path) -> None:
+    start = {**START, "best_of": 3, "start_score": {"near": 20, "far": 0},
+             "auto_change_ends": False}  # fmt: skip
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json({**start, "auto_change_ends": "yes"})
+        assert ws.receive_json()["code"] == "bad_request"
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(start)
+        assert "auto_change_ends" not in ws.receive_json()["score"]
+        score = _award(ws, "near")
+        assert score["games_won"] == {"near": 1, "far": 0} and score["change_ends"]
+        assert "ends_swapped" not in score
+        ws.send_json({"type": "ends", "decision_id": 4})
+        swapped = ws.receive_json()
+        assert swapped["decision_id"] == 4 and swapped["score"]["ends_swapped"]
+        assert swapped["score"]["games_won"] == {"near": 0, "far": 1}
+        assert swapped["decision_log"][-1]["detail"] == "change of ends"
+        assert ws.receive_json()["type"] == "coaching"
+        ws.send_json({"type": "ends", "reason": {"a": 1}})
+        assert ws.receive_json()["code"] == "bad_request"
+        ws.send_json({"type": "undo"})
+        undone = ws.receive_json()["score"]
+        assert undone["games_won"] == {"near": 1, "far": 0} and "ends_swapped" not in undone
+        ws.send_json({"type": "stop"})
+        while ws.receive_json()["type"] != "saved":
+            pass

@@ -7,6 +7,8 @@ data:
   features_dir: data/features
   splits: configs/splits_bst.json   # see stroke_cnn.yaml
   pose_norm: bbox_diag          # how the features were built; stored in the checkpoint
+  window_fps: 30                # frame rate of the windows; stored in the checkpoint, so a
+                                # clip at another rate is sampled over the same time span
   use_trajectory: true          # false for the pose-only ablation
   classes: [smash, clear, drop, net_shot, lift, serve]
 
@@ -23,7 +25,9 @@ train:
   weight_decay: 0.0001
   grad_clip: 1.0
   class_weighting: inverse_frequency
-  early_stopping_patience: 8
+  label_smoothing: 0.1          # chosen on the val split (docs/results/strokes.md)
+  shift_frames: 4               # random time shift of the window, in frames
+  early_stopping_patience: 15
 
 output:
   checkpoint: weights/strokes/stroke_lstm.pt

@@ -102,6 +102,19 @@ def _score_lines(record: ClipRecord) -> list[str]:
     else:
         current = f"game {score.game} " if score.best_of > 1 else ""
         lines.append(f"Current {current}score {score.near}-{score.far} (near-far).")
+    crossings = sum(r.change_ends for r in record.rallies) + sum(
+        c.kind == "ends" for c in score.corrections
+    )
+    if crossings or score.ends_swapped:
+        lines.append(
+            f"The players changed ends {crossings} time(s). In every score, near and far are "
+            "the ends of the court at that moment, so a side's points moved with it; the "
+            + (
+                "side that started near is now far."
+                if score.ends_swapped
+                else "sides are back at the ends they started at."
+            )
+        )
     reasons = [c.reason for c in score.corrections if getattr(c, "reason", None)]
     lines.append(
         f"{len(score.corrections)} manual referee decisions"

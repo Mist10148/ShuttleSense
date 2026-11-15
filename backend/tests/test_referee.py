@@ -129,3 +129,53 @@ def test_unobserved_frames_do_not_close_a_rally() -> None:
     cfg = {"lost_frames_end": 3, "stationary_frames_end": 3}
     assert segment_rallies(visible, xy, [0], cfg)[0].closed
     assert not segment_rallies(visible, xy, [0], cfg, unobserved={2})[0].closed
+
+
+def test_a_change_of_ends_by_hand_is_a_decision_that_undo_takes_back() -> None:
+    from datetime import UTC, datetime
+
+    from shuttlesense.fake import load_golden
+    from shuttlesense.referee.scoring import apply_corrections, undo_last_decision
+    from shuttlesense.render.overlays import score_at
+    from shuttlesense.schema import Score, ScoreCorrection
+
+    record = load_golden()
+    record.rallies = [
+        Rally(index=i, start_frame=10 * i, end_frame=10 * i + 5, winner="near") for i in range(4)
+    ]
+    record.line_calls = []
+    record.score = Score()
+    swap = ScoreCorrection(rally_index=2, winner_before=None, winner_after=None,
+                           at=datetime.now(UTC), kind="ends", frame=17)  # fmt: skip
+    apply_corrections(record, [swap])
+    # Two points at the near end, the players cross, two more points at the near end: 2-2.
+    assert (record.score.near, record.score.far) == (2, 2) and record.score.ends_swapped
+    assert [r.ends_swapped for r in record.rallies] == [False, False, True, True]
+    assert record.rallies[2].score_after == ScorePair(near=1, far=2)
+    assert record.score.corrections == [swap]
+    # The score shown at a frame follows the players too.
+    assert score_at(record, 16) == (2, 0)
+    assert score_at(record, 17) == (0, 2)  # from the frame of the change
+    assert score_at(record, 26) == (1, 2)
+    assert undo_last_decision(record) == []
+    assert (record.score.near, record.score.far) == (4, 0) and not record.score.ends_swapped
+    assert not any(r.ends_swapped for r in record.rallies)
+
+
+def test_the_overlay_score_turns_after_a_change_by_rule() -> None:
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import score_at
+    from shuttlesense.schema import Score
+
+    record = load_golden()
+    record.rallies = [
+        Rally(index=i, start_frame=10 * i, end_frame=10 * i + 5, winner="near") for i in range(3)
+    ]
+    record.score = Score()
+    record.score = apply_rallies(record.rallies, ScorePair(near=9, far=4), auto_change_ends=True)
+    assert [r.change_ends for r in record.rallies] == [False, True, False]
+    assert score_at(record, 4) == (9, 4)
+    assert score_at(record, 6) == (10, 4)
+    assert score_at(record, 16) == (4, 11)  # 11-4 as played, seen from the new ends
+    assert score_at(record, 26) == (5, 11)
+    assert (record.score.near, record.score.far) == (5, 11)

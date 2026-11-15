@@ -183,8 +183,8 @@ Same steps, outputs, tests and acceptance criteria as [T3.1](#t31), for matches 
 **Owner:** M5 · **Estimate:** 8 h · **Priority:** P1 · **Area:** ml · **Refs:** F6, Success metrics (≥ 70% macro accuracy; ablation) · **Depends on:** T3.8 · **Blocks:** T3.10, T3.12, T7.3
 
 **Steps**
-- [x] Train the full model (pose + trajectory) on train, select on val, evaluate once on test; 3 seeds, report mean ± std. *Done on the BST features and split (D29): test macro accuracy 89.5% ± 1.2%.*
-- [x] Same with `--pose-only`: 77.1% ± 0.1%.
+- [x] Train the full model (pose + trajectory) on train, select on val, evaluate once on test; 3 seeds, report mean ± std. *Done on the BST features and split (D29): test macro accuracy 91.2% ± 0.6% (Nov 15, second evaluation after the import fix, D35; 89.5% ± 1.2% on Nov 14).*
+- [x] Same with `--pose-only`: 77.5% ± 0.7%.
 - [ ] The same two runs on our own clips and `configs/splits.json` (needs T3.1, T3.2 and T3.5).
 - [x] Publish the best full checkpoint with its checksum in `download_weights.py`. *Committed under `backend/weights/strokes/` instead of Hugging Face ([D30](../DECISIONS.md)).*
 - [x] Write `docs/results/strokes.md` with the results table and training settings.

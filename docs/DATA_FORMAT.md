@@ -11,7 +11,7 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | Pixel coordinates | Origin top-left of the **normalized** video frame (after io resizing), x right, y down, floats |
 | Court coordinates | Meters on the court plane. Origin at the near-left corner of the singles court, x across the court (0 to 5.18), y toward the far baseline (0 to 13.40) |
 | Frame index | 0-based index into the normalized video; time in seconds is `frame / fps`. `frames[]` holds **every** normalized frame (after fps downsampling), in order |
-| Players | A side is always `"near"` (closer to the camera, bottom of the image) or `"far"`. In doubles (v1.2) each person also has a slot: `near_1`, `near_2`, `far_1`, `far_2`; `near_1`/`far_1` live in the `near`/`far` fields, partners in `near_2`/`far_2`. Slot 1 is the left one when play starts; the slot then stays with that person as the partners move |
+| Players | A side is always `"near"` (closer to the camera, bottom of the image) or `"far"`: an end of the court, whoever stands there (v1.7: the score moves with the players when they change ends). In doubles (v1.2) each person also has a slot: `near_1`, `near_2`, `far_1`, `far_2`; `near_1`/`far_1` live in the `near`/`far` fields, partners in `near_2`/`far_2`. Slot 1 is the left one when play starts; the slot then stays with that person as the partners move |
 | Missing values | `null`, never `-1` or `0`, except `shuttle.visible` which is `0` or `1` as in TrackNetV3 |
 | Confidences | Floats in [0, 1]. A keypoint with `score < 0.3` counts as missing: stages that read joints (hits, feedback, positions) ignore it |
 | Speeds | km/h, always estimates |
@@ -292,10 +292,25 @@ backend/data/
 └── splits.json                 # {"train": [match_ids], "val": [...], "test": [...]} — split by match
 ```
 
-Feature window per hit: `T = 30` frames centered on the hit frame (`extract_features.py --window`). Per frame `F` = 39: the hitter's 17 keypoints × (x, y), centred on the player's box centre and divided by the box diagonal (`pose_norm: bbox_diag`, the rule of the BST features; `bbox_height` is the older rule), plus the shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features. Every checkpoint stores its `window_frames`, `pose_norm` and `use_trajectory`, and inference builds the window from them, so models trained with either rule keep working.
+Feature window per hit: `T = 30` frames centered on the hit frame (`extract_features.py --window`). Per frame `F` = 39: the hitter's 17 keypoints × (x, y), centred on the player's box centre and divided by the box diagonal (`pose_norm: bbox_diag`, the rule of the BST features; `bbox_height` is the older rule), plus the shuttle (x, y, visible, dx, dy) normalized to the frame. The pose-only ablation drops the shuttle features. Every checkpoint stores its `window_frames`, `pose_norm` and `use_trajectory`, and inference builds the window from them, so models trained with either rule keep working. Checkpoints from Nov 15 on may also store `window_fps` (30): on a clip at another frame rate the window is then sampled over the same time span (one second) instead of the same number of frames. They may store `temperature` (networks: the logits are divided by it, so `confidence` is calibrated on the validation split) and `summary_version` (forest: which summary rows it was trained on). A file without these keys is read as before.
 
-All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM as `[T, F]`, and the Random Forest reduces it to one row of summary values (`strokes/rf.py`: per-value mean, standard deviation, minimum, maximum and value at the hit; wrist and elbow speed; elbow, shoulder and knee angles; shuttle steps before and after the hit).
+All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM as `[T, F]`, and the Random Forest reduces it to one row of summary values (`strokes/rf.py`: per-value mean, standard deviation, minimum, maximum and value at the hit; wrist and elbow speed; elbow, shoulder and knee angles; shuttle steps before and after the hit; in version 2, over the frames that hold data only, plus the share of frames with a pose).
 
+
+## Known limits
+
+- **Statistics per player are still per end.** `near` and `far` are ends of the court.
+  Since v1.7 the score follows the players across a change of ends
+  ([below](#schema-v17-change-of-ends)), but `summary.per_player`, the heatmaps, the
+  coaching notes, practice goals and `hits[].player` are still by end: in a session that
+  runs past a change of ends they mix the two players (or pairs).
+- **Doubles after a change of ends.** The tracker numbers the partners at each end, so
+  which person is `_1` and which `_2` at the new end is its guess. After a change at 11
+  the service order continues under the slot with the same number at the other end; check
+  it against the court and name the server for a later game when it differs.
+- **Service lines for a line call** apply only when a rally has a single hit and the stroke
+  model labelled it `serve`. Without a stroke model, or when a serve is labelled as another
+  stroke, the rally lines are used.
 
 ## Schema v1.6 (courtside depth)
 
@@ -315,3 +330,32 @@ All additions are optional; 1.0–1.5 records migrate without invented history.
 These fields remain compatible with the current 1.7 models and golden fixtures.
 Derived JSON exports include goals and a deterministic recap of match result, stroke
 counts and the existing evidence-linked top fixes. No goal improvement is inferred.
+
+## Schema v1.7 (change of ends)
+
+All additions are optional. A record without them never changed ends, so 1.0–1.6 records
+read exactly as before.
+
+**Rule.** `near` and `far` always mean the ends of the court at that moment. A rally's
+`winner` is the end that won it, a referee's point goes to the end tapped, and `score`,
+`score.games`, `score.games_won`, `score.server` and the doubles slots are by the ends as
+they are now. When the players change ends, everything that belongs to a side moves with it:
+after a game won 21–17 from the near end, `games` reads `[{"near": 17, "far": 21}]` and
+`games_won` `{"near": 0, "far": 1}`, because the winners now stand at the far end.
+
+| Where | Field | Meaning |
+| --- | --- | --- |
+| `score` | `auto_change_ends` | The session setting: change ends by the rules (after each game that does not end the match, and when the leader first reaches 11 in the deciding game or a one-game match). Left out when false |
+| `score` | `ends_swapped` | The side that started at the near end is at the far end now. Left out when false |
+| `rallies[]` | `ends_swapped` | The ends had been changed when this rally was played: its `winner` and `score_after` are by the ends then |
+| `rallies[]` | `change_ends` | The players changed ends by rule right after this rally. Its `score_after` is the score as it was played; the next rally starts from the same score seen from the new ends |
+| `score.corrections[]` | `kind: "ends"` | A change of ends marked by hand, placed like an award (`rally_index`, `frame`), with no winner. It turns the ends at that point whether or not `auto_change_ends` is set, so it also cancels an automatic change the players did not make. Undo takes it back |
+
+`score.change_ends` is still the notice "change ends now"; with `auto_change_ends` the
+score has already been turned when it shows. A change marked by hand clears the notice.
+The score at a playback position (the overlay and the app's scoreboard) is turned from a
+rally's `score_after` when the ends at that position differ. `rallies.csv` has an
+`ends_swapped` column and `summary.json` → `match` has `ends_swapped` and
+`decisions.changes_of_ends`.
+
+Python models, Dart models, schema/OpenAPI snapshots and both golden fixtures use 1.7.

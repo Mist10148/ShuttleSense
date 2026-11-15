@@ -8,18 +8,22 @@ data:
   features_dir: data/features
   splits: configs/splits_bst.json   # see stroke_cnn.yaml
   pose_norm: bbox_diag          # how the features were built; stored in the checkpoint
+  window_fps: 30                # frame rate of the windows; stored in the checkpoint, so a
+                                # clip at another rate is sampled over the same time span
   use_trajectory: true          # false for the pose-only ablation
   classes: [smash, clear, drop, net_shot, lift, serve]
 
 model:
   trees: 150
-  max_depth: 14                 # depth and leaf size keep the saved file small
-  min_samples_leaf: 5
+  summary_version: 2            # statistics over frames that hold data (strokes/rf.py)
+  max_depth: 18                 # depth and leaf size, chosen on the val split
+  min_samples_leaf: 3
   max_features: sqrt
   class_weighting: true
 
 train:
   flip_augment: true            # add a mirrored copy of every window
+  shift_copies: [-1, 1]         # and copies with the hit one frame early and late
 
 output:
   checkpoint: weights/strokes/stroke_rf.npz

@@ -15,7 +15,7 @@
 | **Goal** | A user picks CNN, LSTM or Random Forest for a clip or a live session; each has trained weights in the repo and a measured accuracy; the Nov 14 review findings are fixed with tests |
 | **Owners** | M1 (backend, API, docs), M5 (models), M6 (app) |
 | **Entry criteria** | Phase 10 on `main` |
-| **Status** | Done Nov 14: every task below landed with tests (backend 404, app 236). Test macro accuracy on the BST split: 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3% ([results](../results/strokes.md)). Not done here: a run on a real clip with TrackNetV3 and pose installed, and the device check of the selector, which join the T4.3 and T7.2 checks |
+| **Status** | Done Nov 14: every task below landed with tests (backend 404, app 236). Test macro accuracy on the BST split: 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2% (second evaluation on this test split, after the Nov 15 import fix, D35; Nov 14: 89.5%, 88.1%, 82.1%) ([results](../results/strokes.md)). Not done here: a run on a real clip with TrackNetV3 and pose installed, and the device check of the selector, which join the T4.3 and T7.2 checks |
 | **Exit gate** | Every task below is ✅; backend `pytest -m "not gpu"` and `ruff`, app `flutter analyze`, `flutter test` and `dart format` pass |
 
 ## What the research found (T11.1)
@@ -90,9 +90,12 @@ to get weights without team training.
 **Goal.** Turn the BST feature files into our training layout, so the existing dataset loader and
 training script work unchanged.
 
-**Inputs.** `dataset_npy.rar` (per split: `J_only.npy` `[N, 30, 2, 17, 2]`, `shuttle.npy`
-`[N, 30, 2]`, `videos_len.npy`, `labels.npy` with 25 classes: unknown, then 12 types for the top
-player, then the same 12 for the bottom player), `strokes/labels.py`, `strokes/features.py`.
+**Inputs.** `dataset_npy.rar` (per split, one folder per player and stroke type, such as
+`Top_殺球`; per clip `<clip>_joints.npy` `[T, 2, 17, 2]`, `<clip>_shuttle.npy` `[T, 2]` and
+`<clip>_pos.npy`), `strokes/labels.py`, `strokes/features.py`. `T` is 30 except in the training
+clips of matches 1 to 20, where it is 24 or 25: one second at 25 fps. The import resamples
+those to 30 frames with the hit at the centre (D35, Nov 15); before that they were zero-padded
+at the end.
 
 **Steps**
 - [x] `scripts/import_bst_features.py`: read one split folder with `allow_pickle=False`; map the 12
@@ -202,7 +205,9 @@ probabilities; train, save, load and classify round trip.
 **Acceptance criteria.** Each model's test-split numbers are in `docs/results/strokes.md`. The
 PRD target is macro accuracy ≥ 70%; a model that misses it is reported as such.
 
-**Result (Nov 14).** 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%; all three pass the target. Ablation: pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). The forest was
+**Result (Nov 15, after the import fix of D35).** 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2%; all three pass the target. Ablation: pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN). This is the second evaluation on the test split; the first, on Nov 14, gave 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%. On Nov 15 the forest went back to depth 18 with summary version 2 and shifted copies (16 MB, +2.2 points), putting accuracy before file size.
+
+**Nov 14 note.** The forest was
 cut from 200 trees of depth 18 (13 MB) to 150 of depth 14 (6 MB) for about one point of
 validation F1. CPU latency for a 1-minute clip is under 0.1 s for each model
 ([stroke_latency.md](../results/stroke_latency.md)).

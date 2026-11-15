@@ -57,6 +57,9 @@ class Health {
   bool get supportsCourtside => _atLeast(5);
   bool get supportsCourtsideDepth => _atLeast(6);
 
+  /// Clip record 1.7: the score follows the players across a change of ends.
+  bool get supportsChangeEnds => _atLeast(7);
+
   /// Whether the backend can produce [overlay] (its stage is installed).
   bool supportsOverlay(String overlay, Map<String, String> overlayStage) {
     final stage = overlayStage[overlay];

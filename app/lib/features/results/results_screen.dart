@@ -291,6 +291,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     (api) => api.concedeMatch(widget.jobId, winner: winner, frame: _frameIndex.value),
   );
 
+  /// Clip record 1.7: the players changed ends at the playback position.
+  Future<void> _swapEnds() =>
+      _changeScore((api) => api.swapEnds(widget.jobId, frame: _frameIndex.value));
+
   Future<void> _undo() => _changeScore((api) => api.undoScore(widget.jobId));
 
   /// D23: who serves and receives first in a later doubles game.
@@ -442,6 +446,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onAwardReason: courtside ? _awardReason : null,
                   onLet: courtside && record.rallies.isNotEmpty ? _let : null,
                   onConcede: courtside ? _concede : null,
+                  onSwapEnds: (health?.supportsChangeEnds ?? false) ? _swapEnds : null,
                 ),
                 DecisionHistory(
                   record: record,

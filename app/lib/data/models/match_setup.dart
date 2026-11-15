@@ -11,6 +11,7 @@ class MatchSetup {
     this.court = 'singles',
     this.firstServerId,
     this.firstReceiverId,
+    this.autoChangeEnds = true,
   });
 
   final int bestOf;
@@ -25,6 +26,10 @@ class MatchSetup {
   final String? firstServerId;
   final String? firstReceiverId;
 
+  /// Clip record 1.7: the players change ends by the rules (after each game, and at 11 in
+  /// the deciding or only game) and the score goes with them. Off for players who stay put.
+  final bool autoChangeEnds;
+
   bool get doubles => court == 'doubles';
 
   /// Both doubles slots are known (only then are they sent).
@@ -36,14 +41,28 @@ class MatchSetup {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
   );
 
   /// A new first-server side: the doubles slots, which belong to a side, are cleared.
   MatchSetup withFirstServer(String? side) =>
-      MatchSetup(bestOf: bestOf, firstServer: side, court: court);
+      MatchSetup(bestOf: bestOf, firstServer: side, court: court, autoChangeEnds: autoChangeEnds);
 
-  MatchSetup withCourt(String value) =>
-      MatchSetup(bestOf: bestOf, firstServer: firstServer, court: value);
+  MatchSetup withCourt(String value) => MatchSetup(
+    bestOf: bestOf,
+    firstServer: firstServer,
+    court: value,
+    autoChangeEnds: autoChangeEnds,
+  );
+
+  MatchSetup withAutoChangeEnds(bool value) => MatchSetup(
+    bestOf: bestOf,
+    firstServer: firstServer,
+    court: court,
+    firstServerId: firstServerId,
+    firstReceiverId: firstReceiverId,
+    autoChangeEnds: value,
+  );
 
   MatchSetup withService({String? serverId, String? receiverId}) => MatchSetup(
     bestOf: bestOf,
@@ -51,12 +70,14 @@ class MatchSetup {
     court: court,
     firstServerId: serverId,
     firstReceiverId: receiverId,
+    autoChangeEnds: autoChangeEnds,
   );
 
   /// The match fields of POST /jobs and the live start message.
   Map<String, Object?> toJson() => {
     'best_of': bestOf,
     'first_server': firstServer,
+    'auto_change_ends': autoChangeEnds,
     if (hasServiceOrder) ...{
       'first_server_id': firstServerId,
       'first_receiver_id': firstReceiverId,
@@ -70,15 +91,18 @@ class MatchSetup {
       other.firstServer == firstServer &&
       other.court == court &&
       other.firstServerId == firstServerId &&
-      other.firstReceiverId == firstReceiverId;
+      other.firstReceiverId == firstReceiverId &&
+      other.autoChangeEnds == autoChangeEnds;
 
   @override
   String toString() =>
       'MatchSetup(bestOf: $bestOf, firstServer: $firstServer, court: $court, '
-      'firstServerId: $firstServerId, firstReceiverId: $firstReceiverId)';
+      'firstServerId: $firstServerId, firstReceiverId: $firstReceiverId, '
+      'autoChangeEnds: $autoChangeEnds)';
 
   @override
-  int get hashCode => Object.hash(bestOf, firstServer, court, firstServerId, firstReceiverId);
+  int get hashCode =>
+      Object.hash(bestOf, firstServer, court, firstServerId, firstReceiverId, autoChangeEnds);
 }
 
 const MatchSetup kDefaultMatchSetup = MatchSetup();
