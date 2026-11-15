@@ -144,7 +144,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 | --- | --- | --- |
 | FR-14 (F14) | Detect rally start (serve) and end (shuttle lost or stationary on floor for N frames); show "IN PLAY" or "BETWEEN RALLIES" | Rally boundaries match manual labels on test footage |
 | FR-15 (F15) | Estimate landing point on the court plane; classify in or out with a confidence value | Clear in/out cases correct on test rallies; close calls flagged as uncertain |
-| FR-16 (F16) | Award the rally to a player or pair using landing side and in/out result; apply BWF 21-point rally scoring; let the user correct any point in the app, with a reason (let, fault, service fault), start from a game under way, end a match on a retirement, and undo the newest decision of any kind (D32, D33) | Scoreboard updates after each rally; a correction changes the score and is logged |
+| FR-16 (F16) | Award the rally to a player or pair using landing side and in/out result; apply BWF 21-point rally scoring; follow the players across a change of ends (by the rules, or marked by hand); let the user correct any point in the app, with a reason (let, fault, service fault), start from a game under way, end a match on a retirement, and undo the newest decision of any kind (D32, D33) | Scoreboard updates after each rally; a correction changes the score and is logged |
 
 ### P3: Live mode, line calls and coaching
 

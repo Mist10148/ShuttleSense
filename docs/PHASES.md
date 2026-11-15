@@ -641,13 +641,12 @@ box in the phase files falls under one of its headings; the phase files keep the
 acceptance criteria. Code for these tasks is on `main` with tests.
 
 - **Decisions (Nov 15 review):**
-  - **Change of ends.** Points and games are credited to the camera end (`near` /
-    `far`), and the ends are never swapped. From game 2, and after 11 in a deciding
-    game, automatic rally winners are credited to the wrong player
-    ([known limits](DATA_FORMAT.md#known-limits)). Decide whether `near` / `far` in the
-    score mean the end or the player who started there, and what a referee's Near / Far
-    tap means after the change. The fix is a clip record 1.7 change with new snapshots
-    and fixtures.
+  - **Change of ends: verify on a real match.** Since Nov 15 the score follows the
+    players (clip record 1.7, [D36](DECISIONS.md)): automatic by the rules, with a
+    Change ends switch in match setup and Players changed ends in the referee's menu.
+    It is tested on synthetic matches only. Check a full best-of-three courtside or on
+    footage, including a change marked by hand. Still open: per-player statistics and
+    doubles identities across a change ([known limits](DATA_FORMAT.md#known-limits)).
   - **Service court for line calls.** The service lines apply only when the stroke
     model labelled a rally's single hit `serve`. Treating the first hit as the serve
     is wrong for a clip that starts mid-rally; it needs labelled rallies to choose.

@@ -50,7 +50,12 @@ A code review after the courtside update fixed, with tests:
 - **Stroke models:** the BST import fault and retraining of D35
   ([results](../results/strokes.md)).
 
-452 non-GPU backend tests and 280 Flutter tests pass. Release builds and the Windows
+- **Change of ends** (clip record 1.7, D36): the score follows the players by the
+  rules, with a setting to turn that off and a change marked by hand in the app, over
+  REST and on the live socket. A line-call override after the deciding point of a match
+  is refused.
+
+465 non-GPU backend tests and 289 Flutter tests pass. Release builds and the Windows
 integration flows were not re-run. None of this closes a device or footage gate.
 
 ## Earlier phase acceptance still open
