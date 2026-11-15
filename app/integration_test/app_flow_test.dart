@@ -151,6 +151,7 @@ Future<void> typeInto(WidgetTester tester, Finder field, String text) async {
 Future<void> tapText(WidgetTester tester, String text) async {
   final target = find.text(text).first;
   await tester.ensureVisible(target);
+  await tester.pump();
   await tester.tap(target);
   await tester.pump();
 }
@@ -292,6 +293,7 @@ void main() {
       await pumpUntil(tester, row);
       expect(find.descendant(of: row, matching: find.textContaining('Live · ')), findsOneWidget);
       await tester.ensureVisible(row);
+      await tester.pump();
       await tester.tap(row);
       await tester.pump();
       await pumpUntil(tester, find.text('Serve'));
