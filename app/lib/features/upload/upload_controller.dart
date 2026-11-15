@@ -48,6 +48,7 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
   static const _firstServerIdKey = 'options.first_server_id';
   static const _firstReceiverIdKey = 'options.first_receiver_id';
   static const _strokeModelKey = 'options.stroke_model';
+  static const _autoChangeEndsKey = 'options.auto_change_ends';
 
   @override
   JobOptions build() {
@@ -64,6 +65,7 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
       court: prefs.getString(_courtKey) == 'doubles' ? 'doubles' : 'singles',
       firstServerId: prefs.getString(_firstServerIdKey),
       firstReceiverId: prefs.getString(_firstReceiverIdKey),
+      autoChangeEnds: prefs.getBool(_autoChangeEndsKey) ?? true,
       strokeModel: switch (prefs.getString(_strokeModelKey)) {
         final String m when kStrokeModels.containsKey(m) => m,
         _ => kStrokeModels.keys.first,
@@ -89,6 +91,7 @@ class JobOptionsNotifier extends Notifier<JobOptions> {
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setInt(_bestOfKey, match.bestOf);
     await prefs.setString(_courtKey, match.court);
+    await prefs.setBool(_autoChangeEndsKey, match.autoChangeEnds);
     for (final (key, value) in [
       (_firstServerKey, match.firstServer),
       (_firstServerIdKey, match.firstServerId),

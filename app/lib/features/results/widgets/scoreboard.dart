@@ -23,6 +23,7 @@ class Scoreboard extends StatelessWidget {
     this.onAwardReason,
     this.onLet,
     this.onConcede,
+    this.onSwapEnds,
     this.doubles = false,
     this.busy = false,
     this.live = false,
@@ -51,6 +52,10 @@ class Scoreboard extends StatelessWidget {
   final void Function(String side, String reason)? onAwardReason;
   final VoidCallback? onLet;
   final ValueChanged<String>? onConcede;
+
+  /// Clip record 1.7: the players changed ends (early, late, or not when the rules said
+  /// so). Null on older backends.
+  final VoidCallback? onSwapEnds;
 
   /// A doubles job or session, known from its settings even before the record shows it.
   final bool doubles;
@@ -102,7 +107,20 @@ class Scoreboard extends StatelessWidget {
     final server = atEnd ? total?.server : null;
     final doubles = this.doubles || record.isDoubles;
     final game = total == null ? 1 : _gameAt(total);
-    final won = total == null || atEnd ? total?.gamesWon : _gamesWonBefore(total, game);
+    // Near and far are the ends at the moment shown. The match totals are by the ends at
+    // the end of the session, so they are turned when the players stood the other way.
+    final swapped = total == null
+        ? false
+        : atEnd
+        ? total.endsSwapped
+        : record.endsSwappedAt(frameIndex);
+    final turn = total != null && swapped != total.endsSwapped;
+    ScorePair seen(ScorePair p) => turn ? ScorePair(near: p.far, far: p.near) : p;
+    final won = total == null
+        ? null
+        : atEnd
+        ? total.gamesWon
+        : seen(_gamesWonBefore(total, game));
     return SectionCard(
       title: 'Score and stats',
       child: Column(
@@ -122,9 +140,16 @@ class Scoreboard extends StatelessWidget {
               Text(
                 [
                   for (var i = 0; i < total.games.length; i++)
-                    'G${total.firstGame + i} ${total.games[i].near}–${total.games[i].far}',
+                    'G${total.firstGame + i} ${seen(total.games[i]).near}–${seen(total.games[i]).far}',
                 ].join(' · '),
                 key: const Key('game-scores'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+            if (swapped)
+              Text(
+                'Ends changed: Near and Far are the ends as they are now',
+                key: const Key('ends-changed'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall,
               ),
@@ -229,13 +254,17 @@ class Scoreboard extends StatelessWidget {
                       onPressed: busy ? null : onClearLast,
                       child: const Text('Clear last winner'),
                     ),
-                  if (onAwardReason != null || onLet != null || onConcede != null)
+                  if (onAwardReason != null ||
+                      onLet != null ||
+                      onConcede != null ||
+                      onSwapEnds != null)
                     DecisionMenu(
                       enabled: !busy,
                       matchOver: total.matchOver,
                       onAwardReason: onAwardReason,
                       onLet: onLet,
                       onConcede: onConcede,
+                      onSwapEnds: onSwapEnds,
                     ),
                 ],
               ),
@@ -320,11 +349,13 @@ class RallyHistory extends StatelessWidget {
   static String _changes(List<ScoreCorrection> corrections) {
     final awards = corrections.where((c) => c.isAward).length;
     final concessions = corrections.where((c) => c.isConcede).length;
-    final fixes = corrections.length - awards - concessions;
+    final ends = corrections.where((c) => c.isEnds).length;
+    final fixes = corrections.length - awards - concessions - ends;
     return [
       if (fixes > 0) '$fixes correction(s)',
       if (awards > 0) '$awards point(s) awarded',
       if (concessions > 0) 'retired',
+      if (ends > 0) '$ends change(s) of ends',
     ].join(' · ');
   }
 }
@@ -545,6 +576,7 @@ class DecisionMenu extends StatelessWidget {
     this.onAwardReason,
     this.onLet,
     this.onConcede,
+    this.onSwapEnds,
   });
 
   final bool enabled;
@@ -552,6 +584,7 @@ class DecisionMenu extends StatelessWidget {
   final void Function(String side, String reason)? onAwardReason;
   final VoidCallback? onLet;
   final ValueChanged<String>? onConcede;
+  final VoidCallback? onSwapEnds;
 
   static String _other(String side) => side == 'near' ? 'far' : 'near';
 
@@ -587,6 +620,8 @@ class DecisionMenu extends StatelessWidget {
             onAwardReason?.call(_other(side), kind);
           case 'let':
             onLet?.call();
+          case 'ends':
+            onSwapEnds?.call();
           case 'retire':
             _retire(context, side);
         }
@@ -607,6 +642,8 @@ class DecisionMenu extends StatelessWidget {
           ],
         if (onLet != null)
           const PopupMenuItem(value: 'let:-', child: Text('Let: replay the last rally')),
+        if (onSwapEnds != null)
+          const PopupMenuItem(value: 'ends:-', child: Text('Players changed ends')),
         if (onConcede != null)
           for (final side in const ['near', 'far'])
             PopupMenuItem(value: 'retire:$side', child: Text('${playerLabel(side)} retires')),

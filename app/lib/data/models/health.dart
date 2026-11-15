@@ -31,7 +31,7 @@ class Health {
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
-  static const expectedSchema = '1.6';
+  static const expectedSchema = '1.7';
 
   bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 
@@ -48,6 +48,9 @@ class Health {
   /// Clip record 1.5 (D33): joining a match under way, decision reasons and retirement.
   bool get supportsCourtside => _atLeast(5);
   bool get supportsCourtsideDepth => _atLeast(6);
+
+  /// Clip record 1.7: the score follows the players across a change of ends.
+  bool get supportsChangeEnds => _atLeast(7);
 
   /// Whether the backend can produce [overlay] (its stage is installed).
   bool supportsOverlay(String overlay, Map<String, String> overlayStage) {

@@ -190,6 +190,7 @@ class JobOptions {
     this.court = 'singles',
     this.firstServerId,
     this.firstReceiverId,
+    this.autoChangeEnds = true,
     this.strokeModel,
   });
 
@@ -210,6 +211,9 @@ class JobOptions {
   final String? firstServerId;
   final String? firstReceiverId;
 
+  /// The score follows the players across a change of ends (clip record 1.7).
+  final bool autoChangeEnds;
+
   /// Which classifier names the strokes: cnn, lstm or rf (Phase 11). Null: the server's
   /// default, also what is sent to a server without the choice.
   final String? strokeModel;
@@ -220,6 +224,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
   );
 
   JobOptions copyWith({Set<String>? overlays, bool? referee, bool? calibrate}) => JobOptions(
@@ -232,6 +237,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
     strokeModel: strokeModel,
   );
 
@@ -245,6 +251,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
     strokeModel: strokeModel,
   );
 
@@ -258,6 +265,7 @@ class JobOptions {
     court: match.court,
     firstServerId: match.firstServerId,
     firstReceiverId: match.firstReceiverId,
+    autoChangeEnds: match.autoChangeEnds,
     strokeModel: strokeModel,
   );
 
@@ -271,6 +279,7 @@ class JobOptions {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
     strokeModel: model,
   );
 

@@ -1516,4 +1516,62 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Open results'), findsOneWidget);
   });
+
+  testWidgets('change of ends: the start says so, E and the menu mark one by hand', (tester) async {
+    const health = Health(
+      version: '0.1.0',
+      schemaVersion: '1.7',
+      device: 'cpu',
+      authRequired: false,
+      stages: kAllStages,
+    );
+    final sockets = await pumpLive(
+      tester,
+      size: const Size(1280, 800),
+      api: FakeApiClient(health: health),
+    );
+    await tester.pump();
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    expect(socket.sent.first['auto_change_ends'], isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pump();
+    expect(socket.sent.last['type'], 'ends');
+    socket.emit({
+      'type': 'score',
+      'score': {'near': 0, 'far': 0, 'ends_swapped': true},
+      'rallies': <dynamic>[],
+      'decision_id': socket.sent.last['decision_id'],
+    });
+    await events(tester);
+    expect(find.byKey(const Key('ends-changed')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('decision-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Players changed ends'));
+    await tester.pumpAndSettle();
+    expect(socket.sent.where((m) => m['type'] == 'ends'), hasLength(2));
+    socket.emit({
+      'type': 'score',
+      'score': {'near': 0, 'far': 0},
+      'rallies': <dynamic>[],
+      'decision_id': socket.sent.last['decision_id'],
+    });
+    await events(tester);
+    expect(find.byKey(const Key('ends-changed')), findsNothing);
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('an older server gets no change-of-ends key or menu item', (tester) async {
+    final sockets = await pumpLive(tester, size: const Size(1280, 800));
+    await startWithoutCourt(tester);
+    final sent = sockets.single.sent.length;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pump();
+    expect(sockets.single.sent.length, sent);
+    await tapStop(tester);
+    await events(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
 }

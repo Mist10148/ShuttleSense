@@ -148,7 +148,13 @@ class ClipRecord {
   /// Score shown at [frameIndex]: after the last rally that ended at or before it, plus the
   /// points awarded since (an award counts from its frame on). Before the first scored rally
   /// ends this is the starting score. Null without a referee.
-  ScorePair? scoreAt(int frameIndex) {
+  ScorePair? scoreAt(int frameIndex) => _scoreAndEnds(frameIndex)?.score;
+
+  /// Whether the players had changed ends at [frameIndex] (clip record 1.7): near and far
+  /// in the score shown there are the ends as they stood then.
+  bool endsSwappedAt(int frameIndex) => _scoreAndEnds(frameIndex)?.swapped ?? false;
+
+  ({ScorePair score, bool swapped})? _scoreAndEnds(int frameIndex) {
     final total = score;
     if (total == null) return null;
     final awards = total.corrections.where((c) => c.isAward && c.winnerAfter != null).toList();
@@ -170,17 +176,32 @@ class ClipRecord {
       current = shift(current, a.winnerAfter, -1);
     }
     int? last;
+    // `shown` is how the ends stood when `current` was true, `now` how they stand at the
+    // frame: the pair is turned when they differ, so the score follows the players.
+    var shown = first?.endsSwapped ?? false;
+    var now = shown;
     for (final r in rallies) {
       if (r.endFrame <= frameIndex && r.scoreAfter != null) {
         current = r.scoreAfter!;
         last = r.index;
+        shown = r.endsSwapped;
+        now = r.endsSwapped != r.changeEnds;
       }
     }
     for (final a in awards) {
       final after = last == null ? true : a.rallyIndex > last;
       if (after && (a.frame ?? 0) <= frameIndex) current = shift(current, a.winnerAfter, 1);
     }
-    return current;
+    for (final c in total.corrections.where((c) => c.isEnds)) {
+      final since = last == null
+          ? (first == null || c.rallyIndex <= first.index)
+          : c.rallyIndex > last;
+      if (since && (c.frame ?? 0) <= frameIndex) now = !now;
+    }
+    return (
+      score: now == shown ? current : ScorePair(near: current.far, far: current.near),
+      swapped: now,
+    );
   }
 
   /// Strokes so far in the rally containing [frameIndex] (whole clip without rallies).
@@ -445,6 +466,9 @@ class ScoreCorrection {
   bool get isAward => kind == 'award';
   bool get isConcede => kind == 'concede';
 
+  /// The players changed ends there, marked by hand (v1.7).
+  bool get isEnds => kind == 'ends';
+
   /// A rally cleared to be replayed.
   bool get isLet => kind == 'winner' && winnerAfter == null && reason == 'let';
 
@@ -499,6 +523,8 @@ class Score extends ScorePair {
     this.gameService = const [],
     this.startGames,
     this.intervalSeconds,
+    this.autoChangeEnds = false,
+    this.endsSwapped = false,
   });
 
   final List<ScoreCorrection> corrections;
@@ -531,6 +557,12 @@ class Score extends ScorePair {
 
   /// Players change ends now: after a game, and at 11 in the deciding game.
   final bool changeEnds;
+
+  /// Clip record 1.7: the score follows the players by the rules, and whether the side
+  /// that started at the near end is at the far end now. Near and far are always the
+  /// ends as they are.
+  final bool autoChangeEnds;
+  final bool endsSwapped;
 
   /// Doubles: the slots who served and received first (set by the user), and who serves
   /// and receives the next rally.
@@ -572,6 +604,8 @@ class Score extends ScorePair {
     gameService: asList(j['game_service']).map(GameService.fromJson).toList(),
     startGames: j['start_games'] == null ? null : ScorePair.fromJson(j['start_games'] as Json),
     intervalSeconds: asInt(j['interval_s']),
+    autoChangeEnds: j['auto_change_ends'] == true,
+    endsSwapped: j['ends_swapped'] == true,
   );
 }
 
@@ -612,6 +646,8 @@ class Rally {
     this.serverId,
     this.receiverId,
     this.review,
+    this.endsSwapped = false,
+    this.changeEnds = false,
   });
 
   final int index;
@@ -634,6 +670,11 @@ class Rally {
   /// Why the user should check this rally (e.g. the server stood in the wrong court).
   final String? review;
 
+  /// Clip record 1.7: the players had changed ends when this rally was played (its
+  /// winner and score are by the ends then), and they changed ends right after it.
+  final bool endsSwapped;
+  final bool changeEnds;
+
   factory Rally.fromJson(Json j) => Rally(
     index: asInt(j['index'])!,
     startFrame: asInt(j['start_frame'])!,
@@ -646,6 +687,8 @@ class Rally {
     serverId: j['server_id'] as String?,
     receiverId: j['receiver_id'] as String?,
     review: j['review'] as String?,
+    endsSwapped: j['ends_swapped'] == true,
+    changeEnds: j['change_ends'] == true,
   );
 }
 

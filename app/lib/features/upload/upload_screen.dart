@@ -183,6 +183,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   value: options.match,
                   onChanged: notifier.setMatch,
                   showCourt: true,
+                  showChangeEnds: health?.supportsChangeEnds ?? false,
                 ),
               StrokeModelField(
                 value: options.strokeModel,

@@ -452,4 +452,105 @@ void main() {
     expect(singles.hits.every((h) => h.hitter == null && h.who == h.player), isTrue);
     expect(singles.score!.serverId, isNull);
   });
+
+  test('the score at a playback position follows the players across a change of ends', () {
+    Map<String, dynamic> rally(
+      int i, {
+      bool swapped = false,
+      bool change = false,
+      int? n,
+      int? f,
+    }) => {
+      'index': i,
+      'start_frame': 10 * i,
+      'end_frame': 10 * i + 5,
+      'winner': 'near',
+      'score_after': {'near': n, 'far': f},
+      if (swapped) 'ends_swapped': true,
+      if (change) 'change_ends': true,
+    };
+    Map<String, dynamic> record(Map<String, dynamic> score, List<Map<String, dynamic>> rallies) => {
+      'schema_version': '1.7',
+      'clip_id': 'ends',
+      'fps': 30,
+      'width': 640,
+      'height': 360,
+      'num_frames': 60,
+      'rallies': rallies,
+      'score': score,
+    };
+
+    // By rule: 9-4, two points at the near end reach 11, the players cross, one more point.
+    final byRule = ClipRecord.fromJson(
+      record(
+        {'near': 5, 'far': 11, 'auto_change_ends': true, 'ends_swapped': true},
+        [
+          rally(0, n: 10, f: 4),
+          rally(1, n: 11, f: 4, change: true),
+          rally(2, n: 5, f: 11, swapped: true),
+        ],
+      ),
+    );
+    expect(byRule.score!.autoChangeEnds && byRule.score!.endsSwapped, isTrue);
+    expect(byRule.rallies[1].changeEnds && byRule.rallies[2].endsSwapped, isTrue);
+    expect(byRule.scoreAt(4), const ScorePair(near: 9, far: 4));
+    expect(byRule.scoreAt(6), const ScorePair(near: 10, far: 4));
+    expect(byRule.endsSwappedAt(6), isFalse);
+    expect(byRule.scoreAt(16), const ScorePair(near: 4, far: 11)); // 11-4, from the new ends
+    expect(byRule.endsSwappedAt(16), isTrue);
+    expect(byRule.scoreAt(26), const ScorePair(near: 5, far: 11));
+
+    // By hand, at frame 17, after two rallies.
+    final byHand = ClipRecord.fromJson(
+      record(
+        {
+          'near': 1,
+          'far': 2,
+          'ends_swapped': true,
+          'corrections': [
+            {
+              'rally_index': 2,
+              'winner_before': null,
+              'winner_after': null,
+              'at': '2026-11-15T10:00:00Z',
+              'kind': 'ends',
+              'frame': 17,
+            },
+          ],
+        },
+        [rally(0, n: 1, f: 0), rally(1, n: 2, f: 0), rally(2, n: 1, f: 2, swapped: true)],
+      ),
+    );
+    expect(byHand.score!.corrections.single.isEnds, isTrue);
+    expect(byHand.score!.corrections.single.isAward, isFalse);
+    expect(byHand.scoreAt(16), const ScorePair(near: 2, far: 0));
+    expect(byHand.scoreAt(17), const ScorePair(near: 0, far: 2));
+    expect(byHand.endsSwappedAt(16), isFalse);
+    expect(byHand.endsSwappedAt(17), isTrue);
+    expect(byHand.scoreAt(26), const ScorePair(near: 1, far: 2));
+
+    // An older record has no change of ends.
+    final golden = ClipRecord.fromJson(
+      jsonDecode(File('test/fixtures/golden_record.json').readAsStringSync())
+          as Map<String, dynamic>,
+    );
+    expect(golden.score!.endsSwapped || golden.score!.autoChangeEnds, isFalse);
+    expect(golden.endsSwappedAt(58), isFalse);
+    const newer = Health(
+      version: '0.1.0',
+      schemaVersion: '1.7',
+      device: 'cpu',
+      authRequired: false,
+      stages: [],
+    );
+    const older = Health(
+      version: '0.1.0',
+      schemaVersion: '1.6',
+      device: 'cpu',
+      authRequired: false,
+      stages: [],
+    );
+    expect(newer.supportsChangeEnds, isTrue);
+    expect(older.supportsChangeEnds, isFalse);
+  });
 }

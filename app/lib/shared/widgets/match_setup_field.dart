@@ -12,11 +12,15 @@ class MatchSetupField extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.showCourt = false,
+    this.showChangeEnds = false,
   });
 
   final MatchSetup value;
   final ValueChanged<MatchSetup> onChanged;
   final bool showCourt;
+
+  /// The change-of-ends switch, for servers that follow the players (clip record 1.7).
+  final bool showChangeEnds;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +85,24 @@ class MatchSetupField extends StatelessWidget {
                 onChanged(value.withFirstServer(s.first.isEmpty ? null : s.first)),
           ),
         ),
+        if (showChangeEnds) ...[
+          row(
+            'Change ends',
+            Switch(
+              key: const Key('auto-change-ends'),
+              value: value.autoChangeEnds,
+              onChanged: (on) => onChanged(value.withAutoChangeEnds(on)),
+            ),
+          ),
+          Text(
+            value.autoChangeEnds
+                ? 'By the rules: after each game, and at 11 in the deciding or only game. '
+                      'The score moves with the players.'
+                : 'Off: the score stays with each end. Use Players changed ends when they '
+                      'cross.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
         if (showCourt)
           row(
             'Lines',

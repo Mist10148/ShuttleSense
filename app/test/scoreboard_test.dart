@@ -169,4 +169,84 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('change of ends', () {
+    Score score({bool swapped = true}) => Score(
+      near: 3,
+      far: 5,
+      bestOf: 3,
+      game: 2,
+      games: const [ScorePair(near: 17, far: 21)],
+      gamesWon: const ScorePair(near: 0, far: 1),
+      autoChangeEnds: true,
+      endsSwapped: swapped,
+      corrections: const [
+        ScoreCorrection(rallyIndex: 1, kind: 'ends', frame: 57),
+        ScoreCorrection(rallyIndex: 1, winnerAfter: 'far', kind: 'award', frame: 58),
+      ],
+    );
+
+    testWidgets('the board says the ends changed and counts the change', (tester) async {
+      await pump(
+        tester,
+        Scoreboard(record: goldenRecord().copyWith(score: score()), frameIndex: 59),
+      );
+      expect(find.byKey(const Key('ends-changed')), findsOneWidget);
+      expect(find.text('Game 2 of 3 · games 0–1'), findsOneWidget);
+      expect(find.text('G1 17–21'), findsOneWidget);
+      expect(find.textContaining('1 change(s) of ends'), findsOneWidget);
+      expect(find.textContaining('1 point(s) awarded'), findsOneWidget);
+      expect(find.textContaining('correction(s)'), findsNothing);
+
+      await pump(
+        tester,
+        Scoreboard(record: goldenRecord().copyWith(score: score(swapped: false)), frameIndex: 59),
+      );
+      expect(find.byKey(const Key('ends-changed')), findsNothing);
+    });
+
+    testWidgets('earlier in the replay the totals are shown from the ends as they were', (
+      tester,
+    ) async {
+      // The golden rally was played before the change: the game the far end now holds was
+      // won from the near end.
+      await pump(
+        tester,
+        Scoreboard(record: goldenRecord().copyWith(score: score()), frameIndex: 10),
+      );
+      expect(find.byKey(const Key('ends-changed')), findsNothing);
+      expect(find.text('G1 21–17'), findsOneWidget);
+    });
+
+    testWidgets('Players changed ends is in the decision menu', (tester) async {
+      var swaps = 0;
+      await pump(
+        tester,
+        Scoreboard(
+          record: goldenRecord().copyWith(score: score(swapped: false)),
+          frameIndex: 59,
+          onAward: (_) {},
+          onSwapEnds: () => swaps++,
+        ),
+      );
+      await tester.tap(find.byKey(const Key('decision-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Players changed ends'));
+      await tester.pumpAndSettle();
+      expect(swaps, 1);
+      // Without the callback (an older server) the item is not offered.
+      await pump(
+        tester,
+        Scoreboard(
+          record: goldenRecord().copyWith(score: score(swapped: false)),
+          frameIndex: 59,
+          onAward: (_) {},
+          onLet: () {},
+        ),
+      );
+      await tester.tap(find.byKey(const Key('decision-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Players changed ends'), findsNothing);
+    });
+  });
 }
