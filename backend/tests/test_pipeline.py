@@ -168,3 +168,21 @@ def test_stage_that_becomes_available_reruns_downstream(
     weights.write_bytes(b"trained")
     run_pipeline(tiny_video, out, clip_id="c", config=config)
     assert calls == {"strokes": 2, "feedback": 2}  # strokes runs, so feedback is redone
+
+
+def test_a_failed_cache_write_keeps_the_old_file(tmp_path: Path, monkeypatch) -> None:
+    from shuttlesense import atomic, cache
+
+    cache.save_skipped(tmp_path, "referee", "old")
+    path = cache.cache_path(tmp_path, "referee")
+    before = path.read_text(encoding="utf-8")
+
+    def fail(src: Path, dst: Path, **_: float) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(atomic, "replace", fail)
+    with pytest.raises(OSError):
+        cache.save_skipped(tmp_path, "referee", "new")
+    assert path.read_text(encoding="utf-8") == before
+    assert [p.name for p in path.parent.iterdir()] == [path.name]  # no temp file left
+    assert cache.is_skipped(tmp_path, "referee", "old")

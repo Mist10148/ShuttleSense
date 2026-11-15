@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from shuttlesense.atomic import atomic_write_text
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord
 
 # Bump when OWNED changes so caches written with fewer fields miss instead of loading them.
@@ -122,7 +123,7 @@ def save_skipped(out_dir: Path, stage: str, key: str) -> None:
         return
     path = cache_path(out_dir, stage)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"config_hash": key, "skipped": True}), encoding="utf-8")
+    atomic_write_text(path, json.dumps({"config_hash": key, "skipped": True}))
 
 
 def is_skipped(out_dir: Path, stage: str, key: str) -> bool:
@@ -150,7 +151,7 @@ def save(out_dir: Path, stage: str, key: str, record: ClipRecord) -> None:
         data["frames"] = [f.model_dump(mode="json", include=set(per_frame)) for f in record.frames]
     path = cache_path(out_dir, stage)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"config_hash": key, "fields": data}), encoding="utf-8")
+    atomic_write_text(path, json.dumps({"config_hash": key, "fields": data}))
 
 
 def load(out_dir: Path, stage: str, key: str, record: ClipRecord) -> ClipRecord | None:
