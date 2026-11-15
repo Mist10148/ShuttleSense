@@ -19,11 +19,13 @@ from shuttlesense.stream.perception import ModelPerception, enable_watch_player_
 from shuttlesense.stream.watch_parallel import ParallelWatchPerception
 
 
-def run(reader, frames, device, parallel, corners=None, court="singles"):
+def run(reader, frames, device, parallel, corners=None, court="singles", batch_size=1):
     import torch
 
     base = ModelPerception(with_court(load_config(), court), device,
                            (reader.width, reader.height), corners)
+    base.config = {**base.config, "watch": {**base.config.get("watch", {}),
+                                            "pose_batch_size": batch_size}}
     enable_watch_player_continuity(base)
     if not all(base.available.values()):
         raise RuntimeError(f"Models unavailable: {base.available}")
@@ -51,6 +53,8 @@ def main():
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     parser.add_argument("--court", choices=["singles", "doubles"], default="singles")
+    parser.add_argument("--compare-batch", type=int, default=0,
+                        help="compare sequential pose calls with this batch size")
     parser.add_argument("--corners", type=float, nargs=8, metavar="PIXEL",
                         help="singles-reference corners in near-left through far-left order")
     args = parser.parse_args()
@@ -63,12 +67,15 @@ def main():
     else:
         print("No court supplied: player tracking outputs cannot be compared.")
     sequential, a = run(reader, args.frames, device, False, corners, args.court)
-    concurrent, b = run(reader, args.frames, device, True, corners, args.court)
+    concurrent, b = run(reader, args.frames, device, not bool(args.compare_batch),
+                        corners, args.court, args.compare_batch or 1)
     if not sequential or len(a) != len(b):
         raise SystemExit("Video has too few readable frames")
     # Exclude initial model warmup from timing, but include all frames in comparison.
     warmup = min(10, len(sequential) // 4)
-    for label, values in [("sequential", sequential[warmup:]), ("concurrent", concurrent[warmup:])]:
+    comparison = "batched pose" if args.compare_batch else "concurrent"
+    for label, values in [("sequential", sequential[warmup:]),
+                          (comparison, concurrent[warmup:])]:
         print(
             f"{label}: median {statistics.median(values):.1f} ms, "
             f"p95 {np.percentile(values, 95):.1f} ms"

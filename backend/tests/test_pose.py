@@ -258,3 +258,88 @@ def test_make_tracker_follows_the_court() -> None:
     assert isinstance(tracker, DoublesTracker) and tracker.appearance_weight == 1.0
     players = track_players(tracker, [box(500, 600), box(700, 300)], frame_height=720)
     assert players.near is not None and players.far is not None and players.near_2 is None
+
+
+def test_batched_pose_uses_same_boxes_and_chunk_order():
+    from types import SimpleNamespace
+
+    from shuttlesense.pose.estimator import _batched_body_pose
+
+    sizes = []
+    class Session:
+        def get_inputs(self):
+            return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
+        def get_outputs(self):
+            return [SimpleNamespace(name="output")]
+        def run(self, names, inputs):
+            batch = inputs["input"]
+            sizes.append(len(batch))
+            return [batch[:, 0, 0, 0].reshape(-1, 1)]
+
+    class Pose:
+        backend, to_openpose, session = "onnxruntime", False, Session()
+        def preprocess(self, image, box):
+            return np.full((2, 2, 3), box[0]), box[0], 1
+        def postprocess(self, outputs, center, scale):
+            assert outputs[0][0, 0] == center
+            return np.array([[[center, scale]]]), np.array([[center]])
+
+    body = SimpleNamespace(one_stage=False, pose_model=Pose(),
+                           det_model=lambda frame: [[i, 0, 1, 1] for i in range(5)])
+    keypoints, scores = _batched_body_pose(body, np.zeros((10, 10, 3)), 2)
+    assert sizes == [2, 2, 1]
+    assert keypoints[:, 0, 0].tolist() == list(range(5))
+    assert scores[:, 0].tolist() == list(range(5))
+
+
+def test_batched_pose_uses_full_frame_when_no_boxes():
+    from types import SimpleNamespace
+
+    from shuttlesense.pose.estimator import _batched_body_pose
+
+    class Session:
+        def get_inputs(self):
+            return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
+        def get_outputs(self):
+            return [SimpleNamespace(name="output")]
+        def run(self, names, inputs):
+            return [np.ones((1, 1))]
+    class Pose:
+        backend, to_openpose, session = "onnxruntime", False, Session()
+        def preprocess(self, image, box):
+            assert box == [0, 0, 10, 8]
+            return np.zeros((2, 2, 3)), 0, 1
+        def postprocess(self, outputs, center, scale):
+            return np.ones((1, 17, 2)), np.ones((1, 17))
+    body = SimpleNamespace(one_stage=False, pose_model=Pose(), det_model=lambda frame: [])
+    keypoints, scores = _batched_body_pose(body, np.zeros((8, 10, 3)), 8)
+    assert keypoints.shape == (1, 17, 2) and scores.shape == (1, 17)
+
+
+def test_watch_batch_failure_falls_back_once(monkeypatch):
+    import pytest
+
+    from shuttlesense.pose import estimator
+
+    rtmlib = pytest.importorskip("rtmlib")
+
+    class Body:
+        def __init__(self, **kwargs):
+            self.calls = 0
+        def __call__(self, frame):
+            self.calls += 1
+            keypoints = np.array([[[i * 2., i * 3.] for i in range(17)]])
+            return keypoints, np.ones((1, 17))
+
+    attempts = []
+    def failed(*args):
+        attempts.append(1)
+        raise RuntimeError("unsupported batch")
+    monkeypatch.setattr(rtmlib, "Body", Body)
+    monkeypatch.setattr(estimator, "_batched_body_pose", failed)
+    sequential = estimator._rtmlib_detector("balanced", "cpu")
+    batched = sequential.with_batch(8)
+    image = np.zeros((8, 10, 3), dtype=np.uint8)
+    assert batched(image) == sequential(image)
+    assert batched(image) == sequential(image)
+    assert len(attempts) == 1

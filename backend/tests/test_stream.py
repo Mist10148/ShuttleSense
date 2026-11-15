@@ -391,6 +391,7 @@ def test_watch_cache_preserves_model_inputs_across_sliding_windows(monkeypatch):
 
 def test_watch_enables_cache_without_changing_live_defaults():
     from types import SimpleNamespace
+
     from shuttlesense.stream.perception import enable_watch_player_continuity
 
     model = ModelPerception.__new__(ModelPerception)
@@ -401,3 +402,17 @@ def test_watch_enables_cache_without_changing_live_defaults():
     assert model.tracker.watch_outside_tracking
     # Replay/demo perception does not need model-specific state.
     enable_watch_player_continuity(SimpleNamespace())
+
+
+def test_watch_experimental_pose_batch_is_session_local():
+    from shuttlesense.stream.perception import enable_watch_player_continuity
+
+    def original(frame):
+        return ["original"]
+    original.with_batch = lambda size: lambda frame: ["batch", size]
+    model = ModelPerception.__new__(ModelPerception)
+    model.detect = original
+    model.config = {"watch": {"pose_batch_size": 8}}
+    enable_watch_player_continuity(model)
+    assert model.detect(None) == ["batch", 8]
+    assert original(None) == ["original"]

@@ -48,6 +48,13 @@ def enable_watch_player_continuity(perception: Perception) -> None:
         tracker.watch_outside_tracking = True
     if isinstance(perception, ModelPerception):
         perception.watch_preprocess_cache = True
+        configured = (getattr(perception, "config", {}).get("watch") or {}).get(
+            "pose_batch_size", 1
+        )
+        batch_size = max(1, min(16, int(configured)))
+        factory = getattr(getattr(perception, "detect", None), "with_batch", None)
+        if batch_size > 1 and factory is not None:
+            perception.detect = factory(batch_size)
 
 
 class ModelPerception:

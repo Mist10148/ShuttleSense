@@ -13,12 +13,21 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/router/app_router.dart';
 import '../../data/models/video_info.dart';
+import '../../data/models/job.dart';
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
 import 'court_geometry.dart';
+
+String formatWatchElapsed(Duration elapsed) {
+  final seconds = elapsed.inSeconds;
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds ~/ 60) % 60;
+  final remaining = seconds % 60;
+  return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remaining.toString().padLeft(2, '0')}';
+}
 
 class WatchScreen extends ConsumerStatefulWidget {
   const WatchScreen({super.key});
@@ -34,6 +43,9 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   StreamSubscription<dynamic>? subscription;
   Timer? timer;
   Timer? backgroundTimer;
+  Timer? elapsedTimer;
+  final Stopwatch analysisClock = Stopwatch();
+  bool renderPollBusy = false;
   bool backgroundStarted = false, backgroundBusy = false;
   bool stopAcknowledged = false;
   ApiClient? backgroundApi;
@@ -169,6 +181,44 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     }
   }
 
+  void startElapsedClock() {
+    analysisClock
+      ..reset()
+      ..start();
+    elapsedTimer?.cancel();
+    elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+      if (!backgroundStarted && stopping && jobId != null && status == 'Rendering...') {
+        unawaited(pollSavedRender());
+      }
+    });
+  }
+
+  void stopElapsedClock() {
+    analysisClock.stop();
+    elapsedTimer?.cancel();
+  }
+
+  Future<void> pollSavedRender() async {
+    if (renderPollBusy || jobId == null) return;
+    renderPollBusy = true;
+    try {
+      final job = await ref.read(apiClientProvider).getJob(jobId!);
+      if (!mounted || !job.status.isFinished) return;
+      setState(() {
+        stopElapsedClock();
+        status = job.status == JobStatus.done ? 'Session saved' : 'Rendering failed';
+        if (job.status != JobStatus.done) error = job.error ?? 'Rendering failed';
+      });
+      ref.invalidate(jobsListProvider);
+    } on ApiException {
+      // Keep the clock running and retry; temporary network failures are not completion.
+    } finally {
+      renderPollBusy = false;
+    }
+  }
+
   Future<void> start() async {
     final info = video;
     if (info == null ||
@@ -177,6 +227,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         (corners.isNotEmpty && fullToSingles(corners) == null)) {
       return;
     }
+    startElapsedClock();
     if (realTime) {
       await startBackground(info);
       return;
@@ -200,7 +251,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         onMessage,
         onError: (Object e) => fail('Connection lost: $e'),
         onDone: () {
-          if (mounted && status != 'Session saved' && error == null) {
+          if (mounted && status != 'Session saved' && status != 'Rendering...' && error == null) {
             fail('Connection lost. Check History for the analyzed portion.');
           }
         },
@@ -255,6 +306,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       if (mounted) {
         setState(() {
           backgroundStarted = false;
+          stopElapsedClock();
           error = '$e';
         });
       }
@@ -315,9 +367,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         if (data['status'] == 'done') {
           status = 'Session saved';
           stopping = true;
+          stopElapsedClock();
           backgroundTimer?.cancel();
         } else if (data['status'] == 'failed' || data['status'] == 'cancelled') {
           error = '${data['error'] ?? 'Analysis failed'}';
+          stopElapsedClock();
           stopping = true;
           backgroundTimer?.cancel();
         } else if (stopping) {
@@ -338,6 +392,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
 
   void fail(String message) {
     timer?.cancel();
+    stopElapsedClock();
     unawaited(player?.pause());
     unawaited(socket?.sink.close());
     if (backgroundStarted && jobId != null && !stopping && mounted) {
@@ -501,8 +556,10 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           playing = false;
           waiting = false;
           stopping = true;
-          status = 'Session saved';
+          status = jobId == null ? 'Session saved' : 'Rendering...';
+          if (jobId == null) stopElapsedClock();
         });
+        if (jobId != null) unawaited(pollSavedRender());
         ref.invalidate(jobsListProvider);
       case 'error':
         fail((msg['detail'] ?? 'Video analysis failed').toString());
@@ -550,6 +607,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   void dispose() {
     timer?.cancel();
     backgroundTimer?.cancel();
+    stopElapsedClock();
     if (backgroundStarted && !stopping && jobId != null && backgroundApi != null) {
       final position =
           (player?.state.position.inMilliseconds ?? videoPosition.inMilliseconds) / 1000;
@@ -785,6 +843,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           Text(
             '$status · ${realTime ? (videoPosition.inMilliseconds / 1000).toStringAsFixed(1) : (index / fps).toStringAsFixed(1)} s${total > 0 ? ' / ${(total / fps).toStringAsFixed(1)} s' : ''}',
           ),
+          Text('Elapsed: ${formatWatchElapsed(analysisClock.elapsed)} (includes pauses)'),
           Text('Rally: $rally'),
           if (synthetic)
             const Text('Demo server: results are synthetic and do not describe this video.'),
@@ -845,6 +904,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                 unawaited(videoCompletedSubscription?.cancel());
                 unawaited(videoErrorSubscription?.cancel());
                 unawaited(player?.dispose());
+                stopElapsedClock();
+                analysisClock.reset();
                 setState(() {
                   socket = null;
                   subscription = null;

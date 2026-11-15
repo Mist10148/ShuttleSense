@@ -25,6 +25,12 @@ class _SuggestionApi extends FakeApiClient {
 }
 
 void main() {
+  test('watch elapsed time is a wall-clock duration with hours', () {
+    expect(formatWatchElapsed(Duration.zero), '00:00:00');
+    expect(formatWatchElapsed(const Duration(minutes: 2, seconds: 9)), '00:02:09');
+    expect(formatWatchElapsed(const Duration(hours: 12, minutes: 3, seconds: 4)), '12:03:04');
+  });
+
   Health health(bool enabled) => Health(
     version: '0.1',
     schemaVersion: '1.6',

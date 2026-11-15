@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,9 +18,11 @@ def test_watch_pulls_frames_and_saves_partial(
         # Exercise the Watch setup with a tracker without loading pose models.
         original_session = app.state.live._session
         trackers = []
+        started_times = []
 
         def session_with_tracker(*args, **kwargs):
             session = original_session(*args, **kwargs)
+            started_times.append(session.started_at)
             tracker = SimpleNamespace(watch_outside_tracking=False)
             session.perception.tracker = tracker
             trackers.append(tracker)
@@ -49,6 +52,9 @@ def test_watch_pulls_frames_and_saves_partial(
             assert saved["type"] == "saved" and saved["job_id"] == started["job_id"]
         job = client.get("/jobs/" + saved["job_id"]).json()
         assert job["court"] == "doubles"
+        assert datetime.fromisoformat(job["started_at"]).timestamp() == pytest.approx(
+            started_times[0], abs=0.001
+        )
         assert "partial" in client.get("/videos/" + job["video_id"]).json()["filename"]
         record = client.get("/jobs/" + saved["job_id"] + "/record").json()
         assert record["num_frames"] == 3

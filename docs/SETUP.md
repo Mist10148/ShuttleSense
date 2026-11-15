@@ -239,6 +239,14 @@ to `false` to use sequential inference, or `true` to opt in on another device. C
 require a backend restart. `backend/scripts/bench_watch_parallel.py` compares the modes
 on a video; provide calibrated `--corners` to compare player tracking too.
 
+Watch can optionally batch per-frame RTMPose detections by setting
+`watch.pose_batch_size` (up to 16). The default is 1, the original sequential path.
+Batching is experimental: GPU numerical differences can move keypoints or change
+tracking decisions, so compare it against sequential results on representative footage
+before using it for analysis. The benchmark script accepts `--compare-batch 8` to compare
+sequential and batched detections. Unsupported ONNX models and batching failures fall back
+to sequential inference for that session. Restart the backend after changing the setting.
+
 | Target | Command |
 | --- | --- |
 | Chrome (web) | `flutter run -d chrome` |

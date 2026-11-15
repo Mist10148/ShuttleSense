@@ -6,6 +6,7 @@ The choice is made in the Phase 1 spike (T1.5) and set in configs/pipeline.yaml.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -14,6 +15,7 @@ from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Player
 from shuttlesense.stage import StageContext, StageSkipped
 
 _MODELS: dict[tuple[str, str, str], Any] = {}
+log = logging.getLogger(__name__)
 
 
 def assign_sides(players: list[Player]) -> tuple[Player | None, Player | None]:
@@ -53,8 +55,7 @@ def _rtmlib_detector(mode: str, device: str):
 
     body = Body(mode=mode, backend="onnxruntime", device=device)
 
-    def detect(frame: np.ndarray) -> list[Player]:
-        keypoints, scores = body(frame)  # (N, 17, 2), (N, 17)
+    def players_from_pose(keypoints, scores) -> list[Player]:
         people = []
         for kps, sc in zip(keypoints, scores, strict=False):
             bbox = bbox_from_keypoints(kps, sc)
@@ -71,7 +72,63 @@ def _rtmlib_detector(mode: str, device: str):
             )
         return people
 
+    def detect(frame: np.ndarray) -> list[Player]:
+        return players_from_pose(*body(frame))
+
+    def with_batch(batch_size: int):
+        # The body and ONNX sessions are shared, but the batch switch belongs to one
+        # Watch session and must not change live or upload inference.
+        enabled = True
+
+        def detect_batched(frame: np.ndarray) -> list[Player]:
+            nonlocal enabled
+            if not enabled:
+                return detect(frame)
+            try:
+                return players_from_pose(*_batched_body_pose(body, frame, batch_size))
+            except Exception:
+                # Unsupported model/runtime or resource pressure: fall back for the
+                # rest of this session, preserving the original model's behavior.
+                log.exception("Watch pose batching failed; using sequential inference")
+                enabled = False
+                return detect(frame)
+
+        return detect_batched
+
+    detect.with_batch = with_batch
+
     return detect
+
+
+
+def _batched_body_pose(body, frame: np.ndarray, batch_size: int):
+    """RTMLib's normal detection and pose preprocessing, grouped per frame."""
+    if body.one_stage or body.pose_model.backend != "onnxruntime":
+        raise ValueError("batching requires a two-stage ONNX RTMPose model")
+    pose = body.pose_model
+    if pose.to_openpose:
+        raise ValueError("batching expects COCO keypoints")
+    session = pose.session
+    input_info = session.get_inputs()[0]
+    if isinstance(input_info.shape[0], int) and input_info.shape[0] == 1:
+        raise ValueError("pose model does not support dynamic batches")
+    boxes = body.det_model(frame)
+    if len(boxes) == 0:
+        boxes = [[0, 0, frame.shape[1], frame.shape[0]]]
+    keypoints, scores = [], []
+    outputs = [output.name for output in session.get_outputs()]
+    for start in range(0, len(boxes), max(1, batch_size)):
+        prepared = [pose.preprocess(frame, b) for b in boxes[start:start + batch_size]]
+        batch = np.stack([
+            np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
+            for img, _, _ in prepared
+        ])
+        result = session.run(outputs, {input_info.name: batch})
+        for index, (_, center, scale) in enumerate(prepared):
+            kps, score = pose.postprocess([r[index:index + 1] for r in result], center, scale)
+            keypoints.append(kps)
+            scores.append(score)
+    return np.concatenate(keypoints, axis=0), np.concatenate(scores, axis=0)
 
 
 def _keypoint_rcnn_detector(device: str):

@@ -31,7 +31,9 @@ def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Pat
         assert start.status_code == 201, start.text
         assert trackers[0].watch_outside_tracking is True
         job_id = start.json()["job_id"]
-        assert client.get("/jobs/" + job_id).json()["status"] == "running"
+        initial_job = client.get("/jobs/" + job_id).json()
+        assert initial_job["status"] == "running"
+        analysis_started = initial_job["started_at"]
         assert client.delete("/videos/" + vid).status_code == 409
         pos = client.post("/watch/background/" + job_id + "/position", json={"seconds": 0.24})
         assert pos.json()["watched_s"] == 0.24
@@ -43,6 +45,7 @@ def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Pat
                 break
             time.sleep(0.05)
         assert job["status"] == "done", job
+        assert job["started_at"] == analysis_started
         assert job["court"] == "doubles"
         record = client.get("/jobs/" + job_id + "/record").json()
         assert record["num_frames"] == 6
