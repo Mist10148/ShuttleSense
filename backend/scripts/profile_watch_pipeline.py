@@ -44,15 +44,39 @@ def main():
                         help="experiment with a smaller ONNX Runtime CPU thread pool")
     parser.add_argument("--player-provider", choices=["cuda", "detector", "pose", "both"],
                         default="cuda", help="experimental TensorRT RTX model selection")
+    parser.add_argument("--pose-batch-size", type=int, choices=range(1, 17),
+                        help="override Watch pose batch size")
+    parser.add_argument("--pose-opt-batch", type=int, choices=range(1, 17),
+                        help="override TensorRT RTX pose optimal batch shape")
     parser.add_argument("--shadow-margin", type=float,
                         help="observe a tighter candidate margin without changing selection")
+    parser.add_argument("--shadow-footpoint", action="store_true",
+                        help="observe footpoint-based candidate filtering without excluding")
     parser.add_argument("--nvtx", action="store_true", help="add NVTX ranges for Nsight Systems")
+    parser.add_argument("--gpu-window", action="store_true",
+                        help="experiment with GPU shuttle input")
+    parser.add_argument("--track-provider", choices=["pytorch", "rtx"], default="pytorch")
+    parser.add_argument("--pose-crop-lookup", action="store_true",
+                        help="experiment with lookup-table pose crop normalization")
+    parser.add_argument("--split-detector", action="store_true",
+                        help="experiment with the TensorRT / CUDA split detector")
+    parser.add_argument("--pose-breakdown", action="store_true",
+                        help="measure pose crop, inference and postprocessing calls")
     args = parser.parse_args()
     setup_start = time.perf_counter()
     config = with_court(load_config(), args.court)
     config = {**config, "watch": {**config.get("watch", {}),
                                    "player_provider": args.player_provider,
-                                   "candidate_shadow_margin_m": args.shadow_margin}}
+                                   "candidate_shadow_margin_m": args.shadow_margin,
+                                   "candidate_shadow_footpoint": args.shadow_footpoint}}
+    config["watch"]["track_gpu_window"] = args.gpu_window
+    config["watch"]["track_provider"] = args.track_provider
+    config["watch"]["pose_crop_lookup"] = args.pose_crop_lookup
+    config["watch"]["split_detector"] = args.split_detector
+    if args.pose_batch_size is not None:
+        config["watch"]["pose_batch_size"] = args.pose_batch_size
+    if args.pose_opt_batch is not None:
+        config["watch"]["pose_opt_batch"] = args.pose_opt_batch
     device = detect_device(args.device)
     reader = FrameReader(args.video)
     corners = None
@@ -98,6 +122,20 @@ def main():
     measure(model, "_shuttle", "shuttle")
     measure(model, "_players", "players")
     measure(model.far_refiner, "refine", "far_refinement")
+    if args.pose_breakdown:
+        import inspect
+
+        detector = getattr(model, "watch_detect", None)
+        if detector is None:
+            raise RuntimeError("pose breakdown needs a Watch candidate detector")
+        closure = inspect.getclosurevars(detector).nonlocals
+        body = closure["body"]
+        for method, label in (("preprocess", "pose_crop"), ("postprocess", "pose_post")):
+            measure(body.pose_model, method, label)
+        measure(body.pose_model.session, "run", "pose_run")
+        lookup = closure.get("lookup")
+        if lookup is not None:
+            measure(lookup, "prepare", "pose_lookup")
     parallel = ParallelWatchPerception(model)
     with tempfile.TemporaryDirectory(prefix="shuttlesense-profile-") as temp:
         recording = Path(temp) / "recording.mp4" if args.record else None
@@ -177,6 +215,7 @@ def main():
         if candidates.proposal is not None:
             print(f"candidate proposal: {candidates.proposal_stats}")
     print(f"provider diagnostics: {getattr(model, 'provider_diagnostics', 'CUDA baseline')}")
+    print(f"shuttle provider: {getattr(model, 'track_provider_diagnostics', 'PyTorch baseline')}")
 
 
 if __name__ == "__main__":

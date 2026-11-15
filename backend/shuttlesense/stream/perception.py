@@ -10,6 +10,7 @@ from the first frames instead of the whole clip, InpaintNet and centred smoothin
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -17,6 +18,8 @@ from typing import Any, Protocol
 import numpy as np
 
 from shuttlesense.schema import ClipRecord, Player, Players, Shuttle
+
+log = logging.getLogger(__name__)
 
 
 class Perception(Protocol):
@@ -53,15 +56,54 @@ def enable_watch_player_continuity(perception: Perception) -> None:
         )
         batch_size = max(1, min(16, int(configured)))
         watch = (getattr(perception, "config", {}).get("watch") or {})
+        track_rtx = watch.get("track_provider", "pytorch") == "rtx"
+        if ((watch.get("track_gpu_window", False) or track_rtx) and perception.model is not None
+                and str(perception.device).startswith("cuda") and perception.bg_mode == "concat"):
+            try:
+                from shuttlesense.tracking.watch_gpu_window import WatchGpuWindow
+
+                perception.track_gpu_window = WatchGpuWindow(perception.seq_len, perception.device)
+            except Exception:
+                log.exception("Could not initialize GPU shuttle window; using CPU input")
+        if track_rtx:
+            perception.track_provider_diagnostics = {"requested": "rtx", "active": "pytorch"}
+            try:
+                import hashlib
+
+                import torch
+
+                from shuttlesense.config import BACKEND_DIR
+                from shuttlesense.tracking.watch_tracknet_rtx import TrackNetRtx
+
+                if getattr(perception, "track_gpu_window", None) is None:
+                    raise RuntimeError("TrackNet RTX requires a CUDA concat input window")
+                cfg = perception.config.get("stages", {}).get("tracking", {})
+                weights = BACKEND_DIR / cfg.get("tracknet_weights", "weights/tracknet/TrackNet_best.pt")
+                digest = hashlib.sha256(weights.read_bytes()).hexdigest()[:20]
+                cache = BACKEND_DIR / ".cache" / "watch_tracknet_rtx" / f"{digest}-{torch.__version__}"
+                channels = perception.model.down_block_1.conv_1.conv.in_channels
+                perception.track_rtx = TrackNetRtx(perception.model, channels, perception.device, cache)
+                perception.track_provider_diagnostics.update(
+                    active="rtx", assignments=perception.track_rtx.assignments
+                )
+            except Exception as exc:
+                log.exception("TrackNet TensorRT initialization failed; using PyTorch")
+                perception.track_provider_diagnostics["fallback_reason"] = str(exc)
+                if not watch.get("track_gpu_window", False):
+                    perception.track_gpu_window = None
         provider = watch.get("player_provider", "cuda")
         provider_factory = getattr(getattr(perception, "detect", None), "with_provider", None)
-        if provider != "cuda" and provider_factory is not None:
-            perception.detect = provider_factory(provider, batch_size)
+        split_detector = bool(watch.get("split_detector", False))
+        if (provider != "cuda" or split_detector) and provider_factory is not None:
+            perception.detect = provider_factory(provider, batch_size,
+                                                int(watch.get("pose_opt_batch", 4)),
+                                                split_detector)
             perception.provider_diagnostics = perception.detect.provider_diagnostics
         factory = getattr(getattr(perception, "detect", None), "with_batch", None)
         raw_detect = getattr(perception, "detect", None)
+        use_lookup = bool(watch.get("pose_crop_lookup", False))
         if batch_size > 1 and factory is not None:
-            perception.detect = factory(batch_size)
+            perception.detect = factory(batch_size, True) if use_lookup else factory(batch_size)
         mode = watch.get("candidate_filter", "off")
         watch_factory = getattr(raw_detect, "with_watch", None)
         if mode in ("shadow", "filter") and watch_factory and tracker is not None:
@@ -71,8 +113,11 @@ def enable_watch_player_continuity(perception: Perception) -> None:
                 tracker, perception.homography, perception.size, mode,
                 float(watch.get("candidate_margin_m", 2.0)),
                 watch.get("candidate_shadow_margin_m"),
+                bool(watch.get("candidate_shadow_footpoint", False)),
             )
-            perception.watch_detect = watch_factory(batch_size, perception.watch_candidates)
+            perception.watch_detect = (watch_factory(batch_size, perception.watch_candidates, True)
+                                       if use_lookup else
+                                       watch_factory(batch_size, perception.watch_candidates))
 
 
 class ModelPerception:
@@ -171,6 +216,26 @@ class ModelPerception:
             self.window.append(frame)
         frames = list(self.window)
         frames = [frames[0]] * (self.seq_len - len(frames)) + frames  # pad at the start
+        gpu_window = getattr(self, "track_gpu_window", None)
+        if gpu_window is not None:
+            try:
+                from shuttlesense.tracking.postprocess import heatmap_to_xy, scale_to_video
+
+                with torch.inference_mode(), torch.autocast("cuda"):
+                    batch = gpu_window.push(resized_rgb, self.median)
+                    track_rtx = getattr(self, "track_rtx", None)
+                    heatmap = (track_rtx.run(batch) if track_rtx is not None else
+                               self.model(batch)[:, -1:].float().cpu().numpy()[0, 0])
+                x, y, vis = heatmap_to_xy(heatmap)
+                if vis:
+                    x, y = scale_to_video(np.array([[x, y]]), INPUT_SIZE, self.size)[0]
+                return Shuttle(x=round(x, 1), y=round(y, 1), visible=1) if vis else Shuttle()
+            except Exception as exc:
+                log.exception("GPU shuttle window failed; using CPU input for this Watch session")
+                self.track_gpu_window = None
+                self.track_rtx = None
+                if getattr(self, "track_provider_diagnostics", None) is not None:
+                    self.track_provider_diagnostics.update(active="pytorch", fallback_reason=str(exc))
         with torch.inference_mode():
             points = track_windows(
                 self.model, [frames], self.bg_mode, self.median, self.device, self.size,

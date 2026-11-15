@@ -77,16 +77,31 @@ def _rtmlib_detector(mode: str, device: str, body=None):
     def detect(frame: np.ndarray) -> list[Player]:
         return players_from_pose(*body(frame))
 
-    def with_batch(batch_size: int):
+    def make_lookup(enabled):
+        if not enabled:
+            return None
+        try:
+            from shuttlesense.pose.watch_preprocess import PoseCropLookup
+
+            return PoseCropLookup(body.pose_model)
+        except Exception:
+            log.exception("Pose crop lookup unavailable; using original preprocessing")
+            return None
+
+    def with_batch(batch_size: int, use_lookup=False):
         # The body and ONNX sessions are shared, but the batch switch belongs to one
         # Watch session and must not change live or upload inference.
         enabled = True
+        lookup = make_lookup(use_lookup)
 
         def detect_batched(frame: np.ndarray) -> list[Player]:
             nonlocal enabled
             if not enabled:
                 return detect(frame)
             try:
+                if lookup is not None:
+                    return players_from_pose(*_batched_body_pose(body, frame, batch_size,
+                                                                crop_lookup=lookup))
                 return players_from_pose(*_batched_body_pose(body, frame, batch_size))
             except Exception:
                 # Unsupported model/runtime or resource pressure: fall back for the
@@ -97,8 +112,9 @@ def _rtmlib_detector(mode: str, device: str, body=None):
 
         return detect_batched
 
-    def with_watch(batch_size, candidates):
-        batched = with_batch(batch_size) if batch_size > 1 else detect
+    def with_watch(batch_size, candidates, use_lookup=False):
+        batched = with_batch(batch_size, use_lookup) if batch_size > 1 else detect
+        lookup = make_lookup(use_lookup)
         enabled = True
 
         def detect_watch(frame):
@@ -123,7 +139,14 @@ def _rtmlib_detector(mode: str, device: str, body=None):
                     return []
                 selected_boxes = [boxes[i] for i in indices]
                 if batch_size > 1:
-                    keypoints, scores = _batched_body_pose(body, frame, batch_size, selected_boxes)
+                    if lookup is not None:
+                        keypoints, scores = _batched_body_pose(
+                            body, frame, batch_size, selected_boxes, crop_lookup=lookup
+                        )
+                    else:
+                        keypoints, scores = _batched_body_pose(
+                            body, frame, batch_size, selected_boxes
+                        )
                 else:
                     keypoints, scores = body.pose_model(frame, selected_boxes)
                 pose_s = time.perf_counter() - start
@@ -149,12 +172,14 @@ def _rtmlib_detector(mode: str, device: str, body=None):
 
     detect.with_batch = with_batch
     detect.with_watch = with_watch
-    def with_provider(provider, batch_size):
+    def with_provider(provider, batch_size, opt_batch=4, split_detector=False):
         from shuttlesense.config import BACKEND_DIR
         from shuttlesense.pose.watch_acceleration import make_watch_body
 
         cache = BACKEND_DIR / ".cache" / "tensorrt_rtx"
-        watch_body, diagnostics = make_watch_body(body, provider, batch_size, device, cache)
+        watch_body, diagnostics = make_watch_body(
+            body, provider, batch_size, device, cache, opt_batch, split_detector
+        )
         watch_detect = _rtmlib_detector(mode, device, body=watch_body)
         watch_detect.provider_diagnostics = diagnostics
         return watch_detect
@@ -165,7 +190,8 @@ def _rtmlib_detector(mode: str, device: str, body=None):
 
 
 
-def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None):
+def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None, *, vectorized=False,
+                       crop_lookup=None):
     """RTMLib's normal detection and pose preprocessing, grouped per frame."""
     if body.one_stage or body.pose_model.backend != "onnxruntime":
         raise ValueError("batching requires a two-stage ONNX RTMPose model")
@@ -183,16 +209,41 @@ def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None):
     keypoints, scores = [], []
     outputs = [output.name for output in session.get_outputs()]
     for start in range(0, len(boxes), max(1, batch_size)):
-        prepared = [pose.preprocess(frame, b) for b in boxes[start:start + batch_size]]
-        batch = np.stack([
-            np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
-            for img, _, _ in prepared
-        ])
+        selected = boxes[start:start + batch_size]
+        batch = None
+        if crop_lookup is not None and crop_lookup.enabled:
+            try:
+                batch, geometry = crop_lookup.prepare(frame, selected)
+                prepared = [(None, center, scale) for center, scale in geometry]
+            except Exception:
+                log.exception("Pose crop lookup failed; using original preprocessing")
+                crop_lookup.enabled = False
+        if batch is None:
+            prepared = [pose.preprocess(frame, b) for b in selected]
+            batch = np.stack([
+                np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
+                for img, _, _ in prepared
+            ])
         result = session.run(outputs, {input_info.name: batch})
-        for index, (_, center, scale) in enumerate(prepared):
-            kps, score = pose.postprocess([r[index:index + 1] for r in result], center, scale)
+        native_pose = (vectorized and type(pose).__name__ == "RTMPose" and
+                       type(pose).__module__ == "rtmlib.tools.pose_estimation.rtmpose")
+        if native_pose:
+            centers = np.asarray([center for _, center, _ in prepared])
+            scales = np.asarray([scale for _, _, scale in prepared])
+            native_pose = centers.shape == (len(prepared), 2) and scales.shape == centers.shape
+        if native_pose:
+            # RTMPose's SimCC decoder accepts batched results. Broadcasting each
+            # crop's geometry avoids repeating identical NumPy operations per person.
+            kps, score = pose.postprocess(result, centers[:, None, :], scales[:, None, :])
+            if kps.shape[0] != len(prepared) or score.shape[0] != len(prepared):
+                raise ValueError("pose postprocessing returned an unexpected batch size")
             keypoints.append(kps)
             scores.append(score)
+        else:
+            for index, (_, center, scale) in enumerate(prepared):
+                kps, score = pose.postprocess([r[index:index + 1] for r in result], center, scale)
+                keypoints.append(kps)
+                scores.append(score)
     return np.concatenate(keypoints, axis=0), np.concatenate(scores, axis=0)
 
 

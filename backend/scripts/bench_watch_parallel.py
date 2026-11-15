@@ -21,15 +21,28 @@ from shuttlesense.stream.watch_parallel import ParallelWatchPerception
 
 
 def run(reader, frames, device, parallel, corners=None, court="singles", batch_size=1,
-        candidate_filter="off", start_frame=0, jpeg_roundtrip=False, player_provider="cuda"):
+        candidate_filter="off", start_frame=0, jpeg_roundtrip=False, player_provider="cuda",
+        vectorized_postprocess=False, gpu_window=False, pose_crop_lookup=False,
+        split_detector=False, track_provider="pytorch"):
     import torch
 
+    from shuttlesense.pose import estimator
+
+    original_batch_pose = estimator._batched_body_pose
+    if vectorized_postprocess:
+        def batched_postprocess(*a, **kw):
+            return original_batch_pose(*a, **kw, vectorized=True)
+        estimator._batched_body_pose = batched_postprocess
     base = ModelPerception(with_court(load_config(), court), device,
                            (reader.width, reader.height), corners)
     base.config = {**base.config, "watch": {**base.config.get("watch", {}),
                                             "pose_batch_size": batch_size,
                                             "candidate_filter": candidate_filter,
-                                            "player_provider": player_provider}}
+                                            "player_provider": player_provider,
+                                            "track_gpu_window": gpu_window,
+                                            "pose_crop_lookup": pose_crop_lookup,
+                                            "split_detector": split_detector,
+                                            "track_provider": track_provider}}
     enable_watch_player_continuity(base)
     if not all(base.available.values()):
         raise RuntimeError(f"Models unavailable: {base.available}")
@@ -55,9 +68,14 @@ def run(reader, frames, device, parallel, corners=None, court="singles", batch_s
     finally:
         if parallel:
             processor.close()
+        estimator._batched_body_pose = original_batch_pose
     diagnostics = getattr(base, "watch_candidates", None)
     if player_provider != "cuda":
         print("Provider diagnostics:", getattr(base, "provider_diagnostics", None))
+    if gpu_window:
+        print("GPU shuttle window active:", getattr(base, "track_gpu_window", None) is not None)
+    if track_provider != "pytorch":
+        print("Shuttle provider diagnostics:", getattr(base, "track_provider_diagnostics", None))
     return timings, observations, dict(diagnostics.stats) if diagnostics else None
 
 
@@ -106,6 +124,18 @@ def main():
                         help="compare unfiltered and prefiltered candidates")
     parser.add_argument("--compare-batch", type=int, default=0,
                         help="compare sequential pose calls with this batch size")
+    parser.add_argument("--compare-pose-batch", type=int, choices=range(1, 17),
+                        help="compare current Watch pose batch size with this size")
+    parser.add_argument("--compare-postprocess", action="store_true",
+                        help="compare sequential and vectorized pose postprocessing")
+    parser.add_argument("--compare-gpu-window", action="store_true",
+                        help="compare CPU and GPU shuttle window construction")
+    parser.add_argument("--compare-pose-lookup", action="store_true",
+                        help="compare original and lookup-table pose crop preparation")
+    parser.add_argument("--compare-split-detector", action="store_true",
+                        help="compare CUDA detector and experimental TensorRT split detector")
+    parser.add_argument("--compare-track-rtx", action="store_true",
+                        help="compare PyTorch TrackNet against the TensorRT RTX prototype")
     parser.add_argument("--compare-decoded", action="store_true",
                         help="compare JPEG inputs against decoded source frames")
     parser.add_argument("--compare-provider", choices=["detector", "pose", "both"],
@@ -123,41 +153,76 @@ def main():
         print("No court supplied: player tracking outputs cannot be compared.")
     batch_size = args.compare_batch or 1
     if sum(bool(x) for x in (args.compare_decoded, args.compare_batch,
-                              args.compare_filter, args.compare_provider)) > 1:
+                              args.compare_filter, args.compare_provider,
+                              args.compare_pose_batch, args.compare_postprocess,
+                              args.compare_gpu_window, args.compare_pose_lookup,
+                              args.compare_split_detector, args.compare_track_rtx)) > 1:
         parser.error("select only one comparison mode")
     watch = load_config().get("watch", {})
-    if args.compare_decoded or args.compare_provider:
+    if (args.compare_decoded or args.compare_provider or args.compare_pose_batch
+            or args.compare_postprocess or args.compare_gpu_window or args.compare_pose_lookup
+            or args.compare_split_detector or args.compare_track_rtx):
         batch_size = int(watch.get("pose_batch_size", 1))
-    same_watch = bool(args.compare_decoded or args.compare_provider)
+    same_watch = bool(args.compare_decoded or args.compare_provider or args.compare_pose_batch
+                      or args.compare_postprocess or args.compare_gpu_window
+                      or args.compare_pose_lookup or args.compare_split_detector
+                      or args.compare_track_rtx)
     initial_batch = batch_size if args.compare_filter or same_watch else 1
     baseline_filter = (watch.get("candidate_filter", "off") if same_watch else
                        "shadow" if args.compare_filter else "off")
     candidate_filter = (watch.get("candidate_filter", "off") if same_watch else
                         "filter" if args.compare_filter else "off")
+    current_provider = (watch.get("player_provider", "cuda")
+                        if args.compare_pose_batch or args.compare_postprocess
+                        or args.compare_gpu_window or args.compare_pose_lookup
+                        or args.compare_split_detector or args.compare_track_rtx else "cuda")
     sequential, a, diagnostics = run(reader, args.frames, device,
-                                     bool(args.compare_decoded or args.compare_provider),
+                                     same_watch,
                                      corners, args.court,
                                      initial_batch,
                                      baseline_filter, args.start_frame,
-                                     jpeg_roundtrip=same_watch)
+                                     jpeg_roundtrip=same_watch, player_provider=current_provider)
     concurrent, b, filtered = run(reader, args.frames, device,
                                  not (args.compare_batch or args.compare_filter),
-                                 corners, args.court, batch_size,
+                                 corners, args.court, args.compare_pose_batch or batch_size,
                                  candidate_filter, args.start_frame,
-                                 jpeg_roundtrip=bool(args.compare_provider),
-                                 player_provider=args.compare_provider or "cuda")
+                                 jpeg_roundtrip=bool(args.compare_provider or
+                                                     args.compare_pose_batch or
+                                                     args.compare_postprocess or
+                                                     args.compare_gpu_window or
+                                                     args.compare_pose_lookup or
+                                                     args.compare_split_detector or
+                                                     args.compare_track_rtx),
+                                 player_provider=args.compare_provider or current_provider,
+                                 vectorized_postprocess=args.compare_postprocess,
+                                 gpu_window=args.compare_gpu_window,
+                                 pose_crop_lookup=args.compare_pose_lookup,
+                                 split_detector=args.compare_split_detector,
+                                 track_provider="rtx" if args.compare_track_rtx else "pytorch")
     if not sequential or len(a) != len(b):
         raise SystemExit("Video has too few readable frames")
     # Exclude initial model warmup from timing, but include all frames in comparison.
     warmup = min(10, len(sequential) // 4)
-    comparison = (f"TensorRT RTX {args.compare_provider}" if args.compare_provider else
+    comparison = ("TensorRT TrackNet" if args.compare_track_rtx else
+                  "split detector" if args.compare_split_detector else
+                  "pose crop lookup" if args.compare_pose_lookup else
+                  "GPU shuttle window" if args.compare_gpu_window else
+                  "vectorized postprocessing" if args.compare_postprocess else
+                  f"pose batch {args.compare_pose_batch}" if args.compare_pose_batch else
+                  f"TensorRT RTX {args.compare_provider}" if args.compare_provider else
                   "decoded frames" if args.compare_decoded else
                   "filtered candidates" if args.compare_filter else
                   "batched pose" if args.compare_batch else "concurrent")
     if diagnostics is not None:
         print(f"Baseline diagnostics: {diagnostics}")
         print(f"Candidate diagnostics: {filtered}")
-    baseline_label = ("JPEG input" if args.compare_decoded else
+    baseline_label = ("PyTorch TrackNet" if args.compare_track_rtx else
+                      "CUDA detector" if args.compare_split_detector else
+                      "original pose crops" if args.compare_pose_lookup else
+                      "JPEG input" if args.compare_decoded else
+                      "CPU shuttle window" if args.compare_gpu_window else
+                      "sequential postprocessing" if args.compare_postprocess else
+                      "current Watch" if args.compare_pose_batch else
                       "CUDA baseline" if args.compare_provider else "sequential")
     for label, values in [(baseline_label,
                            sequential[warmup:]),
@@ -167,7 +232,7 @@ def main():
             f"p95 {np.percentile(values, 95):.1f} ms"
         )
     print(f"Frame outputs differing: {sum(x != y for x, y in zip(a, b, strict=True))}/{len(a)}")
-    if args.compare_filter or args.compare_decoded or args.compare_provider:
+    if args.compare_filter or same_watch:
         presence_differences = 0
         max_keypoint_px = 0.0
         for (_, left), (_, right) in zip(a, b, strict=True):

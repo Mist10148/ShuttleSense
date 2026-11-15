@@ -16,15 +16,18 @@ class WatchCandidates:
     """
 
     def __init__(self, tracker, homography, frame_size, mode="shadow", margin_m=2.0,
-                 proposal_margin=None):
+                 proposal_margin=None, proposal_footpoint=False, footpoint=False):
         self.tracker, self.homography, self.frame_size = tracker, homography, frame_size
         self.mode, self.margin = mode, margin_m
+        self.footpoint = footpoint
         self.stats = {"frames": 0, "people": 0, "eligible": 0, "excluded": 0,
                       "tracked_excluded": 0, "detection_s": 0.0, "pose_s": 0.0,
                       "fallback": False}
         self.excluded_players = []
-        self.proposal = (WatchCandidates(tracker, homography, frame_size, "shadow", proposal_margin)
-                         if proposal_margin is not None else None)
+        self.proposal = (WatchCandidates(
+            tracker, homography, frame_size, "shadow",
+            margin_m if proposal_margin is None else proposal_margin, footpoint=proposal_footpoint,
+        ) if proposal_margin is not None or proposal_footpoint else None)
         self.proposal_keep = []
         self.proposal_stats = {"frames": 0, "additional_excluded": 0, "tracked_excluded": 0}
         self.proposal_players = []
@@ -82,6 +85,8 @@ class WatchCandidates:
                     continue
                 rect = np.asarray([[x0,y0],[x1,y0],[x1,y1],[x0,y1]], dtype=np.float32)
                 overlap, _ = cv2.intersectConvexConvex(polygon, rect)
+                if self.footpoint:
+                    overlap = cv2.pointPolygonTest(polygon, ((x0 + x1) / 2, y1), False) >= 0
                 near_track = any(x0 <= b and x1 >= a and y0 <= d and y1 >= c
                                  for a, c, b, d in protected)
                 keep.append(overlap > 0 or near_track)

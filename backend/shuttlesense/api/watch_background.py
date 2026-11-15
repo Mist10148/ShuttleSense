@@ -46,6 +46,7 @@ class BackgroundWatch:
         self.error = None
         self.candidate_diagnostics = None
         self.provider_diagnostics = None
+        self.track_provider_diagnostics = None
         self.shutdown_requested = False
         self.last_seen = time.monotonic()
         self.thread = threading.Thread(target=self.run, name="watch-background", daemon=True)
@@ -80,6 +81,8 @@ class BackgroundWatch:
                 "candidate_diagnostics": diagnostics,
                 "provider_diagnostics": getattr(perception, "provider_diagnostics", None)
                 or self.provider_diagnostics,
+                "track_provider_diagnostics": getattr(perception, "track_provider_diagnostics", None)
+                or self.track_provider_diagnostics,
                 "watched_s": self.watched,
                 "analyzed_s": self.analyzed / self.reader.fps,
                 "target_s": self.target,
@@ -194,6 +197,7 @@ class BackgroundWatch:
             perception = getattr(session.perception, "perception", session.perception)
             candidates = getattr(perception, "watch_candidates", None)
             self.provider_diagnostics = getattr(perception, "provider_diagnostics", None)
+            self.track_provider_diagnostics = getattr(perception, "track_provider_diagnostics", None)
             if candidates is not None:
                 with self.condition:
                     self.candidate_diagnostics = {

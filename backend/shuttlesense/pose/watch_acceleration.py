@@ -31,7 +31,7 @@ class _FallbackSession:
             return self.fallback.run(*args, **kwargs)
 
 
-def _rtx_session(original, batch_size, is_pose, cache_dir):
+def _rtx_session(original, batch_size, is_pose, cache_dir, opt_batch=4):
     import onnxruntime as ort
     import onnxruntime_ep_nv_tensorrt_rtx as plugin
 
@@ -56,7 +56,8 @@ def _rtx_session(original, batch_size, is_pose, cache_dir):
     dynamic = not isinstance(shape[0], int) or shape[0] <= 0
     minimum = [1, *shape[1:]] if dynamic else shape
     maximum = [batch_size if is_pose else 1, *shape[1:]] if dynamic else shape
-    optimum = [min(batch_size, 4) if is_pose else 1, *shape[1:]] if dynamic else shape
+    opt_size = min(batch_size, max(1, opt_batch)) if is_pose else 1
+    optimum = [opt_size, *shape[1:]] if dynamic else shape
     def profile(dims):
         return f"{spec.name}:{'x'.join(str(x) for x in dims)}"
     opts = ort.SessionOptions()
@@ -76,7 +77,8 @@ def _rtx_session(original, batch_size, is_pose, cache_dir):
     return session, assignments
 
 
-def make_watch_body(body, provider, batch_size, device, cache_dir=None):
+def make_watch_body(body, provider, batch_size, device, cache_dir=None, opt_batch=4,
+                    split_detector=False):
     """Copy model wrappers, retaining their original CUDA sessions as fallbacks."""
     if provider not in ("cuda", "detector", "pose", "both"):
         raise ValueError(f"unknown Watch provider mode: {provider}")
@@ -86,8 +88,10 @@ def make_watch_body(body, provider, batch_size, device, cache_dir=None):
         original = getattr(body, attribute)
         component = copy.copy(original)
         setattr(clone, attribute, component)
-        selected = provider in (name, "both")
-        info = {"requested": "tensorrt_rtx" if selected else "cuda", "active": "cuda"}
+        split = name == "detector" and split_detector
+        selected = provider in (name, "both") or split
+        requested = "split_tensorrt_rtx" if split else "tensorrt_rtx" if selected else "cuda"
+        info = {"requested": requested, "active": "cuda"}
         if hasattr(original.session, "get_providers"):
             info["fallback_providers"] = original.session.get_providers()
         diagnostics["models"][name] = info
@@ -96,7 +100,14 @@ def make_watch_body(body, provider, batch_size, device, cache_dir=None):
         try:
             if str(device) not in ("cuda", "cuda:0"):
                 raise ValueError("TensorRT RTX experiment currently supports CUDA device 0 only")
-            accelerated, assignments = _rtx_session(original, batch_size, name == "pose", cache_dir)
+            if split:
+                from shuttlesense.pose.watch_split_detector import make_split_detector
+
+                accelerated, assignments = make_split_detector(original, cache_dir)
+            else:
+                accelerated, assignments = _rtx_session(
+                    original, batch_size, name == "pose", cache_dir, opt_batch
+                )
             info.update(active="tensorrt_rtx", assignments=assignments)
             component.session = _FallbackSession(accelerated, original.session, info)
         except Exception as exc:

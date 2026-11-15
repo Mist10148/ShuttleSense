@@ -329,6 +329,38 @@ it does not assess players already excluded by that filter. Set the existing fil
 `shadow` to include those candidates in a separate reference test. This audit does not
 replace labeled footage, and no tighter filtering is enabled by the setting. The profiler
 also accepts `--shadow-margin 1.0` for the same experiment.
+`watch.candidate_shadow_footpoint: true` instead evaluates a proposal based on the
+bottom center of each detection box; it does not exclude any candidates. The profiler
+accepts `--shadow-footpoint`. Jumping, occlusion, and inaccurate boxes can put a real
+player's footpoint outside the court, so shadow counters and labeled footage must be
+reviewed before considering any active use.
+
+For an isolated TensorRT detector split experiment install `onnx` separately and run
+`python scripts/probe_watch_detector_split.py --video PATH --frames 40`. It splits the
+balanced YOLOX model at fixed internal tensor names, runs the network in TensorRT RTX,
+and retains CUDA postprocessing. It reports matched box differences and timings; it
+does not change Watch. The 40-frame trial showed different boxes and a small isolated
+gain, so this detector path is not enabled. The script is specific to the current
+balanced YOLOX graph and should not be assumed to support another model version.
+
+To compare TensorRT pose batch sizes, use `--pose-batch-size 8` or `16` with
+`profile_watch_pipeline.py`, and `--compare-pose-batch 16` with
+`bench_watch_parallel.py`. Engine compilation for previously unseen batch shapes can
+make the first run slower; compare cold and warm runs and validate tracking outputs.
+`bench_watch_parallel.py --compare-postprocess` tests a vectorized RTMPose decoder
+against the current per-person decoder. It is not enabled in Watch: the short test had
+identical outputs but did not demonstrate an end-to-end speedup.
+`--pose-opt-batch` tests TensorRT's preferred optimization shape separately from the
+actual batch size; the configured value remains 4 because a short test with 8 did not
+improve throughput. A new shape can incur first-run compilation overhead.
+
+`scripts/probe_watch_tracknet_rtx.py --video PATH --frames 200` exports the current
+TrackNet to an experimental ONNX model in `.cache`, then compares the existing CUDA
+autocast path against TensorRT RTX on Watch-style inputs and reports latest-heatmap
+and detection differences. It requires the optional `onnx` package and does not change
+Watch. Treat its inference-only timing as a screening result, not a full pipeline result.
+In one 200-frame prototype, the exported TensorRT path was slower and visibility differed
+on 101 frames, so it is not enabled and needs further debugging before use.
 
 For an Nsight Systems trace, install NVIDIA Nsight Systems and launch the profiler with
 `nsys profile --trace=cuda,nvtx -o watch-trace python scripts/profile_watch_pipeline.py`

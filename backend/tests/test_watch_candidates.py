@@ -53,3 +53,12 @@ def test_tighter_margin_is_shadow_only_and_audits_tracked_players():
     proposed.proposal_players = [player]
     proposed.audit(Players(near=player))
     assert proposed.proposal_stats["tracked_excluded"] == 1
+
+
+def test_footpoint_proposal_does_not_change_selected_boxes():
+    base = _selector("filter")
+    proposed = WatchCandidates(base.tracker, base.homography, (1280, 720),
+                               "filter", 2.0, proposal_footpoint=True)
+    boxes = [[x, 100, x + 80, 350] for x in range(0, 1200, 40)]
+    assert proposed.select(boxes, (720, 1280, 3)) == base.select(boxes, (720, 1280, 3))
+    assert proposed.proposal_stats["additional_excluded"] > 0
