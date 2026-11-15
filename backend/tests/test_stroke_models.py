@@ -136,7 +136,39 @@ def test_import_bst_features(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert top[3, POSE_FEATURES + 2] == 0 and top[4, POSE_FEATURES + 2] == 1  # visible flag
     assert not top[4, POSE_FEATURES + 3 :].any()  # no step right after the gap
     short = x[meta.tolist().index("Top_殺球/1_1_1_2")]
-    assert not short[27:].any()  # padded frames
+    assert short[:, :POSE_FEATURES].any(axis=1).all()  # stretched over the window: no dead frames
+
+
+def test_short_bst_clips_keep_the_hit_at_the_window_centre() -> None:
+    importer = load_script("import_bst_features")
+    frames, window = 25, 30
+    joints = np.zeros((frames, 2, 17, 2))
+    joints[:, 0] = np.arange(1, frames + 1)[:, None, None]  # frame number + 1 in every value
+    shuttle = np.full((frames, 2), 0.5)
+    shuttle[:, 0] = np.linspace(0.2, 0.44, frames)  # 0.01 per frame
+    shuttle[7] = 0.0  # not found on frame 7
+
+    resampled = importer.clip_window(joints, shuttle, 0, window)
+    # The clip centre (frame 12 of 25) lands on the window centre (frame 15 of 30).
+    assert resampled[window // 2, 0] == pytest.approx(frames // 2 + 1, abs=0.5)
+    assert resampled[:, 0].min() >= 1 and resampled[:, 0].max() <= frames
+    assert (np.diff(resampled[:, 0]) >= 0).all()
+    seen = resampled[:, POSE_FEATURES + 2] > 0
+    assert 0 < (~seen).sum() <= 2  # the gap stays a gap; it is not bridged
+    step = resampled[seen, POSE_FEATURES + 3]
+    assert step[step != 0] == pytest.approx(0.01 * frames / window, abs=1e-3)  # per 1/30 s
+
+    centred = importer.clip_window(joints, shuttle, 0, window, "centre")
+    assert not centred[:3].any() and not centred[28:].any()
+    assert centred[window // 2, 0] == frames // 2 + 1
+    padded = importer.clip_window(joints, shuttle, 0, window, "end")
+    assert padded[0, 0] == 1 and not padded[frames:].any()
+    with pytest.raises(ValueError):
+        importer.clip_window(joints, shuttle, 0, window, "nope")
+
+    long = np.zeros((31, 2, 17, 2))
+    long[:, 0] = np.arange(1, 32)[:, None, None]
+    assert importer.clip_window(long, np.zeros((31, 2)), 0, window)[0, 0] == 1
 
 
 def test_import_matches_build_window() -> None:

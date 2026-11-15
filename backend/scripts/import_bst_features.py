@@ -2,6 +2,7 @@
 
 Usage: python scripts/import_bst_features.py --src data/bst_download/extracted/dataset_npy
                 [--out data/features] [--splits configs/splits_bst.json] [--window 30]
+                [--short-clips resample|centre|end]
 
 Get the source by hand: download `dataset_npy.rar` (ShuttleSet, merged types, 30 frames) from
 the Google Drive link in https://github.com/Va6lue/BST-Badminton-Stroke-type-Transformer and
@@ -12,7 +13,8 @@ extract it. It holds one folder per split and stroke type:
 
 Joints are RTMPose COCO-17 keypoints, centred on the player's box centre and divided by the
 box diagonal (`pose_norm: bbox_diag` in strokes/features.py). The shuttle is TrackNetV3 output
-and (0, 0) when it was not found. The hit is at the clip centre.
+and (0, 0) when it was not found. The hit is at the clip centre. Most clips are 30 frames;
+the training clips of matches 1 to 20 are 24 or 25 (one second at 25 fps), see fit_length.
 
 For each split this writes <out>/bst_<split>.npz with X [N, window, 39], y [N] and meta [N],
 the layout of scripts/extract_features.py, and a splits file naming the three. The hitter is
@@ -30,7 +32,12 @@ from pathlib import Path
 import numpy as np
 
 from shuttlesense.schema import NUM_KEYPOINTS, STROKE_CLASSES
-from shuttlesense.strokes.features import POSE_FEATURES, num_features, shuttle_features
+from shuttlesense.strokes.features import (
+    POSE_FEATURES,
+    num_features,
+    sample_rows,
+    shuttle_features,
+)
 from shuttlesense.strokes.labels import SHUTTLESET_ZH_TO_EN, map_label
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -49,27 +56,62 @@ def folder_label(name: str) -> tuple[int, int] | None:
     return SIDES[side], STROKE_CLASSES.index(label)
 
 
-def fit_length(arr: np.ndarray, window: int) -> np.ndarray:
-    """Keep the first `window` frames, or pad with zero frames at the end."""
-    if len(arr) >= window:
-        return arr[:window]
-    pad = np.zeros((window - len(arr), *arr.shape[1:]), dtype=arr.dtype)
-    return np.concatenate([arr, pad])
+SHORT_CLIPS = ("resample", "centre", "end")
 
 
-def clip_window(joints: np.ndarray, shuttle: np.ndarray, player: int, window: int) -> np.ndarray:
+def fit_length(
+    arr: np.ndarray, valid: np.ndarray, window: int, short_clips: str = "resample"
+) -> tuple[np.ndarray, np.ndarray]:
+    """(rows [window, D], valid [window]) from a clip of any length, the hit kept at the centre.
+
+    A longer clip keeps its middle `window` frames. A shorter one is, by `short_clips`:
+    - "resample": stretched over the window (strokes.features.sample_rows). The short
+      ShuttleSet clips are one second at 25 fps, so this puts them on the 30 fps time base
+      of the others;
+    - "centre": padded with zero frames on both sides;
+    - "end": padded with zero frames at the end, which moves the hit off the centre (the
+      import before this option existed; kept to reproduce the first results).
+    """
+    if short_clips not in SHORT_CLIPS:
+        raise ValueError(f"unknown short_clips {short_clips!r}")
+    t = len(arr)
+    if t >= window:
+        start = (t - window) // 2
+        return arr[start : start + window], valid[start : start + window]
+    if short_clips == "resample" and t:
+        positions = (np.arange(window) + 0.5) * t / window - 0.5
+        return sample_rows(arr, valid, np.clip(positions, 0, t - 1))
+    before = window // 2 - t // 2 if short_clips == "centre" else 0
+    rows = np.zeros((window, *arr.shape[1:]), dtype=arr.dtype)
+    seen = np.zeros(window, dtype=bool)
+    rows[before : before + t] = arr
+    seen[before : before + t] = valid
+    return rows, seen
+
+
+def clip_window(
+    joints: np.ndarray,
+    shuttle: np.ndarray,
+    player: int,
+    window: int,
+    short_clips: str = "resample",
+) -> np.ndarray:
     """[window, 39] features for one clip, as strokes.features.build_window would give."""
     if joints.ndim != 4 or joints.shape[1:] != (2, NUM_KEYPOINTS, 2) or shuttle.ndim != 2:
         raise ValueError(f"unexpected shapes {joints.shape} / {shuttle.shape}")
-    pose = fit_length(joints[:, player].astype(np.float32), window)
-    xy = fit_length(shuttle[:, :2].astype(np.float32), window)
+    pose = np.nan_to_num(joints[:, player].astype(np.float32).reshape(len(joints), -1))
+    xy = np.nan_to_num(shuttle[:, :2].astype(np.float32))
+    pose, _ = fit_length(pose, pose.any(axis=1), window, short_clips)
+    xy, seen = fit_length(xy, (xy != 0).any(axis=1), window, short_clips)
     feats = np.zeros((window, num_features(True)), dtype=np.float32)
-    feats[:, :POSE_FEATURES] = pose.reshape(window, POSE_FEATURES)
-    feats[:, POSE_FEATURES:] = shuttle_features(xy, (xy != 0).any(axis=1))
+    feats[:, :POSE_FEATURES] = pose
+    feats[:, POSE_FEATURES:] = shuttle_features(xy, seen)
     return np.nan_to_num(feats, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def import_split(split_dir: Path, window: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+def import_split(
+    split_dir: Path, window: int, short_clips: str = "resample"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """(X, y, meta, skipped) for one split folder."""
     xs, ys, meta, skipped = [], [], [], 0
     for folder in sorted(p for p in split_dir.iterdir() if p.is_dir()):
@@ -84,7 +126,7 @@ def import_split(split_dir: Path, window: int) -> tuple[np.ndarray, np.ndarray, 
             try:
                 joints = np.load(joints_path, allow_pickle=False)
                 shuttle = np.load(shuttle_path, allow_pickle=False)
-                xs.append(clip_window(joints, shuttle, player, window))
+                xs.append(clip_window(joints, shuttle, player, window, short_clips))
             except (OSError, ValueError):
                 skipped += 1
                 continue
@@ -100,6 +142,12 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=BACKEND_DIR / "data" / "features")
     parser.add_argument("--splits", type=Path, default=BACKEND_DIR / "configs" / "splits_bst.json")
     parser.add_argument("--window", type=int, default=30, help="frames per window")
+    parser.add_argument(
+        "--short-clips",
+        choices=SHORT_CLIPS,
+        default="resample",
+        help="clips shorter than the window: stretch them (default) or pad them",
+    )
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -108,9 +156,11 @@ def main() -> None:
         split_dir = args.src / split
         if not split_dir.is_dir():
             raise SystemExit(f"{split_dir} not found: --src must hold train/, val/ and test/")
-        x, y, meta, skipped = import_split(split_dir, args.window)
+        x, y, meta, skipped = import_split(split_dir, args.window, args.short_clips)
         name = f"bst_{split}"
-        np.savez_compressed(args.out / f"{name}.npz", X=x, y=y, meta=meta)
+        np.savez_compressed(
+            args.out / f"{name}.npz", X=x, y=y, meta=meta, short_clips=np.array(args.short_clips)
+        )
         names[split] = [name]
         counts = Counter(STROKE_CLASSES[i] for i in y)
         per_class = ", ".join(f"{c} {counts.get(c, 0)}" for c in STROKE_CLASSES)

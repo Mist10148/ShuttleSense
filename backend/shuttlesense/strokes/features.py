@@ -65,6 +65,42 @@ def shuttle_features(xy: np.ndarray, visible: np.ndarray) -> np.ndarray:
     return out
 
 
+def sample_rows(
+    values: np.ndarray, valid: np.ndarray, positions: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """(rows [M, D], valid [M]) of `values` [T, D] at fractional frame `positions` [M].
+
+    Linear interpolation between two valid frames. Next to an invalid frame (or the end of
+    the clip) the nearer frame is taken as it is, so a gap stays a gap and is never bridged.
+    Shared by the BST feature import (clips of another length) and inference (another fps).
+    """
+    values = np.asarray(values, dtype=np.float32)
+    valid = np.asarray(valid, dtype=bool)
+    positions = np.asarray(positions, dtype=np.float64)
+    out = np.zeros((len(positions), values.shape[1]), dtype=np.float32)
+    ok = np.zeros(len(positions), dtype=bool)
+    if not len(values):
+        return out, ok
+    lo = np.floor(positions).astype(int)
+    frac = (positions - lo).astype(np.float32)
+    hi = lo + 1
+
+    def usable(i: np.ndarray) -> np.ndarray:
+        inside = (i >= 0) & (i < len(values))
+        return inside & valid[np.clip(i, 0, len(values) - 1)]
+
+    lo_ok, hi_ok = usable(lo), usable(hi)
+    lo_c, hi_c = np.clip(lo, 0, len(values) - 1), np.clip(hi, 0, len(values) - 1)
+    both = lo_ok & hi_ok
+    out[both] = values[lo_c[both]] * (1 - frac[both, None]) + values[hi_c[both]] * frac[both, None]
+    only_lo = lo_ok & ~hi_ok & (frac <= 0.5)
+    only_hi = hi_ok & ~lo_ok & (frac >= 0.5)
+    out[only_lo] = values[lo_c[only_lo]]
+    out[only_hi] = values[hi_c[only_hi]]
+    ok = both | only_lo | only_hi
+    return out, ok
+
+
 def build_window(
     record: ClipRecord,
     hit_frame: int,
