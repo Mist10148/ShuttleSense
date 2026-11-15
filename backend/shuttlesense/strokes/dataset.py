@@ -22,17 +22,27 @@ def load_npz(features_dir: Path, match_ids: Sequence[str]) -> tuple[np.ndarray, 
     return np.concatenate(xs), np.concatenate(ys)
 
 
+def shift_window(x: np.ndarray, shift: int) -> np.ndarray:
+    """Move a [T, F] window `shift` frames later (earlier when negative); zeros fill the gap."""
+    if not shift:
+        return x
+    x = np.roll(x, shift, axis=0)
+    if shift > 0:
+        x[:shift] = 0
+    else:
+        x[shift:] = 0
+    return x
+
+
 def augment(
-    x: np.ndarray, rng: np.random.Generator, use_trajectory: bool, noise: float = 0.01
+    x: np.ndarray,
+    rng: np.random.Generator,
+    use_trajectory: bool,
+    noise: float = 0.01,
+    max_shift: int = 2,
 ) -> np.ndarray:
-    """Random time shift (+-2 frames), horizontal flip (p=0.5) and Gaussian noise on [T, F]."""
-    shift = int(rng.integers(-2, 3))
-    if shift:
-        x = np.roll(x, shift, axis=0)
-        if shift > 0:
-            x[:shift] = 0
-        else:
-            x[shift:] = 0
+    """Random time shift (+-max_shift frames), horizontal flip (p=0.5) and Gaussian noise."""
+    x = shift_window(x, int(rng.integers(-max_shift, max_shift + 1)))
     if rng.random() < 0.5:
         x = flip_window(x, use_trajectory)
     return x + rng.normal(0, noise, x.shape).astype(np.float32)
@@ -48,11 +58,14 @@ class StrokeDataset:
         use_trajectory: bool = True,
         augment_data: bool = False,
         seed: int = 42,
+        max_shift: int = 2,
+        noise: float = 0.01,
     ) -> None:
         x, self.y = load_npz(features_dir, match_ids)
         self.x = x if use_trajectory or x.size == 0 else x[:, :, :POSE_FEATURES]
         self.use_trajectory = use_trajectory
         self.augment_data = augment_data
+        self.max_shift, self.noise = max_shift, noise
         self.rng = np.random.default_rng(seed)
 
     @property
@@ -65,7 +78,7 @@ class StrokeDataset:
     def __getitem__(self, i: int):
         x = self.x[i]
         if self.augment_data:
-            x = augment(x.copy(), self.rng, self.use_trajectory)
+            x = augment(x.copy(), self.rng, self.use_trajectory, self.noise, self.max_shift)
         return np.ascontiguousarray(x.T, dtype=np.float32), self.y[i]
 
     def class_weights(self, num_classes: int) -> np.ndarray:

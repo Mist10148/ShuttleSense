@@ -60,18 +60,25 @@ def softmax(logits: np.ndarray) -> np.ndarray:
     return e / e.sum(axis=1, keepdims=True)
 
 
-def predict_proba(model: Any, kind: str, x: np.ndarray, device: str) -> np.ndarray:
-    """[N, classes] probabilities for windows x [N, T, F] from any of the three models."""
+def predict_proba(
+    model: Any, kind: str, x: np.ndarray, device: str, temperature: float = 1.0
+) -> np.ndarray:
+    """[N, classes] probabilities for windows x [N, T, F] from any of the three models.
+
+    `temperature` divides the logits of a network before the softmax (1.0 leaves them as
+    they are). Training fits it on the validation split and stores it in the checkpoint, so
+    `confidence` is closer to how often the model is right; the predicted class is unchanged.
+    """
     if kind == "rf":
         from shuttlesense.strokes.rf import summary_features
 
-        return model.predict_proba(summary_features(x))
+        return model.predict_proba(summary_features(x, model.meta.get("summary_version", 1)))
     import torch
 
     batch = x if kind == "lstm" else np.transpose(x, (0, 2, 1))
     with torch.inference_mode():
         logits = model(torch.from_numpy(np.ascontiguousarray(batch)).to(device))
-    return softmax(logits.float().cpu().numpy())
+    return softmax(logits.float().cpu().numpy() / max(float(temperature), 1e-3))
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
@@ -98,13 +105,17 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         use_traj = cfg.get("use_trajectory", True)
     pose_norm = ckpt.get("pose_norm", "bbox_height")
     classes = ckpt.get("classes", list(STROKE_CLASSES))
+    # Optional keys of newer checkpoints; without them the window is the clip's own frames
+    # and the confidence is the plain softmax, as for the first weights.
+    window_fps = ckpt.get("window_fps")
     x = np.stack(
         [
-            build_window(record, h.frame, h.player_attr, window, use_traj, pose_norm)
+            build_window(record, h.frame, h.player_attr, window, use_traj, pose_norm, window_fps)
             for h in record.hits
         ]
     )
-    probs = predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device)
+    temperature = float(ckpt.get("temperature", 1.0))
+    probs = predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device, temperature)
     for hit, p in zip(record.hits, probs, strict=True):
         best = int(p.argmax())
         hit.stroke = classes[best]

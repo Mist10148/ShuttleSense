@@ -11,9 +11,12 @@ the split file (data.splits). For each seed, saves the best model on val macro-F
 copied to <checkpoint><ext>, the file the pipeline loads.
 
 - cnn, lstm: a torch checkpoint {state_dict, kind, in_features, window_frames, classes,
-  config, use_trajectory, pose_norm}.
+  config, use_trajectory, pose_norm, temperature} and, when data.window_fps is set,
+  window_fps. temperature is fitted on the val split after training (fit_temperature).
+  train.shift_frames (2), train.noise (0.01) and train.label_smoothing (0) tune training.
 - rf: scikit-learn trains the forest on summary features (strokes/rf.py); it is saved as
   plain arrays in an .npz file, which inference reads without scikit-learn.
+  model.summary_version picks the summary rows; train.shift_copies adds shifted windows.
 
 scripts/make_figures.py turns the metrics files into docs/results/strokes.md.
 """
@@ -46,23 +49,45 @@ def model_input(xb, kind: str):
     return xb.transpose(1, 2) if kind == "lstm" else xb
 
 
-def predict(model, dataset, batch_size: int, device: str, kind: str = "cnn") -> np.ndarray:
+def predict_logits(model, dataset, batch_size: int, device: str, kind: str = "cnn") -> np.ndarray:
     import torch
 
     model.eval()
-    preds = []
+    out = []
     with torch.inference_mode():
         for start in range(0, len(dataset), batch_size):
             stop = min(start + batch_size, len(dataset))
             xb = np.stack([dataset[i][0] for i in range(start, stop)])
             logits = model(model_input(torch.from_numpy(xb).to(device), kind))
-            preds.append(logits.argmax(dim=1).cpu().numpy())
-    return np.concatenate(preds) if preds else np.zeros(0, int)
+            out.append(logits.float().cpu().numpy())
+    return np.concatenate(out) if out else np.zeros((0, 0), np.float32)
+
+
+def predict(model, dataset, batch_size: int, device: str, kind: str = "cnn") -> np.ndarray:
+    logits = predict_logits(model, dataset, batch_size, device, kind)
+    return logits.argmax(axis=1) if len(logits) else np.zeros(0, int)
+
+
+def nll(logits: np.ndarray, y: np.ndarray, temperature: float = 1.0) -> float:
+    """Mean negative log-likelihood of the true classes at a softmax temperature."""
+    z = logits / temperature
+    z = z - z.max(axis=1, keepdims=True)
+    log_probs = z - np.log(np.exp(z).sum(axis=1, keepdims=True))
+    return float(-log_probs[np.arange(len(y)), y].mean())
+
+
+def fit_temperature(logits: np.ndarray, y: np.ndarray) -> float:
+    """The softmax temperature with the lowest NLL on (logits, y): one number, found on a
+    grid from 0.5 to 5. It rescales confidences and leaves every predicted class as it is."""
+    if not len(y):
+        return 1.0
+    grid = np.exp(np.linspace(np.log(0.5), np.log(5.0), 93))
+    return round(float(grid[int(np.argmin([nll(logits, y, t) for t in grid]))]), 4)
 
 
 def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajectory: bool) -> dict:
     """What inference needs to rebuild the feature window a model was trained on."""
-    return {
+    meta = {
         "kind": kind,
         "in_features": train_ds.in_features,
         "window_frames": int(train_ds.x.shape[1]),
@@ -70,6 +95,11 @@ def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajector
         "use_trajectory": use_trajectory,
         "pose_norm": cfg["data"].get("pose_norm", "bbox_height"),
     }
+    # The frame rate of the training windows; inference then covers the same time span on a
+    # clip at another rate (strokes.features.build_window). Left out when the data has none.
+    if cfg["data"].get("window_fps"):
+        meta["window_fps"] = float(cfg["data"]["window_fps"])
+    return meta
 
 
 def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dict:
@@ -79,7 +109,7 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
     except ImportError as exc:
         raise SystemExit("scikit-learn is needed to train the Random Forest") from exc
 
-    from shuttlesense.strokes.dataset import StrokeDataset
+    from shuttlesense.strokes.dataset import StrokeDataset, shift_window
     from shuttlesense.strokes.features import flip_window
     from shuttlesense.strokes.metrics import classification_report
     from shuttlesense.strokes.rf import Forest, summary_features
@@ -92,9 +122,15 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise SystemExit("empty train or val split: check data/features and the split file")
     x, y = train_ds.x, train_ds.y
-    if cfg.get("train", {}).get("flip_augment", True):  # mirrored copies, as the CNN sees
-        x = np.concatenate([x, np.stack([flip_window(w, use_trajectory) for w in x])])
-        y = np.concatenate([y, y])
+    tcfg = cfg.get("train", {})
+    version = int(mcfg.get("summary_version", 1))
+    copies = [x]
+    for shift in tcfg.get("shift_copies", []):  # the hit a few frames early or late
+        copies.append(np.stack([shift_window(w.copy(), int(shift)) for w in x]))
+    if tcfg.get("flip_augment", True):  # mirrored copies, as the CNN sees
+        copies += [np.stack([flip_window(w, use_trajectory) for w in c]) for c in list(copies)]
+    y = np.concatenate([y] * len(copies))
+    x = np.concatenate(copies)
     model = RandomForestClassifier(
         n_estimators=mcfg.get("trees", 200),
         max_depth=mcfg.get("max_depth", 18),
@@ -104,11 +140,13 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
         n_jobs=-1,
         random_state=seed,
     )
-    model.fit(summary_features(x), y)
+    model.fit(summary_features(x, version), y)
     meta = checkpoint_meta(cfg, "rf", train_ds, classes, use_trajectory)
+    if version != 1:
+        meta["summary_version"] = version
     meta["config"] = {"model": mcfg}
     forest = Forest.from_sklearn(model, meta)
-    val_pred = forest.predict_proba(summary_features(val_ds.x)).argmax(1)
+    val_pred = forest.predict_proba(summary_features(val_ds.x, version)).argmax(1)
     val = classification_report(val_ds.y, val_pred, classes)
     print(json.dumps({"val_macro_f1": val["macro_f1"], "val_accuracy": val["accuracy"]}))
     result: dict = {
@@ -121,7 +159,7 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
     if splits.get("test"):
         test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
         if len(test_ds):
-            preds = forest.predict_proba(summary_features(test_ds.x)).argmax(1)
+            preds = forest.predict_proba(summary_features(test_ds.x, version)).argmax(1)
             result["test"] = classification_report(test_ds.y, preds, classes)
     result["checkpoint"] = forest
     return result
@@ -155,7 +193,13 @@ def train(
     tcfg = cfg["train"]
     seed_everything(seed)
     train_ds = StrokeDataset(
-        features_dir, splits["train"], use_trajectory, augment_data=True, seed=seed
+        features_dir,
+        splits["train"],
+        use_trajectory,
+        augment_data=True,
+        seed=seed,
+        max_shift=int(tcfg.get("shift_frames", 2)),
+        noise=float(tcfg.get("noise", 0.01)),
     )
     val_ds = StrokeDataset(features_dir, splits["val"], use_trajectory)
     if len(train_ds) == 0 or len(val_ds) == 0:
@@ -166,7 +210,9 @@ def train(
     weights = None
     if tcfg.get("class_weighting") == "inverse_frequency":
         weights = torch.from_numpy(train_ds.class_weights(len(classes))).to(device)
-    loss_fn = torch.nn.CrossEntropyLoss(weight=weights)
+    loss_fn = torch.nn.CrossEntropyLoss(
+        weight=weights, label_smoothing=float(tcfg.get("label_smoothing", 0.0))
+    )
     opt = torch.optim.AdamW(model.parameters(), lr=tcfg["lr"], weight_decay=tcfg["weight_decay"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=tcfg["epochs"])
     loader = DataLoader(
@@ -208,12 +254,19 @@ def train(
                 break
 
     model.load_state_dict(best_state)
+    val_logits = predict_logits(model, val_ds, 512, device, kind)
+    temperature = fit_temperature(val_logits, val_ds.y)
     result: dict = {
         "seed": seed,
         "algorithm": kind,
         "use_trajectory": use_trajectory,
         "history": history,
         "best_val_macro_f1": best_f1,
+        "temperature": temperature,
+        "val_nll": {
+            "raw": nll(val_logits, val_ds.y),
+            "scaled": nll(val_logits, val_ds.y, temperature),
+        },
     }
     if splits.get("test"):
         test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
@@ -223,6 +276,7 @@ def train(
     result["checkpoint"] = {
         "state_dict": best_state,
         "config": cfg,
+        "temperature": temperature,
         **checkpoint_meta(cfg, kind, train_ds, classes, use_trajectory),
     }
     return result

@@ -101,6 +101,32 @@ def sample_rows(
     return out, ok
 
 
+def _frame_rows(
+    record: ClipRecord, indices: range, player: str, pose_norm: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """(pose [K, 34], present [K], shuttle xy [K, 2], seen [K]) for the frames `indices`;
+    a frame outside the clip has neither a player nor a shuttle."""
+    w = record.width or 1
+    h = record.height or 1
+    pose = np.zeros((len(indices), POSE_FEATURES), dtype=np.float32)
+    present = np.zeros(len(indices), dtype=bool)
+    xy = np.zeros((len(indices), 2), dtype=np.float32)
+    seen = np.zeros(len(indices), dtype=bool)
+    for t, i in enumerate(indices):
+        if not 0 <= i < len(record.frames):
+            continue
+        frame = record.frames[i]
+        p = getattr(frame.players, player)
+        if p and p.keypoints and p.bbox is not None and p.bbox[3] > 0:
+            pose[t] = pose_vector(p.keypoints, p.bbox, pose_norm)
+            present[t] = True
+        s = frame.shuttle
+        if s is not None and s.visible and s.x is not None and s.y is not None:
+            xy[t] = (s.x / w, s.y / h)
+            seen[t] = True
+    return pose, present, xy, seen
+
+
 def build_window(
     record: ClipRecord,
     hit_frame: int,
@@ -108,27 +134,29 @@ def build_window(
     window: int = 32,
     use_trajectory: bool = True,
     pose_norm: str = "bbox_height",
+    window_fps: float | None = None,
 ) -> np.ndarray:
-    """[window, F] features for the frames centred on `hit_frame` (start = hit - window // 2)."""
+    """[window, F] features for the frames centred on `hit_frame` (start = hit - window // 2).
+
+    `window_fps` is the frame rate the model's windows were built at (from its checkpoint).
+    When the clip runs at another rate, the window covers the same time span instead of the
+    same number of frames: it is sampled at `window_fps` around the hit (sample_rows), so
+    poses move and the shuttle steps at the speed the model was trained on. Without it, or
+    at the same rate, the window is the clip's own frames.
+    """
     feats = np.zeros((window, num_features(use_trajectory)), dtype=np.float32)
-    w = record.width or 1
-    h = record.height or 1
     start = hit_frame - window // 2
-    xy = np.zeros((window, 2), dtype=np.float32)
-    seen = np.zeros(window, dtype=bool)
-    for t in range(window):
-        i = start + t
-        if not 0 <= i < len(record.frames):
-            continue
-        frame = record.frames[i]
-        p = getattr(frame.players, player)
-        feats[t, :POSE_FEATURES] = pose_vector(
-            p.keypoints if p else None, p.bbox if p else None, pose_norm
-        )
-        s = frame.shuttle
-        if s is not None and s.visible and s.x is not None and s.y is not None:
-            xy[t] = (s.x / w, s.y / h)
-            seen[t] = True
+    step = (record.fps / window_fps) if window_fps and record.fps else 1.0
+    if abs(step - 1.0) < 0.02:
+        pose, _, xy, seen = _frame_rows(record, range(start, start + window), player, pose_norm)
+    else:
+        positions = hit_frame + (np.arange(window) - window // 2) * step
+        first = int(np.floor(positions[0]))
+        source = range(first, int(np.ceil(positions[-1])) + 1)
+        pose, present, xy, seen = _frame_rows(record, source, player, pose_norm)
+        pose, _ = sample_rows(pose, present, positions - first)
+        xy, seen = sample_rows(xy, seen, positions - first)
+    feats[:, :POSE_FEATURES] = pose
     if use_trajectory:
         feats[:, POSE_FEATURES:] = shuttle_features(xy, seen)
     return feats

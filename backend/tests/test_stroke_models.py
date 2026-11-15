@@ -393,3 +393,138 @@ def test_bench_times_installed_models(tmp_path: Path, monkeypatch: pytest.Monkey
     assert [(r["model"], r["device"]) for r in rows] == [("Random Forest", "cpu")]  # no CNN file
     text = bench.models_markdown({"hits": 5, "duration_s": 5.0, "models": rows})
     assert "| Random Forest | cpu |" in text and "< 30 s (met)" in text
+
+
+# --- options stored with the weights ----------------------------------------------------
+
+
+def test_summary_v2_leaves_frames_without_data_out() -> None:
+    rng = np.random.default_rng(0)
+    x = rng.normal(0, 0.1, (4, 30, 39)).astype(np.float32)
+    x[:, :, :POSE_FEATURES] += 1.0  # every pose value is positive: a zero frame is the minimum
+    x[:, :, POSE_FEATURES + 2] = 1.0  # the shuttle is seen on every frame
+    full_v1, full_v2 = summary_features(x), summary_features(x, 2)
+    # On complete windows version 2 is version 1 plus two "pose present" columns.
+    assert full_v2.shape[1] == full_v1.shape[1] + 2
+    assert full_v2[:, :-18] == pytest.approx(full_v1[:, :-16], abs=1e-5)
+    assert full_v2[:, -16:] == pytest.approx(full_v1[:, -16:], abs=1e-6)
+    assert full_v2[:, -18:-16] == pytest.approx(1.0)
+
+    gap = x.copy()
+    gap[:, 24:] = 0.0  # the player and the shuttle are gone for the last six frames
+    v1, v2 = summary_features(gap), summary_features(gap, 2)
+    low = slice(2 * 39, 2 * 39 + POSE_FEATURES)  # the per-value minimum block, pose columns
+    assert v2[:, low] == pytest.approx(x[:, :24, :POSE_FEATURES].min(1), abs=1e-6)
+    assert (v1[:, low] == 0).all()  # version 1 reports the empty frames instead
+    assert v2[:, -18] == pytest.approx(24 / 30)
+    assert np.isfinite(summary_features(np.zeros((2, 30, 39), np.float32), 2)).all()
+    assert np.isfinite(summary_features(np.zeros((1, 1, 34), np.float32), 2)).all()
+    with pytest.raises(ValueError):
+        summary_features(x, 3)
+
+
+def test_forest_file_names_its_summary_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("sklearn")
+    trainer = load_script("train_stroke_classifier")
+    monkeypatch.setattr(trainer, "BACKEND_DIR", tmp_path)
+    for i, m in enumerate(("a", "b")):
+        write_npz(tmp_path / f"{m}.npz", 90, seed=i)
+    cfg = train_cfg("rf")
+    cfg["model"]["summary_version"] = 2
+    cfg["train"]["shift_copies"] = [-2, 2]
+    cfg["data"]["window_fps"] = 30
+    result = trainer.train(
+        cfg, {"train": ["a"], "val": ["b"], "test": []}, use_trajectory=True, seed=1, device="cpu"
+    )
+    trainer.save_checkpoint(result["checkpoint"], tmp_path / "stroke_rf.npz")
+    monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
+    model, ckpt = classify.load_classifier("stroke_rf.npz", "cpu")
+    assert (ckpt["summary_version"], ckpt["window_fps"]) == (2, 30.0)
+    x = np.zeros((3, 30, 39), np.float32)
+    assert classify.predict_proba(model, "rf", x, "cpu").shape == (3, len(STROKE_CLASSES))
+    record = load_golden()
+    record = classify.run(record, stroke_ctx(algorithm="rf", weights_rf="stroke_rf.npz"))
+    assert all(h.stroke in STROKE_CLASSES for h in record.hits)
+
+
+def test_window_covers_the_training_time_span_at_another_frame_rate() -> None:
+    record = load_golden()  # 30 fps
+    hit, window = 30, 30
+    same = build_window(record, hit, "near", window, True, "bbox_diag")
+    assert (build_window(record, hit, "near", window, True, "bbox_diag", 30.0) == same).all()
+
+    # The same rally filmed at 15 fps: every second frame.
+    half = record.model_copy(update={"frames": record.frames[::2], "fps": record.fps / 2})
+    plain = build_window(half, hit // 2, "near", window, True, "bbox_diag")
+    timed = build_window(half, hit // 2, "near", window, True, "bbox_diag", 30.0)
+    even = np.arange(window) % 2 == (window // 2) % 2  # samples that fall on a 15 fps frame
+    inside = (hit + np.arange(window) - window // 2 >= 0) & (
+        hit + np.arange(window) - window // 2 < len(record.frames) - 1
+    )
+    pose = slice(0, POSE_FEATURES)
+    assert timed[even & inside, pose] == pytest.approx(same[even & inside, pose], abs=1e-5)
+    # Without the frame rate the window spans twice the time and no longer lines up.
+    where = slice(POSE_FEATURES, POSE_FEATURES + 2)  # the shuttle position
+    assert timed[even & inside, where] == pytest.approx(same[even & inside, where], abs=1e-5)
+    assert np.abs(plain[even & inside, where] - same[even & inside, where]).max() > 0.01
+    # Shuttle steps are per 1/30 s again, not per 15 fps frame.
+    moving = (timed[:, POSE_FEATURES + 3] != 0) & (same[:, POSE_FEATURES + 3] != 0)
+    assert moving.sum() >= 5
+    ratio = (
+        np.abs(timed[moving, POSE_FEATURES + 3 :]).sum()
+        / np.abs(same[moving, POSE_FEATURES + 3 :]).sum()
+    )
+    assert ratio == pytest.approx(1.0, abs=0.25)
+
+
+def test_sample_rows_never_bridges_a_gap() -> None:
+    from shuttlesense.strokes.features import sample_rows
+
+    values = np.array([[0.0], [1.0], [9.0], [3.0]], np.float32)
+    valid = np.array([True, True, False, True])
+    rows, ok = sample_rows(values, valid, np.array([0.0, 0.5, 1.4, 1.6, 2.6, 3.0, 3.6, -1.0]))
+    assert rows[:, 0] == pytest.approx([0.0, 0.5, 1.0, 0.0, 3.0, 3.0, 0.0, 0.0])
+    assert ok.tolist() == [True, True, True, False, True, True, False, False]
+    assert sample_rows(np.zeros((0, 2)), np.zeros(0, bool), np.array([0.0]))[1].tolist() == [False]
+
+
+def test_temperature_rescales_confidence_only() -> None:
+    trainer = load_script("train_stroke_classifier")
+    rng = np.random.default_rng(0)
+    logits = rng.normal(0, 2, (4000, 6))
+    probs = np.exp(logits) / np.exp(logits).sum(1, keepdims=True)
+    y = np.array([rng.choice(6, p=p) for p in probs])
+    assert trainer.fit_temperature(logits, y) == pytest.approx(1.0, abs=0.1)
+    hot = trainer.fit_temperature(logits * 3, y)  # three times too confident
+    assert hot == pytest.approx(3.0, abs=0.3)
+    assert trainer.nll(logits * 3, y, hot) < trainer.nll(logits * 3, y)
+    assert trainer.fit_temperature(np.zeros((0, 6)), np.zeros(0, int)) == 1.0
+
+    torch = pytest.importorskip("torch")
+    from shuttlesense.strokes.model import build_model
+
+    torch.manual_seed(0)
+    model = build_model(39, len(STROKE_CLASSES)).eval()
+    x = rng.normal(0, 1, (8, 30, 39)).astype(np.float32)
+    plain = classify.predict_proba(model, "cnn", x, "cpu")
+    cooled = classify.predict_proba(model, "cnn", x, "cpu", temperature=4.0)
+    assert (plain.argmax(1) == cooled.argmax(1)).all()
+    assert cooled.max(1).mean() < plain.max(1).mean()
+    assert cooled.sum(1) == pytest.approx(1.0, abs=1e-5)
+
+
+def test_shift_range_and_shifted_copies() -> None:
+    from shuttlesense.strokes.dataset import augment, shift_window
+
+    x = np.arange(1, 7, dtype=np.float32)[:, None] * np.ones((1, 39), np.float32)
+    later = shift_window(x.copy(), 2)
+    assert later[:, 0].tolist() == [0, 0, 1, 2, 3, 4]
+    assert shift_window(x.copy(), -1)[:, 0].tolist() == [2, 3, 4, 5, 6, 0]
+    assert shift_window(x, 0) is x
+    rng = np.random.default_rng(0)
+    still = [augment(x.copy(), rng, True, noise=0.0, max_shift=0)[:, 40 % 39] for _ in range(8)]
+    assert all(row.tolist() == x[:, 1].tolist() for row in still)
+    starts = {int(np.argmax(augment(x.copy(), rng, False, 0.0, 4)[:, 1] > 0)) for _ in range(200)}
+    assert max(starts) == 4  # up to four frames late
