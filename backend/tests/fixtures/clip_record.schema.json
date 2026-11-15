@@ -1110,9 +1110,19 @@
     },
     "Rally": {
       "properties": {
+        "change_ends": {
+          "default": false,
+          "title": "Change Ends",
+          "type": "boolean"
+        },
         "end_frame": {
           "title": "End Frame",
           "type": "integer"
+        },
+        "ends_swapped": {
+          "default": false,
+          "title": "Ends Swapped",
+          "type": "boolean"
         },
         "game": {
           "default": 1,
@@ -1275,8 +1285,13 @@
       "type": "object"
     },
     "Score": {
-      "description": "The current game's score (the last game's once the match is over) and match state.",
+      "description": "The current game's score (the last game's once the match is over) and match state.\n\n`near` and `far` are the ends of the court as they are now (v1.7): when the players\nchange ends, the points, games and server move with them and `ends_swapped` flips.",
       "properties": {
+        "auto_change_ends": {
+          "default": false,
+          "title": "Auto Change Ends",
+          "type": "boolean"
+        },
         "best_of": {
           "default": 1,
           "title": "Best Of",
@@ -1293,6 +1308,11 @@
           },
           "title": "Corrections",
           "type": "array"
+        },
+        "ends_swapped": {
+          "default": false,
+          "title": "Ends Swapped",
+          "type": "boolean"
         },
         "far": {
           "default": 0,
@@ -1517,7 +1537,7 @@
       "type": "object"
     },
     "ScoreCorrection": {
-      "description": "A user's score change: a rally's winner set or cleared, a point awarded, or a match\nconceded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given). A concession\n(v1.5) ends the match there: `winner_after` wins because the other side retired.",
+      "description": "A user's score change: a rally's winner set or cleared, a point awarded, or a match\nconceded.\n\nAn award is a point for a rally the referee layer missed; it counts after the detected\nrallies before rally_index (the number of rallies when it was given). A concession\n(v1.5) ends the match there: `winner_after` wins because the other side retired.\n`ends` (v1.7) says the players changed ends there, early, late or against the automatic\nchange: it sits where an award would and has no winner.",
       "properties": {
         "at": {
           "format": "date-time",
@@ -1541,7 +1561,8 @@
           "enum": [
             "winner",
             "award",
-            "concede"
+            "concede",
+            "ends"
           ],
           "title": "Kind",
           "type": "string"
@@ -1921,7 +1942,7 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "1.6",
+      "default": "1.7",
       "title": "Schema Version",
       "type": "string"
     },

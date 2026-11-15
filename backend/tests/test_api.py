@@ -361,7 +361,7 @@ def test_old_record_is_migrated_when_served(tmp_path: Path, tiny_video: Path) ->
             data.pop(key, None)
         path.write_text(json.dumps(data), encoding="utf-8")
         served = client.get(f"/jobs/{job_id}/record").json()
-        assert served["schema_version"] == "1.6" and served["mode"] == "upload"
+        assert served["schema_version"] == "1.7" and served["mode"] == "upload"
         assert served["line_calls"][0]["call"] == "in"
 
 

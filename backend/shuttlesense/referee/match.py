@@ -9,6 +9,14 @@ BWF Laws of Badminton, rally scoring (singles):
   games; a change of ends after each game and at 11 in the deciding game;
 - a side that retires concedes the match (a `concede` correction, v1.5).
 
+Change of ends (v1.7). `near` and `far` are always the ends of the court at that moment: a
+rally's winner is the end that won it, and a referee's point goes to the end tapped. With
+`auto_change_ends` the match follows the players when the Laws send them across: the points,
+the games won, the finished games, the server and the doubles slots swap ends, so the same
+people keep their score. A manual change (`swaps`, an `ends` correction) does the same at its
+place in the match, for players who change early or late, or not at all (it then cancels the
+automatic one). Without `auto_change_ends` only the `change_ends` notice is raised, as before.
+
 A session can join a match under way: `start` is the score of the current game and
 `start_games` the games each side had already won, which set the game number.
 
@@ -32,7 +40,7 @@ correction can change who won the game.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from shuttlesense.schema import GameService, PlayerId, PlayerSide, Score, ScorePair, side_of
@@ -52,6 +60,8 @@ class Step:
     server_id: PlayerId | None = None  # doubles: who served and received this rally
     receiver_id: PlayerId | None = None
     score_before: ScorePair | None = None  # the game score when the rally started
+    ends_swapped: bool = False  # the ends had been changed when this step was played
+    change_ends: bool = False  # and were changed by rule right after it
 
 
 @dataclass
@@ -97,6 +107,20 @@ class DoublesCourts:
         else:
             self.serving = side  # nobody moves
 
+    def mirror(self) -> None:
+        """The pairs change ends mid-game: each person keeps their service court (it goes by
+        their own side's score) and takes the slot with the same number at the other end."""
+
+        def across(slot: PlayerId) -> PlayerId:
+            end = "far" if slot.startswith("near") else "near"
+            return end + slot[slot.index("_") :]  # type: ignore[return-value]
+
+        self.at = {
+            OTHER[side]: {court: across(slot) for court, slot in courts.items()}  # type: ignore[index]
+            for side, courts in self.at.items()
+        }
+        self.serving = OTHER[self.serving]
+
 
 def validate_start_games(start_games: ScorePair | None, best_of: int) -> None:
     """Raise ValueError unless the games already won fit a match that is still on."""
@@ -125,13 +149,17 @@ def play(
     game_service: Sequence[GameService] = (),
     start_games: ScorePair | None = None,
     concessions: Mapping[int, PlayerSide] | None = None,
+    auto_change_ends: bool = False,
+    swaps: Collection[int] = (),
 ) -> MatchPlay:
     """Run the match over the rally winners and return each step and the final state.
 
     With `first_server_id` and `first_receiver_id` (doubles, on opposite sides) every step
     and the score also say who serves and receives; `game_service` does the same for games
     after the first. `concessions` maps a step index to the side that wins the match there
-    because the other retired; that step plays no point.
+    because the other retired; that step plays no point. `swaps` holds the step indexes
+    where the players changed ends by hand; such a step plays no point either. With
+    `auto_change_ends` they also change by rule (see the module docstring).
     """
     later = {g.game: g for g in game_service}
     if best_of not in (1, 3):
@@ -158,32 +186,58 @@ def play(
     match_winner: PlayerSide | None = None
     interval = change_ends = False
     reached_interval = max(near, far) >= INTERVAL_AT  # joined after the interval
+    swapped = False  # the side that started at the near end is at the far end
     steps: list[Step] = []
+
+    def cross() -> None:
+        """The players change ends: what belongs to a side goes with it."""
+        nonlocal near, far, server, swapped
+        near, far = far, near
+        won["near"], won["far"] = won["far"], won["near"]
+        games[:] = [ScorePair(near=g.far, far=g.near) for g in games]
+        server = OTHER[server] if server is not None else None
+        if courts:
+            courts.mirror()
+        swapped = not swapped
+
     for i, w in enumerate(winners):
         if match_winner is not None:
-            steps.append(Step(game=game, score_after=None))
+            steps.append(Step(game=game, score_after=None, ends_swapped=swapped))
+            continue
+        if i in swaps:
+            # Changed by hand: also answers a "change ends" notice that was showing.
+            cross()
+            change_ends = False
+            steps.append(Step(game, ScorePair(near=near, far=far), ends_swapped=swapped))
             continue
         ids = courts.pair(near, far) if courts else (None, None)
         before = ScorePair(near=near, far=far)
         if i in concessions:
             match_winner, conceded = concessions[i], True
             interval = change_ends = False
-            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
+            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before,
+                              ends_swapped=swapped))  # fmt: skip
             continue
         if w is None:
             # No point played: an interval or change of ends still stands.
-            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
+            steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before,
+                              ends_swapped=swapped))  # fmt: skip
             continue
         interval = change_ends = False
         near, far = (near + 1, far) if w == "near" else (near, far + 1)
         server = w
         if courts:
             courts.won(w)
-        steps.append(Step(game, ScorePair(near=near, far=far), *ids, score_before=before))
+        step = Step(game, ScorePair(near=near, far=far), *ids, score_before=before,
+                    ends_swapped=swapped)  # fmt: skip
+        steps.append(step)
         if not reached_interval and max(near, far) == INTERVAL_AT:
             reached_interval = interval = True
             # The deciding game, or a one-game match (BWF Laws 8.1.3 and Appendix 3).
             change_ends = game == best_of
+            if change_ends and auto_change_ends:
+                cross()
+                step.change_ends = True
         if _wins_game(near, far) is None:
             continue
         games.append(ScorePair(near=near, far=far))
@@ -197,12 +251,15 @@ def play(
         game += 1
         near, far = 0, 0
         reached_interval = False
-        # The game winners choose their server: unknown unless the user named them. The game
-        # winner serves first in the next game: server is already w.
-        named = later.get(game)
         courts = None
-        if (named and side_of(named.server_id) == w
-                and side_of(named.receiver_id) != w):  # fmt: skip
+        if auto_change_ends:
+            cross()
+            step.change_ends = True
+        # The game winners choose their server: unknown unless the user named them. The game
+        # winner serves first in the next game: `server` is that side, at the end it is at now.
+        named = later.get(game)
+        if (named and server is not None and side_of(named.server_id) == server
+                and side_of(named.receiver_id) != server):  # fmt: skip
             courts = DoublesCourts(named.server_id, named.receiver_id, 0, 0)
 
     score = Score(near=near, far=far, best_of=best_of, first_server=first_server, game=game,
@@ -220,6 +277,7 @@ def play(
     score.games_won = ScorePair(near=won["near"], far=won["far"])
     score.match_winner = match_winner
     score.interval, score.change_ends = interval, change_ends
+    score.auto_change_ends, score.ends_swapped = auto_change_ends, swapped
     if interval:
         score.interval_s = GAME_INTERVAL_S if near == far == 0 else INTERVAL_S
     if match_winner is None:
