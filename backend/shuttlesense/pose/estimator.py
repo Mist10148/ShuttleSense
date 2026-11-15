@@ -7,6 +7,7 @@ The choice is made in the Phase 1 spike (T1.5) and set in configs/pipeline.yaml.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import numpy as np
@@ -95,13 +96,60 @@ def _rtmlib_detector(mode: str, device: str):
 
         return detect_batched
 
+    def with_watch(batch_size, candidates):
+        batched = with_batch(batch_size) if batch_size > 1 else detect
+        enabled = True
+
+        def detect_watch(frame):
+            nonlocal enabled
+            if not enabled:
+                candidates.excluded_players = []
+                return batched(frame)
+            try:
+                start = time.perf_counter()
+                boxes = body.det_model(frame)
+                detected = len(boxes)
+                detection_s = time.perf_counter() - start
+                # RTMLib falls back to the whole image when YOLO returns no boxes.
+                if detected == 0:
+                    boxes = [[0, 0, frame.shape[1], frame.shape[0]]]
+                keep = candidates.select(boxes, frame.shape)
+                indices = [i for i, selected in enumerate(keep)
+                           if selected or candidates.mode == "shadow"]
+                start = time.perf_counter()
+                if not indices:
+                    candidates.record(detected, keep, detection_s, time.perf_counter() - start)
+                    return []
+                selected_boxes = [boxes[i] for i in indices]
+                if batch_size > 1:
+                    keypoints, scores = _batched_body_pose(body, frame, batch_size, selected_boxes)
+                else:
+                    keypoints, scores = body.pose_model(frame, selected_boxes)
+                pose_s = time.perf_counter() - start
+                candidates.record(detected, keep if detected else [], detection_s, pose_s)
+                people = players_from_pose(keypoints, scores)
+                if candidates.mode == "shadow":
+                    for index, kps, score in zip(indices, keypoints, scores, strict=True):
+                        if not keep[index]:
+                            candidates.excluded_players.extend(players_from_pose([kps], [score]))
+                return people
+            except Exception:
+                log.exception("Watch candidate selection failed; using unfiltered inference")
+                enabled = False
+                candidates.excluded_players = []
+                candidates.stats["fallback"] = True
+                return batched(frame)
+
+        return detect_watch
+
     detect.with_batch = with_batch
+    detect.with_watch = with_watch
 
     return detect
 
 
 
-def _batched_body_pose(body, frame: np.ndarray, batch_size: int):
+def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None):
     """RTMLib's normal detection and pose preprocessing, grouped per frame."""
     if body.one_stage or body.pose_model.backend != "onnxruntime":
         raise ValueError("batching requires a two-stage ONNX RTMPose model")
@@ -112,7 +160,8 @@ def _batched_body_pose(body, frame: np.ndarray, batch_size: int):
     input_info = session.get_inputs()[0]
     if isinstance(input_info.shape[0], int) and input_info.shape[0] == 1:
         raise ValueError("pose model does not support dynamic batches")
-    boxes = body.det_model(frame)
+    if boxes is None:
+        boxes = body.det_model(frame)
     if len(boxes) == 0:
         boxes = [[0, 0, frame.shape[1], frame.shape[0]]]
     keypoints, scores = [], []

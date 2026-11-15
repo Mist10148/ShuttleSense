@@ -240,12 +240,37 @@ require a backend restart. `backend/scripts/bench_watch_parallel.py` compares th
 on a video; provide calibrated `--corners` to compare player tracking too.
 
 Watch can optionally batch per-frame RTMPose detections by setting
-`watch.pose_batch_size` (up to 16). The default is 1, the original sequential path.
+`watch.pose_batch_size` (up to 16). It is currently set to 8; set it to 1 for the original sequential path.
 Batching is experimental: GPU numerical differences can move keypoints or change
 tracking decisions, so compare it against sequential results on representative footage
 before using it for analysis. The benchmark script accepts `--compare-batch 8` to compare
 sequential and batched detections. Unsupported ONNX models and batching failures fall back
 to sequential inference for that session. Restart the backend after changing the setting.
+
+`watch.candidate_filter` is currently set to experimental `filter`. Set it to `shadow`
+to count candidates a conservative
+court-aware filter would exclude, while still running pose on everyone. The background
+Watch status includes `candidate_diagnostics`, including candidates and any excluded
+person later tracked in shadow mode. Use `scripts/bench_watch_parallel.py --compare-filter
+--compare-batch 8` with `--video`, `--court`, and calibrated singles-reference `--corners`
+to compare the two paths. The experimental `filter` setting actually removes candidates;
+it can miss players, especially with bad calibration, occlusion, or motion outside the
+court. Use it only after validation; `off` restores the prior behavior. The filter is
+bypassed when the court is missing or partly outside the image.
+
+To measure the Watch pipeline on a local video, run from `backend`:
+`python scripts/profile_watch_pipeline.py --video PATH --device cuda --court doubles
+--corners X1 Y1 X2 Y2 X3 Y3 X4 Y4 --frames 80 --record`. The report includes
+JPEG, model, far-player recovery, recording and analysis times. Model times overlap
+in parallel mode, so do not add them together. Startup and the chosen footage affect
+the result. `scripts/bench_watch_track_batch.py --video PATH --device cuda --batch 4`
+is a separate cross-frame shuttle batching experiment; it does not enable batching
+in Watch. On the tested RTX 5070 Ti it showed no speedup.
+
+`scripts/probe_tensorrt_rtx.py` is a standalone provider experiment requiring a
+separate compatible ONNX Runtime / TensorRT RTX environment and saved model inputs.
+It does not change the application's inference provider. Engine startup, dynamic
+batch sizes and end-to-end player tracking still need validation before deployment.
 
 | Target | Command |
 | --- | --- |

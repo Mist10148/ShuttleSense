@@ -21,6 +21,9 @@ def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Pat
             session = original_session(*args, **kwargs)
             tracker = SimpleNamespace(watch_outside_tracking=False)
             session.perception.tracker = tracker
+            session.perception.watch_candidates = SimpleNamespace(
+                mode="shadow", stats={"frames": 3, "excluded": 5, "tracked_excluded": 0}
+            )
             trackers.append(tracker)
             return session
 
@@ -46,6 +49,8 @@ def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Pat
             time.sleep(0.05)
         assert job["status"] == "done", job
         assert job["started_at"] == analysis_started
+        diagnostic = client.get(f"/watch/background/{job_id}").json()["candidate_diagnostics"]
+        assert diagnostic["mode"] == "shadow" and diagnostic["excluded"] == 5
         assert job["court"] == "doubles"
         record = client.get("/jobs/" + job_id + "/record").json()
         assert record["num_frames"] == 6

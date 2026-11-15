@@ -94,6 +94,29 @@ def test_tracknet_input_channels_and_inpaint_mask() -> None:
     assert tracknet._inpaint_mask(xy, np.array([1, 0, 0, 1]), 100).tolist() == [0, 1, 1, 0]
 
 
+def test_latest_only_decodes_the_same_final_point(monkeypatch) -> None:
+    torch = pytest.importorskip("torch")
+    calls = []
+
+    def decode(heatmap):
+        calls.append(1)
+        return float(heatmap[0, 0]), 2.0, 1
+
+    monkeypatch.setattr(tracknet, "heatmap_to_xy", decode)
+    def model(batch):
+        return torch.tensor([[[[1.0]], [[2.0]], [[3.0]]]]).repeat(len(batch), 1, 1, 1)
+
+    frame = np.zeros((288, 512, 3), dtype=np.uint8)
+    windows = [[frame] * 3, [frame] * 3]
+    full = tracknet.track_windows(model, windows, "", None, "cpu", (512, 288))
+    assert len(calls) == 6
+    calls.clear()
+    latest = tracknet.track_windows(model, windows, "", None, "cpu", (512, 288),
+                                    latest_only=True)
+    assert latest == [[sequence[-1]] for sequence in full]
+    assert len(calls) == 2
+
+
 def test_tracknet_predict_maps_padded_windows(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

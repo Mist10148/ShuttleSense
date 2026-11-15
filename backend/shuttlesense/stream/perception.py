@@ -53,8 +53,20 @@ def enable_watch_player_continuity(perception: Perception) -> None:
         )
         batch_size = max(1, min(16, int(configured)))
         factory = getattr(getattr(perception, "detect", None), "with_batch", None)
+        raw_detect = getattr(perception, "detect", None)
         if batch_size > 1 and factory is not None:
             perception.detect = factory(batch_size)
+        watch = (getattr(perception, "config", {}).get("watch") or {})
+        mode = watch.get("candidate_filter", "off")
+        watch_factory = getattr(raw_detect, "with_watch", None)
+        if mode in ("shadow", "filter") and watch_factory and tracker is not None:
+            from shuttlesense.pose.watch_candidates import WatchCandidates
+
+            perception.watch_candidates = WatchCandidates(
+                tracker, perception.homography, perception.size, mode,
+                float(watch.get("candidate_margin_m", 2.0)),
+            )
+            perception.watch_detect = watch_factory(batch_size, perception.watch_candidates)
 
 
 class ModelPerception:
@@ -139,13 +151,16 @@ class ModelPerception:
 
         from shuttlesense.tracking.tracknet import INPUT_SIZE, track_windows
 
+        resized_rgb = (cv2.resize(frame[:, :, ::-1], INPUT_SIZE)
+                       if self.watch_preprocess_cache else None)
         if self.bg_mode and len(self.bg_samples) < self.background_frames:
-            self.bg_samples.append(cv2.resize(frame, INPUT_SIZE)[:, :, ::-1])
+            self.bg_samples.append(resized_rgb if resized_rgb is not None
+                                   else cv2.resize(frame, INPUT_SIZE)[:, :, ::-1])
             self.median = np.median(np.stack(self.bg_samples), axis=0).astype(np.uint8)
         if self.watch_preprocess_cache:
             # The window slides by one frame: resize each image once, not once per
             # occurrence in overlapping windows. Keep the dynamic median unchanged.
-            self.window.append(cv2.resize(frame[:, :, ::-1], INPUT_SIZE))
+            self.window.append(resized_rgb)
         else:
             self.window.append(frame)
         frames = list(self.window)
@@ -154,6 +169,7 @@ class ModelPerception:
             points = track_windows(
                 self.model, [frames], self.bg_mode, self.median, self.device, self.size,
                 prepared_rgb=self.watch_preprocess_cache,
+                latest_only=self.watch_preprocess_cache,
             )[0]
         x, y, vis = points[-1]
         return Shuttle(x=round(x, 1), y=round(y, 1), visible=1) if vis else Shuttle()
@@ -161,7 +177,8 @@ class ModelPerception:
     def _players(self, frame: np.ndarray) -> Players:
         if self.detect is None:
             return Players()
-        people = [p for p in self.detect(frame) if p.score >= self.min_person_score]
+        detector = getattr(self, "watch_detect", self.detect)
+        people = [p for p in detector(frame) if p.score >= self.min_person_score]
         sx, sy = self.size[0] / frame.shape[1], self.size[1] / frame.shape[0]
         if abs(sx - 1.0) > 1e-6 or abs(sy - 1.0) > 1e-6:
             people = [_scale_person(p, sx, sy) for p in people]
@@ -170,9 +187,13 @@ class ModelPerception:
             people = refiner.refine(frame, self.detect, self.tracker, people,
                                     homography=self.homography, scale=(sx, sy))  # fmt: skip
         # Boxes are in session pixels; the shirt colours are read from this (smaller) frame.
-        return self.tracker.update(people, frame_height=self.size[1],
-                                   homography=self.homography, frame=frame,
-                                   image_scale=(1 / sx, 1 / sy))  # fmt: skip
+        result = self.tracker.update(people, frame_height=self.size[1],
+                                     homography=self.homography, frame=frame,
+                                     image_scale=(1 / sx, 1 / sy))  # fmt: skip
+        candidates = getattr(self, "watch_candidates", None)
+        if candidates is not None and abs(sx - 1) < 1e-6 and abs(sy - 1) < 1e-6:
+            candidates.audit(result)
+        return result
 
 
 class ReplayPerception:

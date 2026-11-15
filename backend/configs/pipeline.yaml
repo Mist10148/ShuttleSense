@@ -11,7 +11,9 @@ seed: 42  # reserved: no pipeline stage is random yet (training seeds: stroke_cn
 watch:
   stroke_min_confidence: 0.5  # heuristic; validate against labelled footage
   parallel_perception: auto   # concurrent models for CUDA; false disables, true forces
-  pose_batch_size: 1          # experimental: 1 keeps original; try 8 after validating footage
+  candidate_filter: filter  # experimental; shadow checks without excluding candidates
+  candidate_margin_m: 2.0  # area around playing court; also protects established tracks
+  pose_batch_size: 8          # experimental; set to 1 for original sequential pose inference
 
 stages:
   io:

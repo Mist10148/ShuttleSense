@@ -50,6 +50,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   bool stopAcknowledged = false;
   ApiClient? backgroundApi;
   double analysisSeconds = 0;
+  String? candidateDiagnostics;
   Player? player;
   VideoController? videoController;
   StreamSubscription<Duration>? videoPositionSubscription;
@@ -325,6 +326,24 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       if (!mounted) return;
       setState(() {
         analysisSeconds = (data['analyzed_s'] as num?)?.toDouble() ?? 0;
+        final diagnostics = data['candidate_diagnostics'];
+        if (diagnostics is Map) {
+          final people = (diagnostics['people'] as num?)?.toInt() ?? 0;
+          final excluded = (diagnostics['excluded'] as num?)?.toInt() ?? 0;
+          final tracked = (diagnostics['tracked_excluded'] as num?)?.toInt() ?? 0;
+          if (diagnostics['fallback'] == true) {
+            candidateDiagnostics = 'Candidate check unavailable; analyzing everyone.';
+          } else if (diagnostics['mode'] == 'shadow') {
+            candidateDiagnostics =
+                'Candidate check: $excluded of $people person detections '
+                'marked for exclusion; $tracked later matched tracked players. '
+                'Shadow mode still analyzes everyone.';
+          } else if (diagnostics['mode'] == 'filter') {
+            candidateDiagnostics =
+                'Experimental candidate filter: '
+                '$excluded of $people person detections excluded.';
+          }
+        }
         final frame = data['frame'];
         if (frame is Map<String, dynamic>) {
           frameData = frame;
@@ -860,6 +879,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
               'Overlays are hidden when analysis is behind.',
             ),
+          if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
           if (!stopping && started && error == null)
             Wrap(
               spacing: 8,
@@ -912,6 +932,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                   player = null;
                   videoController = null;
                   videoPosition = Duration.zero;
+                  candidateDiagnostics = null;
                   lastRequestedIndex = -1;
                   lastAnalyzedIndex = -1;
                   started = false;

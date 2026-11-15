@@ -343,3 +343,70 @@ def test_watch_batch_failure_falls_back_once(monkeypatch):
     assert batched(image) == sequential(image)
     assert batched(image) == sequential(image)
     assert len(attempts) == 1
+
+
+def test_watch_candidate_shadow_and_filter_keep_original_order(monkeypatch):
+
+    import pytest
+    rtmlib = pytest.importorskip("rtmlib")
+    from shuttlesense.pose import estimator
+
+    class Body:
+        def __init__(self, **kwargs):
+            self.det_model = lambda frame: [[0, 0, 3, 3], [5, 5, 9, 9]]
+        def __call__(self, frame):
+            raise AssertionError("unexpected unfiltered fallback")
+
+    def batch(body, frame, size, boxes):
+        kps = np.array([[[box[0] + n, n] for n in range(17)] for box in boxes], float)
+        return kps, np.ones((len(boxes), 17))
+
+    class Candidates:
+        def __init__(self, mode):
+            self.mode, self.excluded_players, self.records = mode, [], []
+        def select(self, boxes, shape):
+            return [False, True]
+        def record(self, *args):
+            self.records.append(args)
+
+    monkeypatch.setattr(rtmlib, "Body", Body)
+    monkeypatch.setattr(estimator, "_batched_body_pose", batch)
+    detector = estimator._rtmlib_detector("balanced", "cpu")
+    image = np.zeros((10, 10, 3), np.uint8)
+    shadow = Candidates("shadow")
+    all_players = detector.with_watch(8, shadow)(image)
+    assert len(all_players) == 2 and len(shadow.excluded_players) == 1
+    assert shadow.excluded_players[0] == all_players[0]
+    filtered = Candidates("filter")
+    players = detector.with_watch(8, filtered)(image)
+    assert players == all_players[1:]
+    assert filtered.records[0][:2] == (2, [False, True])
+
+
+def test_watch_candidate_failure_falls_back_to_unfiltered(monkeypatch):
+    import pytest
+
+    from shuttlesense.pose import estimator
+
+    rtmlib = pytest.importorskip("rtmlib")
+    class Body:
+        def __init__(self, **kwargs):
+            self.det_model = lambda frame: [[0, 0, 3, 3]]
+        def __call__(self, frame):
+            return np.array([[[n, n] for n in range(17)]], float), np.ones((1, 17))
+    class Candidates:
+        mode = "filter"
+        excluded_players = []
+        stats = {"fallback": False}
+        calls = 0
+        def select(self, boxes, shape):
+            self.calls += 1
+            raise ValueError("bad projection")
+    monkeypatch.setattr(rtmlib, "Body", Body)
+    baseline = estimator._rtmlib_detector("balanced", "cpu")
+    candidates = Candidates()
+    accelerated = baseline.with_watch(1, candidates)
+    frame = np.zeros((10, 10, 3), np.uint8)
+    assert accelerated(frame) == baseline(frame)
+    assert accelerated(frame) == baseline(frame)
+    assert candidates.calls == 1 and candidates.stats["fallback"]

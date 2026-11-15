@@ -367,7 +367,8 @@ def test_watch_cache_preserves_model_inputs_across_sliding_windows(monkeypatch):
     pytest.importorskip("torch")
     inputs = []
 
-    def track(model, windows, bg_mode, median, device, size, *, prepared_rgb=False):
+    def track(model, windows, bg_mode, median, device, size, *, prepared_rgb=False,
+              latest_only=False):
         prepare = tracknet._track_input_rgb if prepared_rgb else tracknet._track_input
         inputs.append(prepare(windows[0], bg_mode, median))
         return [[(0.0, 0.0, 0)] * len(windows[0])]

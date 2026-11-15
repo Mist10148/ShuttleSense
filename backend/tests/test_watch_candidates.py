@@ -1,0 +1,42 @@
+
+from shuttlesense.court import compute_homography
+from shuttlesense.pose.player_tracker import CourtPlayerTracker
+from shuttlesense.pose.watch_candidates import WatchCandidates
+from shuttlesense.schema import COURT_SIZE_M, Player, Players
+
+
+def _selector(mode="shadow"):
+    h = compute_homography([[212, 650], [1068, 650], [880, 210], [400, 210]])
+    tracker = CourtPlayerTracker({}, "doubles", COURT_SIZE_M)
+    return WatchCandidates(tracker, h, (1280, 720), mode)
+
+
+def test_court_near_candidates_kept_and_spectators_marked():
+    selector = _selector()
+    boxes = [[0, 0, 100, 100], [600, 400, 680, 650], [1000, 40, 1100, 100]]
+    assert selector.select(boxes, (720, 1280, 3)) == [False, True, False]
+    selector.record(3, [False, True, False], .1, .2)
+    assert selector.stats["excluded"] == 2 and selector.stats["eligible"] == 1
+
+
+def test_confirmed_track_keeps_nearby_outside_candidate():
+    selector = _selector()
+    t = selector.tracker.slots["near"]
+    t.locked, t.bbox = True, (40, 50, 60, 150)
+    assert selector.select([[0, 0, 100, 100]], (720, 1280, 3)) == [True]
+
+
+def test_missing_calibration_and_offscreen_court_keep_everyone():
+    selector = _selector()
+    selector.homography = None
+    assert selector.select([[0, 0, 100, 100]], (720, 1280, 3)) == [True]
+    selector.homography = compute_homography([[-10, 650], [1068, 650], [880, 210], [400, 210]])
+    assert selector.select([[0, 0, 100, 100]], (720, 1280, 3)) == [True]
+
+
+def test_shadow_reports_excluded_tracked_player_without_changing_result():
+    selector = _selector()
+    player = Player(bbox=(1, 2, 20, 40), score=.9)
+    selector.excluded_players = [player]
+    selector.audit(Players(near=player))
+    assert selector.stats["tracked_excluded"] == 1

@@ -129,6 +129,7 @@ def track_windows(
     frame_size: tuple[int, int],
     *,
     prepared_rgb: bool = False,
+    latest_only: bool = False,
 ) -> list[list[tuple[float, float, int]]]:
     """Shuttle (x, y, visible) in frame pixels for every frame of each seq_len window.
 
@@ -140,10 +141,15 @@ def track_windows(
     prepare = _track_input_rgb if prepared_rgb else _track_input
     batch = torch.from_numpy(np.stack([prepare(w, bg_mode, median) for w in windows]))
     with torch.autocast("cuda", enabled=device.startswith("cuda")):
-        heatmaps = model(batch.to(device)).float().cpu().numpy()
+        heatmaps = model(batch.to(device))
+        if latest_only:
+            heatmaps = heatmaps[:, -1:]
+        heatmaps = heatmaps.float().cpu().numpy()
     out = []
     for sequence in heatmaps:
         points = []
+        # Watch consumes only the newest point. Inference remains identical, but
+        # decoding old heatmaps in the overlapping window is unnecessary.
         for heatmap in sequence:
             x, y, vis = heatmap_to_xy(heatmap)
             if vis:
