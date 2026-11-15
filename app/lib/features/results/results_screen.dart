@@ -447,6 +447,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
             ),
             coach: SessionSummary(
               record: record,
+              doubles: doublesJob,
               videoAvailable: widget.videoAvailable == true,
               onGoalChanged: record.schemaVersion == '1.6'
                   ? (goal, done) async {

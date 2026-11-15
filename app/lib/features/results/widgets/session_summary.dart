@@ -11,12 +11,13 @@ final seekRequestProvider = StateProvider.family<Moment?, String>((ref, jobId) =
 
 /// F21 / C6: the top 3 things to fix, each with the moments that show it (tap to seek),
 /// the other notes, and the way into the coach chat.
-class SessionSummary extends StatelessWidget {
+class SessionSummary extends StatefulWidget {
   const SessionSummary({
     super.key,
     required this.record,
     required this.onSeek,
     this.videoAvailable = true,
+    this.doubles = false,
     this.onAskCoach,
     this.chatAvailable = false,
     this.onGoalChanged,
@@ -25,19 +26,67 @@ class SessionSummary extends StatelessWidget {
   final ClipRecord record;
   final ValueChanged<Moment> onSeek;
   final bool videoAvailable;
+  final bool doubles;
   final VoidCallback? onAskCoach;
   final bool chatAvailable;
   final void Function(PracticeGoal, bool)? onGoalChanged;
 
   @override
+  State<SessionSummary> createState() => _SessionSummaryState();
+}
+
+class _SessionSummaryState extends State<SessionSummary> {
+  String? _player;
+
+  bool _matches(String player) => _player == null || _player == player || _player == sideOf(player);
+
+  Widget _goalCard(PracticeGoal goal) {
+    final frame = goal.frame;
+    final time = goal.timeS;
+    final canSeek =
+        widget.videoAvailable &&
+        frame != null &&
+        frame >= 0 &&
+        frame < widget.record.numFrames &&
+        time != null &&
+        time.isFinite &&
+        time >= 0;
+    return PracticeGoalCard(
+      goal: goal,
+      onSeek: canSeek ? widget.onSeek : null,
+      onComplete: widget.onGoalChanged == null ? null : (done) => widget.onGoalChanged!(goal, done),
+    );
+  }
+
+  Widget _noteTile(SessionNote note, {int? rank}) => _NoteTile(
+    note: note,
+    rank: rank,
+    onSeek: widget.videoAvailable ? widget.onSeek : null,
+    moments: note.moments
+        .where((moment) => moment.frame >= 0 && moment.frame < widget.record.numFrames)
+        .toList(),
+  );
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final record = widget.record;
     final coaching = record.coaching;
-    final top = coaching?.topFixes.take(3).toList() ?? const <SessionNote>[];
-    final others = [
-      for (final n in coaching?.notes ?? const <SessionNote>[])
-        if (!top.contains(n)) n,
+    final notes = coaching?.notes ?? const <SessionNote>[];
+    final attributed = notes.where((note) => note.player != null && _matches(note.player!));
+    final top =
+        (_player == null
+                ? coaching?.topFixes.where((note) => note.player != null) ?? const <SessionNote>[]
+                : Coaching.rankedFixes(attributed))
+            .take(3)
+            .toList();
+    final others = attributed.where((note) => !top.contains(note)).toList();
+    final generalNotes = notes.where((note) => note.player == null).toList();
+    final goals = [
+      for (final goal in record.practiceGoals)
+        if (goal.player case final String player when _matches(player)) goal,
     ];
+    final generalGoals = record.practiceGoals.where((goal) => goal.player == null).toList();
     return SectionCard(
       title: 'Coach',
       child: Column(
@@ -48,7 +97,8 @@ class SessionSummary extends StatelessWidget {
             Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
           if (record.score != null)
             Text('Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}'),
-          if (record.summary != null)
+          if (record.summary != null && record.summary!.strokeCounts.isNotEmpty) ...[
+            Text('Session stroke totals', style: theme.textTheme.titleSmall),
             Wrap(
               spacing: 8,
               children: [
@@ -56,46 +106,46 @@ class SessionSummary extends StatelessWidget {
                   Chip(label: Text('${kStrokeLabels[item.key] ?? item.key}: ${item.value}')),
               ],
             ),
-          for (final goal in record.practiceGoals)
-            PracticeGoalCard(
-              goal: goal,
-              onSeek:
-                  videoAvailable &&
-                      goal.frame != null &&
-                      goal.frame! >= 0 &&
-                      goal.frame! < record.numFrames &&
-                      goal.timeS != null &&
-                      goal.timeS!.isFinite &&
-                      goal.timeS! >= 0
-                  ? onSeek
-                  : null,
-              onComplete: onGoalChanged == null ? null : (done) => onGoalChanged!(goal, done),
+          ],
+          if (notes.any((note) => note.player != null) ||
+              record.practiceGoals.any((goal) => goal.player != null))
+            CoachPlayerFilter(
+              player: _player,
+              doubles: widget.doubles || record.isDoubles,
+              onChanged: (player) => setState(() => _player = player),
             ),
-          if (record.practiceGoals.isEmpty) const Text('No saved practice goals.'),
+          for (final goal in goals) _goalCard(goal),
           if (top.isEmpty)
             Text(
-              coaching == null
+              _player != null
+                  ? 'No repeated pattern was identified for ${playerLabel(_player!)}.'
+                  : coaching == null
                   ? 'Session notes appear once strokes are classified.'
                   : 'Not enough evidence of a repeated pattern in this session.',
               style: theme.textTheme.bodyMedium,
             )
           else ...[
             Text('Top things to fix', style: theme.textTheme.titleSmall),
-            for (final (i, note) in top.indexed) _NoteTile(rank: i + 1, note: note, onSeek: onSeek),
+            for (final (i, note) in top.indexed) _noteTile(note, rank: i + 1),
           ],
           if (others.isNotEmpty)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: Text('All notes (${others.length + top.length})'),
-              children: [for (final n in others) _NoteTile(note: n, onSeek: onSeek)],
+              title: Text('More player notes (${others.length})'),
+              children: [for (final note in others) _noteTile(note)],
             ),
+          if (generalNotes.isNotEmpty || generalGoals.isNotEmpty) ...[
+            Text('Session-wide notes and goals', style: theme.textTheme.titleSmall),
+            for (final goal in generalGoals) _goalCard(goal),
+            for (final note in generalNotes) _noteTile(note),
+          ],
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: chatAvailable ? onAskCoach : null,
+            onPressed: widget.chatAvailable ? widget.onAskCoach : null,
             icon: const Icon(Icons.forum_outlined),
             label: const Text('Ask your coach'),
           ),
-          if (!chatAvailable)
+          if (!widget.chatAvailable)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
@@ -115,10 +165,11 @@ class SessionSummary extends StatelessWidget {
 }
 
 class _NoteTile extends StatelessWidget {
-  const _NoteTile({required this.note, required this.onSeek, this.rank});
+  const _NoteTile({required this.note, required this.onSeek, required this.moments, this.rank});
 
   final SessionNote note;
-  final ValueChanged<Moment> onSeek;
+  final ValueChanged<Moment>? onSeek;
+  final List<Moment> moments;
   final int? rank;
 
   @override
@@ -138,8 +189,10 @@ class _NoteTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(note.text),
-                const SizedBox(height: 4),
-                MomentChips(moments: note.moments, onSeek: onSeek),
+                if (onSeek case final seek? when moments.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  MomentChips(moments: moments, onSeek: seek),
+                ],
               ],
             ),
           ),

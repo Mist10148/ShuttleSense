@@ -817,6 +817,14 @@ class Coaching {
   /// The notes named in top_fixes, most important first.
   List<SessionNote> get topFixes => [for (final id in topFixIds) ...notes.where((n) => n.id == id)];
 
+  static List<SessionNote> rankedFixes(Iterable<SessionNote> notes) =>
+      notes.where((note) => note.severity > 0).toList()..sort((a, b) {
+        final impact = (b.count * b.severity).compareTo(a.count * a.severity);
+        if (impact != 0) return impact;
+        final frequency = (b.count / b.total).compareTo(a.count / a.total);
+        return frequency == 0 ? a.id.compareTo(b.id) : frequency;
+      });
+
   factory Coaching.fromJson(Json j) => Coaching(
     notes: asList(j['session_notes']).map(SessionNote.fromJson).toList(),
     topFixIds: (j['top_fixes'] as List<dynamic>? ?? const []).cast<String>(),

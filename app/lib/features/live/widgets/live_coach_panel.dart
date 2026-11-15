@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/disclaimers.dart';
+import '../../../shared/widgets/courtside_tools.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../live_controller.dart';
 
@@ -48,19 +49,11 @@ class LiveCoachPanel extends StatelessWidget {
     // no severity and are not faults; the server keeps them out of its top fixes too.
     final notes = coaching.notes.where(
       (note) =>
-          note.severity > 0 &&
-          (note.player == null ||
-              note.player == player ||
-              (!player!.contains('_') && sideOf(note.player!) == player)),
+          note.player == null ||
+          note.player == player ||
+          (!player!.contains('_') && sideOf(note.player!) == player),
     );
-    final ranked = notes.toList()
-      ..sort((a, b) {
-        final impact = (b.count * b.severity).compareTo(a.count * a.severity);
-        if (impact != 0) return impact;
-        final frequency = (b.count / b.total).compareTo(a.count / a.total);
-        return frequency == 0 ? a.id.compareTo(b.id) : frequency;
-      });
-    return ranked.take(3).toList();
+    return Coaching.rankedFixes(notes).take(3).toList();
   }
 
   @override
@@ -78,31 +71,7 @@ class LiveCoachPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (onPlayerChanged != null)
-            Wrap(
-              spacing: Spacing.sm,
-              children: [
-                for (final (value, label) in [
-                  (null, 'Both'),
-                  ('near', 'Near'),
-                  ('far', 'Far'),
-                  if (state.doubles) ...[
-                    ('near_1', 'Near 1'),
-                    ('near_2', 'Near 2'),
-                    ('far_1', 'Far 1'),
-                    ('far_2', 'Far 2'),
-                  ],
-                ])
-                  ChoiceChip(
-                    avatar: value == null
-                        ? null
-                        : Icon(Icons.circle, size: 12, color: colors.forPlayer(value)),
-                    showCheckmark: value == null,
-                    label: Text(label),
-                    selected: player == value,
-                    onSelected: (_) => onPlayerChanged!(value),
-                  ),
-              ],
-            ),
+            CoachPlayerFilter(player: player, doubles: state.doubles, onChanged: onPlayerChanged!),
           if (practiceCue case final cue?) ...[
             const SizedBox(height: Spacing.sm),
             _Tinted(

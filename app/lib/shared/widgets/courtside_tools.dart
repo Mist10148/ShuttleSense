@@ -1,7 +1,46 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/clip_record.dart';
+
+class CoachPlayerFilter extends StatelessWidget {
+  const CoachPlayerFilter({
+    super.key,
+    required this.player,
+    required this.doubles,
+    required this.onChanged,
+  });
+
+  final String? player;
+  final bool doubles;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PlayerColors.of(context);
+    return Wrap(
+      spacing: Spacing.sm,
+      children: [
+        for (final value in [
+          null,
+          'near',
+          'far',
+          if (doubles) ...['near_1', 'near_2', 'far_1', 'far_2'],
+        ])
+          ChoiceChip(
+            avatar: value == null
+                ? null
+                : Icon(Icons.circle, size: 12, color: colors.forPlayer(value)),
+            showCheckmark: value == null,
+            label: Text(value == null ? 'Both' : playerLabel(value)),
+            selected: player == value,
+            onSelected: (_) => onChanged(value),
+          ),
+      ],
+    );
+  }
+}
 
 class DecisionHistory extends StatefulWidget {
   const DecisionHistory({super.key, required this.record, this.onSeek});

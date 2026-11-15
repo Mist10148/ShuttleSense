@@ -142,6 +142,75 @@ void main() {
   });
 
   group('session summary', () {
+    testWidgets('doubles recap filters player goals and notes and keeps shared evidence', (
+      tester,
+    ) async {
+      final record = ClipRecord.fromJson({
+        'schema_version': '1.6',
+        'clip_id': 'test',
+        'fps': 30,
+        'width': 640,
+        'height': 360,
+        'num_frames': 30,
+        'coaching': {
+          'session_notes': [
+            for (final (player, text) in [
+              ('near_1', 'First partner cue'),
+              ('near_2', 'Second partner cue'),
+              ('far_1', 'Opposing partner cue'),
+              (null, 'Shared finding'),
+            ])
+              {
+                'id': text,
+                'player': player,
+                'rule': 'balance',
+                'text': text,
+                'count': 1,
+                'total': 1,
+                'severity': 1,
+                'moments': [
+                  {'frame': 15, 'time_s': 0.5},
+                ],
+              },
+          ],
+          'top_fixes': ['First partner cue', 'Second partner cue', 'Opposing partner cue'],
+        },
+        'practice_goals': [
+          {'text': 'Shared practice goal'},
+          {'player': 'near_2', 'text': 'Second partner goal', 'completed': true},
+        ],
+      });
+      final seeks = <Moment>[];
+      Widget view({required bool videoAvailable}) => host(
+        SessionSummary(
+          record: record,
+          onSeek: seeks.add,
+          videoAvailable: videoAvailable,
+          doubles: true,
+        ),
+      );
+      await tester.pumpWidget(view(videoAvailable: true));
+      expect(find.text('Opposing partner cue'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Near'));
+      await tester.pumpAndSettle();
+      expect(find.text('First partner cue'), findsOneWidget);
+      expect(find.text('Second partner cue'), findsOneWidget);
+      expect(find.text('Opposing partner cue'), findsNothing);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Near 2'));
+      await tester.pumpAndSettle();
+      expect(find.text('First partner cue'), findsNothing);
+      expect(find.text('Second partner cue'), findsOneWidget);
+      expect(find.text('Second partner goal'), findsOneWidget);
+      expect(find.text('Completed · self-reported'), findsOneWidget);
+      expect(find.text('Shared finding'), findsOneWidget);
+      expect(find.text('Shared practice goal'), findsOneWidget);
+      await tester.ensureVisible(find.byType(ActionChip).first);
+      await tester.tap(find.byType(ActionChip).first);
+      expect(seeks.single.frame, 15);
+      await tester.pumpWidget(view(videoAvailable: false));
+      expect(find.byType(ActionChip), findsNothing);
+    });
+
     testWidgets('lists top fixes with seek chips and the disclaimer', (tester) async {
       final seeks = <Moment>[];
       var asked = false;
