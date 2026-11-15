@@ -40,6 +40,15 @@ def tunnel_url(line: str) -> str | None:
     return match.group(0) if match else None
 
 
+def token_problem(token: str) -> str | None:
+    """Why this token must not guard a public tunnel, or None when it is acceptable."""
+    if token.strip().lower() in {"change-me", "changeme"}:
+        return "set your own token: 'change-me' is the placeholder everyone knows"
+    if len(token.strip()) < 8:
+        return "the token must be at least 8 characters: the tunnel URL is public"
+    return None
+
+
 def _drain(stream) -> None:
     for _line in stream:
         pass
@@ -50,6 +59,9 @@ def main() -> None:
     parser.add_argument("--token", required=True, help="bearer token the app must send")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    problem = token_problem(args.token)
+    if problem:
+        raise SystemExit(problem)
 
     env = {**os.environ, "SHUTTLESENSE_TOKEN": args.token}
     server = subprocess.Popen(

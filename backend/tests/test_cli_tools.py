@@ -161,6 +161,13 @@ def test_colab_tunnel_url_is_found_in_the_cloudflared_log() -> None:
     assert serve_colab.tunnel_url("see https://example.com for help") is None
 
 
+def test_colab_refuses_a_placeholder_or_short_token() -> None:
+    serve_colab = load_script("serve_colab")
+    assert "placeholder" in serve_colab.token_problem("change-me")
+    assert "8 characters" in serve_colab.token_problem("abc")
+    assert serve_colab.token_problem("court-2-finals") is None
+
+
 def test_hitter_side_picks_the_wrist_next_to_the_shuttle() -> None:
     from shuttlesense.schema import Shuttle
     from shuttlesense.stream.synthetic import synthetic_record
