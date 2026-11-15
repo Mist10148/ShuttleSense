@@ -220,6 +220,17 @@ void main() {
     expect(onlyAwards.scoreAt(40), const ScorePair(near: 1, far: 0));
     expect(golden.strokesSoFar(30), 2);
     expect(golden.rallyAt(57), isNull);
+    // A let replays the rally in play, or the last one that ended: never a later rally.
+    final rallies = golden.rallies;
+    expect(golden.rallyToReplay(rallies.first.startFrame)!.index, rallies.first.index);
+    expect(golden.rallyToReplay(rallies.last.endFrame + 1)!.index, rallies.last.index);
+    if (rallies.first.startFrame > 0) {
+      expect(golden.rallyToReplay(rallies.first.startFrame - 1), isNull);
+    }
+    expect(golden.copyWith(rallies: const []).rallyToReplay(10), isNull);
+    expect(golden.atLeast(6), golden.schemaVersion != '1.5');
+    expect(golden.atLeast(0), isTrue);
+    expect(golden.atLeast(99), isFalse);
   });
 
   test('ScoreUpdate parses the correction response', () {

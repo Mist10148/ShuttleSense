@@ -192,5 +192,5 @@ class PlaybackShortcuts extends StatelessWidget {
 }
 
 /// Loads [url] with optional auth headers into [player], paused.
-void openVideo(Player player, String url, Map<String, String> headers) =>
+Future<void> openVideo(Player player, String url, Map<String, String> headers) =>
     player.open(Media(url, httpHeaders: headers), play: false);

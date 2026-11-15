@@ -125,6 +125,26 @@ class ClipRecord {
     return null;
   }
 
+  /// The rally a let at [frameIndex] replays: the one in play there, else the last one
+  /// that ended before it. Null before the first rally: there is nothing to replay yet.
+  Rally? rallyToReplay(int frameIndex) {
+    final playing = rallyAt(frameIndex);
+    if (playing != null) return playing;
+    Rally? last;
+    for (final r in rallies) {
+      if (r.endFrame <= frameIndex && (last == null || r.endFrame >= last.endFrame)) last = r;
+    }
+    return last;
+  }
+
+  /// Whether this record is clip record 1.[minor] or newer.
+  bool atLeast(int minor) {
+    final parts = schemaVersion.split('.');
+    final major = int.tryParse(parts.first) ?? 0;
+    final have = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return major > 1 || (major == 1 && have >= minor);
+  }
+
   /// Score shown at [frameIndex]: after the last rally that ended at or before it, plus the
   /// points awarded since (an award counts from its frame on). Before the first scored rally
   /// ends this is the starting score. Null without a referee.

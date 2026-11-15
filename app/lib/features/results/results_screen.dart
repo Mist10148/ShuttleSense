@@ -244,7 +244,11 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   void _openIfAvailable() {
     if (_opened || widget.videoAvailable != true) return;
     _opened = true;
-    openVideo(_player, widget.videoUrl, widget.headers);
+    unawaited(
+      openVideo(_player, widget.videoUrl, widget.headers).catchError((Object error) {
+        debugPrint('Could not open the video: $error');
+      }),
+    );
   }
 
   @override
@@ -268,13 +272,15 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   );
 
   /// D33: a let, so the rally at (or last before) the playback position is replayed.
-  Future<void> _let() {
-    final rally =
-        _record.rallyAt(_frameIndex.value) ??
-        _record.rallies.lastWhere(
-          (r) => r.endFrame <= _frameIndex.value,
-          orElse: () => _record.rallies.last,
-        );
+  Future<void> _let() async {
+    final rally = _record.rallyToReplay(_frameIndex.value);
+    if (rally == null) {
+      // Before the first rally: replaying "the last rally of the match" would be a guess.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No rally to replay yet. Move to the rally first.')),
+      );
+      return;
+    }
     return _changeScore(
       (api) => api.correctScore(widget.jobId, rallyIndex: rally.index, winner: null, reason: 'let'),
     );
@@ -449,7 +455,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               record: record,
               doubles: doublesJob,
               videoAvailable: widget.videoAvailable == true,
-              onGoalChanged: record.schemaVersion == '1.6'
+              onGoalChanged: record.atLeast(6)
                   ? (goal, done) async {
                       try {
                         await ref
