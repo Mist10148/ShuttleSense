@@ -56,7 +56,7 @@ class LiveScreen extends ConsumerWidget {
     return PopScope(
       canPop: !streaming,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && state.phase == LivePhase.live) {
+        if (!didPop && controller.canDecide) {
           confirmStop(context, state, controller.stop);
         }
       },
@@ -92,7 +92,7 @@ class LiveScreen extends ConsumerWidget {
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
-                onPressed: state.phase == LivePhase.live
+                onPressed: controller.canDecide
                     ? () => confirmStop(context, state, controller.stop)
                     : null,
                 icon: const Icon(Icons.stop),
@@ -127,7 +127,11 @@ class LiveScreen extends ConsumerWidget {
 /// decisions exist, ask first (T12.6).
 Future<void> confirmStop(BuildContext context, LiveState state, VoidCallback stop) async {
   final record = state.record;
-  final worthAsking = record.rallies.isNotEmpty || (record.score?.corrections.isNotEmpty ?? false);
+  final worthAsking =
+      record.rallies.isNotEmpty ||
+      record.practiceGoals.isNotEmpty ||
+      record.decisionLog.isNotEmpty ||
+      (record.score?.corrections.isNotEmpty ?? false);
   if (!worthAsking) {
     stop();
     return;
@@ -556,18 +560,19 @@ class _LiveViewState extends ConsumerState<_LiveView> {
             title: Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
             subtitle: const Text('Stop to save it, or Undo to change the result.'),
             trailing: FilledButton(
-              onPressed: () => confirmStop(context, state, controller.stop),
+              onPressed: decisionBusy ? null : () => confirmStop(context, state, controller.stop),
               child: const Text('Stop and save'),
             ),
           ),
         ),
-      if (state.phase == LivePhase.reconnecting || (state.phase == LivePhase.live && decisionBusy))
+      if (state.phase == LivePhase.reconnecting ||
+          (state.phase == LivePhase.live && controller.pendingAction != null))
         Semantics(
           liveRegion: true,
           child: Text(
             state.phase == LivePhase.reconnecting
                 ? 'Reconnecting and refreshing the score…'
-                : 'Waiting for the referee decision to be confirmed…',
+                : controller.pendingAction!,
           ),
         ),
       Scoreboard(

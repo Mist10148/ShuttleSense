@@ -225,6 +225,13 @@ void main() {
         await tester.tap(find.text('Confirm IN'));
         await events(tester);
         expect(socket.sent.last, {'type': 'override', 'line_call_id': 1, 'call': 'in'});
+        socket.emit(lineCallEvent(id: 1, call: 'in', override: 'in'));
+        socket.emit({
+          'type': 'score',
+          'score': {'near': 0, 'far': 0},
+          'rallies': [],
+        });
+        await events(tester);
         await tester.ensureVisible(find.text('Coach'));
         await tester.tap(find.text('Coach'));
         await events(tester);
@@ -868,6 +875,12 @@ void main() {
     expect(socket.sent.where((m) => m['type'] == 'award').single['winner'], 'far');
     expect(socket.sent.where((m) => m['type'] == 'undo'), hasLength(1));
     expect(tester.takeException(), isNull);
+    socket.emit({
+      'type': 'score',
+      'score': {'near': 0, 'far': 0},
+      'rallies': [],
+    });
+    await events(tester);
     await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));

@@ -40,6 +40,14 @@ void main() {
     final controller = container.read(liveControllerProvider.notifier);
     controller.award('near');
     final first = sockets.first.sent.last;
+    await events(tester);
+    expect(find.text('Confirming the referee decision…'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Stop')).onPressed,
+      isNull,
+    );
+    await controller.stop();
+    expect(sockets.first.sent.last, first);
     await sockets.first.drop();
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
@@ -51,10 +59,24 @@ void main() {
       'type': 'score',
       'score': {'near': 1, 'far': 0},
       'rallies': [],
+      'line_calls': [
+        {
+          'id': 4,
+          'frame': 1,
+          'rally_index': 0,
+          'time_s': 0.1,
+          'call': 'in',
+          'landing_xy': [2, 4],
+          'margin_cm': 20,
+          'confidence': 0.9,
+          'uncertain': false,
+        },
+      ],
       'decision_id': first['decision_id'],
     });
     await events(tester);
     expect(controller.canDecide, isTrue);
+    expect(container.read(liveControllerProvider).lineCalls.single.id, 4);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
   });

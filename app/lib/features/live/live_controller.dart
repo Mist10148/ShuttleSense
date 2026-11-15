@@ -238,6 +238,7 @@ class LiveState {
     ({int id, String text})? notice,
     Coaching? coaching,
     RallySummary? lastRally,
+    bool clearCoaching = false,
     bool? doubles,
     bool? courtsideDepth,
     List<DecisionEntry>? decisionLog,
@@ -276,8 +277,8 @@ class LiveState {
     fps: fps ?? this.fps,
     processedFrames: processedFrames ?? this.processedFrames,
     notice: notice ?? this.notice,
-    coaching: coaching ?? this.coaching,
-    lastRally: lastRally ?? this.lastRally,
+    coaching: clearCoaching ? coaching : (coaching ?? this.coaching),
+    lastRally: clearCoaching ? lastRally : (lastRally ?? this.lastRally),
     doubles: doubles ?? this.doubles,
     courtsideDepth: courtsideDepth ?? this.courtsideDepth,
     decisionLog: decisionLog ?? this.decisionLog,
@@ -645,25 +646,26 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       final size = (width: asInt(event['width'])!, height: asInt(event['height'])!);
       _expectedJobId = event['job_id'] as String?;
-      _seed(event);
-      _set(
-        state.copyWith(
-          phase: LivePhase.live,
-          sessionId: event['session_id'] as String,
-          size: size,
-          courtCorners: (event['corners'] as List?)?.map((p) => asPoint(p)!).toList(),
-          fps: asDouble(event['fps']),
-          stages: (event['stages'] as Map? ?? const {}).map(
-            (k, v) => MapEntry(k as String, v as bool),
-          ),
-          score: event['score'] == null ? null : Score.fromJson(event['score'] as Json),
-          rallyState: event['rally_state'] as String?,
-          rallyStartFrame: asInt(event['rally_start_frame']),
-          clearRallyStart:
-              event.containsKey('rally_start_frame') && event['rally_start_frame'] == null,
-          strokesInRally: asInt(event['strokes_in_rally']),
+      final snapshot = _seed(event).copyWith(
+        phase: LivePhase.live,
+        courtsideDepth: event['courtside_depth'] == true,
+        sessionId: event['session_id'] as String,
+        size: size,
+        courtCorners: (event['corners'] as List?)?.map((p) => asPoint(p)!).toList(),
+        fps: asDouble(event['fps']),
+        stages: (event['stages'] as Map? ?? const {}).map(
+          (k, v) => MapEntry(k as String, v as bool),
         ),
+        speedKmh: state.speedKmh,
       );
+      if (_pendingCommand case final Json retry) {
+        socket.sendJson(retry);
+        _decisionTimeout = Timer(
+          const Duration(seconds: 5),
+          () => unawaited(_reconnect(generation)),
+        );
+      }
+      _set(snapshot);
       return (started: event, refused: null);
     } on Object catch (e) {
       final refused = e is _Refused
@@ -686,39 +688,49 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
 
   /// The session so far from `started`: a fresh start has only the start score, a resume
   /// gets back every hit, rally and call it missed while away.
-  void _seed(Json started) {
+  LiveState _seed(Json started) {
     _decisionAck = started['decision_ack'] == true;
     _decisionDedup = started['decision_dedup'] == true;
-    _set(state.copyWith(courtsideDepth: started['courtside_depth'] == true));
-    _courtside(started);
+    if (!_decisionDedup) _clearDecision();
     _padFrames(asInt(started['frames']) ?? 0);
-    if (!started.containsKey('rallies')) return; // an older backend
-    state.hits
-      ..clear()
-      ..addAll(asList(started['hits']).map(Hit.fromJson));
-    state.rallies
-      ..clear()
-      ..addAll(asList(started['rallies']).map(Rally.fromJson));
-    state.lineCalls
-      ..clear()
-      ..addAll(asList(started['line_calls']).map(LineCall.fromJson));
-    final coaching = started['coaching'] as Json?;
-    final summary = started['rally_summary'] as Json?;
-    final retry = _decisionDedup ? _pendingCommand : null;
-    if (retry == null) _clearDecision();
-    if (retry != null) {
-      _socket?.sendJson(retry);
-      _decisionTimeout = Timer(
-        const Duration(seconds: 5),
-        () => unawaited(_reconnect(_generation)),
-      );
+    return _applySnapshot(started);
+  }
+
+  LiveState _applySnapshot(Json event) {
+    void replace<T>(String key, List<T> items, T Function(Json) parse) {
+      if (!event.containsKey(key)) return;
+      final received = asList(event[key]).map(parse).toList();
+      items
+        ..clear()
+        ..addAll(received);
     }
-    _set(
-      state.copyWith(
-        speedKmh: state.speedKmh,
-        coaching: coaching == null ? null : Coaching.fromJson(coaching),
-        lastRally: summary == null ? null : RallySummary.fromJson(summary),
-      ),
+
+    replace('rallies', state.rallies, Rally.fromJson);
+    replace('hits', state.hits, Hit.fromJson);
+    replace('line_calls', state.lineCalls, LineCall.fromJson);
+    final coaching = event['coaching'] as Json?;
+    final summary = event['rally_summary'] as Json?;
+    final hasCourtside = event.containsKey('practice_goals');
+    return state.copyWith(
+      score: event['score'] == null ? null : Score.fromJson(event['score'] as Json),
+      rallyState: event['rally_state'] as String?,
+      rallyStartFrame: asInt(event['rally_start_frame']),
+      clearRallyStart: event.containsKey('rally_start_frame') && event['rally_start_frame'] == null,
+      strokesInRally: asInt(event['strokes_in_rally']),
+      speedKmh: state.speedKmh,
+      coaching: coaching == null ? null : Coaching.fromJson(coaching),
+      lastRally: summary == null ? null : RallySummary.fromJson(summary),
+      clearCoaching: event.containsKey('coaching'),
+      decisionLog: hasCourtside
+          ? asList(event['decision_log']).map(DecisionEntry.fromJson).toList()
+          : null,
+      practiceGoals: hasCourtside
+          ? asList(event['practice_goals']).map(PracticeGoal.fromJson).toList()
+          : null,
+      intervalState: event['interval_state'] == null
+          ? null
+          : IntervalState.fromJson(event['interval_state'] as Json),
+      clearInterval: hasCourtside && event['interval_state'] == null,
     );
   }
 
@@ -828,13 +840,8 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           );
         }
       case 'score':
-        _courtside(e);
         if (_matchesDecision(e)) _clearDecision();
-        final rallies = asList(e['rallies']).map(Rally.fromJson).toList();
-        state.rallies
-          ..clear()
-          ..addAll(rallies);
-        _set(state.copyWith(score: Score.fromJson(e['score'] as Json), speedKmh: state.speedKmh));
+        _set(_applySnapshot(e));
       case 'degraded':
         _set(
           state.copyWith(
@@ -851,20 +858,6 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       case 'error':
         _onServerError(e);
     }
-  }
-
-  void _courtside(Json e) {
-    if (!e.containsKey('practice_goals')) return;
-    _set(
-      state.copyWith(
-        decisionLog: asList(e['decision_log']).map(DecisionEntry.fromJson).toList(),
-        practiceGoals: asList(e['practice_goals']).map(PracticeGoal.fromJson).toList(),
-        intervalState: e['interval_state'] == null
-            ? null
-            : IntervalState.fromJson(e['interval_state'] as Json),
-        clearInterval: e['interval_state'] == null,
-      ),
-    );
   }
 
   void interval(String action) => _decide({'type': 'interval', 'action': action});
@@ -1005,6 +998,13 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   /// Whether a referee decision can reach the server now.
   bool get canDecide =>
       state.phase == LivePhase.live && _socket != null && _pendingDecision == null;
+
+  String? get pendingAction => switch (_pendingCommand?['type']) {
+    'goal' => 'Saving the practice goal…',
+    'interval' => 'Confirming the interval timer change…',
+    null => null,
+    _ => 'Confirming the referee decision…',
+  };
 
   int? get pendingReviewId => _pendingReviewId;
 
@@ -1150,7 +1150,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   /// Stop streaming and wait for the server to save the session.
-  Future<void> stop() => _stop();
+  Future<void> stop() async {
+    if (canDecide) await _stop();
+  }
 
   Future<void> _stop({Object? captureError}) async {
     final socket = _socket;
@@ -1158,7 +1160,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final generation = _generation;
     _streaming = false;
     _clearImages();
-    _clearDecision();
+    _decisionTimeout?.cancel();
     final cameraReleased = _releaseCamera();
     _set(state.copyWith(phase: LivePhase.stopping));
     final saved = _saved = Completer<String?>();
@@ -1191,9 +1193,11 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
           error ??
           (jobId == null ? 'No frames were saved.' : 'The session so far is saved to History.');
       error = 'Camera stopped: $captureError. $outcome';
+      if (_pendingDecision != null) error += ' The last courtside action is unconfirmed.';
     }
     await cameraReleased;
     if (_disposed || generation != _generation) return;
+    _clearDecision();
     _set(
       state.copyWith(
         phase: error == null ? LivePhase.saved : LivePhase.error,
