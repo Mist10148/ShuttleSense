@@ -150,7 +150,7 @@ Future<void> typeInto(WidgetTester tester, Finder field, String text) async {
 
 Future<void> tapText(WidgetTester tester, String text) async {
   final target = find.text(text).first;
-  await tester.ensureVisible(target);
+  await Scrollable.ensureVisible(tester.element(target), alignment: 0.5);
   await tester.pump();
   await tester.tap(target);
   await tester.pump();
@@ -186,6 +186,9 @@ void main() {
       await pumpUntil(tester, find.text('Upload clip'));
       await tapText(tester, 'Upload clip');
       await pumpUntil(tester, find.text('New analysis'));
+      // The successful connection banner can cover the upload action in a short window.
+      ScaffoldMessenger.of(tester.element(find.text('New analysis').first)).removeCurrentSnackBar();
+      await tester.pump();
 
       // 2. Pick and upload without calibration; 4. processing runs to the end.
       await tapText(tester, 'Calibrate court');
