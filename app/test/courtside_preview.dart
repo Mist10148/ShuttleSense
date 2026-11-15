@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
+import 'package:shuttlesense_app/features/live/live_controller.dart';
+import 'package:shuttlesense_app/features/live/widgets/live_coach_panel.dart';
 import 'package:shuttlesense_app/features/results/widgets/scoreboard.dart';
 import 'package:shuttlesense_app/shared/widgets/courtside_tools.dart';
 
@@ -69,7 +71,7 @@ void main() {
       final referee = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('REFEREE'),
+          Text('Referee', style: AppTheme.light().textTheme.headlineSmall),
           Scoreboard(
             record: record,
             frameIndex: 299,
@@ -93,40 +95,34 @@ void main() {
       final coach = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('COACH'),
-          PracticeGoalCard(
-            goal: const PracticeGoal(
-              text: 'Recover to the centre after each overhead stroke.',
-              player: 'near',
-            ),
-            onComplete: (_) {},
-            onEdit: () {},
-          ),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('After the session'),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Review your goals and the moments that prompted them. Completion is self-reported.',
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('View saved moment'),
+          Text('Coach', style: AppTheme.light().textTheme.headlineSmall),
+          LiveCoachPanel(
+            player: 'near',
+            onPlayerChanged: (_) {},
+            state: const LiveState(
+              lastRally: RallySummary(
+                index: 8,
+                durationS: 5.6,
+                strokes: 7,
+                winner: 'near',
+                faults: [
+                  (
+                    hitId: 1,
+                    player: 'near',
+                    hitter: null,
+                    stroke: 'smash',
+                    tip: 'Extend your hitting arm fully at contact.',
                   ),
                 ],
               ),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Coaching cues are heuristic guidance. Automated line calls require review.',
+            goalControls: PracticeGoalCard(
+              goal: const PracticeGoal(
+                text: 'Recover to the centre after each overhead stroke.',
+                player: 'near',
+              ),
+              onComplete: (_) {},
+              onEdit: () {},
             ),
           ),
         ],
@@ -171,7 +167,10 @@ void main() {
           ),
         ),
       );
+      await tester.tap(find.text('Decision history (1)'));
+      // Let expansion finish without waiting for the live interval's periodic ticker.
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(tester.takeException(), isNull);
       await tester.runAsync(() async {
         final image = await (boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary)

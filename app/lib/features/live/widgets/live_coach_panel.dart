@@ -20,6 +20,7 @@ class LiveCoachPanel extends StatelessWidget {
     this.onPlayerChanged,
     this.practiceCue,
     this.onPracticeCueChanged,
+    this.goalControls,
   });
 
   final LiveState state;
@@ -29,6 +30,7 @@ class LiveCoachPanel extends StatelessWidget {
   final ValueChanged<String?>? onPlayerChanged;
   final PracticeCue? practiceCue;
   final ValueChanged<PracticeCue?>? onPracticeCueChanged;
+  final Widget? goalControls;
 
   Widget _pinButton(String text, int rally) {
     final cue = (text: text, rally: rally);
@@ -131,6 +133,7 @@ class LiveCoachPanel extends StatelessWidget {
           ),
           if (last != null && nextCue != null && onPracticeCueChanged != null)
             _pinButton(nextCue, last.index),
+          if (goalControls case final goal?) ...[const SizedBox(height: Spacing.sm), goal],
           if (last != null) ...[
             const Divider(height: 20),
             Text('Last rally', style: theme.textTheme.titleSmall),

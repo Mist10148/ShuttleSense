@@ -34,6 +34,7 @@ Future<List<String>> pumpScreen(
   List<Override> overrides = const [],
   bool settle = true,
   Brightness brightness = Brightness.light,
+  TextScaler textScaler = TextScaler.noScaling,
 }) async {
   setSize(tester, size);
   SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000', ...prefs});
@@ -64,6 +65,10 @@ Future<List<String>> pumpScreen(
       child: MaterialApp.router(
         theme: brightness == Brightness.dark ? AppTheme.dark() : AppTheme.light(),
         routerConfig: router,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
+        ),
       ),
     ),
   );

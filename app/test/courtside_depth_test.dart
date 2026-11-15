@@ -244,6 +244,42 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });
+
+      testWidgets('live roles at $width / $brightness / 200% text', (tester) async {
+        await pumpLive(
+          tester,
+          size: Size(width, 1000),
+          brightness: brightness,
+          textScaler: const TextScaler.linear(2),
+          onHello: (_) => {
+            ...startedEvent(),
+            'courtside_depth': true,
+            'decision_ack': true,
+            'decision_dedup': true,
+            'score': {'near': 0, 'far': 0},
+          },
+        );
+        final start = find.text('Start without court');
+        await tester.scrollUntilVisible(start, 120);
+        await tester.pump();
+        await startWithoutCourt(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.text('Point Near'), findsOneWidget);
+        await tester.tap(find.text('Coach'));
+        await events(tester);
+        expect(find.text('Point Near'), findsNothing);
+        final cue = find.text('Next rally');
+        final goal = find.text('Set practice goal');
+        expect(tester.getTopLeft(cue).dy, lessThan(tester.getTopLeft(goal).dy));
+        expect(tester.takeException(), isNull);
+        final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+        final controller = container.read(liveControllerProvider.notifier);
+        controller.saveGoal(const PracticeGoal(text: 'Recover to base'));
+        await events(tester);
+        expect(find.text('Saving the practice goal…'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 1));
+      });
     }
   }
 }

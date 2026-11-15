@@ -520,7 +520,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 child: Center(
                   child: Text(switch (state.phase) {
                     LivePhase.connecting => 'Connecting… the server may be loading its models',
-                    LivePhase.reconnecting => 'Refreshing camera connection…',
+                    LivePhase.reconnecting => 'Reconnecting…',
                     LivePhase.stopping => 'Saving the session…',
                     _ => '',
                   }, style: const TextStyle(color: Colors.white, fontSize: 18)),
@@ -529,6 +529,27 @@ class _LiveViewState extends ConsumerState<_LiveView> {
           ],
         ),
       ),
+    );
+    final scoreboard = Scoreboard(
+      record: record,
+      frameIndex: frameIndex,
+      live: true,
+      busy: !_coach && decisionBusy,
+      showHistory: false,
+      onAward: _coach ? null : controller.award,
+      onUndo: _coach ? null : controller.undo,
+      onSetService: _coach ? null : controller.setService,
+      onClearLast: _coach || lastRally?.winner == null
+          ? null
+          : () => controller.correct(lastRally!.index, null),
+      doubles: state.doubles,
+      onAwardReason: _coach || !courtside
+          ? null
+          : (side, reason) => controller.award(side, reason: reason),
+      onLet: _coach || !courtside || lastRally == null
+          ? null
+          : () => controller.correct(lastRally.index, null, reason: 'let'),
+      onConcede: _coach || !courtside ? null : controller.concede,
     );
     final controls = [
       SegmentedButton<bool>(
@@ -555,16 +576,28 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         Card(
           key: const Key('match-over'),
           color: Theme.of(context).colorScheme.tertiaryContainer,
-          child: ListTile(
-            leading: const Icon(Icons.emoji_events_outlined),
-            title: Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
-            subtitle: const Text('Stop to save it, or Undo to change the result.'),
-            trailing: FilledButton(
-              onPressed: decisionBusy ? null : () => confirmStop(context, state, controller.stop),
-              child: const Text('Stop and save'),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Match won by ${playerLabel(record.score!.matchWinner!)}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (!_coach) const Text('Undo to change the result.'),
+                FilledButton(
+                  onPressed: decisionBusy
+                      ? null
+                      : () => confirmStop(context, state, controller.stop),
+                  child: const Text('Stop and save'),
+                ),
+              ],
             ),
           ),
         ),
+      if (state.phase == LivePhase.stopping)
+        Semantics(liveRegion: true, child: const Text('Saving the session to History…')),
       if (state.phase == LivePhase.reconnecting ||
           (state.phase == LivePhase.live && controller.pendingAction != null))
         Semantics(
@@ -575,27 +608,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 : controller.pendingAction!,
           ),
         ),
-      Scoreboard(
-        record: record,
-        frameIndex: frameIndex,
-        live: true,
-        busy: !_coach && decisionBusy,
-        showHistory: false,
-        onAward: _coach ? null : controller.award,
-        onUndo: _coach ? null : controller.undo,
-        onSetService: _coach ? null : controller.setService,
-        onClearLast: _coach || lastRally?.winner == null
-            ? null
-            : () => controller.correct(lastRally!.index, null),
-        doubles: state.doubles,
-        onAwardReason: _coach || !courtside
-            ? null
-            : (side, reason) => controller.award(side, reason: reason),
-        onLet: _coach || !courtside || lastRally == null
-            ? null
-            : () => controller.correct(lastRally.index, null, reason: 'let'),
-        onConcede: _coach || !courtside ? null : controller.concede,
-      ),
+      if (!_coach) scoreboard,
       if (!_coach && pendingReviews.isNotEmpty)
         Text(
           '${pendingReviews.length} ${pendingReviews.length == 1 ? 'call' : 'calls'} awaiting review',
@@ -631,10 +644,29 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       if (goal != null && mounted) controller.saveGoal(goal);
     }
 
+    final goalControls = !state.courtsideDepth
+        ? null
+        : savedGoal == null
+        ? Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: decisionBusy ? null : editGoal,
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Set practice goal'),
+            ),
+          )
+        : PracticeGoalCard(
+            goal: savedGoal,
+            onComplete: decisionBusy
+                ? null
+                : (done) => controller.saveGoal(savedGoal, completed: done),
+            onEdit: decisionBusy ? null : editGoal,
+          );
     final details = _coach
         ? LiveCoachPanel(
             state: state,
             player: _coachPlayer,
+            goalControls: goalControls,
             practiceCue: state.courtsideDepth ? null : _practiceCues[_coachPlayer],
             onPracticeCueChanged: state.courtsideDepth
                 ? (decisionBusy
@@ -685,30 +717,6 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         );
       }
       if (!_coach) controls.add(DecisionHistory(record: record));
-      if (_coach) {
-        if (savedGoal != null) {
-          controls.add(
-            PracticeGoalCard(
-              goal: savedGoal,
-              onComplete: decisionBusy
-                  ? null
-                  : (done) => controller.saveGoal(savedGoal, completed: done),
-              onEdit: decisionBusy ? null : editGoal,
-            ),
-          );
-        } else {
-          controls.add(
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: decisionBusy ? null : editGoal,
-                icon: const Icon(Icons.flag_outlined),
-                label: const Text('Set practice goal'),
-              ),
-            ),
-          );
-        }
-      }
     }
     final camera = [
       video,
@@ -718,6 +726,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
       if (state.hits.isNotEmpty) HitCallout(hit: state.hits.last),
     ];
     final analysis = [
+      if (_coach) scoreboard,
       CourtMinimap(
         record: record,
         frameIndex: frameIndex,

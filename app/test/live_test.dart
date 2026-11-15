@@ -40,6 +40,7 @@ Future<List<FakeLiveSocket>> pumpLive(
   FakeApiClient? api,
   bool unreachable = false,
   Brightness brightness = Brightness.light,
+  TextScaler textScaler = TextScaler.noScaling,
   Map<String, dynamic>? Function(Map<String, dynamic> hello)? onHello,
 }) async {
   final sockets = <FakeLiveSocket>[];
@@ -49,6 +50,7 @@ Future<List<FakeLiveSocket>> pumpLive(
     size: size,
     api: api,
     brightness: brightness,
+    textScaler: textScaler,
     prefs: {'ui.mode': 'live'},
     overrides: [
       frameSourceFactoryProvider.overrideWithValue(() => source ?? FakeFrameSource()),
