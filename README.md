@@ -290,7 +290,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | --- | --- | --- | --- |
 | Shuttle detection accuracy (within 4 px) | Trajectory test clips | ≥ 85% | TBD |
 | Hit detection F1 (±3 frames) | ShuttleSet test matches | ≥ 0.75 | TBD |
-| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3% ([strokes.md](docs/results/strokes.md)) |
+| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2% ([strokes.md](docs/results/strokes.md)) |
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
@@ -300,7 +300,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | Processing time, 1-min 720p clip | Colab T4 / RTX 4050 | < 5 min | TBD |
 | Full app flow | Android phone, tablet, Windows, Chrome | All pass | TBD |
 
-**Ablation:** pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). These numbers are on broadcast matches; accuracy on phone footage is not measured yet.
+**Ablation:** pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN). These numbers are on broadcast matches; accuracy on phone footage is not measured yet.
 
 ---
 

@@ -34,6 +34,25 @@ verification pending, and externally blocked. Synthetic tests do not close devic
   measured 201.4 ms p95 and 7.6 fps sequential throughput on generated video. Both
   pose sessions selected ONNX Runtime's CUDA provider.
 
+## Follow-up review on Nov 15
+
+A code review after the courtside update fixed, with tests:
+
+- **Live protocol:** a decision with a malformed `frame`, `reason` or `rally_index` was
+  applied and then failed before its receipt was stored, so a retry applied it twice; it
+  is now refused first (`bad_request`). Frames that are not JPEG are refused undecoded.
+- **App:** a connection that stays open but silent is resumed after 10 s, and captures are
+  skipped while more than 8 frames are unanswered; leaving the live screen sends `stop`,
+  so the session is saved at once; the interval clock no longer starts again when its
+  panel is rebuilt; Let before the first rally no longer clears the last rally.
+- **Backend:** stage cache files are written atomically; a coach question that cannot
+  start no longer blocks the job; `serve_colab.py` refuses the placeholder token.
+- **Stroke models:** the BST import fault and retraining of D35
+  ([results](../results/strokes.md)).
+
+452 non-GPU backend tests and 280 Flutter tests pass. Release builds and the Windows
+integration flows were not re-run. None of this closes a device or footage gate.
+
 ## Earlier phase acceptance still open
 
 | Phases | Remaining evidence | Dependency |

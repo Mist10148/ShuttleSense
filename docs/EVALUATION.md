@@ -37,8 +37,9 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 
 | What | Result | Report |
 | --- | --- | --- |
-| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%. Target ≥ 70% | [results/strokes.md](results/strokes.md) |
-| Ablation: shuttle trajectory features (1D CNN) | pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN) | [results/strokes.md](results/strokes.md) |
+| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2%. Target ≥ 70%. (second evaluation on this test split, after the Nov 15 import fix, D35; Nov 14: 89.5%, 88.1%, 82.1%) | [results/strokes.md](results/strokes.md) |
+| Ablation: shuttle trajectory features (1D CNN) | pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN) | [results/strokes.md](results/strokes.md) |
+| Stroke confidence | The networks store a softmax temperature fitted on the validation split (0.53 for the CNN, 0.61 for the LSTM), so `confidence` is calibrated on broadcast data; the predicted class is unchanged. Not measured on phone footage | [results/strokes.md](results/strokes.md) |
 | Stroke stage latency, CPU, 40 hits in a 1-minute clip | Under 0.1 s for each of the three models | [results/stroke_latency.md](results/stroke_latency.md) |
 | Live pipeline overhead with fake perception (420 frames paced at 30 fps) | p50 12.9 ms and p95 26.2 ms frame round trip, with p95 22.9 ms on the server | [results/live_latency.md](results/live_latency.md) |
 | The same, 300 frames on Nov 12 | p50 15.7 ms and p95 36.7 ms round trip, p95 31.0 ms on the server; hits 0.74 s and line calls 1.73 s at p95 | [results/live_latency_fake.md](results/live_latency_fake.md) |
@@ -60,9 +61,34 @@ timing during rallies.
 
 ## 5. Error analysis
 
-- The most confused stroke pairs and why (`results/strokes.md`, `strokes_confusion.png`).
-- Where hit detection fails: shuttle out of frame, occlusion by the player, net shots with little direction change.
-- Broadcast vs phone gap: camera height and angle, motion blur, frame rate.
+**Strokes** (measured, [results/strokes.md](results/strokes.md)):
+
+- **Drop against smash is the main error for every model.** A drop is called a smash in 17%
+  of cases by the CNN, 21% by the LSTM and 31% by the Random Forest; the reverse happens in
+  9% to 11%. Both are overhead strokes with the same preparation, and they differ mostly in
+  racket speed at contact and in how fast the shuttle leaves, which a one-second window of
+  body keypoints (no racket) and a 2D shuttle position shows only weakly. Drop has the
+  lowest F1 of the six classes for every model (80%, 75%, 68%).
+- **Lift against net shot** is second (6% to 16%): both are played low at the net, and the
+  difference is the shuttle's path after the hit.
+- **The shuttle carries most of that difference.** Without the shuttle features the CNN
+  falls from 91.2% to 77.5% macro accuracy, and clear drops furthest (F1 93.5% to 67.9%):
+  a clear, a drop and a smash look alike from the pose alone. The practical consequence is
+  that stroke accuracy depends on shuttle tracking, which is not measured on phone footage.
+- **The forest is weakest where timing matters.** It sees summary statistics, not the order
+  of frames, and its drop-to-smash confusion rose from 27% to 31% with the Nov 15 settings
+  even though its overall accuracy rose by two points.
+- **A training-data fault found on Nov 15** (D35): 61% of the training windows had the hit
+  three frames early. Correcting it and re-tuning on the validation split moved the CNN from
+  89.5% to 91.2%, the LSTM from 88.1% to 89.0% and the forest from 82.1% to 84.3%. The test
+  split had been evaluated once before, so these gains are estimates.
+- **No class for other strokes.** Drives are left out of training, so every drive in a real
+  rally is given one of the six labels, usually with a low confidence.
+
+**Not measured yet** (no labelled team footage):
+
+- Where hit detection fails: shuttle out of frame, occlusion by the player, net shots with little direction change. The stroke models were trained on annotated hit frames; a detected hit a few frames off is covered only by the ±2 to ±4 frame shift used in training.
+- Broadcast vs phone gap: camera height and angle, motion blur, frame rate. A clip at another frame rate is now sampled over the same one-second span the models were trained on, which has a unit test but no accuracy measurement.
 
 ## 6. Threats to validity
 

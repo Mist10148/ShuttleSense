@@ -551,7 +551,7 @@ models and ships trained weights for all of them. All thirteen tasks are done:
 - **Models (T11.2–T11.6):** `scripts/import_bst_features.py`; an LSTM; a Random Forest on summary
   features, saved as plain arrays so the server needs neither scikit-learn nor a pickled file;
   `train_stroke_classifier.py --algorithm cnn|lstm|rf`. Test macro accuracy on the BST split, three
-  seeds: 1D CNN 89.5% ± 1.2%, LSTM 88.1% ± 0.6%, Random Forest 82.1% ± 0.3%. Ablation: pose only 77.1% ± 0.1% against 89.5% ± 1.2% with the shuttle (1D CNN). Weights are committed under `backend/weights/strokes/`.
+  seeds: 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2% (second evaluation on this test split, after the Nov 15 import fix, D35; Nov 14: 89.5%, 88.1%, 82.1%). Ablation: pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN). Weights are committed under `backend/weights/strokes/`.
 - **Choice per job (T11.7–T11.9):** `stroke_model` on `POST /jobs` and the live start, `stroke_models`
   in `/health`, clip record 1.4 (`stroke_model`), `--stroke-model` on the CLI, and a selector in the
   app's upload options and live setup. Running a clip again with another model reuses the cached
