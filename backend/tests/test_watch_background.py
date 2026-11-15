@@ -3,11 +3,12 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
-from shuttlesense.api import watch_background
 from shuttlesense.api.main import create_app
 from shuttlesense.api.settings import Settings
+from shuttlesense.stream.session import LiveSession
 
 
 def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Path, monkeypatch):
@@ -56,19 +57,23 @@ def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Pat
         assert record["num_frames"] == 6
 
 
-def test_stop_is_acknowledged_while_worker_is_behind(tmp_path: Path, tiny_video: Path, monkeypatch):
+@pytest.mark.parametrize("decoded", [False, True])
+def test_stop_is_acknowledged_while_worker_is_behind(
+    tmp_path: Path, tiny_video: Path, monkeypatch, decoded: bool
+):
     entered, release = threading.Event(), threading.Event()
-    real_frames = watch_background._frames
+    real_process = LiveSession.process
 
-    def slow_frames(*args):
+    def slow_process(*args):
         entered.set()
         assert release.wait(10)
-        return real_frames(*args)
+        return real_process(*args)
 
-    monkeypatch.setattr(watch_background, "_frames", slow_frames)
+    monkeypatch.setattr(LiveSession, "process", slow_process)
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
     try:
         with TestClient(app) as client:
+            app.state.live.state.jobs.config.setdefault("watch", {})["decoded_frames"] = decoded
             with tiny_video.open("rb") as f:
                 vid = client.post("/videos", files={"file": ("tiny.mp4", f, "video/mp4")}).json()[
                     "id"
@@ -91,9 +96,13 @@ def test_stop_is_acknowledged_while_worker_is_behind(tmp_path: Path, tiny_video:
         release.set()
 
 
-def test_paused_preview_processes_only_acknowledged_frames(tmp_path: Path, tiny_video: Path):
+@pytest.mark.parametrize("decoded", [False, True])
+def test_paused_preview_processes_only_acknowledged_frames(
+    tmp_path: Path, tiny_video: Path, decoded: bool
+):
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
     with TestClient(app) as client:
+        app.state.live.state.jobs.config.setdefault("watch", {})["decoded_frames"] = decoded
         with tiny_video.open("rb") as f:
             vid = client.post("/videos", files={"file": ("tiny.mp4", f, "video/mp4")}).json()["id"]
         job_id = client.post("/watch/background", json={"video_id": vid}).json()["job_id"]

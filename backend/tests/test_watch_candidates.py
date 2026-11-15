@@ -40,3 +40,16 @@ def test_shadow_reports_excluded_tracked_player_without_changing_result():
     selector.excluded_players = [player]
     selector.audit(Players(near=player))
     assert selector.stats["tracked_excluded"] == 1
+
+
+def test_tighter_margin_is_shadow_only_and_audits_tracked_players():
+    base = _selector("filter")
+    proposed = WatchCandidates(base.tracker, base.homography, (1280, 720),
+                               "filter", 2.0, 0.0)
+    boxes = [[x, 300, x + 20, 350] for x in range(0, 1280, 20)]
+    assert proposed.select(boxes, (720, 1280, 3)) == base.select(boxes, (720, 1280, 3))
+    assert proposed.proposal_stats["additional_excluded"] > 0
+    player = Player(bbox=(1, 2, 20, 40), score=.9)
+    proposed.proposal_players = [player]
+    proposed.audit(Players(near=player))
+    assert proposed.proposal_stats["tracked_excluded"] == 1

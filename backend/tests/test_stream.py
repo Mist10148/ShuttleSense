@@ -212,6 +212,32 @@ def test_capture_slots_keep_video_and_record_aligned(tmp_path) -> None:
         video.release()
 
 
+def test_decoded_frames_share_timeline_and_validate_shape(tmp_path) -> None:
+    import cv2
+
+    from shuttlesense.stream.fake_source import blank_frames, encode
+
+    jpeg_session = _session(25)
+    decoded_session = _session(25, tmp_path)
+    jpeg = encode(next(blank_frames(1)), 0, 0)[12:]
+    decoded = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert decoded_session.process(decoded[:, :-1], 0, 0, 0)[0]["code"] == "bad_frame"
+    for index, ts in enumerate((100, 108, 224)):
+        a = jpeg_session.process(jpeg, index, ts, 0)
+        b = decoded_session.process(decoded, index, ts, 0)
+        for event in a + b:
+            event.pop("latency_ms", None)
+        assert a == b
+    assert jpeg_session.analyzer.record == decoded_session.analyzer.record
+    assert decoded_session.stats.processed == jpeg_session.stats.processed
+    decoded_session.finish()
+    video = cv2.VideoCapture(str(tmp_path / "rec.mp4"))
+    try:
+        assert video.get(cv2.CAP_PROP_FRAME_COUNT) == 4
+    finally:
+        video.release()
+
+
 def test_skipped_frames_do_not_run_the_windowed_stages(monkeypatch) -> None:
     from shuttlesense.stream.fake_source import blank_frames, encode
 

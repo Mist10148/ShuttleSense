@@ -12,7 +12,7 @@ import cv2
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from shuttlesense.api.live import HEADER, LiveBusy, _frames, _start_request
+from shuttlesense.api.live import HEADER, LiveBusy, _frames, _start_request, courtside_snapshot
 from shuttlesense.api.models import Job, utcnow
 from shuttlesense.api.routes import get_storage, require_token
 from shuttlesense.api.storage import Storage
@@ -45,6 +45,7 @@ class BackgroundWatch:
         self.recent = deque(maxlen=64)
         self.error = None
         self.candidate_diagnostics = None
+        self.provider_diagnostics = None
         self.shutdown_requested = False
         self.last_seen = time.monotonic()
         self.thread = threading.Thread(target=self.run, name="watch-background", daemon=True)
@@ -70,11 +71,15 @@ class BackgroundWatch:
             perception = getattr(session, "perception", None)
             perception = getattr(perception, "perception", perception)
             candidates = getattr(perception, "watch_candidates", None)
-            diagnostics = ({"mode": candidates.mode, **candidates.stats}
+            diagnostics = ({"mode": candidates.mode, **candidates.stats,
+                            "proposal": candidates.proposal_stats
+                            if getattr(candidates, "proposal", None) else None}
                            if candidates is not None else self.candidate_diagnostics)
             return {
                 "job_id": self.entry.job_id,
                 "candidate_diagnostics": diagnostics,
+                "provider_diagnostics": getattr(perception, "provider_diagnostics", None)
+                or self.provider_diagnostics,
                 "watched_s": self.watched,
                 "analyzed_s": self.analyzed / self.reader.fps,
                 "target_s": self.target,
@@ -119,11 +124,20 @@ class BackgroundWatch:
                 if item is None:
                     break
                 index, frame = item
-                ok, jpeg = cv2.imencode(".jpg", frame)
-                if not ok:
-                    raise ValueError("Could not encode video frame")
-                packet = HEADER.pack(index, index * 1000.0 / self.reader.fps) + jpeg.tobytes()
-                events = _frames(session, [(packet, time.monotonic())])
+                if (self.state.jobs.config.get("watch") or {}).get("decoded_frames", False):
+                    with session.lock:
+                        events = session.process(
+                            frame, index, index * 1000.0 / self.reader.fps, time.monotonic()
+                        )
+                        for event in events:
+                            if event["type"] == "score":
+                                event.update(courtside_snapshot(session.analyzer.record))
+                else:
+                    ok, jpeg = cv2.imencode(".jpg", frame)
+                    if not ok:
+                        raise ValueError("Could not encode video frame")
+                    packet = HEADER.pack(index, index * 1000.0 / self.reader.fps) + jpeg.tobytes()
+                    events = _frames(session, [(packet, time.monotonic())])
                 with self.condition:
                     self.analyzed = index + 1
                     for event in events:
@@ -179,9 +193,14 @@ class BackgroundWatch:
             frames.close()
             perception = getattr(session.perception, "perception", session.perception)
             candidates = getattr(perception, "watch_candidates", None)
+            self.provider_diagnostics = getattr(perception, "provider_diagnostics", None)
             if candidates is not None:
                 with self.condition:
-                    self.candidate_diagnostics = {"mode": candidates.mode, **candidates.stats}
+                    self.candidate_diagnostics = {
+                        "mode": candidates.mode, **candidates.stats,
+                        "proposal": candidates.proposal_stats
+                        if getattr(candidates, "proposal", None) else None,
+                    }
             if hasattr(session.perception, "close"):
                 session.perception.close()
             self.state.jobs.forget_cancelled(self.entry.job_id)

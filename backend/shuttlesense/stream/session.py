@@ -194,7 +194,9 @@ class LiveSession:
                 raise RuntimeError(f"cannot write the live recording to {self.recording}")
         self._writer.write(frame)
 
-    def _prepare_frame(self, jpeg: bytes, ts: float) -> tuple[np.ndarray | None, list[Event]]:
+    def _prepare_frame(
+        self, jpeg: bytes | np.ndarray, ts: float
+    ) -> tuple[np.ndarray | None, list[Event]]:
         """Place a capture on the shared video and record timeline."""
         index = self.analyzer.record.num_frames
         elapsed_slots = 0.0 if self._anchor_ts is None else (ts - self._anchor_ts) * self.fps / 1000
@@ -210,7 +212,14 @@ class LiveSession:
             self.last_capture_ts = ts
             self._count_drop()
             return None, []
-        frame = self._decode(jpeg)
+        if isinstance(jpeg, np.ndarray):
+            frame = jpeg
+            if frame.dtype != np.uint8 or frame.shape != (self.height, self.width, 3):
+                return None, [{
+                    "type": "error", "code": "bad_frame", "detail": "invalid decoded frame"
+                }]
+        else:
+            frame = self._decode(jpeg)
         if frame is None:
             return None, [{"type": "error", "code": "bad_frame", "detail": "could not decode JPEG"}]
         self.last_capture_ts = ts
@@ -257,7 +266,9 @@ class LiveSession:
                 e.update(client_frame=client_frame, ts=ts, skipped=True)
         return warnings + events
 
-    def process(self, jpeg: bytes, client_frame: int, ts: float, received: float) -> list[Event]:
+    def process(
+        self, jpeg: bytes | np.ndarray, client_frame: int, ts: float, received: float
+    ) -> list[Event]:
         """Full perception on one frame. `received` is time.monotonic() at arrival."""
         frame, warnings = self._prepare_frame(jpeg, ts)
         if frame is None:

@@ -31,15 +31,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=100)
+    parser.add_argument("--wall-seconds", type=float,
+                        help="stop processing after this many wall-clock seconds")
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     parser.add_argument("--court", choices=["singles", "doubles"], default="singles")
     parser.add_argument("--corners", type=float, nargs=8)
     parser.add_argument("--record", action="store_true")
+    parser.add_argument("--decoded-frames", action="store_true",
+                        help="bypass the background Watch JPEG round trip")
     parser.add_argument("--ort-threads", type=int, default=0,
                         help="experiment with a smaller ONNX Runtime CPU thread pool")
+    parser.add_argument("--player-provider", choices=["cuda", "detector", "pose", "both"],
+                        default="cuda", help="experimental TensorRT RTX model selection")
+    parser.add_argument("--shadow-margin", type=float,
+                        help="observe a tighter candidate margin without changing selection")
+    parser.add_argument("--nvtx", action="store_true", help="add NVTX ranges for Nsight Systems")
     args = parser.parse_args()
+    setup_start = time.perf_counter()
     config = with_court(load_config(), args.court)
+    config = {**config, "watch": {**config.get("watch", {}),
+                                   "player_provider": args.player_provider,
+                                   "candidate_shadow_margin_m": args.shadow_margin}}
     device = detect_device(args.device)
     reader = FrameReader(args.video)
     corners = None
@@ -71,9 +84,14 @@ def main():
 
         def wrapped(*a, **kw):
             start = time.perf_counter()
+            if args.nvtx:
+                import torch
+                torch.cuda.nvtx.range_push(label)
             try:
                 return original(*a, **kw)
             finally:
+                if args.nvtx:
+                    torch.cuda.nvtx.range_pop()
                 timings[label].append((time.perf_counter() - start) * 1000)
         setattr(obj, name, wrapped)
 
@@ -105,23 +123,49 @@ def main():
         measure(session, "_decode", "decode")
         measure(session, "_record_frame", "record")
         measure(session.analyzer, "_tick", "analysis_tick")
+        print(f"setup={time.perf_counter() - setup_start:.2f}s", flush=True)
+        run_start = time.perf_counter()
+        frames = iter(reader.frames(args.start_frame, args.start_frame + args.frames))
         try:
-            for i, frame in reader.frames(args.start_frame, args.start_frame + args.frames):
+            while True:
+                if (args.wall_seconds is not None and
+                        time.perf_counter() - run_start >= args.wall_seconds):
+                    break
                 start = time.perf_counter()
-                ok, jpeg = cv2.imencode(".jpg", frame)
-                if not ok:
-                    raise RuntimeError("JPEG encode failed")
-                timings["encode"].append((time.perf_counter() - start) * 1000)
+                item = next(frames, None)
+                timings["read"].append((time.perf_counter() - start) * 1000)
+                if item is None:
+                    break
+                i, frame = item
                 index = i - args.start_frame
-                packet = HEADER.pack(index, index * 1000.0 / reader.fps) + jpeg.tobytes()
+                ts = index * 1000.0 / reader.fps
+                if not args.decoded_frames:
+                    start = time.perf_counter()
+                    ok, jpeg = cv2.imencode(".jpg", frame)
+                    if not ok:
+                        raise RuntimeError("JPEG encode failed")
+                    timings["encode"].append((time.perf_counter() - start) * 1000)
+                    packet = HEADER.pack(index, ts) + jpeg.tobytes()
                 start = time.perf_counter()
-                _frames(session, [(packet, time.monotonic())])
+                if args.decoded_frames:
+                    with session.lock:
+                        session.process(frame, index, ts, time.monotonic())
+                else:
+                    _frames(session, [(packet, time.monotonic())])
                 timings["frame"].append((time.perf_counter() - start) * 1000)
         finally:
+            frames.close()
             parallel.close()
+            close_start = time.perf_counter()
             session.close()
-    print(f"device={device}, frames={len(timings['frame'])}, recording={args.record}")
-    print("Times include startup; shuttle and player work may overlap.")
+            close_s = time.perf_counter() - close_start
+        elapsed = time.perf_counter() - run_start
+    count = len(timings["frame"])
+    print(f"device={device}, frames={count}, recording={args.record}, "
+          f"decoded_frames={args.decoded_frames}")
+    print(f"processing_wall={elapsed:.2f}s, throughput={count / elapsed:.2f} fps, "
+          f"recording_close={close_s:.2f}s, video_duration={count / reader.fps:.2f}s")
+    print("Frame timings include inference warmup; shuttle and player work may overlap.")
     for name, values in timings.items():
         if values:
             print(f"{name:14s} count={len(values):4d} total={sum(values)/1000:8.2f}s "
@@ -130,6 +174,9 @@ def main():
     candidates = getattr(model, "watch_candidates", None)
     if candidates is not None:
         print(f"candidate diagnostics: {candidates.stats}")
+        if candidates.proposal is not None:
+            print(f"candidate proposal: {candidates.proposal_stats}")
+    print(f"provider diagnostics: {getattr(model, 'provider_diagnostics', 'CUDA baseline')}")
 
 
 if __name__ == "__main__":

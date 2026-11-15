@@ -52,11 +52,16 @@ def enable_watch_player_continuity(perception: Perception) -> None:
             "pose_batch_size", 1
         )
         batch_size = max(1, min(16, int(configured)))
+        watch = (getattr(perception, "config", {}).get("watch") or {})
+        provider = watch.get("player_provider", "cuda")
+        provider_factory = getattr(getattr(perception, "detect", None), "with_provider", None)
+        if provider != "cuda" and provider_factory is not None:
+            perception.detect = provider_factory(provider, batch_size)
+            perception.provider_diagnostics = perception.detect.provider_diagnostics
         factory = getattr(getattr(perception, "detect", None), "with_batch", None)
         raw_detect = getattr(perception, "detect", None)
         if batch_size > 1 and factory is not None:
             perception.detect = factory(batch_size)
-        watch = (getattr(perception, "config", {}).get("watch") or {})
         mode = watch.get("candidate_filter", "off")
         watch_factory = getattr(raw_detect, "with_watch", None)
         if mode in ("shadow", "filter") and watch_factory and tracker is not None:
@@ -65,6 +70,7 @@ def enable_watch_player_continuity(perception: Perception) -> None:
             perception.watch_candidates = WatchCandidates(
                 tracker, perception.homography, perception.size, mode,
                 float(watch.get("candidate_margin_m", 2.0)),
+                watch.get("candidate_shadow_margin_m"),
             )
             perception.watch_detect = watch_factory(batch_size, perception.watch_candidates)
 

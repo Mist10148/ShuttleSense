@@ -267,10 +267,74 @@ the result. `scripts/bench_watch_track_batch.py --video PATH --device cuda --bat
 is a separate cross-frame shuttle batching experiment; it does not enable batching
 in Watch. On the tested RTX 5070 Ti it showed no speedup.
 
+The optional `watch.decoded_frames: true` bypasses the background worker's internal
+JPEG encode/decode. It is currently disabled; the model sees different pixels when enabled,
+so validate player and shuttle accuracy on representative footage.
+Restart the backend after changing the setting. Set it back to `false` to restore
+the JPEG path. The live camera's JPEG input is unchanged.
+
+For an offline comparison, run `profile_watch_pipeline.py` twice with identical
+arguments and add `--decoded-frames` to the candidate run. Use `--record`, court
+corners, and enough `--frames` to cover the desired duration (45 seconds at the
+normalized 25 fps requires 1125 frames). Alternate baseline and candidate at least
+three times. The reported processing wall time and fps are an offline measurement;
+they do not include the app, actual playback, polling, or final annotated export.
+Measure analysis position after 45 wall-clock seconds separately in the app. The
+script reports setup and recording close separately, and overlapping model timings
+must not be added. GPU contention, warmup and calibration affect the comparison.
+
+Use `scripts/bench_watch_parallel.py --video PATH --device cuda --court doubles
+--corners X1 Y1 X2 Y2 X3 Y3 X4 Y4 --frames 1125 --compare-decoded` to compare
+perception and downstream events on the same frames. Differences require review
+against labeled footage; equal events are not proof of accuracy. This comparison
+times perception only, excluding JPEG conversion, so use the profiler for speed.
+For a CUDA timeline, NVIDIA Nsight Systems can trace the profiler process; compare
+unprofiled runs for timing. Use Flutter profile mode to investigate playback jank,
+and measure final video export separately from analysis catch-up.
+
 `scripts/probe_tensorrt_rtx.py` is a standalone provider experiment requiring a
 separate compatible ONNX Runtime / TensorRT RTX environment and saved model inputs.
 It does not change the application's inference provider. Engine startup, dynamic
 batch sizes and end-to-end player tracking still need validation before deployment.
+
+The Watch-only TensorRT RTX experiment uses the same YOLOX and RTMPose models and
+keeps their original CUDA sessions for fallback. Install the standalone plugin in a
+compatible CUDA 13 environment with `pip install --no-deps
+onnxruntime-ep-nv-tensorrt-rtx-cu13==0.5.0`. This is optional; verify ONNX Runtime,
+driver and CUDA compatibility for the machine first. In `watch.player_provider`,
+`pose` is currently enabled for testing; `detector`, `pose` and `both` request TensorRT RTX
+for the indicated models, and `cuda` restores the baseline. Restart the backend after
+changing it. The background Watch
+status exposes `provider_diagnostics`, including graph assignments and fallback errors.
+TensorRT numerical differences require representative tracking validation. On the
+tested model and plugin, YOLOX engine creation failed because its TopK exceeds the
+provider's limit, so the detector fell back to CUDA; RTMPose ran on TensorRT RTX.
+The runtime cache is stored in `backend/.cache/tensorrt_rtx` and is rebuilt if needed.
+
+Compare outputs with `bench_watch_parallel.py --video PATH --device cuda --court doubles
+--corners X1 Y1 X2 Y2 X3 Y3 X4 Y4 --frames 120 --compare-provider pose` (or `detector`
+or `both`). Check provider diagnostics before interpreting speed or output comparisons;
+the script processes JPEG input on both paths. For a recording-enabled 45-second offline
+throughput sample, use `profile_watch_pipeline.py --video PATH --device cuda --court
+doubles --corners X1 Y1 X2 Y2 X3 Y3 X4 Y4 --frames 1125 --wall-seconds 45 --record`
+and repeat with `--player-provider pose`. Setup is timed separately; this does not
+reproduce app playback or the full 45-second user experience. Alternate trials, test
+cold and warm caches, and validate outputs before enabling the provider in Watch.
+
+The optional `watch.candidate_shadow_margin_m` records an additional tighter court-margin
+proposal without changing candidate selection. For example, set it to `1.0` to compare
+against the current 2.0 m margin. The status field `candidate_diagnostics.proposal`
+counts additional exclusions and tracked exclusions relative to the existing filter;
+it does not assess players already excluded by that filter. Set the existing filter to
+`shadow` to include those candidates in a separate reference test. This audit does not
+replace labeled footage, and no tighter filtering is enabled by the setting. The profiler
+also accepts `--shadow-margin 1.0` for the same experiment.
+
+For an Nsight Systems trace, install NVIDIA Nsight Systems and launch the profiler with
+`nsys profile --trace=cuda,nvtx -o watch-trace python scripts/profile_watch_pipeline.py`
+followed by the same video, court and frame options and `--nvtx`. Compare timing with
+unprofiled runs; tracing can perturb performance. The trace and its CUDA/CPU timeline
+must be inspected on the machine where the workload runs.
 
 | Target | Command |
 | --- | --- |

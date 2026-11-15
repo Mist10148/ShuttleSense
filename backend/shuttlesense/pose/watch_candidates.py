@@ -15,15 +15,33 @@ class WatchCandidates:
     Shadow mode records estimates but leaves all candidates in inference.
     """
 
-    def __init__(self, tracker, homography, frame_size, mode="shadow", margin_m=2.0):
+    def __init__(self, tracker, homography, frame_size, mode="shadow", margin_m=2.0,
+                 proposal_margin=None):
         self.tracker, self.homography, self.frame_size = tracker, homography, frame_size
         self.mode, self.margin = mode, margin_m
         self.stats = {"frames": 0, "people": 0, "eligible": 0, "excluded": 0,
                       "tracked_excluded": 0, "detection_s": 0.0, "pose_s": 0.0,
                       "fallback": False}
         self.excluded_players = []
+        self.proposal = (WatchCandidates(tracker, homography, frame_size, "shadow", proposal_margin)
+                         if proposal_margin is not None else None)
+        self.proposal_keep = []
+        self.proposal_stats = {"frames": 0, "additional_excluded": 0, "tracked_excluded": 0}
+        self.proposal_players = []
 
     def select(self, boxes, image_shape):
+        self.proposal_players = []
+        if self.proposal is not None:
+            self.proposal_keep = self.proposal.select(boxes, image_shape)
+        keep = self._select(boxes, image_shape)
+        if self.proposal is not None:
+            self.proposal_stats["frames"] += 1
+            self.proposal_stats["additional_excluded"] += sum(
+                old and not new for old, new in zip(keep, self.proposal_keep, strict=True)
+            )
+        return keep
+
+    def _select(self, boxes, image_shape):
         self.excluded_players = []
         keep = [True] * len(boxes)
         if self.homography is None or not len(boxes):
@@ -80,6 +98,11 @@ class WatchCandidates:
         self.stats["pose_s"] += pose_s
 
     def audit(self, players):
+        if self.proposal is not None:
+            for name in ("near", "near_2", "far", "far_2"):
+                player = getattr(players, name)
+                if player is not None and any(player.bbox == p.bbox for p in self.proposal_players):
+                    self.proposal_stats["tracked_excluded"] += 1
         if self.mode != "shadow":
             return
         for name in ("near", "near_2", "far", "far_2"):

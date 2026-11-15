@@ -1,0 +1,2 @@
+# Optional Watch-only plugin for a compatible CUDA 13 / ONNX Runtime GPU environment.
+onnxruntime-ep-nv-tensorrt-rtx-cu13==0.5.0

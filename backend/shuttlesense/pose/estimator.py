@@ -47,14 +47,15 @@ def load_detector(backend: str, mode: str, device: str):
     return detect
 
 
-def _rtmlib_detector(mode: str, device: str):
+def _rtmlib_detector(mode: str, device: str, body=None):
     try:
         from rtmlib import Body  # docs/SETUP.md
     except ImportError as exc:
         raise StageSkipped("rtmlib is not installed") from exc
     from shuttlesense.pose.tracking import bbox_from_keypoints
 
-    body = Body(mode=mode, backend="onnxruntime", device=device)
+    if body is None:
+        body = Body(mode=mode, backend="onnxruntime", device=device)
 
     def players_from_pose(keypoints, scores) -> list[Player]:
         people = []
@@ -128,6 +129,10 @@ def _rtmlib_detector(mode: str, device: str):
                 pose_s = time.perf_counter() - start
                 candidates.record(detected, keep if detected else [], detection_s, pose_s)
                 people = players_from_pose(keypoints, scores)
+                if getattr(candidates, "proposal", None) is not None:
+                    for index, kps, score in zip(indices, keypoints, scores, strict=True):
+                        if keep[index] and not candidates.proposal_keep[index]:
+                            candidates.proposal_players.extend(players_from_pose([kps], [score]))
                 if candidates.mode == "shadow":
                     for index, kps, score in zip(indices, keypoints, scores, strict=True):
                         if not keep[index]:
@@ -144,6 +149,17 @@ def _rtmlib_detector(mode: str, device: str):
 
     detect.with_batch = with_batch
     detect.with_watch = with_watch
+    def with_provider(provider, batch_size):
+        from shuttlesense.config import BACKEND_DIR
+        from shuttlesense.pose.watch_acceleration import make_watch_body
+
+        cache = BACKEND_DIR / ".cache" / "tensorrt_rtx"
+        watch_body, diagnostics = make_watch_body(body, provider, batch_size, device, cache)
+        watch_detect = _rtmlib_detector(mode, device, body=watch_body)
+        watch_detect.provider_diagnostics = diagnostics
+        return watch_detect
+
+    detect.with_provider = with_provider
 
     return detect
 
