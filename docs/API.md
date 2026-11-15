@@ -116,6 +116,14 @@ Response `201`:
 
 Same body as the upload response.
 
+### `POST /videos/{video_id}/court-corners?frame=0`
+
+Analyzes the selected source frame and returns `{ "frame": 0, "corners": [[x, y], ...] }`.
+Coordinates are source pixels in near-left, near-right, far-right, far-left order, and
+always identify the singles reference court, including for doubles matches. `corners` is
+`null` when the detector cannot find a sufficiently supported suggestion. Suggestions
+must be reviewed and can be adjusted by the user. A missing video or frame returns 404.
+
 ### `GET /videos/{video_id}/frames/{n}`
 
 JPEG of frame `n` (0-based), used for court calibration. Optional query `max_width` (default 1280) to downscale for phones. Coordinates the app sends back are always in **source video pixels** (the `width` × `height` reported by `POST /videos`), whatever size the JPEG was scaled to; the response includes headers `X-Frame-Width` and `X-Frame-Height` (source size) so the app can scale taps.

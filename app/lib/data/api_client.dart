@@ -174,6 +174,19 @@ class ApiClient {
     )).data!,
   );
 
+  /// Suggest singles-reference corners on the selected source frame.
+  Future<List<({double x, double y})>?> suggestCourtCorners(String videoId, int frame) =>
+      _call(() async {
+        final res = await _dio.post<Json>(
+          '/videos/$videoId/court-corners',
+          queryParameters: {'frame': frame},
+        );
+        final corners = res.data!['corners'] as List?;
+        return corners
+            ?.map((p) => (x: (p[0] as num).toDouble(), y: (p[1] as num).toDouble()))
+            .toList();
+      });
+
   Future<Json> suggestMatchType(String videoId, List<({double x, double y})> corners) =>
       _call(() async {
         final res = await _dio.post<Json>(

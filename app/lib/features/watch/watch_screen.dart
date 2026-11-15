@@ -59,9 +59,42 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   int frameWidth = 1, frameHeight = 1;
   bool synthetic = false;
   bool modelsMissing = false;
-  bool autoMode = false, scanning = false;
+  bool autoMode = false, scanning = false, detectingCourt = false;
+  String? courtDetectionMessage;
   String? matchType, suggestion;
   String? suggestionDetail;
+
+  Future<void> detectCourt() async {
+    final info = video;
+    if (info == null || matchType == null || scanning || detectingCourt) return;
+    setState(() {
+      detectingCourt = true;
+      courtDetectionMessage = null;
+    });
+    try {
+      final result = await ref.read(apiClientProvider).suggestCourtCorners(info.id, 0);
+      if (!mounted || video?.id != info.id) return;
+      setState(() {
+        if (result == null || !isConvex(result)) {
+          courtDetectionMessage = 'Could not find the court reliably. Place the corners manually.';
+        } else {
+          corners
+            ..clear()
+            ..addAll(result);
+          suggestion = null;
+          suggestionDetail = null;
+          courtDetectionMessage =
+              'Check the suggested singles court corners and drag them to adjust.';
+        }
+      });
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => courtDetectionMessage = '${e.message}. Place the corners manually.');
+      }
+    } finally {
+      if (mounted) setState(() => detectingCourt = false);
+    }
+  }
 
   Future<void> suggest() async {
     final info = video;
@@ -120,6 +153,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       setState(() {
         video = result;
         corners.clear();
+        courtDetectionMessage = null;
         matchType = null;
         status = 'Tap the four singles court corners for player detection.';
       });
@@ -543,7 +577,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           const Text('This backend does not support Watch & Analyze.')
         else if (info == null)
           FilledButton.icon(
-            onPressed: uploading ? null : pick,
+            onPressed: uploading || detectingCourt ? null : pick,
             icon: const Icon(Icons.upload_file),
             label: Text(uploading ? 'Uploading…' : 'Choose video'),
           )
@@ -557,7 +591,9 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               ButtonSegment(value: false, label: Text('Analyze every frame')),
             ],
             selected: {realTime},
-            onSelectionChanged: scanning ? null : (v) => setState(() => realTime = v.first),
+            onSelectionChanged: scanning || detectingCourt
+                ? null
+                : (v) => setState(() => realTime = v.first),
           ),
           Text(
             realTime
@@ -575,7 +611,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               ButtonSegment(value: true, label: Text('Suggest automatically')),
             ],
             selected: {autoMode},
-            onSelectionChanged: scanning
+            onSelectionChanged: scanning || detectingCourt
                 ? null
                 : (v) => setState(() {
                     autoMode = v.first;
@@ -584,9 +620,43 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                     suggestionDetail = null;
                   }),
           ),
-          const Text('Optional calibration: tap the four singles court corners, even for doubles, in near left, near right, far right, far left order.'),
+          const Text('Confirm the match format:'),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final format in ['singles', 'doubles'])
+                ChoiceChip(
+                  label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
+                  selected: matchType == format,
+                  onSelected: scanning || detectingCourt
+                      ? null
+                      : (_) => setState(() => matchType = format),
+                ),
+            ],
+          ),
+          const Text('Court calibration'),
+          const Text(
+            'Select the match format above, then find corners automatically or tap them manually.',
+          ),
+          OutlinedButton.icon(
+            onPressed: matchType == null || scanning || detectingCourt ? null : detectCourt,
+            icon: detectingCourt
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_fix_high),
+            label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
+          ),
+          if (courtDetectionMessage != null) Text(courtDetectionMessage!),
+          const Text(
+            'Optional calibration: tap the four singles court corners, even for doubles, in near left, near right, far right, far left order.',
+          ),
           const Text('Without court calibration, player detection is disabled.'),
-          const Text('For best accuracy, use a tripod and keep the whole court in a fixed view; do not pan or zoom.'),
+          const Text(
+            'For best accuracy, use a tripod and keep the whole court in a fixed view; do not pan or zoom.',
+          ),
           SizedBox(
             height: 320,
             child: CornerCanvas(
@@ -595,7 +665,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               height: info.height,
               corners: corners,
               onTap: (c) {
-                if (!scanning && corners.length < 4) {
+                if (!scanning && !detectingCourt && corners.length < 4) {
                   setState(() {
                     corners.add(c);
                     if (autoMode) {
@@ -607,7 +677,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                 }
               },
               onMove: (i, c) {
-                if (!scanning) {
+                if (!scanning && !detectingCourt) {
                   setState(() {
                     corners[i] = c;
                     if (autoMode) {
@@ -621,10 +691,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             ),
           ),
           TextButton(
-            onPressed: corners.isEmpty || scanning
+            onPressed: corners.isEmpty || scanning || detectingCourt
                 ? null
                 : () => setState(() {
                     corners.clear();
+                    courtDetectionMessage = null;
                     if (autoMode) {
                       matchType = null;
                       suggestion = null;
@@ -638,7 +709,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               'Automatic detection requires four court corners and may be affected by spectators or hidden players.',
             ),
             OutlinedButton(
-              onPressed: isConvex(corners) && !scanning && health?.watchMatchType == true
+              onPressed:
+                  isConvex(corners) &&
+                      !scanning &&
+                      !detectingCourt &&
+                      health?.watchMatchType == true
                   ? suggest
                   : null,
               child: Text(scanning ? 'Checking video…' : 'Suggest match format'),
@@ -652,23 +727,10 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                     : 'Suggested: $suggestion. $suggestionDetail',
               ),
           ],
-          const Text('Confirm the match format:'),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final format in ['singles', 'doubles'])
-                ChoiceChip(
-                  label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
-                  selected: matchType == format,
-                  onSelected: scanning || (autoMode && suggestionDetail == null)
-                      ? null
-                      : (_) => setState(() => matchType = format),
-                ),
-            ],
-          ),
           FilledButton(
             onPressed:
                 !scanning &&
+                    !detectingCourt &&
                     matchType != null &&
                     (!realTime || health?.watchBackground == true) &&
                     (corners.isEmpty || isConvex(corners))

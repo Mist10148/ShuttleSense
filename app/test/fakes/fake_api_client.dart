@@ -152,6 +152,12 @@ class FakeApiClient extends ApiClient {
     return videos['vid1']!;
   }
 
+  List<({double x, double y})>? suggestedCorners;
+
+  @override
+  Future<List<({double x, double y})>?> suggestCourtCorners(String videoId, int frame) =>
+      _answer('suggestCourtCorners $videoId $frame', () => suggestedCorners);
+
   @override
   Future<VideoInfo> getVideo(String videoId) => _answer('getVideo $videoId', () {
     final v = videos[videoId];

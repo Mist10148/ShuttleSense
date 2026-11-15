@@ -80,6 +80,17 @@ def test_openapi_snapshot(client: TestClient) -> None:
     assert_matches_snapshot(client.app.openapi(), docs)
 
 
+def test_court_corner_suggestion_endpoint(client: TestClient, tiny_video: Path) -> None:
+    video_id = upload(client, tiny_video).json()["id"]
+    response = client.post(f"/videos/{video_id}/court-corners?frame=0")
+    assert response.status_code == 200
+    assert response.json()["frame"] == 0
+    assert response.json()["corners"] is None
+    assert client.post(f"/videos/{video_id}/court-corners?frame=100").status_code == 404
+    assert client.post(f"/videos/{video_id}/court-corners?frame=-1").status_code == 422
+    assert client.post("/videos/missing/court-corners").status_code == 404
+
+
 def test_full_round_trip(client: TestClient, tiny_video: Path) -> None:
     res = upload(client, tiny_video)
     assert res.status_code == 201, res.text

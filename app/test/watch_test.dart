@@ -128,6 +128,96 @@ void main() {
     );
   });
 
+  testWidgets('court corners can be suggested after choosing a format and cleared', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    final api = FakeApiClient()
+      ..suggestedCorners = [
+        (x: 200.0, y: 650.0),
+        (x: 1000.0, y: 650.0),
+        (x: 800.0, y: 200.0),
+        (x: 400.0, y: 200.0),
+      ];
+    await pumpScreen(
+      tester,
+      const WatchScreen(),
+      size: laptop,
+      api: api,
+      overrides: [
+        healthProvider.overrideWith(
+          (ref) async => const Health(
+            version: '1',
+            schemaVersion: '1',
+            device: 'cpu',
+            authRequired: false,
+            stages: [],
+            watchVideo: true,
+          ),
+        ),
+      ],
+    );
+    await tester.tap(find.text('Choose video'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Find corners automatically'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Find corners automatically'))
+          .onPressed,
+      isNull,
+    );
+    await tester.ensureVisible(find.text('Doubles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Doubles'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Find corners automatically'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Find corners automatically'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Check the suggested singles court corners'), findsOneWidget);
+    expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, hasLength(4));
+    await tester.ensureVisible(find.text('Clear corners'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear corners'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, isEmpty);
+  });
+
+  testWidgets('failed court detection leaves manual placement available', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    await pumpScreen(
+      tester,
+      const WatchScreen(),
+      size: laptop,
+      api: FakeApiClient(),
+      overrides: [
+        healthProvider.overrideWith(
+          (ref) async => const Health(
+            version: '1',
+            schemaVersion: '1',
+            device: 'cpu',
+            authRequired: false,
+            stages: [],
+            watchVideo: true,
+          ),
+        ),
+      ],
+    );
+    await tester.tap(find.text('Choose video'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Singles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Singles'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Find corners automatically'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Find corners automatically'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not find the court reliably'), findsOneWidget);
+    tester.widget<CornerCanvas>(find.byType(CornerCanvas)).onTap((x: 200, y: 650));
+    await tester.pump();
+    expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, hasLength(1));
+  });
+
   testWidgets('automatic suggestion requires confirmation and can be overridden', (tester) async {
     FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
     await pumpScreen(
@@ -167,6 +257,7 @@ void main() {
       await tester.pump();
     }
     await tester.ensureVisible(find.text('Suggest match format'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Suggest match format'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Suggested: doubles'), findsOneWidget);
@@ -175,6 +266,7 @@ void main() {
       isNull,
     );
     await tester.ensureVisible(find.text('Singles'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Singles'));
     await tester.pump();
     expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Singles')).selected, isTrue);

@@ -143,6 +143,25 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
 # Videos -----------------------------------------------------------------------
 
 
+@router.post("/videos/{video_id}/court-corners")
+def suggest_court_corners(
+    video_id: str, storage: StorageDep,
+    frame: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    """Suggest singles-reference corners on a source frame for user review."""
+    from shuttlesense.court.detect import detect_corners
+
+    info = _video_or_404(storage, video_id)
+    source = storage.video_source(video_id)
+    if source is None or (info.num_frames > 0 and frame >= info.num_frames):
+        raise HTTPException(status_code=404, detail="frame not found")
+    image = read_frame(source, frame)
+    if image is None:
+        raise HTTPException(status_code=404, detail="frame not found")
+    corners = detect_corners(image)
+    return {"corners": corners, "frame": frame}
+
+
 @router.post("/videos/{video_id}/match-type")
 def suggest_match_type(
     video_id: str,
