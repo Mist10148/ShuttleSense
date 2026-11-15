@@ -99,7 +99,7 @@ def check_ml() -> None:
         try:
             module = importlib.import_module(name)
         except ImportError:
-            _line(WARN, f"{name} not installed (requirements/ml.txt)")
+            _line(WARN, f"{name} not installed (see docs/SETUP.md for the ML stack)")
             continue
         version = getattr(module, "__version__", "?")
         extra = ""

@@ -103,7 +103,7 @@ flowchart LR
     end
     subgraph Backend["Python backend · laptop GPU or Colab"]
         A[Video] --> B[Shuttle tracker<br/>TrackNetV3]
-        A --> C[Players + pose<br/>RTMDet / RTMPose]
+        A --> C[Players + pose<br/>YOLOX / RTMPose]
         A --> D[Court homography]
         B --> E[(Clip record)]
         C --> E
@@ -122,7 +122,7 @@ flowchart LR
 Live mode uses the same stages frame by frame: the app streams camera frames over a WebSocket (`WS /live`), the backend runs TrackNetV3 and pose on each frame and the hit, stroke, referee and line-call stages on a sliding window, and sends events back. The coach chat sends a text digest of the clip record (never video) to the Claude API when the backend has a key ([docs/PRIVACY.md](docs/PRIVACY.md)).
 
 1. **Capture and upload.** Record a rally on a phone, pick it in the app and upload it to the backend. Optionally tap the 4 court corners on the first frame.
-2. **Perception.** TrackNetV3 locates the shuttle in every frame. RTMDet and RTMPose find both players and their skeletons. The court corners give a homography from the image to the court plane.
+2. **Perception.** TrackNetV3 locates the shuttle in each frame. YOLOX detects players and RTMPose estimates their keypoints. Court corners map image positions to the court plane.
 3. **Shared record.** All output goes into one JSON clip record per video ([format](docs/DATA_FORMAT.md)). Every downstream module reads from it, so modules are developed and tested independently.
 4. **Analysis.** Hits are detected where the shuttle changes direction near a player's wrist. A 1D CNN classifies each hit from a window of pose and shuttle features. Positions are projected onto the court for the minimap and speed estimates. The referee layer finds rally boundaries and in/out calls.
 5. **Results.** The backend renders an annotated MP4 and JSON/CSV summaries; the app plays the video and draws the minimap, status bar, timeline and scoreboard for whatever screen it runs on.
@@ -273,7 +273,7 @@ Datasets and match videos are **not** included in this repository. Use the downl
 | Component | Method | Weights |
 | --- | --- | --- |
 | Shuttle tracking | TrackNetV3 (heatmap CNN + trajectory rectification) | Pretrained |
-| Player detection | RTMDet person detector with near/far ID assignment | Pretrained (COCO) |
+| Player detection | RTMLib's YOLOX person detector with near/far ID assignment | Pretrained |
 | Pose estimation | RTMPose, COCO-17 keypoints (via rtmlib) | Pretrained |
 | Hit detection | Shuttle direction change near a wrist keypoint | Rule-based |
 | Stroke classification | A choice per clip: 1D CNN, LSTM or Random Forest, all over the same pose + shuttle window around each hit | Trained by the team on public ShuttleSet features; weights in the repo |

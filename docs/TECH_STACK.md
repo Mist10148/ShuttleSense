@@ -12,7 +12,7 @@ flowchart LR
     subgraph Backend["backend/ · Python 3.11–3.13"]
         API[FastAPI + Uvicorn] --- PD[pydantic]
         PL[Pipeline] --- CV[OpenCV] --- T[PyTorch] --- ORT[ONNX Runtime]
-        PL --- TN[TrackNetV3] --- RT[rtmlib · RTMDet/RTMPose]
+        PL --- TN[TrackNetV3] --- RT[rtmlib · YOLOX/RTMPose]
     end
     App -- REST/JSON --> API
 ```
@@ -70,8 +70,8 @@ Platform notes:
 | --- | --- | --- | --- | --- |
 | Deep learning | PyTorch | 2.15.0 (CUDA wheel) | BSD-3 | TrackNetV3 is PyTorch; stroke CNN and LSTM training and inference |
 | Shuttle tracking | TrackNetV3 (git submodule) | `6eda442ada1740573f200f836d93edc9a541ee86` | MIT | State of the art for tiny, blurred shuttles; pretrained weights; trajectory rectification |
-| Person + pose | rtmlib (RTMDet + RTMPose) | 0.0.16 | Apache-2.0 | Multi-person, fast on ONNX Runtime, no mmcv install; COCO-17 keypoints |
-| Inference runtime | onnxruntime-gpu | 1.31.1 | MIT | Runs RTMDet/RTMPose on CUDA; CPU fallback with `onnxruntime` |
+| Person + pose | rtmlib (YOLOX + RTMPose) | 0.0.16 | Apache-2.0 | Multi-person COCO-17 keypoints. Install separately to reuse the selected ONNX Runtime package. |
+| Inference runtime | onnxruntime-gpu | 1.31.1 | MIT | Runs YOLOX and RTMPose with the CUDA execution provider. Use one ONNX Runtime package per environment. |
 | Fallback pose | torchvision Keypoint R-CNN | 0.30.0 | BSD-3 | `stages.pose.backend: keypoint_rcnn` (in code; weights fetched to the torch hub cache on first use). Used only if rtmlib fails the Phase 1 spike |
 | Numerics | SciPy | 1.18.1 | BSD-3 | Pulled in by the ML stack (`requirements/ml.txt`); ShuttleSense's own code does not import it (gap filling and smoothing are NumPy, see D9) |
 | Weights hosting | huggingface-hub | 2.3.0 | Apache-2.0 | `scripts/download_weights.py` pulls versioned weights |

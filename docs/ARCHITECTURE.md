@@ -35,7 +35,7 @@ TrackNetV3 and RTMPose need a GPU to hit the "1-minute clip in under 5 minutes" 
 ```mermaid
 flowchart TD
     V["io · F1<br/>load, normalize, frame index"] --> T["tracking · F2<br/>TrackNetV3 + gap interpolation"]
-    V --> P["pose · F3/F4<br/>RTMDet + RTMPose, near/far IDs"]
+    V --> P["pose · F3/F4<br/>YOLOX + RTMPose, near/far IDs"]
     V --> C["court · F9<br/>homography from 4 corners"]
     T --> R[("ClipRecord")]
     P --> R
@@ -81,7 +81,7 @@ backend/
 ├── pyproject.toml              # package metadata, ruff + pytest config
 ├── requirements/
 │   ├── base.txt                # API + light processing (CI installs this)
-│   ├── ml.txt                  # torch, onnxruntime, rtmlib (GPU host only)
+│   ├── ml.txt                  # torch and onnxruntime-gpu (GPU host only)
 │   └── dev.txt                 # pytest, httpx, ruff
 ├── configs/
 │   ├── pipeline.yaml           # stage toggles, thresholds, overlay defaults

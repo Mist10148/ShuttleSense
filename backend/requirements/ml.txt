@@ -1,8 +1,8 @@
 # Model inference and training. GPU host (team laptop) and Colab only.
 # Install the CUDA build of torch first, see docs/SETUP.md.
 torch==2.15.0
-torchvision==0.30.0     # pose fallback: Keypoint R-CNN (T1.5)
-rtmlib==0.0.16
+# Install a matching torchvision wheel separately for the optional Keypoint R-CNN fallback.
+# Install rtmlib separately with --no-deps so its CPU onnxruntime cannot shadow the GPU package.
 onnxruntime-gpu==1.31.1
 scipy==1.18.1
 huggingface-hub==2.3.0

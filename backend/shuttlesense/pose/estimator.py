@@ -1,6 +1,6 @@
 """Player detection, near/far assignment and keypoints (F3/F4, FR-3/FR-4).
 
-Default backend: rtmlib (RTMDet + RTMPose, COCO-17). Fallback: torchvision Keypoint R-CNN.
+Default backend: rtmlib (YOLOX + RTMPose, COCO-17). Fallback: torchvision Keypoint R-CNN.
 The choice is made in the Phase 1 spike (T1.5) and set in configs/pipeline.yaml.
 """
 
@@ -46,7 +46,7 @@ def load_detector(backend: str, mode: str, device: str):
 
 def _rtmlib_detector(mode: str, device: str):
     try:
-        from rtmlib import Body  # requirements/ml.txt
+        from rtmlib import Body  # docs/SETUP.md
     except ImportError as exc:
         raise StageSkipped("rtmlib is not installed") from exc
     from shuttlesense.pose.tracking import bbox_from_keypoints
@@ -79,7 +79,7 @@ def _keypoint_rcnn_detector(device: str):
     downloaded to the torch hub cache on first use."""
     try:
         import torch
-        from torchvision.models.detection import (  # requirements/ml.txt
+        from torchvision.models.detection import (  # docs/SETUP.md
             KeypointRCNN_ResNet50_FPN_Weights,
             keypointrcnn_resnet50_fpn,
         )

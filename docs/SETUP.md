@@ -54,13 +54,25 @@ Check what is installed and what is missing (✓ / ✗ per item; exit code 0 whe
 python scripts/check_env.py
 ```
 
-That is enough to run the API with the stub pipeline, the tests and the lint. For the real models also install the ML stack. Install the CUDA build of PyTorch first, using the exact command from the selector at <https://pytorch.org/get-started/locally/> (Stable, your OS, Pip, Python, latest CUDA), with the version from `requirements/ml.txt`:
+The base stack runs the stub pipeline, tests and lint. For the real models, first
+install the CUDA wheel for the PyTorch version pinned in `requirements/ml.txt`.
+Select a CUDA build that supports your OS, Python version and driver. [PyTorch install selector](https://pytorch.org/get-started/locally/)
 
 ```bash
-pip install torch==2.15.0 torchvision==0.30.0 --index-url https://download.pytorch.org/whl/<cuda-tag>
+pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/<cuda-tag>
 pip install -r requirements/ml.txt
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+pip install --no-deps rtmlib==0.0.16
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python -c "import onnxruntime as ort; print(ort.get_available_providers())"
 ```
+
+Use one ONNX Runtime package per environment. RTMLib's dependencies include the
+CPU package, which can overwrite the GPU package's Python module. The commands
+above use a clean environment with `onnxruntime-gpu` and the base stack's OpenCV.
+For CUDA pose, check for `CUDAExecutionProvider`; if it is missing after a prior
+RTMLib install, uninstall `onnxruntime` and reinstall the pinned GPU wheel.
+Install a matching torchvision wheel separately for the optional Keypoint R-CNN
+backend. [ONNX Runtime Python setup](https://onnxruntime.ai/docs/get-started/with-python.html)
 
 Run the server so other devices on the network can reach it:
 
@@ -145,7 +157,7 @@ clip in the app's upload options, with `--stroke-model` on the CLI, or set the s
 in `configs/pipeline.yaml` (`stages.strokes.algorithm`). The CNN and LSTM need PyTorch; the
 Random Forest runs with the base requirements alone.
 
-RTMDet/RTMPose ONNX files are downloaded and cached by rtmlib on first use.
+RTMLib downloads and caches the YOLOX and RTMPose ONNX files on first use.
 
 ## 6. Datasets
 
