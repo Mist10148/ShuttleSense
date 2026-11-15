@@ -124,13 +124,17 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
     x, y = train_ds.x, train_ds.y
     tcfg = cfg.get("train", {})
     version = int(mcfg.get("summary_version", 1))
-    copies = [x]
-    for shift in tcfg.get("shift_copies", []):  # the hit a few frames early or late
-        copies.append(np.stack([shift_window(w.copy(), int(shift)) for w in x]))
-    if tcfg.get("flip_augment", True):  # mirrored copies, as the CNN sees
-        copies += [np.stack([flip_window(w, use_trajectory) for w in c]) for c in list(copies)]
-    y = np.concatenate([y] * len(copies))
-    x = np.concatenate(copies)
+    # Each copy is reduced to its summary rows at once: the windows of every copy together
+    # would not fit in memory.
+    rows = []
+    for shift in [0, *tcfg.get("shift_copies", [])]:  # the hit a few frames early or late
+        copy = x if not shift else np.stack([shift_window(w.copy(), int(shift)) for w in x])
+        rows.append(summary_features(copy, version))
+        if tcfg.get("flip_augment", True):  # mirrored copies, as the CNN sees
+            mirrored = np.stack([flip_window(w, use_trajectory) for w in copy])
+            rows.append(summary_features(mirrored, version))
+    y = np.concatenate([y] * len(rows))
+    rows = np.concatenate(rows)
     model = RandomForestClassifier(
         n_estimators=mcfg.get("trees", 200),
         max_depth=mcfg.get("max_depth", 18),
@@ -140,7 +144,7 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
         n_jobs=-1,
         random_state=seed,
     )
-    model.fit(summary_features(x, version), y)
+    model.fit(rows, y)
     meta = checkpoint_meta(cfg, "rf", train_ds, classes, use_trajectory)
     if version != 1:
         meta["summary_version"] = version
