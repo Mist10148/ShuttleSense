@@ -41,6 +41,13 @@ def _scale_person(p: Player, sx: float, sy: float) -> Player:
     )
 
 
+def enable_watch_player_continuity(perception: Perception) -> None:
+    """Enable Watch-only outside-court tracking when model-based pose is available."""
+    tracker = getattr(perception, "tracker", None)
+    if tracker is not None:
+        tracker.watch_outside_tracking = True
+
+
 class ModelPerception:
     """TrackNetV3 + pose on live frames; a part whose weights or packages are missing is off."""
 

@@ -289,8 +289,11 @@ class CornerCanvas extends StatefulWidget {
     required this.corners,
     required this.onTap,
     required this.onMove,
+    this.overlayPainter,
   });
 
+  /// Optional preview painted in image coordinates, before the corner handles.
+  final CustomPainter Function(double scale)? overlayPainter;
   final ImageProvider image;
   final int width;
   final int height;
@@ -342,6 +345,8 @@ class _CornerCanvasState extends State<CornerCanvas> {
                       errorBuilder: (_, _, _) =>
                           const MessageView(icon: Icons.broken_image, message: 'Frame unavailable'),
                     ),
+                    if (widget.overlayPainter != null)
+                      IgnorePointer(child: CustomPaint(painter: widget.overlayPainter!(1 / scale))),
                     CustomPaint(painter: CornersPainter(widget.corners, 1 / scale)),
                     for (var i = 0; i < widget.corners.length; i++)
                       Positioned(

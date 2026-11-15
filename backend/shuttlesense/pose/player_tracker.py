@@ -69,6 +69,11 @@ class CourtPlayerTracker:
         self.recovery_after = int(cfg.get("reacquire_confirm_after_frames", 5))
         self.recovery_confirm = max(1, int(cfg.get("reacquire_confirmation_frames", 2)))
         self.view_valid = False
+        # Watch can maintain a confirmed identity by image continuity outside the court.
+        # Offline and live retain their existing, stricter boundary policy.
+        self.watch_outside_tracking = False
+        self.watch_min_iou = float(cfg.get("watch_outside_min_iou", 0.15))
+        self.watch_max_missing = int(cfg.get("watch_outside_max_missing_frames", 3))
         self.jump_margin = float(cfg.get("locked_jump_margin_m", 0.3))
         self.jump_max_distance = float(cfg.get("locked_jump_max_distance_m", 0.35))
         self.jump_max_appearance = float(cfg.get("locked_jump_max_appearance", 0.25))
@@ -116,9 +121,10 @@ class CourtPlayerTracker:
                          for x, y in projected)
             side = "near" if pos[1] < self.court_size[1] / 2 else "far"
             y_margin = self.far_jump_margin if side == "far" else self.jump_margin
-            if not all(xmin-self.jump_margin <= x <= xmax+self.jump_margin and
-                       ymin-y_margin <= y <= ymax+y_margin
-                       for x, y in projected):
+            if not self.watch_outside_tracking and not all(
+                xmin-self.jump_margin <= x <= xmax+self.jump_margin and
+                ymin-y_margin <= y <= ymax+y_margin for x, y in projected
+            ):
                 continue
             hist = torso_histogram(frame, p, image_scale) if frame is not None else None
             candidates.append((p, pos, hist, inside, side, spread))
@@ -170,7 +176,22 @@ class CourtPlayerTracker:
                                   track.hist is not None and hist is not None and
                                   appearance <= self.jump_max_appearance and
                                   _bbox_iou(track.bbox, person.bbox) >= self.far_jump_iou)
-                if not inside:
+                # For Watch, established tracks can continue outside the court using
+                # consecutive image observations. Court-plane distances are unreliable
+                # for a jumping person, so do not compare their projected feet to the
+                # last trusted floor position. Never seed identities from these candidates.
+                watch_continuity = (
+                    self.watch_outside_tracking and track.locked and
+                    (not inside or track.outside_frames > 0) and
+                    track.missing <= self.watch_max_missing and track.bbox is not None and
+                    track.hist is not None and hist is not None and
+                    appearance <= self.jump_max_appearance and
+                    _bbox_iou(track.bbox, person.bbox) >= self.watch_min_iou
+                )
+                if not inside and self.watch_outside_tracking:
+                    if not watch_continuity:
+                        continue
+                elif not inside:
                     if side == "far":
                         if not far_continuity or track.outside_frames >= self.far_jump_max_frames:
                             continue
@@ -186,7 +207,11 @@ class CourtPlayerTracker:
                 jump_match = far_continuity and (
                     not inside or (track.outside_frames > 0 and dist <= self.max_gap_step)
                 )
-                if (dist <= allowed_step or jump_match) and compatible:
+                if (dist <= allowed_step or jump_match or watch_continuity) and compatible:
+                    if watch_continuity:
+                        # Compare competing outside candidates in image space. Projected
+                        # floor coordinates may be arbitrarily distorted during a jump.
+                        dist = (1 - _bbox_iou(track.bbox, person.bbox)) * limit
                     pairs.append((dist + appearance * limit, name, j))
         pairs.sort()
         matched: set[str] = set()

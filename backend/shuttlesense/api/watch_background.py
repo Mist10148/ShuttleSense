@@ -228,6 +228,9 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session = entry.session
+    from shuttlesense.stream.perception import enable_watch_player_continuity
+
+    enable_watch_player_continuity(session.perception)
     try:
         if (state.jobs.config.get("watch") or {}).get(
             "parallel_perception", False

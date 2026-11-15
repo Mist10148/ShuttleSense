@@ -95,6 +95,9 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             raise ValueError("playback must be complete or realtime")
         entry = await asyncio.to_thread(manager.create, request)
         session = entry.session
+        from shuttlesense.stream.perception import enable_watch_player_continuity
+
+        enable_watch_player_continuity(session.perception)
         # Video playback waits for each result, so it must not lower perception resolution
         # merely because a frame took longer than the camera-live latency budget.
         if playback == "complete":

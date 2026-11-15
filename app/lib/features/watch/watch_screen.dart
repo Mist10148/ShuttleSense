@@ -18,6 +18,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
+import 'court_geometry.dart';
 
 class WatchScreen extends ConsumerStatefulWidget {
   const WatchScreen({super.key});
@@ -73,18 +74,20 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     });
     try {
       final result = await ref.read(apiClientProvider).suggestCourtCorners(info.id, 0);
+      final full = result == null ? null : singlesToFull(result);
       if (!mounted || video?.id != info.id) return;
       setState(() {
-        if (result == null || !isConvex(result)) {
+        if (full == null ||
+            full.any((p) => p.x < 0 || p.x > info.width || p.y < 0 || p.y > info.height)) {
           courtDetectionMessage = 'Could not find the court reliably. Place the corners manually.';
         } else {
           corners
             ..clear()
-            ..addAll(result);
+            ..addAll(full);
           suggestion = null;
           suggestionDetail = null;
           courtDetectionMessage =
-              'Check the suggested singles court corners and drag them to adjust.';
+              'Check the suggested outer court corners and drag them to adjust.';
         }
       });
     } on ApiException catch (e) {
@@ -98,7 +101,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
 
   Future<void> suggest() async {
     final info = video;
-    if (info == null || !isConvex(corners) || scanning) return;
+    final singlesCorners = fullToSingles(corners);
+    if (info == null || singlesCorners == null || scanning) return;
     setState(() {
       scanning = true;
       matchType = null;
@@ -107,7 +111,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       error = null;
     });
     try {
-      final result = await ref.read(apiClientProvider).suggestMatchType(info.id, List.of(corners));
+      final result = await ref.read(apiClientProvider).suggestMatchType(info.id, singlesCorners);
       if (!mounted) return;
       setState(() {
         suggestion = result['suggestion'] as String?;
@@ -155,7 +159,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         corners.clear();
         courtDetectionMessage = null;
         matchType = null;
-        status = 'Tap the four singles court corners for player detection.';
+        status = 'Tap the four outer court corners for player detection.';
       });
     } catch (e) {
       if (mounted) setState(() => error = '$e');
@@ -167,7 +171,12 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
 
   Future<void> start() async {
     final info = video;
-    if (info == null || socket != null || matchType == null) return;
+    if (info == null ||
+        socket != null ||
+        matchType == null ||
+        (corners.isNotEmpty && fullToSingles(corners) == null)) {
+      return;
+    }
     if (realTime) {
       await startBackground(info);
       return;
@@ -202,9 +211,9 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           'video_id': info.id,
           'court': matchType,
           'playback': realTime ? 'realtime' : 'complete',
-          if (isConvex(corners))
+          if (fullToSingles(corners) case final singles?)
             'corners': [
-              for (final c in corners) [c.x, c.y],
+              for (final c in singles) [c.x, c.y],
             ],
         }),
       );
@@ -225,7 +234,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       final result = await api.startBackgroundWatch(
         videoId: info.id,
         court: matchType!,
-        corners: isConvex(corners) ? List.of(corners) : [],
+        corners: fullToSingles(corners) ?? [],
       );
       if (!mounted) return;
       setState(() {
@@ -651,7 +660,10 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           ),
           if (courtDetectionMessage != null) Text(courtDetectionMessage!),
           const Text(
-            'Optional calibration: tap the four singles court corners, even for doubles, in near left, near right, far right, far left order.',
+            'Tap the four outer corners of the full court, where the outer sidelines meet the back baselines: near left, near right, far right, far left. Use the same corners for singles and doubles.',
+          ),
+          const Text(
+            'Blue lines preview the court markings. Adjust the corners until they match the video.',
           ),
           const Text('Without court calibration, player detection is disabled.'),
           const Text(
@@ -664,6 +676,9 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               width: info.width,
               height: info.height,
               corners: corners,
+              overlayPainter: fullToSingles(corners) == null
+                  ? null
+                  : (scale) => FullCourtPreview(corners, scale),
               onTap: (c) {
                 if (!scanning && !detectingCourt && corners.length < 4) {
                   setState(() {
@@ -710,7 +725,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             ),
             OutlinedButton(
               onPressed:
-                  isConvex(corners) &&
+                  fullToSingles(corners) != null &&
                       !scanning &&
                       !detectingCourt &&
                       health?.watchMatchType == true
@@ -733,7 +748,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                     !detectingCourt &&
                     matchType != null &&
                     (!realTime || health?.watchBackground == true) &&
-                    (corners.isEmpty || isConvex(corners))
+                    (corners.isEmpty || fullToSingles(corners) != null)
                 ? start
                 : null,
             child: const Text('Start analysis'),

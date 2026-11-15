@@ -7,16 +7,21 @@ import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
 import 'package:shuttlesense_app/features/mode/mode_screen.dart';
 import 'package:shuttlesense_app/features/calibration/calibration_screen.dart';
 import 'package:shuttlesense_app/features/watch/watch_screen.dart';
+import 'package:shuttlesense_app/features/watch/court_geometry.dart';
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
 import 'helpers.dart';
 
 class _SuggestionApi extends FakeApiClient {
+  List<({double x, double y})>? sentCorners;
   @override
   Future<Map<String, dynamic>> suggestMatchType(
     String videoId,
     List<({double x, double y})> corners,
-  ) async => {'suggestion': 'doubles', 'detail': 'Please confirm.'};
+  ) async {
+    sentCorners = corners;
+    return {'suggestion': 'doubles', 'detail': 'Please confirm.'};
+  }
 }
 
 void main() {
@@ -173,8 +178,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Find corners automatically'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Check the suggested singles court corners'), findsOneWidget);
-    expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, hasLength(4));
+    expect(find.textContaining('Check the suggested outer court corners'), findsOneWidget);
+    final canvas = tester.widget<CornerCanvas>(find.byType(CornerCanvas));
+    expect(canvas.corners, hasLength(4));
+    expect(canvas.overlayPainter, isNotNull);
+    final singles = fullToSingles(canvas.corners)!;
+    for (var i = 0; i < 4; i++) {
+      expect(singles[i].x, closeTo(api.suggestedCorners![i].x, 0.001));
+      expect(singles[i].y, closeTo(api.suggestedCorners![i].y, 0.001));
+    }
     await tester.ensureVisible(find.text('Clear corners'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Clear corners'));
@@ -220,11 +232,12 @@ void main() {
 
   testWidgets('automatic suggestion requires confirmation and can be overridden', (tester) async {
     FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    final api = _SuggestionApi();
     await pumpScreen(
       tester,
       const WatchScreen(),
       size: laptop,
-      api: _SuggestionApi(),
+      api: api,
       overrides: [
         healthProvider.overrideWith(
           (ref) async => const Health(
@@ -261,6 +274,9 @@ void main() {
     await tester.tap(find.text('Suggest match format'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Suggested: doubles'), findsOneWidget);
+    expect(api.sentCorners, isNotNull);
+    expect(api.sentCorners!.first.x, greaterThan(100));
+    expect(api.sentCorners![1].x, lessThan(1180));
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start analysis')).onPressed,
       isNull,
