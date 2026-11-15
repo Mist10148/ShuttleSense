@@ -88,6 +88,7 @@ gantt
     Phase 10 hardening             :p10, 2026-11-14, 4d
     Phase 11 stroke models         :p11, 2026-11-14, 4d
     Phase 12 courtside             :p12, 2026-11-14, 1d
+    Phase 13 courtside depth       :p13, 2026-11-15, 1d
     Feature freeze                 :milestone, crit, 2026-11-18, 0d
     Phase 7 eval + release         :p7, 2026-11-18, 3d
     Final demo                     :milestone, crit, 2026-11-20, 0d
@@ -123,6 +124,8 @@ flowchart LR
     P11 --> P7
     P8 --> P12[Phase 12<br/>courtside]
     P12 --> P7
+    P12 --> P13[Phase 13<br/>courtside depth]
+    P13 --> P7
 ```
 
 Phases overlap on purpose: the app (Phase 4) is built against the stub and fake pipelines (T1.10) while models are still being trained.
@@ -623,6 +626,7 @@ models and ships trained weights for all of them. All thirteen tasks are done:
 | T10.1–T10.8 | M1–M4, M6 | Done Nov 14 ([Phase 10](phases/phase-10-hardening.md)); only device checks of the notification and the game-service picker remain, with the T4.4 and T8.14 checks. |
 | T11.1–T11.13 | M1, M5, M6 | Done Nov 14 ([Phase 11](phases/phase-11-stroke-models.md)); what remains is a run on a real clip with the perception models installed and the device check of the selector, with the T4.3 and T7.2 checks. |
 | T12.1–T12.8 | M1, M3, M6 | Done Nov 14 ([Phase 12](phases/phase-12-courtside.md)); what remains is the device checks listed there, with the T8.14 and T8.15 courtside session, and opening the Phase 12 issues. |
+| T13.1–T13.8 | M1, M3, M6 | Code and automated checks done Nov 15 ([Phase 13](phases/phase-13-courtside-depth.md)); what remains is the courtside session listed there: a real network interruption, a real replay and export, and readability at arm's length. |
 | T7.1–T7.13 | M1 and team | Review labelled phone footage, run final evaluations and device checks, audit licenses, and prepare demo and release artifacts. Rehearse and record clean installs before tagging. |
 
 Verified on Nov 3 (an earlier pass, kept for the record):
@@ -630,7 +634,32 @@ Verified on Nov 3 (an earlier pass, kept for the record):
 - App `flutter analyze`, `dart format` and `flutter test` pass (169 tests).
 - `flutter build web --release` passes. The Windows and APK builds were not re-run.
 
-### Left for M1 (needs GitHub admin, hardware, data or the team)
+### Left for the owner (needs GitHub admin, hardware, data or the team)
+
+This is the one list of what cannot be finished from the repository alone. Every open
+box in the phase files falls under one of its headings; the phase files keep the
+acceptance criteria. Code for these tasks is on `main` with tests.
+
+- **Decisions (Nov 15 review):**
+  - **Change of ends.** Points and games are credited to the camera end (`near` /
+    `far`), and the ends are never swapped. From game 2, and after 11 in a deciding
+    game, automatic rally winners are credited to the wrong player
+    ([known limits](DATA_FORMAT.md#known-limits)). Decide whether `near` / `far` in the
+    score mean the end or the player who started there, and what a referee's Near / Far
+    tap means after the change. The fix is a clip record 1.7 change with new snapshots
+    and fixtures.
+  - **Service court for line calls.** The service lines apply only when the stroke
+    model labelled a rally's single hit `serve`. Treating the first hit as the serve
+    is wrong for a clip that starts mid-rally; it needs labelled rallies to choose.
+  - **A `drive` class** (T9.7) and the `rush` / `push` label mapping (T3.3, M4).
+- **Footage and labels (consent needed):** two singles test rallies (T0.10), phone
+  footage with a second labeller (T7.1), doubles rallies (T9.2), landing labels
+  (T8.12), rally boundaries (T6.7). They unlock tracking, hit, pose, speed, line-call
+  and doubles accuracy (T2.10, T2.11, T3.7, T5.13, T7.2, T9.4, T9.5, T9.12) and the
+  stroke models on the team's own split and on phone footage (T3.9, T7.2).
+- **Devices:** phone, tablet, iPad and a Windows webcam for the Phase 4, 5, 8, 10, 12
+  and 13 checks, the [release smoke tests](RELEASE.md) and T7.4. Synthetic tests do not
+  close these.
 
 - **GitHub:**
   - Projects board (`gh auth refresh -s project` is interactive).
@@ -648,11 +677,22 @@ Verified on Nov 3 (an earlier pass, kept for the record):
 - **Real-world checks:**
   - A live session on a real camera (T8.6), including award/undo and the coach panel (T8.14, T8.15).
   - One coach chat with a real API key (T8.8).
+  - A run of each stroke model on a real clip with the perception models installed
+    (Phase 11 gate).
   - Device checks for T5.1, T5.12 and T7.4.
 - **Release:**
   - Licenses of the bundled media_kit libmpv/FFmpeg, and the ML venv scan (T7.13).
   - After the freeze: T7.6 release builds and T7.7 tag `v1.0.0` (bump all three versions).
-- **Team decisions:** M4 approves the T3.3 label mapping and the T4.13 icon art. M5 runs the pose spike notebook.
+  - ShuttleSet's terms of use, recorded in TECH_STACK.md (T1.9).
+  - Pin and verify the cloudflared download and the notebook's onnxruntime-gpu
+    version on Colab (T1.7).
+- **Team decisions:** M4 approves the T3.3 label mapping and the T4.13 icon art. M5 runs the pose spike notebook (D6 is still pending on it).
+- **Team process:** member setup and working agreements (T0.8, T0.12), the schema and
+  API reviews (T1.1, T1.2), slides, backup video and rehearsal (T7.9–T7.11).
+- **Smaller code items left open on purpose:** a job shows `running` while it waits for
+  a live session to free the GPU; tapping the job-finished notification does not open
+  the job (needs a device); `scoreAt` in the app does not restart the count when awards
+  alone cross a game boundary.
 
 ### Verification on Oct 30
 
@@ -677,4 +717,5 @@ Verified on Nov 3 (an earlier pass, kept for the record):
 | [10](phases/phase-10-hardening.md) | T10.1 Backend review fixes · T10.2 App review fixes · T10.3 Doubles service in every game · T10.4 Job-finished notification · T10.5 Speed report · T10.6 Auth token tests · T10.7 Docs sync · T10.8 media_kit licenses |
 | [11](phases/phase-11-stroke-models.md) | T11.1 Research + decisions · T11.2 BST feature import · T11.3 Model registry · T11.4 LSTM · T11.5 Random Forest · T11.6 Training + comparison · T11.7 Stroke model per job (API) · T11.8 Stroke model selector (app) · T11.9 CLI flag · T11.10 Live job fixes · T11.11 API fixes · T11.12 Windows re-render + test notifier · T11.13 Docs sweep + link check |
 | [12](phases/phase-12-courtside.md) | T12.1 Referee decision fixes · T12.2 Coach fixes · T12.3 Mid-match start, reasons, retirement · T12.4 Match stats exports · T12.5 App live and scoreboard fixes · T12.6 Courtside app controls · T12.7 Earlier code-only steps · T12.8 Docs |
+| [13](phases/phase-13-courtside-depth.md) | T13.1 Phase reconciliation · T13.2 Command deduplication + reconnect recovery · T13.3 Decision history · T13.4 Interval clock · T13.5 Practice goals · T13.6 Recap + exports · T13.7 Courtside layout + accessibility · T13.8 Heuristic claims + release evidence |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |

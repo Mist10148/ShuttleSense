@@ -319,6 +319,11 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 - [ ] **Phase 7 (Nov 18 – 20):** feature freeze, evaluation, release builds, final demo
 - [ ] **Phase 9 (from Nov 12):** doubles support: four-player tracking, hitter attribution, doubles service order, four players in the app ([plan](docs/phases/phase-9-doubles.md))
 - [x] **Phase 10 (Nov 14):** review fixes, the doubles service order in every game, a job-finished notification and the remaining code-only steps ([plan](docs/phases/phase-10-hardening.md))
+- [ ] **Phase 11 (Nov 14 – 17):** the stroke classifier as a choice of 1D CNN, LSTM or Random Forest per job; code and trained weights are in, a run on a real clip with the perception models remains ([plan](docs/phases/phase-11-stroke-models.md))
+- [ ] **Phase 12 (Nov 14):** courtside referee and coach fixes, joining a match under way, let, fault and retirement; code is in, device checks remain ([plan](docs/phases/phase-12-courtside.md))
+- [ ] **Phase 13 (Nov 15):** live command recovery, decision history, interval clock, practice goals and the saved recap; code is in, courtside verification remains ([plan](docs/phases/phase-13-courtside-depth.md))
+
+What is left needs footage, devices, accounts or the team: [the owner's list](docs/PHASES.md#left-for-the-owner-needs-github-admin-hardware-data-or-the-team).
 
 ### Future work
 - Automatic court line detection (no taps)
@@ -361,7 +366,7 @@ Detailed tasks, owners and dates: [docs/PHASES.md](docs/PHASES.md) (overview, wo
 | [docs/API.md](docs/API.md) | REST endpoints between the app and the backend |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Every library and tool, versions, licenses, rationale |
 | [docs/SETUP.md](docs/SETUP.md) | Installing and running backend and app, weights, datasets, connecting devices |
-| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 133 tasks (steps, tests, acceptance criteria) |
+| [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 162 tasks (steps, tests, acceptance criteria) |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | What stays on your backend and exactly what the coach chat sends to the Claude API |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |

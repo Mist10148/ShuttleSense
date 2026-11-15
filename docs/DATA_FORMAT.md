@@ -286,6 +286,21 @@ Feature window per hit: `T = 30` frames centered on the hit frame (`extract_feat
 All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM as `[T, F]`, and the Random Forest reduces it to one row of summary values (`strokes/rf.py`: per-value mean, standard deviation, minimum, maximum and value at the hit; wrist and elbow speed; elbow, shoulder and knee angles; shuttle steps before and after the hit).
 
 
+## Known limits
+
+- **`near` and `far` are ends of the court, not people.** A rally's winner is the end the
+  shuttle did not land on, and `score`, `games_won`, `summary.per_player`, the heatmaps and
+  the doubles slots are all keyed by end. `score.change_ends` tells the players to change
+  ends (after each game, and at 11 in the deciding game), but nothing in the record follows
+  them across. In a recording or live session that runs past a change of ends, automatic
+  rally winners after the change are credited to the player now standing at that end, so
+  game and match totals mix the two players. Until that is decided
+  ([owner's list](PHASES.md#left-for-the-owner-needs-github-admin-hardware-data-or-the-team)),
+  score one game per session, or correct the winners by hand after the change.
+- **Service lines for a line call** apply only when a rally has a single hit and the stroke
+  model labelled it `serve`. Without a stroke model, or when a serve is labelled as another
+  stroke, the rally lines are used.
+
 ## Schema v1.6 (courtside depth)
 
 All additions are optional; 1.0–1.5 records migrate without invented history.

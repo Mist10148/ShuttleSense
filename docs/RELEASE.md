@@ -131,4 +131,5 @@ for automated coverage. Use a physical setup to complete the checks below.
 - [ ] Confirm undone decisions remain visible and recorded moments seek correctly.
 - [ ] Review both roles at arm’s length, both themes and 200% text on physical devices.
 - [ ] Confirm missing-video sessions explain the failure while retaining decisions/goals.
+
 These checks supplement, rather than replace, the existing real-model and release gates.

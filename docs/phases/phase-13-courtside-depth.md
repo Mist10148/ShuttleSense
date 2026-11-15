@@ -46,6 +46,9 @@ verification pending, and externally blocked. Synthetic tests do not close devic
 | 10–11 | Notification/selector checks, three-model real-clip comparison | Devices and perception models |
 | 7 | Clean installs, signing, license evidence, demo/rehearsal and final metrics | Release assets, hardware and team |
 
+Everything that needs footage, devices, accounts or a team decision is in one list:
+[Left for the owner](../PHASES.md#left-for-the-owner-needs-github-admin-hardware-data-or-the-team).
+
 Phases 10–12 have implemented code; their device checks remain open. Existing issue
 titles and unchecked phase steps are acceptance tasks, not instructions to rebuild
 features already present. Per-phase cards retain the original acceptance criteria.
