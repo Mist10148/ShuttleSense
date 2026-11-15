@@ -5,7 +5,7 @@ Every number in the README's Evaluation section comes from one of these reports.
 | Report | Script | Task | Status |
 | --- | --- | --- | --- |
 | [dataset.md](dataset.md) | `scripts/dataset_stats.py` (clips); annotation counts below | T3.13 | Annotation counts in; clip counts after extraction |
-| [strokes.md](strokes.md) + figures | `scripts/import_bst_features.py`, `scripts/train_stroke_classifier.py --algorithm cnn\|lstm\|rf --seeds 1,2,3` (and `--pose-only`), then `scripts/make_figures.py` | T3.9, T3.12, T11.6 | Measured Nov 14 on the BST feature split for CNN, LSTM and Random Forest; our own clips (`--splits configs/splits.json`) still to run |
+| [strokes.md](strokes.md) + figures | `scripts/import_bst_features.py`, `scripts/train_stroke_classifier.py --algorithm cnn\|lstm\|rf --seeds 1,2,3` (and `--pose-only`), then `scripts/make_figures.py` | T3.9, T3.12, T11.6 | Measured Nov 15 on the BST feature split for CNN, LSTM and Random Forest (second evaluation, after the import fix of D35); our own clips (`--splits configs/splits.json`) still to run |
 | `hits.md`, `hits_tuning.csv` | `scripts/eval_hits.py` (`--grid` on val matches) | T3.7 | After feature extraction |
 | `tracking.md` | `scripts/label_shuttle.py`, then `scripts/eval_tracking.py` | T2.10 | Needs TrackNetV3 (T2.2) and labelled frames |
 | `benchmark.md` | `scripts/benchmark.py --video ... --corners ... --referee` | T2.9 | Needs a team clip and the GPU |
