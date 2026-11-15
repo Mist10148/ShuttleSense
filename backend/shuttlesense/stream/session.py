@@ -164,9 +164,10 @@ class LiveSession:
     def _decode(self, jpeg: bytes) -> np.ndarray | None:
         import cv2
 
-        # A small JPEG can declare a huge image; check the header before decoding it.
+        # A small file can declare a huge image; check the header before decoding it. Frames
+        # are JPEG only, so anything without a JPEG frame header is refused undecoded.
         size = jpeg_size(jpeg)
-        if size is not None and size[0] * size[1] > MAX_PIXELS_FACTOR * self.width * self.height:
+        if size is None or size[0] * size[1] > MAX_PIXELS_FACTOR * self.width * self.height:
             return None
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:

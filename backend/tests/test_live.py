@@ -823,3 +823,19 @@ def test_malformed_decision_fields_are_refused_before_the_score_changes(
         assert ws.receive_json()["code"] == "bad_request"
         ws.send_json({"type": "stop"})
         assert ws.receive_json()["type"] == "saved"
+
+
+def test_a_frame_that_is_not_jpeg_is_refused_undecoded(tmp_path: Path) -> None:
+    import cv2
+    import numpy as np
+
+    from shuttlesense.stream.fake_source import HEADER
+
+    png = cv2.imencode(".png", np.zeros((360, 640, 3), np.uint8))[1].tobytes()
+    with make_client(tmp_path) as client, client.websocket_connect("/live") as ws:
+        ws.send_json(START)
+        ws.receive_json()
+        ws.send_bytes(HEADER.pack(0, 0.0) + png)
+        assert ws.receive_json()["code"] == "bad_frame"
+        events = _send_frames(ws, 3, first=1)
+        assert any(e["type"] == "frame" for e in events)
