@@ -250,3 +250,72 @@ def test_featureless_fixed_view_does_not_suppress_players():
     player = person(2, 3)
     for _ in range(4):
         assert t.update([player], frame_height=720, homography=H, frame=blank).near == player
+
+
+def test_watch_keeps_locked_player_outside_and_returns_to_court():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    t.watch_outside_tracking = True
+    assert update(t, [person(.05, 3)]).near is not None
+    trusted = t.slots["near"].pos.copy()
+    # Go well beyond the old 0.3 m and nine-frame limits, with smooth image movement.
+    for x in np.linspace(-.05, -1.2, 30):
+        tracked = update(t, [person(x, 3)]).near
+        assert tracked is not None and not tracked.court_position_valid
+        assert np.allclose(t.slots["near"].pos, trusted)
+    for x in np.linspace(-1.2, .1, 30):
+        tracked = update(t, [person(x, 3)]).near
+        assert tracked is not None
+    assert tracked.court_position_valid
+
+
+def test_watch_outside_candidates_cannot_seed_or_replace_players():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    t.watch_outside_tracking = True
+    outside = person(-.1, 3, False)
+    assert update(t, [outside]).near is None
+    red = np.full((720, 1280, 3), (0, 0, 255), dtype=np.uint8)
+    blue = np.full_like(red, (255, 0, 0))
+    inside = person(.05, 3, False)
+    assert t.update([inside], frame_height=720, homography=H, frame=red).near is not None
+    assert t.update([outside], frame_height=720, homography=H, frame=blue).near is None
+    assert t.update([outside], frame_height=720, homography=H, frame=red).near is not None
+    impostor = outside.model_copy(update={"bbox": (outside.bbox[0] + 150, *outside.bbox[1:])})
+    assert t.update([impostor], frame_height=720, homography=H, frame=red).near is None
+
+
+def test_watch_recovers_brief_outside_occlusion_but_not_long_gap():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    t.watch_outside_tracking = True
+    assert update(t, [person(.05, 3)]).near is not None
+    outside = person(-.1, 3)
+    assert update(t, [outside]).near is not None
+    assert update(t, []).near is None
+    assert update(t, [outside]).near is not None
+    for _ in range(4):
+        assert update(t, []).near is None
+    assert update(t, [outside]).near is None
+
+
+def test_watch_tracks_one_doubles_partner_outside_without_replacing_other():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "doubles", COURT_SIZE_M)
+    t.watch_outside_tracking = True
+    a, b = person(-.4, 3), person(3, 3)
+    result = update(t, [a, b])
+    assert result.near == a and result.near_2 == b
+    for x in np.linspace(-.5, -1.2, 15):
+        result = update(t, [person(x, 3), b])
+        assert result.near is not None and not result.near.court_position_valid
+        assert result.near_2 == b
+
+
+def test_watch_far_player_stays_tracked_beyond_baseline():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    t.watch_outside_tracking = True
+    assert update(t, [person(2, 13.3)]).far is not None
+    for y in np.linspace(13.45, 15.5, 25):
+        far = update(t, [person(2, y)]).far
+        assert far is not None and not far.court_position_valid
+    for y in np.linspace(15.5, 13.2, 25):
+        far = update(t, [person(2, y)]).far
+        assert far is not None
+    assert far.court_position_valid

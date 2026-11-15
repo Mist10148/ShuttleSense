@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,9 +9,23 @@ from shuttlesense.api.main import create_app
 from shuttlesense.api.settings import Settings
 
 
-def test_watch_pulls_frames_and_saves_partial(tmp_path: Path, tiny_video: Path) -> None:
+def test_watch_pulls_frames_and_saves_partial(
+    tmp_path: Path, tiny_video: Path, monkeypatch
+) -> None:
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
     with TestClient(app) as client:
+        # Exercise the Watch setup with a tracker without loading pose models.
+        original_session = app.state.live._session
+        trackers = []
+
+        def session_with_tracker(*args, **kwargs):
+            session = original_session(*args, **kwargs)
+            tracker = SimpleNamespace(watch_outside_tracking=False)
+            session.perception.tracker = tracker
+            trackers.append(tracker)
+            return session
+
+        monkeypatch.setattr(app.state.live, "_session", session_with_tracker)
         # Watch sessions must keep full resolution even when live's latency budget is exceeded.
         app.state.jobs.config["live"]["budget_ms"] = 0
         app.state.jobs.config["live"]["check_every"] = 1
@@ -21,6 +36,7 @@ def test_watch_pulls_frames_and_saves_partial(tmp_path: Path, tiny_video: Path) 
             ws.send_json({"type": "start", "video_id": video["id"], "court": "doubles"})
             started = ws.receive_json()
             assert started["type"] == "started"
+            assert trackers[0].watch_outside_tracking is True
             for index in range(3):
                 ws.send_json({"type": "next"})
                 frame = ws.receive_json()
@@ -99,3 +115,35 @@ def test_realtime_watch_skips_analysis_but_preserves_timeline(
         record = client.get(f"/jobs/{saved['job_id']}/record").json()
         assert record["num_frames"] == 5
         assert all(not record["frames"][i]["shuttle"]["visible"] for i in range(1, 4))
+
+
+def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import shuttlesense.io
+    import shuttlesense.render
+    from shuttlesense.api.live import LiveManager
+
+    jobs = Mock()
+    jobs.config = {}
+    storage = Mock()
+    storage.job_dir.return_value = tmp_path
+    storage.video_deleted.return_value = False
+    manager = LiveManager(SimpleNamespace(jobs=jobs, storage=storage), fake=True, ttl_s=0)
+    monkeypatch.setattr(shuttlesense.io, "FrameReader", lambda *a, **kw: [])
+
+    def render(*args, progress, **kwargs):
+        progress(.25)
+        progress(.75)
+        progress(1.0)
+
+    monkeypatch.setattr(shuttlesense.render, "render_video", render)
+    manager._render(SimpleNamespace(id="job", video_id="v", overlays=[]),
+                    SimpleNamespace(height=720, fps=30), tmp_path / "source.mp4")
+    values = [call.kwargs["progress"] for call in jobs._update.call_args_list]
+    assert values[0] == pytest.approx(.92475)
+    assert values[-1] == pytest.approx(.999)
+    assert all(a <= b for a, b in zip(values, values[1:], strict=False))
+    assert jobs.check_cancelled.call_count == 4
+    jobs.finish_outside.assert_called_once_with("job")

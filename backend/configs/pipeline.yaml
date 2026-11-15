@@ -10,7 +10,7 @@ seed: 42  # reserved: no pipeline stage is random yet (training seeds: stroke_cn
 
 watch:
   stroke_min_confidence: 0.5  # heuristic; validate against labelled footage
-  parallel_perception: false  # experimental; benchmark and validate before enabling
+  parallel_perception: auto   # concurrent models for CUDA; false disables, true forces
 
 stages:
   io:

@@ -81,10 +81,20 @@ def _background(reader: Any, count: int = 100) -> np.ndarray:
 def _track_input(frames: list[np.ndarray], bg_mode: str, median: np.ndarray | None) -> np.ndarray:
     import cv2
 
+    return _track_input_rgb(
+        [cv2.resize(frame[:, :, ::-1], INPUT_SIZE) for frame in frames], bg_mode, median
+    )
+
+
+def _track_input_rgb(
+    frames: list[np.ndarray], bg_mode: str, median: np.ndarray | None
+) -> np.ndarray:
+    """Build identical model input from already-resized RGB frames."""
+    import cv2
+
     channels = []
     bg = None if median is None else cv2.resize(median, INPUT_SIZE)
-    for frame in frames:
-        rgb = cv2.resize(frame[:, :, ::-1], INPUT_SIZE)
+    for rgb in frames:
         if bg_mode in ("subtract", "subtract_concat"):
             diff = np.abs(rgb.astype(np.int16) - bg.astype(np.int16)).sum(axis=2)
             diff = np.clip(diff, 0, 255)[None]
@@ -117,6 +127,8 @@ def track_windows(
     median: np.ndarray | None,
     device: str,
     frame_size: tuple[int, int],
+    *,
+    prepared_rgb: bool = False,
 ) -> list[list[tuple[float, float, int]]]:
     """Shuttle (x, y, visible) in frame pixels for every frame of each seq_len window.
 
@@ -125,7 +137,8 @@ def track_windows(
     """
     import torch
 
-    batch = torch.from_numpy(np.stack([_track_input(w, bg_mode, median) for w in windows]))
+    prepare = _track_input_rgb if prepared_rgb else _track_input
+    batch = torch.from_numpy(np.stack([prepare(w, bg_mode, median) for w in windows]))
     with torch.autocast("cuda", enabled=device.startswith("cuda")):
         heatmaps = model(batch.to(device)).float().cpu().numpy()
     out = []

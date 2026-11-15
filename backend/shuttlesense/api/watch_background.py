@@ -188,6 +188,11 @@ def start_background(
         return _start_background(body, request, storage)
 
 
+def _parallel_watch_enabled(setting, device: str) -> bool:
+    """Auto mode uses concurrent models only for CUDA; booleans remain overrides."""
+    return setting is True or (setting == "auto" and str(device).startswith("cuda"))
+
+
 def _start_background(body: BackgroundStart, request: Request, storage: Storage):
     from shuttlesense.court import check_court_area, validate_corners
 
@@ -232,9 +237,9 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
 
     enable_watch_player_continuity(session.perception)
     try:
-        if (state.jobs.config.get("watch") or {}).get(
-            "parallel_perception", False
-        ) and not state.live.fake:
+        parallel = (state.jobs.config.get("watch") or {}).get("parallel_perception", False)
+        use_parallel = _parallel_watch_enabled(parallel, state.jobs.device)
+        if use_parallel and not state.live.fake:
             from shuttlesense.stream.watch_parallel import ParallelWatchPerception
 
             session.perception = ParallelWatchPerception(session.perception)

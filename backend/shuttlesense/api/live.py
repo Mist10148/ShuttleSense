@@ -407,9 +407,20 @@ class LiveManager:
         jobs = self.state.jobs
         try:
             reader = FrameReader(source, target_height=record.height, max_fps=record.fps)
+            last_progress = 0.0
+
+            def on_progress(value: float) -> None:
+                nonlocal last_progress
+                jobs.check_cancelled(job.id)
+                now = time.monotonic()
+                if now - last_progress >= 0.5 or value >= 1:
+                    # Keep 100% for the completed file, including encoder finalization.
+                    jobs._update(job.id, progress=0.9 + 0.099 * min(max(value, 0), 1))
+                    last_progress = now
+
             render_video(record, reader, self.storage.job_dir(job.id) / "annotated.mp4",
                          overlays=job.overlays, config=jobs.config,
-                         progress=lambda _p: jobs.check_cancelled(job.id))  # fmt: skip
+                         progress=on_progress)  # fmt: skip
             jobs.check_cancelled(job.id)  # deleted while the last frames were written
             jobs.finish_outside(job.id)
         except JobCancelled:

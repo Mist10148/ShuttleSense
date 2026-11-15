@@ -8,6 +8,7 @@ touching the others.
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -157,6 +158,14 @@ def _last_hit_before(record: ClipRecord, i: int):
     return last
 
 
+def _cached_last_hit(record: ClipRecord, i: int, state: RenderState):
+    if state.cache.get("hits_record") is not record:
+        state.cache["hits_record"] = record
+        state.cache["hit_frames"] = [h.frame for h in record.hits]
+    index = bisect_right(state.cache["hit_frames"], i) - 1
+    return record.hits[index] if index >= 0 else None
+
+
 def _hitter_anchor(record: ClipRecord, frame: int, side: str) -> tuple[float, float] | None:
     """Hitter's best wrist at `frame`, else the top of their box."""
     p = getattr(record.frames[frame].players, side) if frame < len(record.frames) else None
@@ -188,7 +197,7 @@ def draw_hits(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
     """ "HIT" badge and an expanding ring at the hitter's wrist for marker_duration_s."""
     import cv2
 
-    hit = _last_hit_before(record, i)
+    hit = _cached_last_hit(record, i, state)
     duration = state.stage("hits").get("marker_duration_s", 0.5) * (record.fps or 30)
     if hit is None or i - hit.frame > duration:
         return
@@ -206,7 +215,7 @@ def draw_hits(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -
 
 def draw_strokes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
     """Stroke and confidence ("Smash 81%") above the hitter's box until the next hit."""
-    hit = _last_hit_before(record, i)
+    hit = _cached_last_hit(record, i, state)
     if hit is None or hit.stroke is None:
         return
     p = getattr(record.frames[i].players, hit.player_attr)
@@ -244,14 +253,32 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     segments = court_segments_px(record, state)
     if not segments:
         return
-    overlay = img.copy()
     thick = max(1, int(round(3 * state.scale)))
+    # Only the bounding rectangle of the fixed court can change. Keep a margin for
+    # antialiasing and clip it to the image; drawing order and blending are unchanged.
+    key = (img.shape[:2], thick)
+    if state.cache.get("court_region_key") != key:
+        pad = thick + 3
+        xs = [p[0] for line in segments for p in line]
+        ys = [p[1] for line in segments for p in line]
+        state.cache["court_region_key"] = key
+        state.cache["court_region"] = (
+            max(0, min(xs) - pad), max(0, min(ys) - pad),
+            min(img.shape[1], max(xs) + pad + 1), min(img.shape[0], max(ys) + pad + 1),
+        )
+    x0, y0, x1, y1 = state.cache["court_region"]
+    if x0 >= x1 or y0 >= y1:
+        return
+    region = img[y0:y1, x0:x1]
+    overlay = region.copy()
     for a, b in segments:
-        cv2.line(overlay, a, b, style.COURT, thick, cv2.LINE_AA)
-    cv2.addWeighted(overlay, 0.6, img, 0.4, 0, dst=img)
+        cv2.line(overlay, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0),
+                 style.COURT, thick, cv2.LINE_AA)
+    cv2.addWeighted(overlay, 0.6, region, 0.4, 0, dst=region)
 
 
-def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None) -> str:
+def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None,
+                stroke_counts: list[int] | None = None) -> str:
     """'In play · 182 km/h (est.) · peak 241 · 3 strokes' for frame i."""
     from shuttlesense.analytics.stage import strokes_so_far
 
@@ -268,7 +295,7 @@ def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None)
         peak = peak_history[i]
     if peak is not None:
         parts.append(f"peak {peak:.0f}")
-    count = strokes_so_far(record, i)
+    count = strokes_so_far(record, i) if stroke_counts is None else stroke_counts[i]
     parts.append(f"{count} stroke{'s' if count != 1 else ''}")
     return " | ".join(parts)
 
@@ -284,7 +311,18 @@ def draw_speed(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
                 peak = speed
             history.append(peak)
         state.cache["peak_record"], state.cache["peak_history"] = record, history
-    _label(img, status_text(record, i, peak_history=state.cache["peak_history"]),
+        hit_frames = sorted(h.frame for h in record.hits)
+        rally_events = sorted((r.start_frame, n) for n, r in enumerate(record.rallies))
+        next_rally, last_rally, counts = 0, -1, []
+        for frame in range(len(record.frames)):
+            while next_rally < len(rally_events) and rally_events[next_rally][0] <= frame:
+                last_rally = max(last_rally, rally_events[next_rally][1])
+                next_rally += 1
+            start = record.rallies[last_rally].start_frame if last_rally >= 0 else 0
+            counts.append(bisect_right(hit_frames, frame) - bisect_left(hit_frames, start))
+        state.cache["stroke_counts"] = counts
+    _label(img, status_text(record, i, peak_history=state.cache["peak_history"],
+                            stroke_counts=state.cache["stroke_counts"]),
            _pt(12 * state.scale, img.shape[0] - 14 * state.scale),
            style.PANEL, state.scale)  # fmt: skip
 
@@ -312,7 +350,10 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
         return
     from shuttlesense.court.lines import DOUBLES_SIDE_ALLEY_M
 
-    court = court_type_of(record)
+    if state.cache.get("minimap_record") is not record:
+        state.cache["minimap_record"] = record
+        state.cache["minimap_court"] = court_type_of(record)
+    court = state.cache["minimap_court"]
     lines_size = record.court.court_size_m
     alley = DOUBLES_SIDE_ALLEY_M if court == "doubles" else 0.0
     size = (lines_size[0] + 2 * alley, lines_size[1])  # the panel shows the doubles alleys
@@ -391,7 +432,18 @@ def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     """Scoreboard (Near : Far) at the top left and a landing marker for 1 s after landing."""
     import cv2
 
-    score = score_at(record, i)
+    if state.cache.get("score_record") is not record:
+        state.cache["score_record"] = record
+        changes = {0}
+        changes.update(r.end_frame for r in record.rallies if r.end_frame >= 0)
+        if record.score is not None:
+            changes.update((c.frame or 0) for c in record.score.corrections if (c.frame or 0) >= 0)
+        events = sorted(changes)
+        state.cache["score_events"] = events
+        state.cache["score_values"] = [score_at(record, frame) for frame in events]
+    events = state.cache["score_events"]
+    score = (state.cache["score_values"][bisect_right(events, i) - 1]
+             if i >= 0 else score_at(record, i))
     if score is None:
         return
     s = state.scale

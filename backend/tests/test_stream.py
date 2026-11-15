@@ -356,3 +356,48 @@ def test_live_projects_doubles_partners() -> None:
     a.add_frame(f.shuttle, f.players)
     pos = a.record.frames[0].court_positions
     assert pos.near_2 is not None and pos.far_2 is not None
+
+
+def test_watch_cache_preserves_model_inputs_across_sliding_windows(monkeypatch):
+    from collections import deque
+
+    from shuttlesense.stream.perception import ModelPerception
+    from shuttlesense.tracking import tracknet
+
+    pytest.importorskip("torch")
+    inputs = []
+
+    def track(model, windows, bg_mode, median, device, size, *, prepared_rgb=False):
+        prepare = tracknet._track_input_rgb if prepared_rgb else tracknet._track_input
+        inputs.append(prepare(windows[0], bg_mode, median))
+        return [[(0.0, 0.0, 0)] * len(windows[0])]
+
+    monkeypatch.setattr(tracknet, "track_windows", track)
+    def perception(cache):
+        obj = ModelPerception.__new__(ModelPerception)
+        obj.model, obj.seq_len, obj.bg_mode = object(), 3, "subtract_concat"
+        obj.window, obj.bg_samples, obj.median = deque(maxlen=3), [], None
+        obj.background_frames, obj.device, obj.size = 3, "cpu", (121, 73)
+        obj.watch_preprocess_cache = cache
+        return obj
+
+    plain, cached = perception(False), perception(True)
+    rng = np.random.default_rng(12)
+    for _ in range(5):
+        frame = rng.integers(0, 256, (73, 121, 3), dtype=np.uint8)
+        assert plain._shuttle(frame) == cached._shuttle(frame)
+        assert np.array_equal(inputs[-2], inputs[-1])
+
+
+def test_watch_enables_cache_without_changing_live_defaults():
+    from types import SimpleNamespace
+    from shuttlesense.stream.perception import enable_watch_player_continuity
+
+    model = ModelPerception.__new__(ModelPerception)
+    model.tracker = SimpleNamespace(watch_outside_tracking=False)
+    model.watch_preprocess_cache = False
+    enable_watch_player_continuity(model)
+    assert model.watch_preprocess_cache
+    assert model.tracker.watch_outside_tracking
+    # Replay/demo perception does not need model-specific state.
+    enable_watch_player_continuity(SimpleNamespace())

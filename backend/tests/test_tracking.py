@@ -235,3 +235,15 @@ def test_tracknet_runs_on_cpu_from_a_checkpoint(tmp_path: Path) -> None:
     assert xy.shape == (3, 2) and visible.shape == (3,)
     assert set(visible.tolist()) <= {0, 1} and len(source) == 3
     assert np.isfinite(xy).all()
+
+
+@pytest.mark.parametrize("mode", ["", "concat", "subtract", "subtract_concat"])
+def test_cached_tracknet_inputs_are_exact_for_all_background_modes(mode):
+    import cv2
+
+    rng = np.random.default_rng(121)
+    frames = [rng.integers(0, 256, (73, 121, 3), dtype=np.uint8) for _ in range(3)]
+    median = rng.integers(0, 256, (73, 121, 3), dtype=np.uint8) if mode else None
+    prepared = [cv2.resize(frame[:, :, ::-1], tracknet.INPUT_SIZE) for frame in frames]
+    assert np.array_equal(tracknet._track_input(frames, mode, median),
+                          tracknet._track_input_rgb(prepared, mode, median))

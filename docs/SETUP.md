@@ -222,15 +222,22 @@ flutter analyze && flutter test
 Run on each target:
 
 **Watch & Analyze:** choose this mode after connecting, upload a clip and optionally
-calibrate the court. Playback is silent. By default video plays in real time;
-analysis may skip frames when the server is slow. Choose **Analyze every frame**
-to make playback wait for analysis instead. Browser playback requires a supported
+calibrate the court. Playback is silent. By default video plays in real time while
+analysis processes the watched frames in the background; if it falls behind, it
+continues after playback stops. Choose **Analyze every frame** to make playback wait
+for each analyzed frame instead. Browser playback requires a supported
 video codec; use a compatible MP4 or the frame-by-frame mode if playback fails.
 The saved session ends at the last processed frame. Stop early to save a partial
 session. Chrome has the existing 512 MB upload
 cap; the backend defaults to 1 GB and 10 minutes. Real analysis needs the model
 dependencies and weights in sections 3 and 5; fake mode shows synthetic results.
 FFmpeg is recommended for browser-compatible saved video exports.
+
+Background Watch runs player and shuttle models concurrently on CUDA by default; CPU
+remains sequential. Set `watch.parallel_perception` in `backend/configs/pipeline.yaml`
+to `false` to use sequential inference, or `true` to opt in on another device. Changes
+require a backend restart. `backend/scripts/bench_watch_parallel.py` compares the modes
+on a video; provide calibrated `--corners` to compare player tracking too.
 
 | Target | Command |
 | --- | --- |

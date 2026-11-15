@@ -1,6 +1,7 @@
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -9,13 +10,26 @@ from shuttlesense.api.main import create_app
 from shuttlesense.api.settings import Settings
 
 
-def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Path):
+def test_background_stop_finishes_watched_frames(tmp_path: Path, tiny_video: Path, monkeypatch):
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
     with TestClient(app) as client:
+        # Exercise the Watch setup with a tracker without loading pose models.
+        original_session = app.state.live._session
+        trackers = []
+
+        def session_with_tracker(*args, **kwargs):
+            session = original_session(*args, **kwargs)
+            tracker = SimpleNamespace(watch_outside_tracking=False)
+            session.perception.tracker = tracker
+            trackers.append(tracker)
+            return session
+
+        monkeypatch.setattr(app.state.live, "_session", session_with_tracker)
         with tiny_video.open("rb") as f:
             vid = client.post("/videos", files={"file": ("tiny.mp4", f, "video/mp4")}).json()["id"]
         start = client.post("/watch/background", json={"video_id": vid, "court": "doubles"})
         assert start.status_code == 201, start.text
+        assert trackers[0].watch_outside_tracking is True
         job_id = start.json()["job_id"]
         assert client.get("/jobs/" + job_id).json()["status"] == "running"
         assert client.delete("/videos/" + vid).status_code == 409

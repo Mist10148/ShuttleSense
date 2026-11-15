@@ -46,6 +46,8 @@ def enable_watch_player_continuity(perception: Perception) -> None:
     tracker = getattr(perception, "tracker", None)
     if tracker is not None:
         tracker.watch_outside_tracking = True
+    if isinstance(perception, ModelPerception):
+        perception.watch_preprocess_cache = True
 
 
 class ModelPerception:
@@ -66,6 +68,7 @@ class ModelPerception:
         self.size = frame_size
         self.background_frames = background_frames
         self.available = {"tracking": False, "pose": False}
+        self.watch_preprocess_cache = False
         stages = config.get("stages", {})
         self._init_tracking(stages.get("tracking", {}))
         self._init_pose(stages.get("pose", {}), stages.get("court", {}), corners_px)
@@ -132,12 +135,18 @@ class ModelPerception:
         if self.bg_mode and len(self.bg_samples) < self.background_frames:
             self.bg_samples.append(cv2.resize(frame, INPUT_SIZE)[:, :, ::-1])
             self.median = np.median(np.stack(self.bg_samples), axis=0).astype(np.uint8)
-        self.window.append(frame)
+        if self.watch_preprocess_cache:
+            # The window slides by one frame: resize each image once, not once per
+            # occurrence in overlapping windows. Keep the dynamic median unchanged.
+            self.window.append(cv2.resize(frame[:, :, ::-1], INPUT_SIZE))
+        else:
+            self.window.append(frame)
         frames = list(self.window)
         frames = [frames[0]] * (self.seq_len - len(frames)) + frames  # pad at the start
         with torch.inference_mode():
             points = track_windows(
-                self.model, [frames], self.bg_mode, self.median, self.device, self.size
+                self.model, [frames], self.bg_mode, self.median, self.device, self.size,
+                prepared_rgb=self.watch_preprocess_cache,
             )[0]
         x, y, vis = points[-1]
         return Shuttle(x=round(x, 1), y=round(y, 1), visible=1) if vis else Shuttle()

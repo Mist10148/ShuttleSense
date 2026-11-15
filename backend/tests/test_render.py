@@ -295,3 +295,70 @@ def test_doubles_render_draws_every_layer(tmp_path) -> None:
     for layer in (draw_boxes, draw_pose, draw_minimap):
         layer(img, record, 10, state)
     assert img.any()
+
+
+@pytest.mark.parametrize("corners", [
+    [[20, 80], [140, 80], [120, 20], [40, 20]],
+    [[-40, 100], [190, 100], [140, -10], [20, -10]],
+    [[-80, 60], [-10, 60], [-20, 20], [-70, 20]],
+])
+def test_court_region_matches_full_frame_blend(corners):
+    import cv2
+
+    from shuttlesense.court import compute_homography
+    from shuttlesense.render import style
+    from shuttlesense.render.overlays import RenderState, court_segments_px, draw_court
+    from shuttlesense.schema import ClipRecord, Court
+
+    record = ClipRecord(clip_id="c", fps=25, width=160, height=90, num_frames=1,
+                        court=Court(corners_px=corners,
+                                    homography=compute_homography(corners).tolist()))
+    state = RenderState(scale=1)
+    img = np.random.default_rng(7).integers(0, 256, (90, 160, 3), dtype=np.uint8)
+    expected = img.copy()
+    overlay = expected.copy()
+    for a, b in court_segments_px(record, state):
+        cv2.line(overlay, a, b, style.COURT, 3, cv2.LINE_AA)
+    cv2.addWeighted(overlay, .6, expected, .4, 0, dst=expected)
+    draw_court(img, record, 0, state)
+    assert np.array_equal(img, expected)
+
+
+def test_cached_hit_and_stroke_counts_match_original_at_random_frames():
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import (
+        RenderState,
+        _cached_last_hit,
+        _last_hit_before,
+        draw_speed,
+        status_text,
+    )
+    record = load_golden("doubles")
+    state = RenderState()
+    for index in [0, len(record.frames) - 1, 10, 25, 3, 50]:
+        if index >= len(record.frames):
+            continue
+        assert _cached_last_hit(record, index, state) == _last_hit_before(record, index)
+        draw_speed(np.zeros((record.height, record.width, 3), np.uint8), record, index, state)
+        assert status_text(record, index) == status_text(
+            record, index, peak_history=state.cache["peak_history"],
+            stroke_counts=state.cache["stroke_counts"],
+        )
+
+
+def test_cached_score_overlay_matches_score_at_every_frame(monkeypatch):
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render import overlays
+    record = load_golden("doubles")
+    state = overlays.RenderState()
+    # Exercise arbitrary seek order and compare the labels to the uncached score function.
+    labels = []
+    monkeypatch.setattr(overlays, "_label", lambda img, text, *args: labels.append(text))
+    for i in reversed(range(len(record.frames))):
+        labels.clear()
+        overlays.draw_score(np.zeros((record.height, record.width, 3), np.uint8), record, i, state)
+        score = overlays.score_at(record, i)
+        if score is None:
+            assert not labels
+        else:
+            assert labels == [f"Near {score[0]}", f"Far {score[1]}"]

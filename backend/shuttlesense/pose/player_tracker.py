@@ -246,8 +246,10 @@ class CourtPlayerTracker:
             track.outside_frames = 0 if inside else track.outside_frames + 1
             track.bbox = p.bbox
             track.recovery_pos, track.recovery_count = None, 0
-            track.hist = hist if track.hist is None else (track.hist if hist is None else
-                                                          0.9 * track.hist + 0.1 * hist)
+            # Do not let an uncertain outside observation overwrite the identity template.
+            if inside or not self.watch_outside_tracking:
+                track.hist = hist if track.hist is None else (track.hist if hist is None else
+                                                              0.9 * track.hist + 0.1 * hist)
             track.count += 1
             track.locked = track.locked or track.count >= self.confirm
             if track.locked:
