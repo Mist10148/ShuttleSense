@@ -36,6 +36,7 @@ from shuttlesense.api.models import (
     JobCreate,
     LineCallOverrideBody,
     LineCallUpdate,
+    MatchTypeRequest,
     RenderRequest,
     ScoreAwardIn,
     ScoreConcedeIn,
@@ -133,10 +134,48 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         stroke_models=_stroke_models(request, settings),
         chat_available=request.app.state.chat_client is not None,
         chat_max_messages=settings.chat_max_messages,
+        watch_match_type=not settings.fake_pipeline,
     )
 
 
 # Videos -----------------------------------------------------------------------
+
+
+@router.post("/videos/{video_id}/match-type")
+def suggest_match_type(
+    video_id: str,
+    body: MatchTypeRequest,
+    request: Request,
+    storage: StorageDep,
+    jobs: JobsDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    from shuttlesense.api.match_type import detect_match_type
+    from shuttlesense.stage import StageSkipped
+
+    if settings.fake_pipeline:
+        raise HTTPException(
+            status_code=503, detail="Automatic detection is unavailable in demo mode"
+        )
+    info = _video_or_404(storage, video_id)
+    source = storage.video_source(video_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="video not found")
+    try:
+        if any(not (0 <= x <= info.width and 0 <= y <= info.height) for x, y in body.corners):
+            raise ValueError("Court corners must be inside the video frame")
+        validate_corners(body.corners)
+        check_court_area(body.corners, (info.width, info.height))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not jobs.gpu.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Server is busy; try again or choose manually")
+    try:
+        return detect_match_type(source, body.corners, jobs.config, jobs.device)
+    except (StageSkipped, ImportError, RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"Player detection unavailable: {exc}") from exc
+    finally:
+        jobs.gpu.release()
 
 
 def _video_or_404(storage: Storage, video_id: str) -> VideoInfoOut:
@@ -179,7 +218,7 @@ def upload_video(
             raise HTTPException(status_code=415, detail=str(exc)) from exc
         try:
             io_cfg = request.app.state.jobs.config.get("stages", {}).get("io", {})
-            check_duration(meta, io_cfg.get("max_duration_s", 300))
+            check_duration(meta, io_cfg.get("max_duration_s", 600))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         saved = True
@@ -203,6 +242,15 @@ def upload_video(
 @router.get("/videos/{video_id}", response_model=VideoInfoOut)
 def get_video(video_id: str, storage: StorageDep) -> VideoInfoOut:
     return _video_or_404(storage, video_id)
+
+
+@router.get("/videos/{video_id}/source")
+def get_source_video(video_id: str, storage: StorageDep) -> FileResponse:
+    _video_or_404(storage, video_id)
+    source = storage.video_source(video_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="video not found")
+    return FileResponse(source)
 
 
 @router.get("/videos/{video_id}/frames/{n}")
@@ -234,12 +282,18 @@ def get_frame(
 
 
 @router.delete("/videos/{video_id}", status_code=204)
-def delete_video(video_id: str, storage: StorageDep, jobs: JobsDep) -> Response:
-    _video_or_404(storage, video_id)
-    # Hide the video first so a POST /jobs racing this delete gets a 404, not an orphan job.
-    storage.hide_video(video_id)
-    jobs.delete_for_video(video_id)
-    storage.delete_video(video_id)
+def delete_video(video_id: str, storage: StorageDep, jobs: JobsDep, request: Request) -> Response:
+    with request.app.state.watch_background_lock:
+        _video_or_404(storage, video_id)
+        if any(
+            worker.source_id == video_id and worker.thread.is_alive()
+            for worker in request.app.state.watch_background.values()
+        ):
+            raise HTTPException(status_code=409, detail="Video is in use by background analysis")
+        # Hide the video first so a POST /jobs racing this delete gets a 404, not an orphan job.
+        storage.hide_video(video_id)
+        jobs.delete_for_video(video_id)
+        storage.delete_video(video_id)
     return Response(status_code=204)
 
 

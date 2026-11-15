@@ -121,12 +121,9 @@ def _keypoint_rcnn_detector(device: str):
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill frames[].players with near/far boxes and smoothed COCO-17 keypoints."""
     from shuttlesense.config import court_type
-    from shuttlesense.pose.tracking import (
-        filter_players,
-        make_tracker,
-        smooth_keypoints,
-        track_players,
-    )
+    from shuttlesense.pose.far_refinement import FarPlayerRefiner
+    from shuttlesense.pose.player_tracker import CourtPlayerTracker
+    from shuttlesense.pose.tracking import smooth_keypoints
 
     if ctx.reader is None:
         raise StageSkipped("no frames (io stage did not run)")
@@ -145,21 +142,17 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         homography = compute_homography(corners, court_size)
 
     court = court_type(ctx.config)
-    tracker = make_tracker(cfg, court)
+    tracker = CourtPlayerTracker(cfg, court, court_size)
+    far_refiner = FarPlayerRefiner(cfg, court, court_size)
     min_score = cfg.get("min_person_score", 0.4)
     total = max(len(ctx.reader), 1)
     for i, frame in ctx.reader:
         people = [p for p in detect(frame) if p.score >= min_score]
-        people = filter_players(
-            people,
-            frame_height=record.height,
-            homography=homography,
-            court_size=court_size,
-            max_players=8 if court == "doubles" else 2,  # the tracker keeps two per side
+        people = far_refiner.refine(frame, detect, tracker, people, homography=homography)
+        record.frames[i].players = tracker.update(
+            people, frame_height=record.height, homography=homography, frame=frame
         )
-        record.frames[i].players = track_players(
-            tracker, people, frame_height=record.height, homography=homography, frame=frame
-        )
+        record.frames[i].player_hold_safe = tracker.view_valid
         if i % 25 == 0:
             ctx.progress(i / total)
 

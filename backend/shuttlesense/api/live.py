@@ -10,6 +10,7 @@ frame index and float64 capture time in ms, little-endian, then one JPEG), JSON
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import hashlib
 import hmac
@@ -39,6 +40,176 @@ HEADER = struct.Struct("<Id")
 START_TIMEOUT_S = 10.0
 
 ws_router = APIRouter()
+
+
+@ws_router.websocket("/watch")
+async def watch_video(ws: WebSocket, token: str | None = None) -> None:
+    """Analyze an uploaded video one requested frame at a time, on its video clock."""
+    import cv2
+
+    from shuttlesense.io import FrameReader
+
+    await ws.accept()
+    settings = ws.app.state.settings
+    if settings.token and not (
+        token and hmac.compare_digest(token.encode(), settings.token.encode())
+    ):
+        await _error(ws, "unauthorized", "missing or invalid token", 4401)
+        return
+    manager: LiveManager = ws.app.state.live
+    entry = None
+    frames = None
+    try:
+        start = await asyncio.wait_for(ws.receive_json(), START_TIMEOUT_S)
+        if not isinstance(start, dict) or start.get("type") != "start":
+            raise ValueError("first message must be start")
+        video_id = str(start.get("video_id", ""))
+        meta = manager.storage.load_video_meta(video_id)
+        source = manager.storage.video_source(video_id)
+        if meta is None or source is None:
+            raise ValueError("video not found")
+        live_cfg = manager.state.jobs.config.get("live") or {}
+        reader = await asyncio.to_thread(
+            FrameReader,
+            source,
+            int(live_cfg.get("target_height", 720)),
+            float(live_cfg.get("max_fps", 30)),
+        )
+        corners = start.get("corners")
+        if corners is not None:
+            corners = [
+                [float(x) * reader.width / meta.width, float(y) * reader.height / meta.height]
+                for x, y in corners
+            ]
+        request = _start_request(
+            {
+                **start,
+                "corners": corners,
+                "fps": reader.fps,
+                "width": reader.width,
+                "height": reader.height,
+            }
+        )
+        playback = start.get("playback", "complete")
+        if playback not in ("complete", "realtime"):
+            raise ValueError("playback must be complete or realtime")
+        entry = await asyncio.to_thread(manager.create, request)
+        session = entry.session
+        # Video playback waits for each result, so it must not lower perception resolution
+        # merely because a frame took longer than the camera-live latency budget.
+        if playback == "complete":
+            session.live["scales"] = [1.0]
+        session.request.name = "Watch & Analyze (partial)"
+        session.analyzer.watch_stroke_guard = True
+        try:
+            from shuttlesense.stage import StageSkipped
+            from shuttlesense.strokes import registry
+            from shuttlesense.strokes.classify import load_classifier
+
+            strokes_cfg = session.config.get("stages", {}).get("strokes", {})
+            name = registry.algorithm(strokes_cfg)
+            _, checkpoint = await asyncio.to_thread(
+                load_classifier, registry.weights_path(strokes_cfg, name), session.analyzer.device
+            )
+            session.analyzer.watch_checkpoint = checkpoint
+            window = int(checkpoint.get("window_frames", strokes_cfg.get("window_frames", 32)))
+            window_fps = checkpoint.get("window_fps")
+            step = session.fps / float(window_fps) if window_fps else 1.0
+            ahead = math.ceil((window - 1 - window // 2) * step)
+            session.analyzer.hit_lag = max(session.analyzer.hit_lag, ahead + 1)
+        except (StageSkipped, ImportError, OSError, ValueError, KeyError):
+            log.warning("Watch stroke model unavailable; hits will remain unclassified")
+        frames = iter(reader)
+        next_index = 0
+        await ws.send_json(
+            {
+                "type": "started",
+                "fps": reader.fps,
+                "width": reader.width,
+                "height": reader.height,
+                "frames": len(reader),
+                "job_id": entry.job_id,
+                "stages": session.perception.available,
+                "playback": playback,
+            }
+        )
+        while True:
+            msg = await ws.receive_json()
+            if msg.get("type") == "stop":
+                break
+            if msg.get("type") != "next":
+                await _error(ws, "bad_request", "expected next or stop")
+                continue
+            target = next_index
+            if playback == "realtime":
+                target = msg.get("index", next_index)
+                if type(target) is not int or not next_index <= target < len(reader):
+                    await _error(ws, "bad_request", "invalid or backward video frame index")
+                    continue
+                # Anchor the recording at zero even if playback advanced during startup.
+                if next_index == 0:
+                    target = 0
+                while next_index < target:
+                    skipped = await asyncio.to_thread(next, frames, None)
+                    if skipped is None:
+                        break
+                    skipped_index, skipped_frame = skipped
+                    ok, encoded = await asyncio.to_thread(cv2.imencode, ".jpg", skipped_frame)
+                    if not ok:
+                        raise ValueError("could not encode video frame")
+                    packet = HEADER.pack(skipped_index, skipped_index * 1000.0 / reader.fps)
+                    await asyncio.to_thread(_skip_watch_frame, session, packet + encoded.tobytes())
+                    next_index = skipped_index + 1
+            item = await asyncio.to_thread(next, frames, None)
+            if item is None:
+                session.request.name = "Watch & Analyze"
+                break
+            index, frame = item
+            next_index = index + 1
+            ok, jpeg = await asyncio.to_thread(cv2.imencode, ".jpg", frame)
+            if not ok:
+                raise ValueError("could not encode video frame")
+            data = jpeg.tobytes()
+            packet = HEADER.pack(index, index * 1000.0 / reader.fps) + data
+            events = await asyncio.to_thread(_frames, session, [(packet, time.monotonic())])
+            await ws.send_json(
+                {
+                    "type": "video_frame",
+                    "index": index,
+                    **(
+                        {"jpeg": base64.b64encode(data).decode("ascii")}
+                        if playback == "complete"
+                        else {}
+                    ),
+                    "events": events,
+                }
+            )
+    except LiveBusy:
+        await _error(ws, "busy", "the GPU is busy with another job or live session", 4409)
+    except (ValueError, TypeError, KeyError) as exc:
+        await _error(ws, "bad_request", str(exc), 4400)
+    except (WebSocketDisconnect, TimeoutError):
+        pass
+    except Exception:
+        log.exception("watch session failed")
+        await _error(ws, "internal", "video analysis failed", 1011)
+    finally:
+        if frames is not None:
+            frames.close()
+        if entry is not None:
+            try:
+                job = await asyncio.to_thread(manager.finish, entry)
+                with contextlib.suppress(Exception):
+                    await ws.send_json({"type": "saved", "job_id": job.id if job else None})
+                    await ws.close()
+            except Exception:
+                log.exception("saving watch session failed")
+
+
+def _skip_watch_frame(session: LiveSession, packet: bytes) -> None:
+    index, timestamp = HEADER.unpack_from(packet)
+    with session.lock:
+        session.skip(packet[HEADER.size :], index, timestamp)
 
 
 class LiveBusy(Exception):

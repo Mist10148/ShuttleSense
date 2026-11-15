@@ -110,7 +110,7 @@ Each requirement maps to a feature ID from Scope. Acceptance criteria are what t
 
 | Req | Description | Acceptance criteria |
 | --- | --- | --- |
-| FR-1 (F1) | Accept MP4/MOV/AVI uploads up to 5 minutes, 720p or 1080p, 25 to 60 fps; normalize resolution and frame rate | A 1-minute phone clip and a broadcast clip both load and produce a frame index without error |
+| FR-1 (F1) | Accept MP4/MOV/AVI uploads up to 10 minutes, 720p or 1080p, 25 to 60 fps; normalize resolution and frame rate | A 1-minute phone clip and a broadcast clip both load and produce a frame index without error |
 | FR-2 (F2) | Run pretrained TrackNetV3 to output shuttle (x, y, visible) per frame; draw a fading trail of the last 8 to 15 positions | Trail follows the shuttle on sample clips; per-frame CSV saved |
 | FR-3 (F3) | Detect the two players (four in doubles) and assign stable IDs (near / far, and partner slots in doubles) across the rally | Each player keeps the same ID for the full rally on test clips |
 | FR-4 (F4) | Extract 2D body keypoints (COCO-17) per player per frame; draw skeletons color-coded by player | Skeletons drawn on both players; keypoints saved per frame |

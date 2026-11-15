@@ -264,9 +264,11 @@ class FrameInfo {
     this.rallyState,
     this.near2Pos,
     this.far2Pos,
+    this.playerHoldSafe = true,
   });
 
   final int frame;
+  final bool playerHoldSafe;
 
   /// Court-plane positions in meters (null without calibration). In doubles nearPos and
   /// farPos are near_1 and far_1, and their partners are [near2Pos] and [far2Pos].
@@ -293,6 +295,7 @@ class FrameInfo {
     final pos = j['court_positions'] as Json?;
     return FrameInfo(
       frame: asInt(j['frame'])!,
+      playerHoldSafe: j['player_hold_safe'] as bool? ?? true,
       nearPos: asPoint(pos?['near']),
       farPos: asPoint(pos?['far']),
       near2Pos: asPoint(pos?['near_2']),

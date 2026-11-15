@@ -123,7 +123,7 @@ class LiveOverlayPainter extends CustomPainter {
       canvas.drawRect(
         Rect.fromLTWH(b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy),
         Paint()
-          ..color = colors.forPlayer(side)
+          ..color = colors.forPlayer(side).withValues(alpha: p.held ? 0.4 : 1)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );

@@ -68,9 +68,15 @@ def draw_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         age = (i - frame_idx) / max(length, 1)  # 0 = newest
         alpha = 1.0 - 0.8 * age
         radius = max(1, int(round((6 - 4 * age) * state.scale)))
-        overlay = img.copy()
-        cv2.circle(overlay, p, radius, style.SHUTTLE, -1, cv2.LINE_AA)
-        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, dst=img)
+        pad = radius + 2  # Include anti-aliased edge pixels.
+        x0, y0 = max(0, p[0] - pad), max(0, p[1] - pad)
+        x1, y1 = min(img.shape[1], p[0] + pad + 1), min(img.shape[0], p[1] + pad + 1)
+        if x0 >= x1 or y0 >= y1:
+            continue
+        region = img[y0:y1, x0:x1]
+        overlay = region.copy()
+        cv2.circle(overlay, (p[0] - x0, p[1] - y0), radius, style.SHUTTLE, -1, cv2.LINE_AA)
+        cv2.addWeighted(overlay, alpha, region, 1 - alpha, 0, dst=region)
 
 
 def court_type_of(record: ClipRecord) -> str:
@@ -94,16 +100,31 @@ def _player_labels(record: ClipRecord) -> tuple[tuple[str, str], ...]:
 def draw_boxes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
     import cv2
 
+    from shuttlesense.render.player_boxes import display_players
+
     thick = max(1, int(round(2 * state.scale)))
     if "labels" not in state.cache:
         state.cache["labels"] = _player_labels(record)
+    boxes = display_players(record, i, float(state.stage("render").get("player_box_hold_s", 0.6)))
     for side, label in state.cache["labels"]:
-        p = getattr(record.frames[i].players, side)
-        if p is None:
+        player = boxes.get(side)
+        if player is None:
             continue
-        x, y, w, h = p.bbox
+        x, y, w, h = player["bbox"]
         color = style.PLAYER_COLORS[side]
-        cv2.rectangle(img, _pt(x, y), _pt(x + w, y + h), color, thick, cv2.LINE_AA)
+        if player["held"]:
+            x0, y0 = max(0, round(x) - thick - 2), max(0, round(y) - thick - 2)
+            x1 = min(img.shape[1], round(x + w) + thick + 3)
+            y1 = min(img.shape[0], round(y + h) + thick + 3)
+            if x0 < x1 and y0 < y1:
+                region = img[y0:y1, x0:x1]
+                overlay = region.copy()
+                cv2.rectangle(overlay, _pt(x - x0, y - y0), _pt(x + w - x0, y + h - y0),
+                              color, thick, cv2.LINE_AA)  # fmt: skip
+                cv2.addWeighted(overlay, 0.4, region, 0.6, 0, dst=region)
+            label += " (held)"
+        else:
+            cv2.rectangle(img, _pt(x, y), _pt(x + w, y + h), color, thick, cv2.LINE_AA)
         cv2.putText(img, label, _pt(x, y - 6 * state.scale), style.FONT, 0.6 * state.scale,
                     color, thick, cv2.LINE_AA)  # fmt: skip
 
@@ -230,7 +251,7 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     cv2.addWeighted(overlay, 0.6, img, 0.4, 0, dst=img)
 
 
-def status_text(record: ClipRecord, i: int) -> str:
+def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None) -> str:
     """'In play · 182 km/h (est.) · peak 241 · 3 strokes' for frame i."""
     from shuttlesense.analytics.stage import strokes_so_far
 
@@ -240,9 +261,13 @@ def status_text(record: ClipRecord, i: int) -> str:
         parts.append("In play" if frame.rally_state == "in_play" else "Between rallies")
     if frame.shuttle_speed_kmh is not None:
         parts.append(f"{frame.shuttle_speed_kmh:.0f} km/h (est.)")
-    peaks = [f.shuttle_speed_kmh for f in record.frames[: i + 1] if f.shuttle_speed_kmh]
-    if peaks:
-        parts.append(f"peak {max(peaks):.0f}")
+    if peak_history is None:
+        peaks = [f.shuttle_speed_kmh for f in record.frames[: i + 1] if f.shuttle_speed_kmh]
+        peak = max(peaks) if peaks else None
+    else:
+        peak = peak_history[i]
+    if peak is not None:
+        parts.append(f"peak {peak:.0f}")
     count = strokes_so_far(record, i)
     parts.append(f"{count} stroke{'s' if count != 1 else ''}")
     return " | ".join(parts)
@@ -250,7 +275,17 @@ def status_text(record: ClipRecord, i: int) -> str:
 
 def draw_speed(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
     """Status bar at the bottom left: rally state, estimated speed, peak, stroke count."""
-    _label(img, status_text(record, i), _pt(12 * state.scale, img.shape[0] - 14 * state.scale),
+    if state.cache.get("peak_record") is not record:
+        peak = None
+        history = []
+        for frame in record.frames:
+            speed = frame.shuttle_speed_kmh
+            if speed and (peak is None or speed > peak):
+                peak = speed
+            history.append(peak)
+        state.cache["peak_record"], state.cache["peak_history"] = record, history
+    _label(img, status_text(record, i, peak_history=state.cache["peak_history"]),
+           _pt(12 * state.scale, img.shape[0] - 14 * state.scale),
            style.PANEL, state.scale)  # fmt: skip
 
 
@@ -292,9 +327,12 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
         return px, py
 
     radius = max(2, int(h / 40))
-    panel = img.copy()
-    cv2.rectangle(panel, (x, y), (x + w - 1, y + h - 1), style.MINIMAP_BG, -1)
-    cv2.addWeighted(panel, 0.75, img, 0.25, 0, dst=img)
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(img.shape[1], x + w), min(img.shape[0], y + h)
+    if x0 < x1 and y0 < y1:
+        region = img[y0:y1, x0:x1]
+        panel = np.full_like(region, style.MINIMAP_BG)
+        cv2.addWeighted(panel, 0.75, region, 0.25, 0, dst=region)
     for group in court_lines(lines_size, court).values():
         for a, b in group:
             cv2.line(img, to_px(a), to_px(b), style.COURT, 1, cv2.LINE_AA)

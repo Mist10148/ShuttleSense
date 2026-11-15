@@ -217,6 +217,8 @@ class _ReadyView extends ConsumerWidget {
           'with the whole court in view. Calibrate the court for the minimap, speed and line '
           'calls.',
         ),
+        const Text('Without court calibration, player detection is disabled.'),
+        const Text('For best accuracy, keep the camera fixed and do not pan or zoom.'),
         const SizedBox(height: 8),
         Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
         if (state.error != null)

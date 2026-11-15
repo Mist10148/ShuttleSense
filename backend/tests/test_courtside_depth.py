@@ -126,7 +126,7 @@ def test_old_record_does_not_invent_history():
     record = load_record(
         '{"schema_version":"1.5","clip_id":"old","fps":30,"width":640,"height":360,"num_frames":0}'
     )
-    assert record.schema_version == "1.6"
+    assert record.schema_version == "1.7"
     assert record.practice_goals == record.decision_log == []
     assert record.interval_state is None
 

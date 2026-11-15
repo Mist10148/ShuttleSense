@@ -16,7 +16,7 @@ import '../../data/repositories/analysis_repository.dart';
 const kLargeUploadBytes = 1024 * 1024 * 1024;
 
 /// Clips longer than this are rejected by the server (FR-1).
-const kMaxDurationS = 300;
+const kMaxDurationS = 600;
 
 /// Browsers get a lower cap: Dio's web adapter holds the whole request body in memory before
 /// sending it, so a file near the server limit can crash the tab.

@@ -45,6 +45,17 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
+## Schema v1.7 (player display and jump observations)
+
+Two optional flags are omitted when true and default to true in older records.
+`frames[].player_hold_safe` may be false in historical recordings when the former camera-view
+guard could not verify the view; renderers must not carry a held box across that frame. The
+current tracker assumes a fixed camera and does not use that guard. A player's `court_position_valid`
+is false when a locked player is matched just beyond the court boundary; their pose is a
+measurement, but their projected floor position is excluded from court analytics. Held
+boxes themselves are display-only and are not stored as player measurements. The app's
+record model reads the frame flag and does not consume player pose objects from records.
+
 ## Schema v1.5 (courtside referee)
 
 v1.5 (Nov 14, [D33](DECISIONS.md), [T12.3](phases/phase-12-courtside.md#t123)) adds optional fields only, each left out of the JSON while it is `null`, so older records load unchanged:
@@ -301,6 +312,6 @@ All additions are optional; 1.0–1.5 records migrate without invented history.
   optional rally and Moment, and self-reported `completed`. This user-authored list
   sits outside derived `coaching`, so recomputing notes cannot erase goals.
 
-Python models, Dart models, schema/OpenAPI snapshots and both golden fixtures use 1.6.
+These fields remain compatible with the current 1.7 models and golden fixtures.
 Derived JSON exports include goals and a deterministic recap of match result, stroke
 counts and the existing evidence-linked top fixes. No goal improvement is inferred.

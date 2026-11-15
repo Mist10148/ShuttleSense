@@ -286,6 +286,27 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('a held display box is marked without a measured player', (tester) async {
+    final sockets = await pumpLive(tester, size: laptop);
+    await startWithoutCourt(tester);
+    final socket = sockets.single;
+    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
+    await tester.pump(const Duration(milliseconds: 100));
+    socket.emit({
+      ...frameEvent(0),
+      'players': <String, dynamic>{},
+      'display_players': {
+        'near': {'bbox': [10, 20, 30, 40], 'held': true},
+      },
+    });
+    await events(tester);
+    final player = container.read(liveControllerProvider).players['near'];
+    expect(player?.held, isTrue);
+    expect(player?.keypoints, isEmpty);
+    await tapStop(tester);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('review a later call and advance only after its score acknowledgment', (
     tester,
   ) async {

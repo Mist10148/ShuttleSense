@@ -180,6 +180,42 @@ ShuttleSense/
 
 Full instructions, including Colab, weights, datasets and connecting a phone: **[docs/SETUP.md](docs/SETUP.md)**.
 
+### Windows PowerShell: app and backend
+
+From the repository root, set up the backend once (Python 3.13 is selected
+explicitly so another default Python version does not affect the environment):
+
+```powershell
+cd backend
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements/base.txt -e .
+cd ..\app
+flutter pub get
+```
+
+To run the app, open **two PowerShell terminals** at the repository root.
+After installing the model dependencies and weights in [docs/SETUP.md](docs/SETUP.md#3-backend-on-a-laptop-primary), start the real backend in the first terminal:
+
+```powershell
+cd backend
+Remove-Item Env:SHUTTLESENSE_FAKE_PIPELINE -ErrorAction SilentlyContinue
+.\.venv\Scripts\python.exe -m uvicorn shuttlesense.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Leave that terminal running. Check `http://127.0.0.1:8000/health` or open
+`http://127.0.0.1:8000/docs` in a browser. In the second terminal:
+
+```powershell
+cd app
+flutter run -d chrome
+```
+
+On the connect screen, enter `http://127.0.0.1:8000`. Press `Ctrl+C` in
+each terminal to stop its process. To try the UI without models, set
+`$env:SHUTTLESENSE_FAKE_PIPELINE = "1"` before starting the backend; demo mode
+returns synthetic results rather than analyzing the video.
+For a phone, see [connecting a device](docs/SETUP.md#8-connecting-a-phone-or-tablet-to-the-laptop).
+
 **Backend** (Python 3.11–3.13; NVIDIA GPU recommended):
 
 ```bash

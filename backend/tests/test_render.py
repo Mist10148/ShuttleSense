@@ -90,6 +90,48 @@ def test_trail_draws_only_visible_points() -> None:
     assert img.any(axis=2).sum() < 400  # two small dots only
 
 
+def test_optimized_trail_matches_full_frame_blending_at_edges() -> None:
+    import cv2
+
+    from shuttlesense.render import style
+    from shuttlesense.render.overlays import RenderState, draw_trail
+    from shuttlesense.schema import ClipRecord, Frame, Shuttle
+
+    positions = [(0, 0), (159, 89), (80, 45), (-2, 30)]
+    frames = [Frame(frame=i, shuttle=Shuttle(x=x, y=y, visible=1))
+              for i, (x, y) in enumerate(positions)]
+    record = ClipRecord(clip_id="c", fps=25, width=160, height=90,
+                        num_frames=len(frames), frames=frames)
+    rng = np.random.default_rng(7)
+    image = rng.integers(0, 256, (90, 160, 3), dtype=np.uint8)
+    expected = image.copy()
+    for frame in frames:
+        age = (3 - frame.frame) / 12
+        radius = max(1, round(6 - 4 * age))
+        overlay = expected.copy()
+        cv2.circle(overlay, (int(frame.shuttle.x), int(frame.shuttle.y)), radius,
+                   style.SHUTTLE, -1, cv2.LINE_AA)
+        cv2.addWeighted(overlay, 1 - 0.8 * age, expected, 0.8 * age, 0, dst=expected)
+    draw_trail(image, record, 3, RenderState())
+    assert np.array_equal(image, expected)
+
+
+def test_speed_overlay_uses_the_same_running_peak_when_seeking() -> None:
+    from shuttlesense.render import overlays, style
+
+    record = _record_with_track()
+    for frame, speed in zip(record.frames, [None, 0, 30, 20, 50, 0, None, 45, 60, 10],
+                            strict=True):
+        frame.shuttle_speed_kmh = speed
+    state = overlays.RenderState()
+    for i in (8, 2, 9, 0, 4):
+        expected = np.zeros((90, 160, 3), np.uint8)
+        actual = expected.copy()
+        overlays._label(expected, overlays.status_text(record, i), (12, 76), style.PANEL, 1)
+        overlays.draw_speed(actual, record, i, state)
+        assert np.array_equal(actual, expected)
+
+
 def test_layers_respect_overlay_selection() -> None:
     from shuttlesense.render.overlays import RenderState, draw_frame
     from shuttlesense.schema import Player

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,6 +18,7 @@ class ModeScreen extends ConsumerWidget {
     final current = ref.watch(appModeProvider);
     final health = ref.watch(healthProvider).valueOrNull;
     final liveOff = health != null && !health.supportsLive;
+    final watchSupported = kIsWeb || defaultTargetPlatform == TargetPlatform.windows;
     Future<void> pick(AppMode mode) async {
       await ref.read(appModeProvider.notifier).set(mode);
       if (context.mounted) context.go(Routes.home);
@@ -45,6 +47,18 @@ class ModeScreen extends ConsumerWidget {
                     'you play. The session is saved to History when you stop.',
           selected: current == AppMode.live && !liveOff,
           onTap: liveOff ? null : () => pick(AppMode.live),
+        ),
+        const SizedBox(height: 16),
+        ModeCard(
+          icon: Icons.play_circle_outline,
+          title: 'Watch & Analyze',
+          description: !watchSupported
+              ? 'Watch & Analyze is currently available in Chrome and Windows.'
+              : health?.watchVideo == true
+              ? 'Watch a recorded rally while the server analyzes it frame by frame.'
+              : 'Update the backend to use video-driven live analysis.',
+          selected: current == AppMode.watch && health?.watchVideo == true && watchSupported,
+          onTap: health?.watchVideo == true && watchSupported ? () => pick(AppMode.watch) : null,
         ),
       ],
     );

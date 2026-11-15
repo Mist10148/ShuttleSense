@@ -149,7 +149,10 @@ class _JobTile extends ConsumerWidget {
           },
         ),
         title: Text(title, overflow: TextOverflow.ellipsis),
-        subtitle: Text('${job.isLive ? 'Live · ' : ''}$when · ${job.status.name} · ${job.id}'),
+        subtitle: Text(
+          '${job.isLive ? 'Live · ' : ''}$when · ${job.status.name}'
+          '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''} · ${job.id}',
+        ),
         onTap: () {
           if (job.status == JobStatus.done && !hasResults(job)) {
             // Finished, but its record is gone (e.g. the server's storage was wiped).

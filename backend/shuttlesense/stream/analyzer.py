@@ -88,6 +88,8 @@ class StreamAnalyzer:
         self.config = config
         self.device = device
         self.classify = classify
+        self.watch_stroke_guard = False
+        self.watch_checkpoint = None
         self.tick_every = max(1, tick_every)
         self.max_window = max_window_frames
         from shuttlesense.referee import apply_rallies
@@ -126,12 +128,13 @@ class StreamAnalyzer:
 
     # Per frame ----------------------------------------------------------------
 
-    def add_frame(self, shuttle: Shuttle, players: Players, *, tick: bool = True) -> list[Event]:
+    def add_frame(self, shuttle: Shuttle, players: Players, *, tick: bool = True,
+                  player_hold_safe: bool = True) -> list[Event]:
         """Add the next frame; with tick=False the windowed stages wait for a later frame."""
         i = len(self.record.frames)
         if not tick:
             self._unobserved.add(i)
-        frame = Frame(frame=i, shuttle=shuttle, players=players)
+        frame = Frame(frame=i, shuttle=shuttle, players=players, player_hold_safe=player_hold_safe)
         frame.court_positions, frame.shuttle_speed_kmh = self._project(frame)
         frame.rally_state = self.state
         self.record.frames.append(frame)
@@ -169,7 +172,8 @@ class StreamAnalyzer:
         min_score = self.min_keypoint_score
 
         def player(p: Player | None) -> tuple[float, float] | None:
-            return to_court(player_point(p, min_score), PLAYER_MARGIN_M) if p else None
+            return (to_court(player_point(p, min_score), PLAYER_MARGIN_M)
+                    if p and p.court_position_valid else None)
 
         near, far = player(frame.players.near), player(frame.players.far)
         partners = {"near_2": player(frame.players.near_2), "far_2": player(frame.players.far_2)}
@@ -182,12 +186,17 @@ class StreamAnalyzer:
         return CourtPositions(near=near, far=far, shuttle=shuttle, **partners), speed
 
     def _frame_event(self, frame: Frame) -> Event:
+        from shuttlesense.render.player_boxes import display_players
+
+        render = self.config.get("stages", {}).get("render", {})
+        seconds = float(render.get("player_box_hold_s", 0.6))
         return {
             "type": "frame",
             "frame": frame.frame,
             "time_s": round(frame.frame / (self.record.fps or 30.0), 3),
             "shuttle": _dump(frame.shuttle) if frame.shuttle else None,
             "players": _dump(frame.players),
+            "display_players": display_players(self.record, frame.frame, seconds),
             "court": _dump(frame.court_positions) if frame.court_positions else None,
             "speed_kmh": frame.shuttle_speed_kmh,
             **self.rally_status(),
@@ -240,6 +249,17 @@ class StreamAnalyzer:
                 with contextlib.suppress(StageSkipped, FileNotFoundError, ImportError, OSError):
                     strokes.run(window, ctx)
                     self.record.stroke_model = window.stroke_model
+            if self.watch_stroke_guard:
+                from shuttlesense.stream.watch_strokes import guard_hits
+
+                threshold = float(self.config.get("watch", {}).get("stroke_min_confidence", 0.5))
+                guard_hits(
+                    window,
+                    self.watch_checkpoint,
+                    threshold,
+                    doubles=self.config.get("court") == "doubles",
+                    unobserved=config["_unobserved_frames"],
+                )
             feedback.run(window, ctx)
         analytics.run(window, ctx)
         try:

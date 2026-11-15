@@ -8,12 +8,16 @@
 
 seed: 42  # reserved: no pipeline stage is random yet (training seeds: stroke_cnn.yaml)
 
+watch:
+  stroke_min_confidence: 0.5  # heuristic; validate against labelled footage
+  parallel_perception: false  # experimental; benchmark and validate before enabling
+
 stages:
   io:
     enabled: true
     target_height: 720          # normalize resolution (T2.1)
     max_fps: 30                 # downsample higher frame rates
-    max_duration_s: 300         # FR-1: up to 5 minutes
+    max_duration_s: 600         # FR-1: up to 10 minutes
 
   tracking:
     enabled: true
@@ -35,9 +39,35 @@ stages:
     min_person_score: 0.4
     smoothing_window: 5
     min_keypoint_score: 0.3     # joints below this count as missing
-    hold_frames: 5              # keep a lost player's last box this many frames
-    appearance_weight: 2.0      # doubles: shirt-colour distance, in meters of court distance
-    partners_close_m: 0.6       # doubles: partners this close are told apart by shirt only
+    confirmation_frames: 3      # consistent detections before a slot is locked
+    max_step_m: 0.5             # maximum court movement from last observation
+    max_step_box_fraction: 0.6  # maximum image displacement relative to box height
+    max_reacquire_gap_frames: 90 # bounded recovery window for a missing locked player
+    reacquire_step_per_frame_m: 0.15 # expand movement gate while a player is missing
+    reacquire_max_step_m: 1.5    # never match beyond this distance from last position
+    reacquire_box_step_per_frame: 0.1
+    reacquire_max_box_fraction: 1.2
+    reacquire_confirm_after_frames: 5 # confirm candidates again after a longer gap
+    reacquire_confirmation_frames: 2
+    max_appearance_distance: 0.45
+    locked_jump_margin_m: 0.3    # only for recently matched, locked players
+    locked_jump_max_distance_m: 0.35
+    locked_jump_max_appearance: 0.25
+    locked_jump_max_missing_frames: 2
+    locked_jump_max_frames: 9   # limit continuous outside-boundary exceptions
+    far_locked_jump_margin_m: 1.5 # far-court floor projection is less reliable during jumps
+    far_locked_jump_min_iou: 0.45 # require strong overlap with the last locked box
+    far_locked_jump_max_frames: 18
+    far_jump_max_ankle_spread_m: 2.2 # reject mixed-player feet when landing
+    match_ambiguity: 0.15       # reject near-tied identity matches
+    duplicate_iou: 0.65         # suppress repeated boxes only when poses also closely agree
+    duplicate_pose_fraction: 0.1 # upper-body joint distance as a fraction of player height
+    far_refinement_enabled: true # focused second pose pass only during a far-player gap
+    far_refinement_hold_frames: 12 # continue refinement briefly after recovery
+    far_refinement_max_missing: 45 # don't keep retrying long-lost players
+    hold_frames: 5              # legacy tracker only; missing players are now reported as absent
+    appearance_weight: 2.0      # legacy doubles tracker only
+    partners_close_m: 0.6       # legacy doubles tracker only
 
   court:
     enabled: true
@@ -102,6 +132,7 @@ stages:
 
   render:
     enabled: true
+    player_box_hold_s: 0.6      # display only; never used as a player observation
     codec: libx264
     crf: 23
     minimap_corner: top-right   # top-left | top-right | bottom-left | bottom-right

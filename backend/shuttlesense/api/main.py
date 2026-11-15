@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -111,12 +113,20 @@ def create_app(
         app.state.live = LiveManager(
             app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s
         )
+        app.state.watch_background = {}
+        app.state.watch_background_lock = threading.RLock()
         app.state.device = device
         app.state.available_stages = (
             list(STAGE_NAMES) if settings.fake_pipeline else available_stages(jobs.config)
         )
         jobs.start()
         yield
+        for worker in list(app.state.watch_background.values()):
+            if worker.thread.is_alive():
+                with worker.condition:
+                    worker.shutdown_requested = True
+                    worker.condition.notify_all()
+                await asyncio.to_thread(worker.thread.join)
         await app.state.live.shutdown()
         jobs.stop()
 
@@ -134,6 +144,9 @@ def create_app(
     app.include_router(public)
     app.include_router(router)
     app.include_router(ws_router)
+    from shuttlesense.api.watch_background import router as watch_background_router
+
+    app.include_router(watch_background_router)
     return app
 
 

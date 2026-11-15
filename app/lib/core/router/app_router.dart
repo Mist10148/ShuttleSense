@@ -13,6 +13,7 @@ import '../../features/processing/processing_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/upload/upload_screen.dart';
+import '../../features/watch/watch_screen.dart';
 import '../config/app_mode.dart';
 import '../config/server_config.dart';
 import '../responsive/adaptive_shell.dart';
@@ -58,10 +59,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: Routes.home,
                 // The Analyze tab follows the remembered mode (F18).
                 builder: (context, state) => Consumer(
-                  builder: (context, ref, _) =>
-                      ref.watch(appModeProvider) == AppMode.live && ref.watch(liveAvailableProvider)
-                      ? const LiveScreen()
-                      : const UploadScreen(),
+                  builder: (context, ref, _) => switch (ref.watch(appModeProvider)) {
+                    AppMode.watch => const WatchScreen(),
+                    AppMode.live when ref.watch(liveAvailableProvider) => const LiveScreen(),
+                    _ => const UploadScreen(),
+                  },
                 ),
                 routes: [
                   GoRoute(

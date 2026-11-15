@@ -59,12 +59,21 @@ install the CUDA wheel for the PyTorch version pinned in `requirements/ml.txt`.
 Select a CUDA build that supports your OS, Python version and driver. [PyTorch install selector](https://pytorch.org/get-started/locally/)
 
 ```bash
-pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/<cuda-tag>
+pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/<cuda-tag>
 pip install -r requirements/ml.txt
 pip install --no-deps rtmlib==0.0.16
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python -c "import onnxruntime as ort; print(ort.get_available_providers())"
 ```
+
+On the team's Windows RTX 5070 machine, Python 3.13 with the `cu130` wheel was
+verified with PyTorch 2.14.1 and ONNX Runtime 1.31.1. After installing FFmpeg
+with WinGet, open a new terminal so its updated PATH is visible. If an existing
+terminal cannot find FFmpeg, run
+`$env:PATH = "$env:LOCALAPPDATA\Microsoft\WinGet\Links;$env:PATH"` in that
+terminal. To use real
+models, remove `SHUTTLESENSE_FAKE_PIPELINE` from the backend terminal before
+starting the server; demo mode ignores the uploaded footage for analysis.
 
 Use one ONNX Runtime package per environment. RTMLib's dependencies include the
 CPU package, which can overwrite the GPU package's Python module. The commands
@@ -211,6 +220,17 @@ flutter analyze && flutter test
 ```
 
 Run on each target:
+
+**Watch & Analyze:** choose this mode after connecting, upload a clip and optionally
+calibrate the court. Playback is silent. By default video plays in real time;
+analysis may skip frames when the server is slow. Choose **Analyze every frame**
+to make playback wait for analysis instead. Browser playback requires a supported
+video codec; use a compatible MP4 or the frame-by-frame mode if playback fails.
+The saved session ends at the last processed frame. Stop early to save a partial
+session. Chrome has the existing 512 MB upload
+cap; the backend defaults to 1 GB and 10 minutes. Real analysis needs the model
+dependencies and weights in sections 3 and 5; fake mode shows synthetic results.
+FFmpeg is recommended for browser-compatible saved video exports.
 
 | Target | Command |
 | --- | --- |

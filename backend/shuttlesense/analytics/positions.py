@@ -79,7 +79,7 @@ def project_positions(
     for i, f in enumerate(record.frames):
         for side in players:
             p = getattr(f.players, side)
-            if p is not None:
+            if p is not None and p.court_position_valid:
                 out[side][i] = player_point(p, min_keypoint_score)
         s = f.shuttle
         if s is not None and s.visible and s.x is not None and s.y is not None:

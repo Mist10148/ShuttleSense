@@ -158,7 +158,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Calibrate court'),
-                subtitle: const Text('Tap 4 court corners to enable minimap, speed and in/out'),
+                subtitle: const Text('Tap 4 court corners for player detection and court features. Without calibration, players are not detected.'),
                 value: options.calibrate,
                 onChanged: (v) => notifier.set(options.copyWith(calibrate: v)),
               ),

@@ -248,11 +248,11 @@ void main() {
 
     testWidgets('a failed upload shows the server message', (tester) async {
       final (api, _) = await pickVideo(tester);
-      api.uploadError = ApiException('Video is longer than 5 minutes', statusCode: 400);
+      api.uploadError = ApiException('Video is longer than 10 minutes', statusCode: 400);
       await startUpload(tester);
       api.uploadGate!.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Video is longer than 5 minutes'), findsOneWidget);
+      expect(find.text('Video is longer than 10 minutes'), findsOneWidget);
       expect(find.text('Upload and analyze'), findsOneWidget);
     });
 
@@ -279,9 +279,9 @@ void main() {
       expect(find.text('1:05 · 10.0 MB'), findsOneWidget);
     });
 
-    testWidgets('a clip over 5 minutes is flagged and confirmed before sending', (tester) async {
-      final (api, visited) = await pickVideo(tester, durationS: 400);
-      expect(find.textContaining('longer than the 5-minute server limit'), findsOneWidget);
+    testWidgets('a clip over 10 minutes is flagged and confirmed before sending', (tester) async {
+      final (api, visited) = await pickVideo(tester, durationS: 700);
+      expect(find.textContaining('longer than the 10-minute server limit'), findsOneWidget);
       await startUpload(tester);
       await tester.pumpAndSettle();
       expect(find.text('Long video'), findsOneWidget);

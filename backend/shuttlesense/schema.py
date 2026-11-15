@@ -1,4 +1,4 @@
-"""Clip record schema v1.6 — the shared per-clip data format.
+"""Clip record schema v1.7 — the shared per-clip data format.
 
 This module is the source of truth for docs/DATA_FORMAT.md. Every pipeline stage
 reads and writes a ClipRecord; the API serves it as JSON to the app.
@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.6"
+SCHEMA_VERSION = "1.7"
 
 PlayerSide = Literal["near", "far"]
 # v1.5: why a referee awarded a point or cleared a rally (a let replays it).
@@ -70,6 +70,7 @@ class Player(BaseModel):
     bbox: tuple[float, float, float, float]  # x, y, w, h in pixels
     keypoints: list[tuple[float, float, float]] = Field(default_factory=list)  # [x, y, score] x 17
     score: float = 0.0
+    court_position_valid: bool = Field(default=True, exclude_if=lambda value: value)
 
 
 class Players(BaseModel):
@@ -94,6 +95,7 @@ class Frame(BaseModel):
     frame: int
     shuttle: Shuttle | None = None
     players: Players = Field(default_factory=Players)
+    player_hold_safe: bool = Field(default=True, exclude_if=lambda value: value)
     court_positions: CourtPositions | None = None
     shuttle_speed_kmh: float | None = None
     rally_state: RallyState | None = None

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -98,6 +99,14 @@ class SettingsScreen extends ConsumerWidget {
                 icon: const Icon(Icons.videocam_outlined),
                 enabled: liveAvailable,
                 tooltip: liveAvailable ? null : 'This server is too old for live mode',
+              ),
+              ButtonSegment(
+                value: AppMode.watch,
+                label: const Text('Watch video'),
+                icon: const Icon(Icons.play_circle_outline),
+                enabled:
+                    health.valueOrNull?.watchVideo == true &&
+                    (kIsWeb || defaultTargetPlatform == TargetPlatform.windows),
               ),
             ],
             selected: {ref.watch(appModeProvider)},

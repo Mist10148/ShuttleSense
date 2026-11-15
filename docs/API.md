@@ -1,5 +1,38 @@
 # Backend API
 
+### Watch & Analyze WebSocket
+
+`GET /health` advertises `watch_video` when `WS /watch` is available. Upload a
+video with `POST /videos`, then connect to `/watch` with the optional `token`
+query parameter used by `/live`. Send `{"type":"start","video_id":"..."}`;
+optional `corners` are four source-video pixel coordinates. The `started` event
+reports normalized dimensions, FPS, frame count and job ID. Send one
+`{"type":"next"}` at a time; each `video_frame` includes its index, a base64
+JPEG, and analysis events. The request after the last frame finishes the session.
+`{"type":"stop"}` finishes early. Both return `saved` with a job ID if frames
+were processed. A disconnect also saves the analyzed portion. Pause by withholding
+the next request; timestamps follow video time rather than wall-clock time.
+
+Servers advertising `watch_realtime` also accept `"playback":"realtime"` in
+the start message. In this mode clients play `GET /videos/{id}/source` separately
+and send the current normalized frame `index` with each `next`. The backend
+records intermediate frames without running perception and analyzes the requested
+frame. Frame responses omit the JPEG in this mode. Indices must advance, and
+analysis can miss events; recorded results end at the last processed frame. The
+source endpoint supports range requests and the same token authentication as
+other video endpoints. Older clients that omit `playback` retain the original
+frame-by-frame behavior.
+
+`POST /videos/{video_id}/match-type` accepts `{"corners": [[x,y], ...]}` in
+source-video pixels. It samples up to 12 frames and returns `suggestion` (singles,
+doubles or null), `detail` and `sampled_frames`. Treat the result as a heuristic
+that requires user confirmation. A busy server returns 409; demo mode or an
+unavailable pose model returns 503. `watch_match_type` in `/health` advertises
+support. Pass the confirmed `court` (singles or doubles) in the `/watch` start.
+The watch-only `watch.stroke_min_confidence` setting is an unvalidated heuristic;
+hits lacking a complete window, sufficient pose/shuttle observations, or sufficient
+confidence remain unclassified and do not receive stroke-specific feedback.
+
 REST contract between the Flutter app and the FastAPI backend. The server implements it in [`backend/shuttlesense/api/routes.py`](../backend/shuttlesense/api/routes.py); the app's client is [`app/lib/data/api_client.dart`](../app/lib/data/api_client.dart). FastAPI also serves live interactive docs at `/docs` (Swagger UI) and the OpenAPI JSON at `/openapi.json` on any running server.
 
 Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [clip record](DATA_FORMAT.md): breaking changes need the lead's approval and must update server, app client and this page in one PR.
@@ -236,7 +269,7 @@ Live sessions (F19, [D16](DECISIONS.md)). Authentication: `?token=` (browsers ca
 | Event | Payload |
 | --- | --- |
 | `started` | `session_id`, optional `job_id` (reserved replay ID, stable across resume), `resumed`, `fps`, `width`, `height` (processing size), `frames` (count so far), `stages` (`{"tracking": bool, "pose": bool}`: which models are installed), `corners` (processing pixels), `budget_ms`, and the session so far: `score`, `rallies`, `line_calls`, `hits`, `coaching` and `rally_summary` (null before the first rally). After a resume this restores the session summary |
-| `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (boxes and keypoints), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
+| `frame` | `frame`, `time_s`, `client_frame`, `ts` (echo of the capture time), `shuttle`, `players` (measured boxes and keypoints), `display_players` (boxes with a `held` flag for display only), `court` (positions in m), `speed_kmh`, `rally_state`, `rally_start_frame`, `strokes_in_rally`, `latency_ms` (arrival → event), `skipped` (true when the frame got no perception) |
 | `hit` | `hit`: a clip-record hit (stroke, confidence, feedback, speed); sent about `hit_lag` frames after the contact |
 | `rally` | `state: "in_play"` with `start_frame`, `index`; or `state: "between_rallies"` with the finished `rally` |
 | `line_call` | `line_call`: a clip-record line call (again after an override) |

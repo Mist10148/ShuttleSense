@@ -1,0 +1,252 @@
+﻿"""Regression tests for conservative court-aware player selection."""
+import numpy as np
+
+from shuttlesense.court import compute_homography, court_to_image
+from shuttlesense.pose.player_tracker import CourtPlayerTracker
+from shuttlesense.schema import COURT_SIZE_M, Player
+
+H = compute_homography([[212, 650], [1068, 650], [880, 210], [400, 210]])
+
+def person(x, y, ankle=True):
+    px, py = court_to_image(H, np.array([[x, y]]))[0]
+    kps = [(0., 0., 0.)] * 15 + [(float(px), float(py), .9)] * 2 if ankle else []
+    return Player(bbox=(float(px)-30, float(py)-150, 60, 150), keypoints=kps, score=.9)
+
+def update(tracker, people):
+    return tracker.update(people, frame_height=720, homography=H,
+                          frame=np.zeros((720, 1280, 3), dtype=np.uint8))
+
+def test_confirmation_filter_and_identity_lock():
+    t = CourtPlayerTracker({}, "singles", COURT_SIZE_M)
+    near, far, official = person(2, 3), person(2, 10), person(-1.0, 3)
+    for _ in range(2):
+        assert update(t, [official, near, far]).near is None
+    result = update(t, [official, near, far])
+    assert result.near == near and result.far == far
+    for _ in range(8):
+        result = update(t, [official, far])
+        assert result.near is None and result.far == far
+    assert update(t, [near, far]).near is None
+    assert update(t, [near, far]).near == near
+
+def test_doubles_alleys_and_strict_boundary():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "doubles", COURT_SIZE_M)
+    alley = person(-.35, 3, False)
+    assert update(t, [alley]).near == alley
+    outside = person(-.7, 3, False)
+    matched = update(t, [outside]).near
+    assert matched is not None and not matched.court_position_valid
+    assert update(t, [person(-1.3, 3, False)]).near is None
+    singles = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    assert update(singles, [alley]).near is None
+
+def test_distant_and_ambiguous_match_stays_missing():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    update(t, [person(2, 3)])
+    assert update(t, [person(4, 3)]).near is None
+    assert update(t, [person(1.9, 3), person(2.1, 3)]).near is None
+    assert update(t, [person(2.1, 3)]).near is not None
+
+
+def test_duplicate_pose_does_not_hide_the_tracked_player():
+    base = person(2, 3)
+    keypoints = list(base.keypoints)
+    x, y, w, h = base.bbox
+    for joint, px, py in [(0, .5, .1), (5, .3, .25), (6, .7, .25),
+                          (11, .35, .5), (12, .65, .5)]:
+        keypoints[joint] = (x + w * px, y + h * py, .9)
+    base = base.model_copy(update={"keypoints": keypoints})
+    duplicate = base.model_copy(update={"score": .55})
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    assert update(t, [base]).near == base
+    # Two copies of the same person previously looked like an ambiguous identity match.
+    assert update(t, [duplicate, base]).near == base
+
+
+def test_deduplication_preserves_distinct_overlapping_players():
+    from shuttlesense.pose.player_tracker import _same_person_pose
+
+    def posed(offset: float) -> Player:
+        kps = [(0., 0., 0.)] * 17
+        for joint in (0, 5, 6, 11, 12):
+            kps[joint] = (100. + offset, 100. + joint, .9)
+        return Player(bbox=(80, 60, 80, 150), keypoints=kps, score=.9)
+
+    assert _same_person_pose(posed(0), posed(2), iou_min=.65, pose_max=.1)
+    assert not _same_person_pose(posed(0), posed(25), iou_min=.65, pose_max=.1)
+    # Missing pose evidence is never enough to merge players.
+    assert not _same_person_pose(posed(0), person(2, 3), iou_min=.65, pose_max=.1)
+
+def test_doubles_partner_gap():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "doubles", COURT_SIZE_M)
+    a, b = person(1, 3), person(4, 3)
+    result = update(t, [b, a])
+    assert result.near == a and result.near_2 == b
+    assert update(t, [b]).near is None
+    assert update(t, [a, b]).near == a
+
+
+def test_appearance_prevents_replacement_and_returns_original():
+    t = CourtPlayerTracker({"confirmation_frames": 1},
+                           "singles", COURT_SIZE_M)
+    p = person(2, 3, False)
+    red = np.zeros((720, 1280, 3), dtype=np.uint8)
+    blue = red.copy()
+    x, y, w, h = map(int, p.bbox)
+    red[y:y+h, x:x+w] = (0, 0, 255)
+    blue[y:y+h, x:x+w] = (255, 0, 0)
+    assert t.update([p], frame_height=720, homography=H, frame=red).near == p
+    assert t.update([p], frame_height=720, homography=H, frame=blue).near is None
+    assert t.update([p], frame_height=720, homography=H, frame=red).near == p
+
+
+def test_uncalibrated_player_is_never_emitted():
+    t = CourtPlayerTracker({}, "singles", COURT_SIZE_M)
+    p = Player(bbox=(200, 400, 60, 150), score=.9)
+    for _ in range(4):
+        assert t.update([p], frame_height=720, homography=None).near is None
+    assert t.update([], frame_height=720, homography=None).near is None
+
+
+def test_locked_player_can_briefly_cross_boundary_but_strangers_cannot_enter():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    assert update(t, [person(.01, 3)]).near is not None
+    jumped = update(t, [person(-.01, 3)]).near
+    assert jumped is not None and not jumped.court_position_valid
+    stranger = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    assert update(stranger, [person(-.01, 3)]).near is None
+    assert update(t, [person(-.4, 3)]).near is None
+    assert update(t, [person(2, -0.01)]).near is None
+    assert update(t, [person(2, 13.41)]).far is None
+
+
+def test_outside_exception_expires_and_rejects_other_appearance():
+    t = CourtPlayerTracker({"confirmation_frames": 1,
+                            "locked_jump_max_frames": 2}, "singles", COURT_SIZE_M)
+    inside, outside = person(.01, 3, False), person(-.05, 3, False)
+    red = np.zeros((720, 1280, 3), np.uint8)
+    red[:] = (0, 0, 255)
+    blue = np.zeros_like(red)
+    blue[:] = (255, 0, 0)
+    assert t.update([inside], frame_height=720, homography=H, frame=red).near is not None
+    assert t.update([outside], frame_height=720, homography=H, frame=blue).near is None
+    assert t.update([outside], frame_height=720, homography=H, frame=red).near is not None
+    assert t.update([outside], frame_height=720, homography=H, frame=red).near is not None
+    assert t.update([outside], frame_height=720, homography=H, frame=red).near is None
+
+
+def test_far_jump_uses_locked_box_continuity_without_a_floor_position():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    start, jump = person(2, 13.3, False), person(2, 14.3, False)
+    assert update(t, [jump]).far is None  # An outside person cannot start a slot.
+    assert update(t, [start]).far == start
+    ground_position = t.slots["far"].pos.copy()
+    observed = update(t, [jump]).far
+    assert observed is not None and not observed.court_position_valid
+    assert np.allclose(t.slots["far"].pos, ground_position)
+    assert update(t, [start]).far == start
+
+
+def test_far_jump_exception_requires_overlap_and_expires():
+    t = CourtPlayerTracker({"confirmation_frames": 1, "far_locked_jump_max_frames": 2},
+                           "singles", COURT_SIZE_M)
+    start, jump = person(2, 13.3, False), person(2, 14.3, False)
+    assert update(t, [start]).far == start
+    intruder = jump.model_copy(update={"bbox": (jump.bbox[0] + 100, *jump.bbox[1:])})
+    assert update(t, [intruder]).far is None
+    assert update(t, [jump]).far is not None
+    assert update(t, [jump]).far is not None
+    assert update(t, [jump]).far is None
+
+
+def test_far_jump_exception_rejects_wrong_appearance_and_wide_sideliners():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    start = person(2, 13.3, False)
+    jump = person(2, 14.3, False)
+    red = np.zeros((720, 1280, 3), np.uint8)
+    red[:] = (0, 0, 255)
+    blue = np.zeros_like(red)
+    blue[:] = (255, 0, 0)
+    assert t.update([start], frame_height=720, homography=H, frame=red).far is not None
+    assert t.update([jump], frame_height=720, homography=H, frame=blue).far is None
+    assert update(t, [person(-.8, 10, False)]).far is None
+
+
+def test_far_jump_does_not_attach_to_a_distant_in_court_pose():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    start = person(2, 13.3)
+    jump = person(2, 14.3)
+    assert update(t, [start]).far == start
+    assert update(t, [jump]).far is not None
+    impostor = person(2, 9).model_copy(update={"bbox": jump.bbox})
+    assert update(t, [impostor]).far is None
+
+
+def test_far_jump_does_not_accept_a_pose_combining_both_players_feet():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    start = person(2, 13.3)
+    jump = person(2, 14.3)
+    assert update(t, [start]).far == start
+    assert update(t, [jump]).far is not None
+    kps = list(start.keypoints)
+    kps[15] = person(2, 10).keypoints[15]
+    mixed = start.model_copy(update={"bbox": jump.bbox, "keypoints": kps})
+    assert update(t, [mixed]).far is None
+
+
+def test_teleport_and_long_absence_do_not_reassign_locked_slot():
+    t = CourtPlayerTracker({"confirmation_frames": 1, "max_reacquire_gap_frames": 2},
+                           "singles", COURT_SIZE_M)
+    original = person(2, 3)
+    assert update(t, [original]).near == original
+    assert update(t, [person(2.7, 3)]).near is None
+    assert update(t, []).near is None
+    assert update(t, []).near is None
+    assert update(t, [original]).near is None
+
+
+def test_missing_player_can_recover_after_a_plausible_move():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    original = person(2, 3)
+    moved = person(2.75, 3)
+    assert update(t, [original]).near == original
+    # The initial jump is rejected, then the gate grows while the player is absent.
+    assert update(t, [moved]).near is None
+    assert update(t, [moved]).near is None
+    assert update(t, [moved]).near == moved
+
+
+def test_missing_player_can_recover_after_previous_cutoff():
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "doubles", COURT_SIZE_M)
+    a, b = person(1, 3), person(4, 3)
+    assert update(t, [a, b]).near == a
+    for _ in range(20):
+        assert update(t, [b]).near is None
+    assert update(t, [a, b]).near is None
+    result = update(t, [a, b])
+    assert result.near == a and result.near_2 == b
+
+
+def test_long_gap_does_not_accept_changed_appearance():
+    t = CourtPlayerTracker({"confirmation_frames": 1},
+                           "singles", COURT_SIZE_M)
+    player = person(2, 3, False)
+    red = np.zeros((720, 1280, 3), np.uint8)
+    blue = red.copy()
+    x, y, w, h = map(int, player.bbox)
+    red[y:y+h, x:x+w] = (0, 0, 255)
+    blue[y:y+h, x:x+w] = (255, 0, 0)
+    assert t.update([player], frame_height=720, homography=H, frame=red).near == player
+    for _ in range(20):
+        assert t.update([], frame_height=720, homography=H, frame=red).near is None
+    for _ in range(3):
+        assert t.update([player], frame_height=720, homography=H, frame=blue).near is None
+    assert t.update([player], frame_height=720, homography=H, frame=red).near is None
+    assert t.update([player], frame_height=720, homography=H, frame=red).near == player
+
+def test_featureless_fixed_view_does_not_suppress_players():
+    blank = np.zeros((720, 1280, 3), dtype=np.uint8)
+    t = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    player = person(2, 3)
+    for _ in range(4):
+        assert t.update([player], frame_height=720, homography=H, frame=blank).near == player

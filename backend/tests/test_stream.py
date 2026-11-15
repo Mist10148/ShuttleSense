@@ -139,7 +139,7 @@ def test_replay_perception_scales_to_the_session() -> None:
 
 
 def test_degraded_pose_scaling_uses_both_frame_dimensions(monkeypatch) -> None:
-    from shuttlesense.pose import tracking
+    from shuttlesense.schema import Players
 
     record, _ = synthetic_record()
     player = record.frames[10].players.near
@@ -149,8 +149,9 @@ def test_degraded_pose_scaling_uses_both_frame_dimensions(monkeypatch) -> None:
     model.min_person_score = 0.0
     model.homography = None
     model.court_size = (6.1, 13.4)
-    model.tracker = type("Tracker", (), {"update": lambda self, people: (people[0], None)})()
-    monkeypatch.setattr(tracking, "filter_players", lambda people, **kwargs: people)
+    model.tracker = type("Tracker", (), {
+        "update": lambda self, people, **kwargs: Players(near=people[0])
+    })()
     # Rounded resize dimensions can yield different horizontal and vertical scales.
     scaled = model._players(np.zeros((268, 480, 3), np.uint8)).near
     assert scaled.bbox[0] == pytest.approx(player.bbox[0] * (640 / 480))
@@ -243,7 +244,7 @@ def test_skipped_frames_are_passed_to_referee_in_window_coordinates(monkeypatch)
 
 
 def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
-    from shuttlesense.pose.tracking import PlayerTracker
+    from shuttlesense.pose.player_tracker import CourtPlayerTracker
     from shuttlesense.schema import COURT_SIZE_M, NUM_KEYPOINTS, Player
     from shuttlesense.stream.perception import ModelPerception
 
@@ -251,8 +252,12 @@ def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
                     score=0.9)  # fmt: skip
     p = ModelPerception.__new__(ModelPerception)  # no models: set only what _players uses
     p.size, p.model, p.detect = (640, 360), None, lambda frame: [person]
-    p.min_person_score, p.homography, p.court_size = 0.4, None, COURT_SIZE_M
-    p.tracker = PlayerTracker()
+    from shuttlesense.court import compute_homography
+
+    p.min_person_score, p.court_size = 0.4, COURT_SIZE_M
+    p.homography = compute_homography([[0, 359], [639, 359], [639, 0], [0, 0]])
+    p.tracker = CourtPlayerTracker({"confirmation_frames": 1},
+                                   "singles", COURT_SIZE_M)
     _, players = p(np.zeros((180, 320, 3), np.uint8), 0)  # half-size frame
     seen = players.near or players.far
     assert seen.bbox == pytest.approx((200, 200, 40, 120))

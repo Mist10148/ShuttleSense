@@ -41,6 +41,14 @@ class Health(BaseModel):
     stroke_models: list[str] = Field(default_factory=list)
     chat_available: bool = False  # a Claude API key is configured on this backend
     chat_max_messages: int = 0  # questions allowed per session
+    watch_video: bool = True
+    watch_match_type: bool = True
+    watch_realtime: bool = True
+    watch_background: bool = True
+
+
+class MatchTypeRequest(BaseModel):
+    corners: list[tuple[float, float]] = Field(min_length=4, max_length=4)
 
 
 class ChatRequest(BaseModel):
@@ -233,3 +241,6 @@ class Job(BaseModel):
     game_service: list[GameService] = Field(default_factory=list)
     stroke_model: StrokeModel = "cnn"
     mode: Mode = "upload"  # "live" for a saved live session (its video is the recording)
+    watch_position_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
+    watch_analysis_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
+    watch_target_s: float | None = Field(default=None, exclude_if=lambda v: v is None)

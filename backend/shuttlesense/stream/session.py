@@ -249,7 +249,7 @@ class LiveSession:
         self._skipped_since_check += 1
         self._append_frame(frame)
         # No windowed stages on skipped frames: they are the ones there is no time for.
-        events = self.analyzer.add_frame(Shuttle(), self._last_players, tick=False)
+        events = self.analyzer.add_frame(Shuttle(), Players(), tick=False)
         for e in events:
             if e["type"] == "frame":
                 e.update(client_frame=client_frame, ts=ts, skipped=True)
@@ -266,7 +266,10 @@ class LiveSession:
         shuttle, players = self._perceive(frame, index, scale)
         self._append_frame(frame)
         self._last_players = players
-        events = self.analyzer.add_frame(shuttle, players)
+        perception = getattr(self.perception, "perception", self.perception)
+        tracker = getattr(perception, "tracker", None)
+        hold_safe = getattr(tracker, "view_valid", True)
+        events = self.analyzer.add_frame(shuttle, players, player_hold_safe=hold_safe)
         latency = (time.monotonic() - received) * 1000
         self.stats.processed += 1
         self.stats.latencies_ms.append(latency)

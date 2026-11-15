@@ -128,6 +128,8 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                 ],
               ),
             ),
+            const Text('Skipping calibration disables player detection.'),
+            const Text('For best accuracy, use a fixed camera and keep the whole court visible.'),
             Expanded(
               child: _VideoFrameCanvas(
                 info: info,

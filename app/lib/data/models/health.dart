@@ -12,6 +12,10 @@ class Health {
     this.strokeModels,
     this.chatAvailable = false,
     this.chatMaxMessages = 0,
+    this.watchVideo = false,
+    this.watchMatchType = false,
+    this.watchRealtime = false,
+    this.watchBackground = false,
   });
 
   final String status;
@@ -28,10 +32,14 @@ class Health {
   /// The backend has a Claude API key, so the coach chat works.
   final bool chatAvailable;
   final int chatMaxMessages;
+  final bool watchVideo;
+  final bool watchMatchType;
+  final bool watchRealtime;
+  final bool watchBackground;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
-  static const expectedSchema = '1.6';
+  static const expectedSchema = '1.7';
 
   bool get schemaMatches => schemaVersion.split('.').first == expectedSchema.split('.').first;
 
@@ -65,5 +73,9 @@ class Health {
     strokeModels: (j['stroke_models'] as List<dynamic>?)?.cast<String>(),
     chatAvailable: j['chat_available'] as bool? ?? false,
     chatMaxMessages: asInt(j['chat_max_messages']) ?? 0,
+    watchVideo: j['watch_video'] == true,
+    watchMatchType: j['watch_match_type'] == true,
+    watchRealtime: j['watch_realtime'] == true,
+    watchBackground: j['watch_background'] == true,
   );
 }

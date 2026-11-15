@@ -22,12 +22,12 @@ from shuttlesense.atomic import atomic_write_text
 from shuttlesense.schema import SCHEMA_VERSION, ClipRecord
 
 # Bump when OWNED changes so caches written with fewer fields miss instead of loading them.
-CACHE_FORMAT = 3
+CACHE_FORMAT = 4
 
 # stage -> (top-level record fields, per-frame fields) it writes; see ARCHITECTURE.md.
 OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "tracking": ((), ("shuttle",)),
-    "pose": ((), ("players",)),
+    "pose": ((), ("players", "player_hold_safe")),
     "court": (("court",), ()),
     "hits": (("hits",), ()),
     "strokes": (("hits", "stroke_model"), ()),
@@ -52,6 +52,8 @@ def key_config(stage: str, stages_config: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in block.items() if k not in DISPLAY_ONLY}
 
     own = strip(stages_config.get(stage, {}))
+    if stage == "pose":
+        own["_player_selection_version"] = 9
     extra = {name: strip(stages_config.get(name, {})) for name in EXTRA_BLOCKS.get(stage, ())}
     return {**own, "_blocks": extra} if extra else own
 

@@ -142,6 +142,52 @@ class ApiClient {
     return VideoInfo.fromJson(res.data!);
   });
 
+  String sourceVideoUrl(String videoId) => urlWithToken('/videos/$videoId/source');
+
+  Future<Json> startBackgroundWatch({
+    required String videoId,
+    required String court,
+    required List<({double x, double y})> corners,
+  }) => _call(() async {
+    final res = await _dio.post<Json>(
+      '/watch/background',
+      data: {
+        'video_id': videoId,
+        'court': court,
+        if (corners.isNotEmpty)
+          'corners': [
+            for (final c in corners) [c.x, c.y],
+          ],
+      },
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    );
+    return res.data!;
+  });
+
+  Future<Json> backgroundWatchStatus(String jobId) =>
+      _call(() async => (await _dio.get<Json>('/watch/background/$jobId')).data!);
+
+  Future<Json> updateBackgroundWatch(String jobId, double seconds, {bool stop = false}) => _call(
+    () async => (await _dio.post<Json>(
+      '/watch/background/$jobId/${stop ? 'stop' : 'position'}',
+      data: {'seconds': seconds},
+    )).data!,
+  );
+
+  Future<Json> suggestMatchType(String videoId, List<({double x, double y})> corners) =>
+      _call(() async {
+        final res = await _dio.post<Json>(
+          '/videos/$videoId/match-type',
+          data: {
+            'corners': [
+              for (final c in corners) [c.x, c.y],
+            ],
+          },
+          options: Options(receiveTimeout: const Duration(minutes: 5)),
+        );
+        return res.data!;
+      });
+
   /// Frame JPEG URL. The token goes in the query too, because web image requests cannot
   /// always send headers.
   String frameUrl(String videoId, int n, {int maxWidth = 1280}) {

@@ -185,7 +185,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     )
     # source_frames is counted by decoding when the container reports no frame count.
     counted = replace(reader.source, num_frames=reader.source_frames)
-    check_duration(counted, cfg.get("max_duration_s", 300))
+    check_duration(counted, cfg.get("max_duration_s", 600))
     ctx.reader = reader
     record.fps = reader.fps
     record.width = reader.width

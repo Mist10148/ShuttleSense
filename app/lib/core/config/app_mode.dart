@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'server_config.dart';
 
 /// Upload a clip (offline) or go live with a camera (F18).
-enum AppMode { upload, live }
+enum AppMode { upload, live, watch }
 
 /// The last mode the user picked; saved on the device. Upload until one is picked.
 class AppModeNotifier extends Notifier<AppMode> {

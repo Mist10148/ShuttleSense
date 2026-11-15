@@ -76,7 +76,7 @@ class RallySummary {
 }
 
 /// A player box and keypoints in processing pixels, for the overlay.
-typedef LivePlayer = ({List<double> bbox, List<List<double>> keypoints});
+typedef LivePlayer = ({List<double> bbox, List<List<double>> keypoints, bool held});
 
 /// Everything the live screen shows. Lists grow during the session and are shared between
 /// states, so a frame event costs no copying.
@@ -967,15 +967,18 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       trail = trail.sublist(1);
     }
     final players = <String, LivePlayer>{};
+    final display = (e['display_players'] as Json?) ?? (e['players'] as Json?);
     for (final side in ['near', 'far', 'near_2', 'far_2']) {
-      final p = (e['players'] as Json?)?[side] as Json?;
+      final p = display?[side] as Json?;
       if (p == null) continue;
+      final measured = (e['players'] as Json?)?[side] as Json?;
       players[side] = (
         bbox: [for (final v in p['bbox'] as List) (v as num).toDouble()],
         keypoints: [
-          for (final k in p['keypoints'] as List)
+          for (final k in (measured?['keypoints'] as List? ?? const []))
             [for (final v in k as List) (v as num).toDouble()],
         ],
+        held: p['held'] == true,
       );
     }
     final peak = state.peakSpeedKmh;

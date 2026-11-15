@@ -87,7 +87,8 @@ class ModelPerception:
     ) -> None:
         from shuttlesense.config import court_type
         from shuttlesense.pose.estimator import load_detector
-        from shuttlesense.pose.tracking import make_tracker
+        from shuttlesense.pose.far_refinement import FarPlayerRefiner
+        from shuttlesense.pose.player_tracker import CourtPlayerTracker
         from shuttlesense.schema import COURT_SIZE_M
         from shuttlesense.stage import StageSkipped
 
@@ -100,8 +101,9 @@ class ModelPerception:
             return
         self.min_person_score = cfg.get("min_person_score", 0.4)
         self.court = court_type(self.config)
-        self.tracker = make_tracker(cfg, self.court)
         self.court_size = tuple(court_cfg.get("court_size_m", COURT_SIZE_M))
+        self.tracker = CourtPlayerTracker(cfg, self.court, self.court_size)
+        self.far_refiner = FarPlayerRefiner(cfg, self.court, self.court_size)
         self.homography = None
         if corners:
             from shuttlesense.court import compute_homography
@@ -136,23 +138,18 @@ class ModelPerception:
     def _players(self, frame: np.ndarray) -> Players:
         if self.detect is None:
             return Players()
-        from shuttlesense.pose.tracking import filter_players, track_players
-
         people = [p for p in self.detect(frame) if p.score >= self.min_person_score]
         sx, sy = self.size[0] / frame.shape[1], self.size[1] / frame.shape[0]
         if abs(sx - 1.0) > 1e-6 or abs(sy - 1.0) > 1e-6:
             people = [_scale_person(p, sx, sy) for p in people]
-        people = filter_players(
-            people,
-            frame_height=self.size[1],
-            homography=self.homography,
-            court_size=self.court_size,
-            max_players=8 if self.court == "doubles" else 2,
-        )
+        refiner = getattr(self, "far_refiner", None)
+        if refiner is not None:
+            people = refiner.refine(frame, self.detect, self.tracker, people,
+                                    homography=self.homography, scale=(sx, sy))  # fmt: skip
         # Boxes are in session pixels; the shirt colours are read from this (smaller) frame.
-        return track_players(self.tracker, people, frame_height=self.size[1],
-                             homography=self.homography, frame=frame,
-                             image_scale=(1 / sx, 1 / sy))  # fmt: skip
+        return self.tracker.update(people, frame_height=self.size[1],
+                                   homography=self.homography, frame=frame,
+                                   image_scale=(1 / sx, 1 / sy))  # fmt: skip
 
 
 class ReplayPerception:
