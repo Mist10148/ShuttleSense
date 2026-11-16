@@ -19,7 +19,7 @@ model:
   dropout: 0.3
 
 train:
-  epochs: 40
+  epochs: 60                    # the 40-epoch runs were still improving at the cap
   batch_size: 128
   lr: 0.001
   weight_decay: 0.0001
@@ -27,7 +27,11 @@ train:
   class_weighting: inverse_frequency
   label_smoothing: 0.1          # chosen on the val split (docs/results/strokes.md)
   shift_frames: 4               # random time shift of the window, in frames
-  early_stopping_patience: 15
+  early_stopping_patience: 20
+  # Augmentation beyond shift, mirror and noise (strokes/dataset.py), chosen on the val split:
+  scale_jitter: 0.1             # pose scaled by 1 +- this, as a looser or tighter player box
+  keypoint_dropout: 0.03        # chance that a joint is missing for the whole window
+  shuttle_dropout: 0.2          # chance of a 2 to 8 frame gap in the shuttle track
 
 output:
   checkpoint: weights/strokes/stroke_lstm.pt
