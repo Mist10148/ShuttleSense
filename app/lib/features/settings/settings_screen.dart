@@ -23,6 +23,9 @@ class SettingsScreen extends ConsumerWidget {
     final config = ref.watch(serverConfigProvider);
     final health = ref.watch(healthProvider);
     final liveAvailable = ref.watch(liveAvailableProvider);
+    final watchAvailable =
+        health.valueOrNull?.watchVideo == true &&
+        (kIsWeb || defaultTargetPlatform == TargetPlatform.windows);
     return PageScaffold(
       title: 'Settings',
       children: [
@@ -105,11 +108,17 @@ class SettingsScreen extends ConsumerWidget {
                 value: AppMode.watch,
                 label: const Text('Watch video'),
                 icon: const Icon(Icons.play_circle_outline),
-                enabled:
-                    health.valueOrNull?.watchVideo == true &&
-                    (kIsWeb || defaultTargetPlatform == TargetPlatform.windows),
+                enabled: watchAvailable,
+                tooltip: watchAvailable
+                    ? null
+                    : 'Watch needs the Windows or web app and a server that supports it',
               ),
             ],
+            // Default disabled text (onSurface at 38%) is 2.3:1 on the card; keep 4.5:1 (T4.11).
+            style: SegmentedButton.styleFrom(
+              disabledForegroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+              disabledIconColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             selected: {ref.watch(appModeProvider)},
             onSelectionChanged: (s) => ref.read(appModeProvider.notifier).set(s.first),
           ),
