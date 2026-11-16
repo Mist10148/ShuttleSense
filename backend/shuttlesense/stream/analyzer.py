@@ -234,6 +234,29 @@ class StreamAnalyzer:
                     "line_calls": [], "rally_events": [], "score": None, "summary": None}
         )  # fmt: skip
 
+    def _rectify(self, window: ClipRecord) -> None:
+        """Outlier removal and short-gap fill on the window's track, as the offline stage.
+
+        The live perception gives raw per-frame detections. Only the window copy is changed
+        (the stages read it); the session's record keeps what the model saw.
+        """
+        if not self.config.get("live", {}).get("rectify_track", True):
+            return
+        from shuttlesense.tracking.postprocess import apply_track, rectify, track_arrays
+
+        xy, visible = track_arrays(window)
+        if not visible.any():
+            return
+        cfg = self.config.get("stages", {}).get("tracking", {})
+        scale = (window.height or 720) / 720
+        xy, visible, _ = rectify(
+            np.nan_to_num(xy),
+            visible,
+            max_gap=int(cfg.get("max_gap_frames", 8)),
+            outlier_px=float(cfg.get("outlier_px", 80)) * scale,
+        )
+        apply_track(window, xy, visible)
+
     def _run_stages(self, window: ClipRecord) -> None:
         from shuttlesense import analytics, feedback, hits, referee, strokes
 
@@ -242,6 +265,7 @@ class StreamAnalyzer:
             "_unobserved_frames": {i - self.anchor for i in self._unobserved if i >= self.anchor},
         }
         ctx = StageContext(video_path=None, out_dir=None, config=config, device=self.device)
+        self._rectify(window)
         hits.run(window, ctx)
         if window.hits:
             if self.classify is not None:

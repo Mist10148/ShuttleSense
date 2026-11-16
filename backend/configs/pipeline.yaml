@@ -42,6 +42,7 @@ stages:
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)
+    max_inpaint_gap_frames: 30  # InpaintNet repairs gaps up to this long; longer = out of play
     max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
     outlier_px: 80              # isolated detection this far from the track is dropped
     # precomputed_csv: path/to/upstream_predict.csv   # use TrackNetV3 predict.py output
@@ -159,6 +160,7 @@ live:
   tick_every: 5                # frames between runs of the windowed hits/referee stages
   max_window_frames: 900       # the window never grows past 30 s at 30 fps
   background_frames: 30        # TrackNet background median from the first frames
+  rectify_track: true          # outlier removal and short-gap fill on the window, as offline
   check_every: 30              # processed frames between quality checks
   max_drop_rate: 0.2           # skipping more than this share of frames lowers quality
   scales: [1.0, 0.75, 0.5]     # perception input scale per quality level (0, 1, 2)
