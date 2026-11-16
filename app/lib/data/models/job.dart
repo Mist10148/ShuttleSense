@@ -1,3 +1,4 @@
+import 'clip_record.dart' show GameService;
 import 'health.dart';
 import 'json.dart';
 import 'match_setup.dart';
@@ -83,6 +84,9 @@ class Job {
     this.firstServerId,
     this.firstReceiverId,
     this.strokeModel,
+    this.autoChangeEnds = false,
+    this.startGames,
+    this.gameService = const [],
   });
 
   final String id;
@@ -117,6 +121,17 @@ class Job {
   /// The stroke model the job runs (cnn, lstm, rf); null from a server without the choice.
   final String? strokeModel;
 
+  /// Whether the score follows the players across a change of ends (clip record 1.7). Off
+  /// for jobs from before 1.7, which the server scores as it did then.
+  final bool autoChangeEnds;
+
+  /// Games each side had already won when the job's match was joined (best of three).
+  final ({int near, int far})? startGames;
+
+  /// Doubles: who serves and receives first in games 2 and 3, named after each game (D23).
+  /// POST /jobs does not take these, so a retry cannot send them.
+  final List<GameService> gameService;
+
   bool get isLive => mode == 'live';
 
   /// Time spent running so far (or in total once finished).
@@ -145,6 +160,8 @@ class Job {
     court: court,
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
+    autoChangeEnds: autoChangeEnds,
+    startGames: startGames,
     strokeModel: strokeModel,
   );
 
@@ -175,6 +192,12 @@ class Job {
     firstServerId: j['first_server_id'] as String?,
     firstReceiverId: j['first_receiver_id'] as String?,
     strokeModel: j['stroke_model'] as String?,
+    autoChangeEnds: j['auto_change_ends'] == true,
+    startGames: switch (j['start_games']) {
+      final Json s => (near: asInt(s['near']) ?? 0, far: asInt(s['far']) ?? 0),
+      _ => null,
+    },
+    gameService: asList(j['game_service']).map(GameService.fromJson).toList(),
   );
 }
 
@@ -191,6 +214,7 @@ class JobOptions {
     this.firstServerId,
     this.firstReceiverId,
     this.autoChangeEnds = true,
+    this.startGames,
     this.strokeModel,
   });
 
@@ -213,6 +237,9 @@ class JobOptions {
 
   /// The score follows the players across a change of ends (clip record 1.7).
   final bool autoChangeEnds;
+
+  /// Games each side had already won (a match joined mid-way); only a retry has them.
+  final ({int near, int far})? startGames;
 
   /// Which classifier names the strokes: cnn, lstm or rf (Phase 11). Null: the server's
   /// default, also what is sent to a server without the choice.
@@ -238,6 +265,7 @@ class JobOptions {
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
     autoChangeEnds: autoChangeEnds,
+    startGames: startGames,
     strokeModel: strokeModel,
   );
 
@@ -252,6 +280,7 @@ class JobOptions {
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
     autoChangeEnds: autoChangeEnds,
+    startGames: startGames,
     strokeModel: strokeModel,
   );
 
@@ -266,6 +295,7 @@ class JobOptions {
     firstServerId: match.firstServerId,
     firstReceiverId: match.firstReceiverId,
     autoChangeEnds: match.autoChangeEnds,
+    startGames: startGames,
     strokeModel: strokeModel,
   );
 
@@ -280,6 +310,7 @@ class JobOptions {
     firstServerId: firstServerId,
     firstReceiverId: firstReceiverId,
     autoChangeEnds: autoChangeEnds,
+    startGames: startGames,
     strokeModel: model,
   );
 
