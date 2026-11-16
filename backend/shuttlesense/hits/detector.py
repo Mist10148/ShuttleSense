@@ -15,6 +15,10 @@ import numpy as np
 
 from shuttlesense.schema import ClipRecord, Hit, PlayerId, PlayerSide, slot_attr
 from shuttlesense.stage import StageContext
+from shuttlesense.timing import scaled
+
+# stages.hits keys that count frames.
+FRAME_KEYS = ("min_frames_between_hits", "rally_break_frames", "hitter_window_frames")
 
 LEFT_WRIST, RIGHT_WRIST = 9, 10
 MIN_KEYPOINT_SCORE = 0.3
@@ -36,12 +40,18 @@ def direction_changes(xy: np.ndarray, min_angle_deg: float) -> list[int]:
     return [i + 1 for i in np.flatnonzero(angles > min_angle_deg)]
 
 
-def vertical_flips(xy: np.ndarray) -> list[int]:
-    """Indices where the shuttle stops moving down the image and starts moving up."""
+def vertical_flips(xy: np.ndarray, min_px: float = 0.0) -> list[int]:
+    """Indices where the shuttle stops moving down the image and starts moving up.
+
+    Gravity never turns a falling shuttle upwards, so such a turn is a hit. Both steps must
+    cover more than `min_px`: a shuttle held in the hand before a serve, or lying on the
+    floor, jitters by a pixel or two in either direction and is not being hit. The opposite
+    turn (up, then down) is the top of every flight, so it is not a candidate.
+    """
     if len(xy) < 3:
         return []
     vy = np.diff(xy[:, 1])
-    return [i + 1 for i in range(len(vy) - 1) if vy[i] > 0 and vy[i + 1] < 0]
+    return [i + 1 for i in range(len(vy) - 1) if vy[i] > min_px and vy[i + 1] < -min_px]
 
 
 def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
@@ -87,9 +97,11 @@ def detect_hits(
          if any(f not in unobserved for f in range(int(idx[k]) + 1, int(idx[k + 1])))],
         dtype=int,
     )  # fmt: skip
+    min_flip = float(cfg.get("min_flip_px", 0.0)) * cfg.get("scale", 1.0)
     for start, end in zip([0, *breaks], [*breaks, len(idx)], strict=True):
         run = pts[start:end]
-        local = set(direction_changes(run, cfg.get("min_angle_deg", 60))) | set(vertical_flips(run))
+        local = set(direction_changes(run, cfg.get("min_angle_deg", 60)))
+        local |= set(vertical_flips(run, min_flip))
         cand |= {start + i for i in local}
     max_dist = cfg.get("max_wrist_distance_px", 120) * cfg.get("scale", 1.0)
 
@@ -208,7 +220,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill record.hits with (id, frame, time_s, player)."""
     from shuttlesense.tracking import track_arrays
 
-    cfg = dict(ctx.stage_config("hits"))
+    # Frame counts in the config are for 30 fps; pixel distances for 720p.
+    cfg = scaled(ctx.stage_config("hits"), FRAME_KEYS, record.fps)
     cfg["scale"] = (record.height or 720) / 720
     xy, visible = track_arrays(record)
     hits = detect_hits(
