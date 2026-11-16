@@ -13,7 +13,6 @@ from shuttlesense.referee.linecalls import (
 from shuttlesense.referee.match import validate_start_games
 from shuttlesense.referee.rally import (
     build_events,
-    landing_call,
     rally_winner,
     run,
     segment_rallies,
@@ -47,7 +46,6 @@ __all__ = [
     "clear_override",
     "derive_from_rallies",
     "game_winner",
-    "landing_call",
     "load_corrections",
     "load_overrides",
     "rally_winner",

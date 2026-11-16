@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from shuttlesense.referee.rally import landing_call, rally_winner, segment_rallies
+from shuttlesense.court.lines import play_bounds
+from shuttlesense.referee.linecalls import call_landing
+from shuttlesense.referee.rally import rally_winner, segment_rallies
 from shuttlesense.referee.scoring import apply_rallies, game_winner
 from shuttlesense.schema import Landing, Rally, ScorePair
 
@@ -54,6 +56,11 @@ def test_landing_frame_is_after_last_hit() -> None:
     assert segs[0].landing_frame == 50
 
 
+def landing_call(point: np.ndarray, size: tuple[float, float], band: float) -> tuple[bool, float]:
+    call, _, confidence, _ = call_landing(point, play_bounds("singles", size), band)
+    return call == "in", confidence
+
+
 def test_inside_court_is_in() -> None:
     inside, conf = landing_call(np.array([2.5, 10.0]), SIZE, 0.05)
     assert inside and conf == 1.0
@@ -76,9 +83,22 @@ def test_in_shot_wins_rally() -> None:
 
 
 def test_out_shot_loses_rally() -> None:
-    out = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
-    assert rally_winner(out, "near", 6.7) == "far"
-    assert rally_winner(out, "far", 6.7) == "near"
+    long = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
+    assert rally_winner(long, "near", 6.7) == "far"
+    wide = Landing(x_m=-0.6, y_m=2.0, in_court=False, confidence=0.9)
+    assert rally_winner(wide, "far", 6.7) == "near"
+
+
+def test_out_on_the_last_hitters_own_half_is_left_to_the_referee() -> None:
+    # Far is the last detected hitter and the shuttle is out behind far's own baseline:
+    # a mishit, or near's reply was missed and near hit it long. Opposite points: no guess.
+    long = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
+    assert rally_winner(long, "far", 6.7) is None
+    assert rally_winner(long, None, 6.7) is None
+    # In calls do not depend on who was seen hitting.
+    assert rally_winner(Landing(x_m=2.0, y_m=11.0, in_court=True, confidence=0.9), "far", 6.7) == (
+        "near"
+    )
 
 
 def _rallies(winners: list[str | None]) -> list[Rally]:

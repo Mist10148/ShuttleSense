@@ -126,6 +126,23 @@ def test_derive_from_rallies_and_override_rescores() -> None:
     assert record.rallies[0].winner == "far"  # near hit it out
 
 
+def test_a_rally_that_ends_on_its_opening_hit_is_judged_as_a_serve() -> None:
+    from shuttlesense.referee.linecalls import bounds_for
+
+    record = _record(2.0)
+    # One hit, by near standing right of the centre line, that opened the rally. The stroke
+    # model called it a lift: it is still the serve, so the diagonal service court applies.
+    record.hits = [Hit(id=0, frame=4, time_s=0.133, player="near", stroke="lift", rally_index=0)]
+    record.rallies[0].start_frame = 4
+    bounds, is_service = bounds_for(record, record.rallies[0], "singles")
+    assert is_service and bounds == service_bounds("near", 3.5)
+    # The same single hit in a rally already under way when the clip started is a rally shot.
+    record.rallies[0].start_frame = 0
+    assert bounds_for(record, record.rallies[0], "singles") == (play_bounds("singles"), False)
+    # Two hits: an ordinary rally, full court.
+    assert bounds_for(_record(2.0), _record(2.0).rallies[0], "doubles")[0] == play_bounds("doubles")
+
+
 def test_migrated_1_0_record_gets_line_calls() -> None:
     data = _record(2.0).model_dump(mode="json")
     data["schema_version"] = "1.0"

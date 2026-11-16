@@ -23,7 +23,7 @@ from shuttlesense.schema import (
 from shuttlesense.stage import StageContext, StageSkipped
 from shuttlesense.timing import scaled
 
-STATIONARY_PX = 3.0
+STATIONARY_PX = 3.0  # per frame at 720p; scaled to the clip's height (stationary_px)
 # stages.referee keys that count frames.
 FRAME_KEYS = ("stationary_frames_end", "lost_frames_end")
 
@@ -53,6 +53,7 @@ def _rest_after(
     """
     lost = int(cfg.get("lost_frames_end", 30))
     still = int(cfg.get("stationary_frames_end", 20))
+    stationary_px = float(cfg.get("stationary_px", STATIONARY_PX))
     last_visible, missing = frame, 0
     rest_start: int | None = None
     for i in range(frame, stop):
@@ -66,7 +67,7 @@ def _rest_after(
                 return last_visible, None
             continue
         moved = np.linalg.norm(xy[i] - xy[i - 1]) if i > frame and visible[i - 1] else None
-        if moved is not None and moved < STATIONARY_PX:
+        if moved is not None and moved < stationary_px:
             if rest_start is None:
                 rest_start = i - 1
             if i - rest_start + 1 >= still:
@@ -124,31 +125,25 @@ def segment_rallies(
     return segments
 
 
-def landing_call(
-    point_m: np.ndarray, size: tuple[float, float], band_m: float
-) -> tuple[bool, float]:
-    """(in_court, confidence) against the singles rally lines with a fixed band."""
-    from shuttlesense.court.lines import play_bounds
-    from shuttlesense.referee.linecalls import call_landing
-
-    call, _, confidence, _ = call_landing(point_m, play_bounds("singles", size), band_m)
-    return call == "in", confidence
-
-
 def rally_winner(
     landing: Landing | None, last_hitter: PlayerSide | None, net_y: float
 ) -> PlayerSide | None:
     """In: the player on whose half it landed loses. Out: the last hitter loses.
 
     Uncertain calls (confidence < 0.5) award nobody; the user confirms them in the app.
+    So does an out landing on the last detected hitter's own half. That is either a mishit
+    that never crossed the net, or, as likely, the opponent's reply went undetected and it
+    was their shot that flew out. The two give opposite points, and nothing in one camera's
+    track tells them apart, so the rally is left for the referee instead of guessed.
     """
     if landing is None or landing.confidence < 0.5:
         return None
+    landed: PlayerSide = "near" if landing.y_m < net_y else "far"
     if landing.in_court:
-        return "far" if landing.y_m < net_y else "near"
-    if last_hitter is None:
+        return "far" if landed == "near" else "near"
+    if last_hitter is None or last_hitter == landed:
         return None
-    return "far" if last_hitter == "near" else "near"
+    return landed
 
 
 def build_events(record: ClipRecord) -> list[RallyEvent]:
@@ -190,6 +185,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         raise StageSkipped("no hits, so no rallies")
     # Frame counts in the config are for 30 fps.
     cfg = scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps)
+    cfg.setdefault("stationary_px", STATIONARY_PX * (record.height or 720) / 720)
     xy, visible = track_arrays(record)
     segments = segment_rallies(
         visible,

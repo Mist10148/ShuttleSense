@@ -118,12 +118,17 @@ def call_landing(
 
 
 def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Bounds, bool]:
-    """(area the rally's last shot had to land in, whether that is a service court)."""
+    """(area the rally's last shot had to land in, whether that is a service court).
+
+    A rally whose only hit is the one that opened it ended on the serve, whatever the stroke
+    model called that hit: the serve must land in the diagonal service court. A single hit
+    in a rally that was already under way when the clip started is an ordinary shot.
+    """
     size = record.court.court_size_m if record.court else COURT_SIZE_M
     hits = [h for h in record.hits if h.rally_index == rally.index] or [
         h for h in record.hits if rally.start_frame <= h.frame <= rally.end_frame
     ]
-    if len(hits) == 1 and hits[0].stroke == "serve":
+    if len(hits) == 1 and hits[0].frame == rally.start_frame:
         serve = hits[0]
         frame = record.frames[serve.frame] if serve.frame < len(record.frames) else None
         pos = frame.court_positions if frame else None
