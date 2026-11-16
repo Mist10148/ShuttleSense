@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/responsive/breakpoints.dart';
+import 'court_minimap.dart';
 
 /// Arranges the result zones for phone, tablet and laptop (docs/ARCHITECTURE.md §4).
 ///
@@ -25,7 +26,7 @@ class ResultsLayout extends StatelessWidget {
   final Widget minimap;
   final Widget scoreboard;
 
-  /// Session notes and the way into the chat (F21, F22); first in the side panel.
+  /// Session notes and the way into the chat (F21, F22); under the court in the side panel.
   final Widget? coach;
 
   @override
@@ -66,7 +67,11 @@ class ResultsLayout extends StatelessWidget {
           child: TabBarView(
             children: [
               timeline,
-              SingleChildScrollView(padding: const EdgeInsets.all(12), child: minimap),
+              _fitted(
+                padding: 24,
+                (child) => SingleChildScrollView(padding: const EdgeInsets.all(12), child: child),
+                minimap,
+              ),
               SingleChildScrollView(padding: const EdgeInsets.all(12), child: scoreboard),
               if (coach != null)
                 SingleChildScrollView(padding: const EdgeInsets.all(12), child: coach),
@@ -77,12 +82,23 @@ class ResultsLayout extends StatelessWidget {
     ),
   );
 
-  Widget _panel() => SingleChildScrollView(
-    child: Column(
+  /// Tells the minimap how tall the space it scrolls in is, so the whole court fits in
+  /// it without scrolling (the court is far taller than it is wide).
+  Widget _fitted(Widget Function(Widget child) wrap, Widget child, {double padding = 0}) =>
+      LayoutBuilder(
+        builder: (context, constraints) =>
+            CourtMaxHeight(height: constraints.maxHeight - padding, child: wrap(child)),
+      );
+
+  /// The court comes first: it is the one card that has to be seen whole, and the notes
+  /// above it used to push most of it below the fold.
+  Widget _panel() => _fitted(
+    (child) => SingleChildScrollView(child: child),
+    Column(
       children: [
-        if (coach != null) ...[coach!, const SizedBox(height: 16)],
         minimap,
         const SizedBox(height: 16),
+        if (coach != null) ...[coach!, const SizedBox(height: 16)],
         scoreboard,
       ],
     ),

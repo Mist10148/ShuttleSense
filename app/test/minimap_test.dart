@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
 import 'package:shuttlesense_app/features/results/widgets/court_minimap.dart';
+import 'package:shuttlesense_app/features/results/widgets/results_layout.dart';
 import 'package:shuttlesense_app/features/results/widgets/video_panel.dart';
 
 import 'helpers.dart';
@@ -55,6 +56,181 @@ void main() {
       'far player mostly at 2.3 m across, 11.3 m up the court.',
     );
   });
+
+  test('the heatmap counts frames in play only, and shades around a busy cell', () {
+    const record = ClipRecord(
+      schemaVersion: '1.7',
+      clipId: 'c',
+      fps: 30,
+      width: 1280,
+      height: 720,
+      numFrames: 6,
+      frames: [
+        FrameInfo(frame: 0, nearPos: (x: 0.2, y: 0.2)), // waiting before the rally
+        FrameInfo(frame: 1, nearPos: (x: 2.6, y: 1.9)),
+        FrameInfo(frame: 2, nearPos: (x: 2.6, y: 1.9)),
+        FrameInfo(frame: 3, nearPos: (x: 2.6, y: 1.9)),
+        FrameInfo(frame: 4, nearPos: (x: 0.2, y: 0.2)), // and after it
+        FrameInfo(frame: 5, nearPos: (x: 7.1, y: 15.3)), // pinned at the 2 m limit: kept
+      ],
+      hits: [],
+      rallies: [
+        Rally(index: 0, startFrame: 1, endFrame: 3),
+        Rally(index: 1, startFrame: 5, endFrame: 5),
+      ],
+      courtCorners: [(x: 0, y: 0), (x: 1, y: 0), (x: 1, y: 1), (x: 0, y: 1)],
+    );
+    final heat = HeatGrid.fromRecord(record);
+    expect(heat.near.fold<int>(0, (a, b) => a + b), 4);
+    expect(heat.nearMax, 3);
+    final busiest = heat.near.indexOf(3);
+    expect(heat.nearShade[busiest], 1.0);
+    // The cells next to it are shaded less, and a cell far away not at all.
+    expect(heat.nearShade[busiest + 1], inExclusiveRange(0.0, 1.0));
+    expect(heat.nearShade[busiest + 4], 0.0);
+    expect(heat.farShade.every((v) => v == 0), isTrue);
+  });
+
+  test('the shuttle is placed along the line from one hitter to the next', () {
+    const hits = [
+      Hit(id: 0, frame: 0, timeS: 0, player: 'near', rallyIndex: 0),
+      Hit(id: 1, frame: 10, timeS: 0.33, player: 'far', rallyIndex: 0),
+    ];
+    final record = ClipRecord(
+      schemaVersion: '1.7',
+      clipId: 'c',
+      fps: 30,
+      width: 1280,
+      height: 720,
+      numFrames: 21,
+      frames: [
+        for (var i = 0; i <= 20; i++)
+          FrameInfo(
+            frame: i,
+            nearPos: const (x: 1.0, y: 2.0),
+            farPos: const (x: 4.0, y: 12.0),
+            // The camera's floor mapping of a shuttle in the air: far beyond the court.
+            shuttlePos: const (x: 2.0, y: 20.0),
+          ),
+      ],
+      hits: hits,
+      lineCalls: const [
+        LineCall(
+          id: 0,
+          rallyIndex: 0,
+          frame: 20,
+          timeS: 0.67,
+          call: 'in',
+          landing: (x: 2.0, y: 1.0),
+          marginCm: 30,
+          confidence: 0.9,
+          uncertain: false,
+        ),
+      ],
+      courtCorners: const [(x: 0, y: 0), (x: 1, y: 0), (x: 1, y: 1), (x: 0, y: 1)],
+    );
+    final (mid, placed) = shuttleOverCourt(record, 5)!;
+    expect(placed, isTrue);
+    expect((mid.x, mid.y), (2.5, 7.0)); // halfway between the two players
+    // After the last hit it flies to where it landed.
+    final (late, _) = shuttleOverCourt(record, 15)!;
+    expect((late.x, late.y), (3.0, 6.5));
+    // With no hit before it, only the floor mapping is left, and it is marked as such.
+    const early = ClipRecord(
+      schemaVersion: '1.7',
+      clipId: 'c',
+      fps: 30,
+      width: 1280,
+      height: 720,
+      numFrames: 1,
+      frames: [FrameInfo(frame: 0, shuttlePos: (x: 2.0, y: 20.0))],
+      hits: [],
+    );
+    expect(shuttleOverCourt(early, 0), ((x: 2.0, y: 20.0), false));
+    expect(shuttleOverCourt(early, 3), isNull);
+    // A frame where the shuttle was not seen draws nothing, even mid-flight.
+    final unseen = ClipRecord(
+      schemaVersion: '1.7',
+      clipId: 'c',
+      fps: 30,
+      width: 1280,
+      height: 720,
+      numFrames: 21,
+      frames: [
+        for (final f in record.frames)
+          f.frame == 5 ? const FrameInfo(frame: 5, nearPos: (x: 1.0, y: 2.0)) : f,
+      ],
+      hits: hits,
+    );
+    expect(shuttleOverCourt(unseen, 5), isNull);
+  });
+
+  test('the court picture keeps its shape and fits the room it is given', () {
+    final aspect = courtViewAspect(doubles: false);
+    // Room to spare: upright and as wide as the card.
+    final (wide, wideOnSide) = courtViewLayout(300, 2000, doubles: false);
+    expect(wideOnSide, isFalse);
+    expect(wide.width, 300);
+    expect(wide.height, closeTo(300 / aspect, 0.01));
+    // A side panel shorter than the court: it shrinks to fit, same shape, still upright.
+    final (short, shortOnSide) = courtViewLayout(368, 560, doubles: false);
+    expect(shortOnSide, isFalse);
+    expect(short.height, 460);
+    expect(short.width / short.height, closeTo(aspect, 1e-9));
+    // The tab under a phone's video is short and wide: the court lies on its side there.
+    final (flat, flatOnSide) = courtViewLayout(304, 240, doubles: false);
+    expect(flatOnSide, isTrue);
+    expect(flat.height, 140);
+    expect(flat.height / flat.width, closeTo(aspect, 1e-9));
+    expect(flat.width, lessThanOrEqualTo(304));
+    // Never wider than the card, whatever the room.
+    expect(courtViewLayout(60, 150, doubles: true).$1.width, lessThanOrEqualTo(60));
+  });
+
+  for (final (name, size) in [('phone', phone), ('laptop', const Size(1280, 720))]) {
+    testWidgets('$name: the whole court is on screen without scrolling', (tester) async {
+      setSize(tester, size);
+      final record = recordWith(const [
+        // A far glitch and a player in the run-off: neither may paint outside the picture.
+        FrameInfo(frame: 0, nearPos: (x: -1.9, y: -1.9), shuttlePos: (x: 2.0, y: 21.9)),
+      ]);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ResultsLayout(
+              video: const AspectRatio(aspectRatio: 16 / 9, child: Placeholder()),
+              status: const SizedBox(height: 40),
+              timeline: const SizedBox.expand(),
+              minimap: CourtMinimap(record: record, frameIndex: 0),
+              scoreboard: const SizedBox(height: 200),
+              coach: const SizedBox(height: 300),
+            ),
+          ),
+        ),
+      );
+      if (find.text('Minimap').evaluate().isNotEmpty) {
+        await tester.tap(find.text('Minimap'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Heatmap'));
+      await tester.pump();
+      final court = find.descendant(
+        of: find.byType(CourtMinimap),
+        matching: find.byType(CustomPaint),
+      );
+      final box = tester.getRect(court.last);
+      final scroll = tester.getRect(
+        find.ancestor(of: find.byType(CourtMinimap), matching: find.byType(SingleChildScrollView)),
+      );
+      expect(box.top, greaterThanOrEqualTo(scroll.top));
+      expect(box.bottom, lessThanOrEqualTo(scroll.bottom));
+      expect(box.shortestSide / box.longestSide, closeTo(courtViewAspect(doubles: false), 0.01));
+      expect(box.longestSide, greaterThan(200));
+      expect(find.ancestor(of: court.last, matching: find.byType(ClipRect)), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('the heatmap toggle adds where players stood to the label', (tester) async {
     final handle = tester.ensureSemantics();

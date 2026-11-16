@@ -68,8 +68,14 @@ void main() {
 
   testWidgets('the minimap draws a doubles court', (tester) async {
     await pump(tester, CourtMinimap(record: doublesRecord(), frameIndex: 10));
-    final ratio = tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio;
-    expect(ratio, closeTo((5.18 + 0.92) / 13.40, 1e-9));
+    // The picture is the doubles court plus the run-off band around it.
+    final box = tester.getSize(
+      find.descendant(of: find.byType(CourtMinimap), matching: find.byType(CustomPaint)).last,
+    );
+    expect(
+      box.shortestSide / box.longestSide,
+      closeTo((5.18 + 0.92 + 2 * kRunOffM) / (13.40 + 2 * kRunOffM), 1e-3),
+    );
     expect(tester.takeException(), isNull);
   });
 
