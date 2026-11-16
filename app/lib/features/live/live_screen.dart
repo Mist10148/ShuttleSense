@@ -56,7 +56,7 @@ class LiveScreen extends ConsumerWidget {
     return PopScope(
       canPop: !streaming,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && controller.canDecide) {
+        if (!didPop && controller.canStop) {
           confirmStop(context, state, controller.stop);
         }
       },
@@ -92,7 +92,7 @@ class LiveScreen extends ConsumerWidget {
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
-                onPressed: controller.canDecide
+                onPressed: controller.canStop
                     ? () => confirmStop(context, state, controller.stop)
                     : null,
                 icon: const Icon(Icons.stop),
@@ -795,7 +795,10 @@ class _LiveViewState extends ConsumerState<_LiveView> {
           action();
         }),
       ),
-      child: Focus(autofocus: true, child: _layout(controls, details, camera, analysis)),
+      child: Focus(
+        autofocus: true,
+        child: _layout(controls, details, camera, analysis, changeEnds: changeEnds),
+      ),
     );
   }
 
@@ -803,8 +806,9 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     List<Widget> controls,
     Widget details,
     List<Widget> camera,
-    List<Widget> analysis,
-  ) {
+    List<Widget> analysis, {
+    required bool changeEnds,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         Widget column(List<Widget> children) => Column(
@@ -828,8 +832,8 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                         details,
                         if (!_coach)
                           Text(
-                            'Keys: N / F point near / far · Z undo · L let · I / O the call '
-                            'under review',
+                            'Keys: N / F point near / far · Z undo · L let · '
+                            '${changeEnds ? 'E change ends · ' : ''}I / O the call under review',
                             key: const Key('live-keys'),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),

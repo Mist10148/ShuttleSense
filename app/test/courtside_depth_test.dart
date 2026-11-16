@@ -42,12 +42,11 @@ void main() {
     final first = sockets.first.sent.last;
     await events(tester);
     expect(find.text('Confirming the referee decision…'), findsOneWidget);
+    // Stop is not refused meanwhile; it waits for the decision (live_test.dart).
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Stop')).onPressed,
-      isNull,
+      isNotNull,
     );
-    await controller.stop();
-    expect(sockets.first.sent.last, first);
     await sockets.first.drop();
     await events(tester);
     await tester.pump(const Duration(seconds: 1));

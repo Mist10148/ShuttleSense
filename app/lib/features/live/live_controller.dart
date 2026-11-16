@@ -363,6 +363,9 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   Json? _pendingCommand;
   int _decisionSequence = 0;
   int? _pendingDecision;
+
+  /// Stop was pressed while a decision was unconfirmed; it is sent once that is settled.
+  bool _stopAsked = false;
   int? _pendingReviewId;
   Timer? _decisionTimeout;
   Completer<String?>? _saved;
@@ -449,6 +452,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     _captureOrientation = null;
     _clearImages();
     _clearDecision();
+    _stopAsked = false;
     // A connect still waiting for `started` gives up now instead of after its timeout.
     final starting = _started;
     _started = null;
@@ -699,6 +703,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
         );
       }
       _set(snapshot);
+      _stopIfAsked(); // the resume snapshot settled the decision (a server without dedup)
       return (started: event, refused: null);
     } on Object catch (e) {
       final refused = e is _Refused
@@ -904,6 +909,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       case 'score':
         if (_matchesDecision(e)) _clearDecision();
         _set(_applySnapshot(e));
+        _stopIfAsked();
       case 'degraded':
         _set(
           state.copyWith(
@@ -1019,6 +1025,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
             const {'not_found', 'bad_message', 'rally_in_play', 'match_over'}.contains(code))) {
       _clearDecision();
       _notify(message);
+      _stopIfAsked();
       return;
     }
     // Mid-session: frame-level problems, an override of an unknown call (not_found) and a
@@ -1076,12 +1083,18 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   bool get canDecide =>
       state.phase == LivePhase.live && _socket != null && _pendingDecision == null;
 
-  String? get pendingAction => switch (_pendingCommand?['type']) {
-    'goal' => 'Saving the practice goal…',
-    'interval' => 'Confirming the interval timer change…',
-    null => null,
-    _ => 'Confirming the referee decision…',
-  };
+  /// Whether Stop can be asked for now. A decision still waiting for its echo does not
+  /// refuse it: the stop is kept and sent once the decision is settled (see [stop]).
+  bool get canStop => state.phase == LivePhase.live && _socket != null && !_stopAsked;
+
+  String? get pendingAction => _stopAsked
+      ? 'Stopping once the last action is confirmed…'
+      : switch (_pendingCommand?['type']) {
+          'goal' => 'Saving the practice goal…',
+          'interval' => 'Confirming the interval timer change…',
+          null => null,
+          _ => 'Confirming the referee decision…',
+        };
 
   int? get pendingReviewId => _pendingReviewId;
 
@@ -1114,6 +1127,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       }
       _clearDecision();
       _notify('Decision unconfirmed. Check the score before trying again.');
+      _stopIfAsked();
     });
     try {
       final command = {
@@ -1232,14 +1246,34 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
   }
 
   /// Stop streaming and wait for the server to save the session.
+  ///
+  /// While a decision waits for its echo the stop is kept, not sent: a stop ends the session
+  /// for good, so a decision lost on the way could no longer be sent again after a resume.
+  /// It goes out as soon as the decision is settled (echoed, refused, or refreshed by the
+  /// resume snapshot), and the decision itself is sent once more only by that resume, under
+  /// the same decision id.
   Future<void> stop() async {
-    if (canDecide) await _stop();
+    if (!canStop) return;
+    if (_pendingDecision != null) {
+      _stopAsked = true;
+      _set(state.copyWith(speedKmh: state.speedKmh));
+      return;
+    }
+    await _stop();
+  }
+
+  /// The pending decision is settled: carry out a stop that was waiting for it.
+  void _stopIfAsked() {
+    if (!_stopAsked || _pendingDecision != null) return;
+    if (state.phase != LivePhase.live || _socket == null) return;
+    unawaited(_stop());
   }
 
   Future<void> _stop({Object? captureError}) async {
     final socket = _socket;
     if (socket == null || state.phase != LivePhase.live) return;
     final generation = _generation;
+    _stopAsked = false;
     _streaming = false;
     _sessionOpen = false; // told to stop below; a teardown must not send a second stop
     _stopWatchingForStall();
