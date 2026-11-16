@@ -55,8 +55,7 @@ Two optional flags are omitted when true and default to true in older records.
 `frames[].player_hold_safe` may be false in historical recordings when the former camera-view
 guard could not verify the view; renderers must not carry a held box across that frame. The
 current tracker assumes a fixed camera and does not use that guard. A player's `court_position_valid`
-is false when a locked player is matched beyond the court boundary (a jump, or a step
-into the run-off around the court, `stages.pose.candidate_margin_m`); their pose is a
+is false when a locked player is matched just beyond the court boundary; their pose is a
 measurement, but their projected floor position is excluded from court analytics. Held
 boxes themselves are display-only and are not stored as player measurements. The app's
 record model reads the frame flag and does not consume player pose objects from records.

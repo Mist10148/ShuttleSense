@@ -82,8 +82,8 @@ def job_corners(ctx: StageContext) -> list[list[float]] | None:
     The app taps corners on the source frame; the record uses normalized pixels. With
     `stages.court.refine` the taps are then nudged onto the court markings of the first
     frame (court/refine.py), or left as tapped when the markings do not support a better
-    fit. Every stage that needs the court calls this, so all of them use one calibration;
-    the result is remembered on the job's config.
+    fit. The court stage uses this for record.court, which line calls and court positions
+    read. Player selection in the pose stage keeps the corners exactly as tapped.
     """
     from shuttlesense.court.refine import DEFAULTS, refine_corners
 

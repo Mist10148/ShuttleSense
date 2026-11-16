@@ -247,9 +247,9 @@ before using it for analysis. The benchmark script accepts `--compare-batch 8` t
 sequential and batched detections. Unsupported ONNX models and batching failures fall back
 to sequential inference for that session. Restart the backend after changing the setting.
 
-`watch.candidate_filter` defaults to `shadow` (since Nov 16): pose runs on everyone and
-the court-aware filter only counts the candidates it would exclude. Set it to `filter` to
-actually exclude them, which is faster. The background
+`watch.candidate_filter` is currently set to experimental `filter`. Set it to `shadow`
+to count candidates a conservative
+court-aware filter would exclude, while still running pose on everyone. The background
 Watch status includes `candidate_diagnostics`, including candidates and any excluded
 person later tracked in shadow mode. Use `scripts/bench_watch_parallel.py --compare-filter
 --compare-batch 8` with `--video`, `--court`, and calibrated singles-reference `--corners`

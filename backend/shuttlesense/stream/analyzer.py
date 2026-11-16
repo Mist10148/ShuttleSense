@@ -252,7 +252,8 @@ class StreamAnalyzer:
         The live perception gives raw per-frame detections. Only the window copy is changed
         (the stages read it); the session's record keeps what the model saw.
         """
-        if not self.config.get("live", {}).get("rectify_track", True):
+        # Watch & Analyze keeps its own pipeline and timings: nothing is added there.
+        if self.watch_stroke_guard or not self.config.get("live", {}).get("rectify_track", True):
             return
         from shuttlesense.tracking.postprocess import apply_track, rectify, track_arrays
 
@@ -276,6 +277,11 @@ class StreamAnalyzer:
             **self.config,
             "_unobserved_frames": {i - self.anchor for i in self._unobserved if i >= self.anchor},
         }
+        if self.watch_stroke_guard:
+            # Watch labels are the model's own, under its confidence guard: no context step.
+            stages = dict(config.get("stages", {}))
+            stages["strokes"] = {**stages.get("strokes", {}), "context": {"enabled": False}}
+            config["stages"] = stages
         ctx = StageContext(video_path=None, out_dir=None, config=config, device=self.device)
         self._rectify(window)
         hits.run(window, ctx)

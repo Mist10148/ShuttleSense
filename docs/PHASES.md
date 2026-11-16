@@ -631,18 +631,20 @@ measured on the team's own footage: there is none labelled yet.
   a serve is not a hit.
 - **Shuttle tracking:** bursts of two or three false detections are dropped; short gaps
   are filled along the flight, not with a straight line; InpaintNet no longer invents a
-  track across the break between rallies; Live and Watch get the same clean-up on their
-  window.
+  track across the break between rallies; Live gets the same clean-up on its window.
 - **Court calibration:** the tapped corners are nudged onto the painted lines of the first
-  frame when the lines support it (uploads only; Live and Watch use the corners as given).
+  frame when the lines support it, for line calls and court positions on uploads. Player
+  selection, Live and Watch use the corners as given.
 - **Line calls and points:** a rally that ends on its opening hit is judged against the
   service court whatever the stroke label; an out landing on the last detected hitter's own
   half awards nobody and waits for the referee.
-- **Players (merge fixes):** an upload without court corners gets players again (the
-  court-aware tracker of Nov 15 returned none, so such clips had no hits and no strokes);
-  a locked player is followed into the run-off around the court
-  (`stages.pose.candidate_margin_m`, 0 restores the strict rule); the experimental Watch
-  candidate filter defaults to `shadow`, which counts but does not drop candidates.
+- **Watch & Analyze and player selection are as LXED left them** (owner's decision, Nov
+  16): the court-aware player tracker, its boundary rules, the Watch performance settings
+  and the candidate filter are unchanged, and Watch sessions get neither the track clean-up
+  nor the stroke context. Three changes from earlier in this pass (players on uploads
+  without corners, following a player into the run-off, a `shadow` filter default) were
+  taken back. Consequence, by that tracker's design: an upload without court corners has
+  no players, so no hits and no strokes; calibrate the court to get them.
 - **Scores shown during playback, app and rendered video:** right from the session start
   when ends change before the first rally ends; the count restarts when awarded points alone
   finish a game; games won before joining mid-match keep to the right side. Retrying a job
@@ -702,9 +704,6 @@ acceptance criteria. Code for these tasks is on `main` with tests.
   - **Out calls with a doubtful last hitter.** Since Nov 16 an out landing on the last
     detected hitter's own half awards nobody. Count on labelled rallies how often that
     leaves a real mishit for the referee, against how often it stops a wrong point.
-  - **Watch & Analyze settings (LXED).** The run-off margin and the `shadow` candidate
-    filter change that branch's defaults; confirm them on its test footage, or set
-    `candidate_margin_m: 0` and `candidate_filter: filter` to go back.
   - **A `drive` class** (T9.7) and the `rush` / `push` label mapping (T3.3, M4).
 - **Footage and labels (consent needed):** two singles test rallies (T0.10), phone
   footage with a second labeller (T7.1), doubles rallies (T9.2), landing labels

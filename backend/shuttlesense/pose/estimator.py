@@ -314,10 +314,13 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     court_size = tuple(ctx.stage_config("court").get("court_size_m", COURT_SIZE_M))
     if ctx.config.get("court_corners_px"):
         from shuttlesense.court import compute_homography
-        from shuttlesense.court.homography import job_corners
 
-        # The same corners as the court stage: scaled to the record and snapped to the lines.
-        homography = compute_homography(job_corners(ctx), court_size)
+        corners = ctx.config["court_corners_px"]
+        if ctx.reader.resized:
+            sx = ctx.reader.width / ctx.reader.source.width
+            sy = ctx.reader.height / ctx.reader.source.height
+            corners = [[x * sx, y * sy] for x, y in corners]
+        homography = compute_homography(corners, court_size)
 
     court = court_type(ctx.config)
     tracker = CourtPlayerTracker(cfg, court, court_size)
