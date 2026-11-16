@@ -66,7 +66,9 @@ def test_classify_fills_fields_with_dummy_model(monkeypatch: pytest.MonkeyPatch)
     record = load_golden()
     for h in record.hits:
         h.stroke = h.confidence = h.class_probs = None
-    record = classify.run(record, StageContext(video_path=None, out_dir=None))
+    # The model's own answer: the rally and court context (test_stroke_context.py) is off.
+    config = {"stages": {"strokes": {"context": {"enabled": False}}}}
+    record = classify.run(record, StageContext(video_path=None, out_dir=None, config=config))
     assert {h.stroke for h in record.hits} == {"smash"}
     assert all(h.confidence > 0.7 and abs(sum(h.class_probs.values()) - 1) < 1e-3
                for h in record.hits)  # fmt: skip

@@ -119,6 +119,11 @@ stages:
     # frames after a hit before classifying it.
     window_frames: 32
     use_trajectory: true        # false = pose-only ablation
+    context:                    # rally and court context on top of any model (strokes/context.py)
+      enabled: true
+      # weight / floor: default to the values fitted on the validation matches
+      max_flight_s: 2.5         # a longer wait for the reply means a hit was missed
+      doubles_tables: false     # the flight and zone tables are counted from singles
 
   feedback:
     enabled: true               # rules: docs/FEEDBACK_RULES.md

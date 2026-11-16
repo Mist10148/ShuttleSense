@@ -64,6 +64,23 @@ def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
     return float(np.min(np.linalg.norm(good[:, :2] - point, axis=1)))
 
 
+def same_rally(
+    hidden: np.ndarray, a: int, b: int, break_len: int, unobserved: set[int] | None = None
+) -> bool:
+    """Whether frames a and b belong to one rally: the shuttle was never out of sight for
+    `break_len` frames in between. `hidden` is per frame; unobserved frames (live mode: no
+    perception ran) are neither hidden nor seen."""
+    unobserved = unobserved or set()
+    run = 0
+    for f in range(a, b):
+        if f in unobserved:
+            continue
+        run = run + 1 if hidden[f] else 0
+        if run >= break_len:
+            return False
+    return True
+
+
 def detect_hits(
     xy: np.ndarray,
     visible: np.ndarray,
@@ -126,19 +143,13 @@ def detect_hits(
     hidden = np.asarray(visible) <= 0
     break_len = int(cfg.get("rally_break_frames", 30))
 
-    def same_rally(a: int, b: int) -> bool:
-        run = 0
-        for f in range(a, b):
-            if f in unobserved:
-                continue  # no observation: neither hidden nor seen
-            run = run + 1 if hidden[f] else 0
-            if run >= break_len:
-                return False
-        return True
-
     alternating: list[tuple[float, int, PlayerSide]] = []
     for hit in kept:
-        if alternating and alternating[-1][2] == hit[2] and same_rally(alternating[-1][1], hit[1]):
+        if (
+            alternating
+            and alternating[-1][2] == hit[2]
+            and same_rally(hidden, alternating[-1][1], hit[1], break_len, unobserved)
+        ):
             if hit[0] < alternating[-1][0]:
                 alternating[-1] = hit
             continue
@@ -168,6 +179,37 @@ def wrist_arrays(record: ClipRecord, side: str) -> list[np.ndarray | None]:
     return out
 
 
+def partner_distances(
+    record: ClipRecord, hit: Hit, xy: np.ndarray, visible: np.ndarray, window: int
+) -> dict[PlayerId, float]:
+    """Each partner's closest confident wrist to the shuttle within +-window frames of a hit
+    (inf when the partner or the shuttle was not seen)."""
+    slots: tuple[PlayerId, PlayerId] = (f"{hit.player}_1", f"{hit.player}_2")  # type: ignore[assignment]
+    dist = {}
+    for slot in slots:
+        best = float("inf")
+        for i in range(max(0, hit.frame - window), min(len(record.frames), hit.frame + window + 1)):
+            if not visible[i]:
+                continue
+            wrists = _wrists(getattr(record.frames[i].players, slot_attr(slot)))
+            best = min(best, _wrist_distance(xy[i], wrists))
+        dist[slot] = best
+    return dist
+
+
+def closest_partner(record: ClipRecord, hit: Hit, cfg: dict[str, Any]) -> str | None:
+    """Players field of the partner nearer the shuttle at a hit, however small the margin;
+    None when neither was seen."""
+    from shuttlesense.timing import frames_at
+    from shuttlesense.tracking import track_arrays
+
+    xy, visible = track_arrays(record)
+    window = frames_at(cfg.get("hitter_window_frames", 3), record.fps)
+    dist = partner_distances(record, hit, xy, visible, window)
+    slot = min(dist, key=dist.get)
+    return slot_attr(slot) if np.isfinite(dist[slot]) else None
+
+
 def attribute_hitters(record: ClipRecord, cfg: dict[str, Any]) -> None:
     """Doubles: credit each hit to one partner (Hit.hitter, hitter_confidence).
 
@@ -186,23 +228,8 @@ def attribute_hitters(record: ClipRecord, cfg: dict[str, Any]) -> None:
     window = int(cfg.get("hitter_window_frames", 3))
     ambiguous = float(cfg.get("ambiguous_px", 25)) * scale
     for hit in record.hits:
-        slots: tuple[PlayerId, PlayerId] = (f"{hit.player}_1", f"{hit.player}_2")  # type: ignore[assignment]
-        dist = {}
-        for slot in slots:
-            best = float("inf")
-            for i in range(
-                max(0, hit.frame - window), min(len(record.frames), hit.frame + window + 1)
-            ):
-                if not visible[i]:
-                    continue
-                best = min(
-                    best,
-                    _wrist_distance(
-                        xy[i], _wrists(getattr(record.frames[i].players, slot_attr(slot)))
-                    ),
-                )
-            dist[slot] = best
-        a, b = slots
+        dist = partner_distances(record, hit, xy, visible, window)
+        a, b = dist
         da, db = dist[a], dist[b]
         if not np.isfinite(min(da, db)):
             hit.hitter, hit.hitter_confidence = None, None
