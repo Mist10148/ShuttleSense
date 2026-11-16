@@ -169,3 +169,33 @@ def test_training_outputs_are_named_per_seed() -> None:
     assert module.output_path(base, "", 3).name == "stroke_cnn_seed3.pt"
     assert module.output_path(base, "_pose_only", 3).name == "stroke_cnn_pose_only_seed3.pt"
     assert module.output_path(base, "", None).name == "stroke_cnn.pt"
+
+
+def test_extra_augmentation_is_off_by_default_and_keeps_the_window_shape() -> None:
+    from shuttlesense.strokes.dataset import augment
+    from shuttlesense.strokes.features import POSE_FEATURES
+
+    x = np.ones((30, POSE_FEATURES + 5), dtype=np.float32)
+    plain = augment(x.copy(), np.random.default_rng(0), True, noise=0.0, max_shift=0)
+    # Only the mirror can change a window of ones: every value keeps its size.
+    assert np.allclose(np.abs(plain[:, :POSE_FEATURES]), 1.0)
+
+    rng = np.random.default_rng(0)
+    out = augment(
+        x.copy(),
+        rng,
+        True,
+        noise=0.0,
+        max_shift=0,
+        scale_jitter=0.1,
+        keypoint_dropout=0.5,
+        shuttle_dropout=1.0,
+    )
+    assert out.shape == x.shape
+    pose = np.abs(out[:, :POSE_FEATURES]).reshape(30, -1, 2)
+    lost = (pose == 0).all(axis=(0, 2))
+    assert 0 < lost.sum() < pose.shape[1]  # some joints are gone for the whole window
+    kept = pose[:, ~lost]
+    assert np.allclose(kept, kept[0, 0, 0]) and 0.9 <= kept[0, 0, 0] <= 1.1  # one scale
+    hidden = (out[:, POSE_FEATURES + 2] == 0).sum()
+    assert 2 <= hidden <= 8  # one run of frames without the shuttle

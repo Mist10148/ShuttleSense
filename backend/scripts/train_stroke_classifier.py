@@ -13,7 +13,9 @@ copied to <checkpoint><ext>, the file the pipeline loads.
 - cnn, lstm: a torch checkpoint {state_dict, kind, in_features, window_frames, classes,
   config, use_trajectory, pose_norm, temperature} and, when data.window_fps is set,
   window_fps. temperature is fitted on the val split after training (fit_temperature).
-  train.shift_frames (2), train.noise (0.01) and train.label_smoothing (0) tune training.
+  train.shift_frames (2), train.noise (0.01) and train.label_smoothing (0) tune training;
+  train.scale_jitter, train.keypoint_dropout and train.shuttle_dropout (all 0) add the
+  augmentation steps of strokes/dataset.py.
 - rf: scikit-learn trains the forest on summary features (strokes/rf.py); it is saved as
   plain arrays in an .npz file, which inference reads without scikit-learn.
   model.summary_version picks the summary rows; train.shift_copies adds shifted windows.
@@ -204,6 +206,9 @@ def train(
         seed=seed,
         max_shift=int(tcfg.get("shift_frames", 2)),
         noise=float(tcfg.get("noise", 0.01)),
+        scale_jitter=float(tcfg.get("scale_jitter", 0.0)),
+        keypoint_dropout=float(tcfg.get("keypoint_dropout", 0.0)),
+        shuttle_dropout=float(tcfg.get("shuttle_dropout", 0.0)),
     )
     val_ds = StrokeDataset(features_dir, splits["val"], use_trajectory)
     if len(train_ds) == 0 or len(val_ds) == 0:
