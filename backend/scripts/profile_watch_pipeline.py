@@ -62,6 +62,8 @@ def main():
                         help="experiment with the TensorRT / CUDA split detector")
     parser.add_argument("--pose-breakdown", action="store_true",
                         help="measure pose crop, inference and postprocessing calls")
+    parser.add_argument("--detector-breakdown", action="store_true",
+                        help="measure detector preprocessing, inference and postprocessing")
     args = parser.parse_args()
     setup_start = time.perf_counter()
     config = with_court(load_config(), args.court)
@@ -122,7 +124,7 @@ def main():
     measure(model, "_shuttle", "shuttle")
     measure(model, "_players", "players")
     measure(model.far_refiner, "refine", "far_refinement")
-    if args.pose_breakdown:
+    if args.pose_breakdown or args.detector_breakdown:
         import inspect
 
         detector = getattr(model, "watch_detect", None)
@@ -130,12 +132,18 @@ def main():
             raise RuntimeError("pose breakdown needs a Watch candidate detector")
         closure = inspect.getclosurevars(detector).nonlocals
         body = closure["body"]
-        for method, label in (("preprocess", "pose_crop"), ("postprocess", "pose_post")):
-            measure(body.pose_model, method, label)
-        measure(body.pose_model.session, "run", "pose_run")
-        lookup = closure.get("lookup")
-        if lookup is not None:
-            measure(lookup, "prepare", "pose_lookup")
+        if args.pose_breakdown:
+            for method, label in (("preprocess", "pose_crop"), ("postprocess", "pose_post")):
+                measure(body.pose_model, method, label)
+            measure(body.pose_model.session, "run", "pose_run")
+            lookup = closure.get("lookup")
+            if lookup is not None:
+                measure(lookup, "prepare", "pose_lookup")
+        if args.detector_breakdown:
+            for method, label in (("preprocess", "detector_pre"),
+                                  ("inference", "detector_run"),
+                                  ("postprocess", "detector_post")):
+                measure(body.det_model, method, label)
     parallel = ParallelWatchPerception(model)
     with tempfile.TemporaryDirectory(prefix="shuttlesense-profile-") as temp:
         recording = Path(temp) / "recording.mp4" if args.record else None

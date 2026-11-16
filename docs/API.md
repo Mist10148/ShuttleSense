@@ -18,6 +18,11 @@ reports server-side read, JPEG preparation and frame-processing durations. Older
 clients can ignore these fields. Frame-by-frame analysis processes every normalized
 frame: videos above the configured maximum frame rate may be sampled first.
 
+Diagnostic clients may add `"profile_diagnostics": true` to the start message. Each
+frame response then contains `profile_ms`, correlated by `index`, with session-local
+wall-clock timings and candidate counts when available. Stage times can overlap and are
+not direct GPU execution measurements. The field is absent when profiling is disabled.
+
 Servers advertising `watch_realtime` also accept `"playback":"realtime"` in
 the start message. In this mode clients play `GET /videos/{id}/source` separately
 and send the current normalized frame `index` with each `next`. The backend

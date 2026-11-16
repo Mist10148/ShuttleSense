@@ -21,6 +21,8 @@ import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
 import 'court_geometry.dart';
 
+const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
+
 String formatWatchElapsed(Duration elapsed) {
   final seconds = elapsed.inSeconds;
   final hours = seconds ~/ 3600;
@@ -82,6 +84,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   bool focusedAnalysis = false;
   bool focusedAnalysisActive = false;
   final Stopwatch frameClock = Stopwatch();
+  int? profileLastResponseUs;
   Uint8List? image;
   bool uploading = false, playing = false, waiting = false, stopping = false, started = false;
   String? error, jobId;
@@ -207,6 +210,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     analysisClock
       ..reset()
       ..start();
+    profileLastResponseUs = null;
+    if (_watchProfile) debugPrint('WATCH_PROFILE {"event":"start"}');
     elapsedTimer?.cancel();
     elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -218,6 +223,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   }
 
   void stopElapsedClock() {
+    if (_watchProfile && analysisClock.isRunning) {
+      debugPrint(
+        'WATCH_PROFILE ${jsonEncode({'event': 'clock_stopped', 'elapsed_ms': analysisClock.elapsedMicroseconds / 1000, 'status': status})}',
+      );
+    }
     analysisClock.stop();
     elapsedTimer?.cancel();
   }
@@ -229,8 +239,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       final job = await ref.read(apiClientProvider).getJob(jobId!);
       if (!mounted || !job.status.isFinished) return;
       setState(() {
-        stopElapsedClock();
         status = job.status == JobStatus.done ? 'Session saved' : 'Rendering failed';
+        stopElapsedClock();
         if (job.status != JobStatus.done) error = job.error ?? 'Rendering failed';
       });
       ref.invalidate(jobsListProvider);
@@ -284,6 +294,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           'video_id': info.id,
           'court': matchType,
           'playback': realTime ? 'realtime' : 'complete',
+          if (_watchProfile) 'profile_diagnostics': true,
           if (fullToSingles(corners) case final singles?)
             'corners': [
               for (final c in singles) [c.x, c.y],
@@ -461,6 +472,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       waiting = true;
       status = realTime ? 'Playing in real time' : 'Catching up…';
     });
+    if (_watchProfile && profileLastResponseUs != null) {
+      debugPrint(
+        'WATCH_PROFILE ${jsonEncode({'event': 'next', 'frame': index, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000})}',
+      );
+    }
     frameClock
       ..reset()
       ..start();
@@ -507,6 +523,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
 
   void onMessage(dynamic raw) {
     if (!mounted || raw is! String) return;
+    final receivedUs = _watchProfile ? analysisClock.elapsedMicroseconds : 0;
     final msg = jsonDecode(raw) as Map<String, dynamic>;
     switch (msg['type']) {
       case 'started':
@@ -534,10 +551,12 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         }
       case 'video_frame':
         frameClock.stop();
+        final roundTripUs = frameClock.elapsedMicroseconds;
         if (!playing && !stopping) {
           pendingFrame = raw;
           return;
         }
+        final decodeStartUs = _watchProfile ? analysisClock.elapsedMicroseconds : 0;
         setState(() {
           if (!realTime) image = base64Decode(msg['jpeg'] as String);
           accelerationDiagnostics = formatWatchAcceleration(msg['provider_diagnostics']);
@@ -587,6 +606,21 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             }
           }
         });
+        if (_watchProfile) {
+          profileLastResponseUs = receivedUs;
+          final frame = msg['index'];
+          final handledUs = analysisClock.elapsedMicroseconds;
+          debugPrint(
+            'WATCH_PROFILE ${jsonEncode({'event': 'received', 'frame': frame, 'elapsed_ms': receivedUs / 1000, 'video_fps': fps, 'round_trip_ms': roundTripUs / 1000, 'json_ms': (decodeStartUs - receivedUs) / 1000, 'handle_ms': (handledUs - decodeStartUs) / 1000, 'server_ms': msg['timing_ms'], 'profile_ms': msg['profile_ms']})}',
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              debugPrint(
+                'WATCH_PROFILE ${jsonEncode({'event': 'ui_frame', 'frame': frame, 'since_response_ms': (analysisClock.elapsedMicroseconds - receivedUs) / 1000})}',
+              );
+            }
+          });
+        }
         if (playing && !stopping) {
           if (realTime) {
             next();
@@ -596,6 +630,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           }
         }
       case 'saved':
+        if (_watchProfile) {
+          debugPrint(
+            'WATCH_PROFILE ${jsonEncode({'event': 'analysis_saved', 'elapsed_ms': analysisClock.elapsedMicroseconds / 1000})}',
+          );
+        }
         setState(() {
           jobId = msg['job_id'] as String?;
           playing = false;

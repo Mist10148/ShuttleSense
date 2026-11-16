@@ -113,6 +113,12 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             )
             if parallel_watch_enabled(setting, manager.state.jobs.device):
                 session.perception = ParallelWatchPerception(session.perception)
+        profiler = None
+        if start.get("profile_diagnostics") is True:
+            from shuttlesense.stream.watch_profile import WatchFrameProfiler
+
+            profiler = WatchFrameProfiler(session)
+            profiler.attach_reader(reader)
         # Video playback waits for each result, so it must not lower perception resolution
         # merely because a frame took longer than the camera-live latency budget.
         if playback == "complete":
@@ -182,6 +188,8 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                     packet = HEADER.pack(skipped_index, skipped_index * 1000.0 / reader.fps)
                     await asyncio.to_thread(_skip_watch_frame, session, packet + encoded.tobytes())
                     next_index = skipped_index + 1
+            if profiler is not None:
+                profiler.begin()
             read_started = time.perf_counter()
             item = await asyncio.to_thread(next, frames, None)
             read_ms = (time.perf_counter() - read_started) * 1000
@@ -212,6 +220,7 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                         else {}
                     ),
                     "events": events,
+                    **({"profile_ms": profiler.finish()} if profiler is not None else {}),
                     "timing_ms": {"read": round(read_ms, 2), "jpeg": round(encode_ms, 2),
                                   "processing": round(frame_processing_s * 1000, 2)},
                     "provider_diagnostics": getattr(

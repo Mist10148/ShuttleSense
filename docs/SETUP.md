@@ -249,6 +249,35 @@ and repeat with `--parallel true`. It uses temporary storage, real models, and o
 request per frame; the in-process client excludes network latency and Flutter display,
 so also repeat the 45-second checkpoint in the app. Frames are normalized as in Watch.
 
+For opt-in diagnostic timings, add `--profile` to the benchmark. `--resources` samples
+`nvidia-smi` once per second and, if installed with `python -m pip install -r
+requirements/profiling.txt`, samples the benchmark process CPU percentage and resident
+memory. GPU utilization and used VRAM are device-wide snapshots, including other
+processes; the sampled maximum is not an exact peak. Process CPU can exceed 100% because
+one fully utilized logical core is 100%. `--warmup-frames 30` first runs and saves a
+short session in the same server process; without it each invocation starts a new process,
+although the disk cache may already be warm. `--seconds 0` runs the complete normalized
+clip. The 45-second checkpoint is the first completed response at or after 45 seconds.
+
+For the actual Windows app, run `flutter run -d windows --profile
+--dart-define=WATCH_PROFILE=true` and select **Analyze every frame**. `WATCH_PROFILE`
+lines in the Flutter console correlate client request/receive, response handling and
+post-frame callbacks with frame indexes and server timing. A Flutter post-frame callback
+indicates a UI frame was scheduled, not that JPEG decoding or pixels were displayed.
+The `WATCH_PROFILE` events exclude video pixels and file paths but contain per-session
+performance data. The full Flutter console log can include local URLs or other diagnostic
+details; keep it local and review it before sharing. Normal runs do not enable this
+instrumentation. Compare instrumented
+and normal sessions before relying on timing because profiling and console logging can
+change performance. Server per-model values are CPU wall intervals which can overlap and
+may include asynchronous GPU waits; they are not CUDA-event or per-kernel timings.
+Capture the console in PowerShell with `flutter run -d windows --profile
+--dart-define=WATCH_PROFILE=true 2>&1 | Tee-Object -FilePath ../backend/.cache/watch_flutter.log`,
+then from `backend/` run `python scripts/summarize_watch_flutter.py .cache/watch_flutter.log`.
+The summary separates sessions and reports checkpoint, round trips, response handling,
+next-request delay, UI callbacks, and save/clock timings. It requires valid complete log
+lines; a stopped/paused session is not a complete-video measurement.
+
 The optional **Faster player analysis (experimental)** switch limits pose candidates near
 confirmed players between periodic full-candidate refreshes. It uses normal selection if
 the court is uncalibrated, a player is unconfirmed or missing, or a nearby detection is not
@@ -321,6 +350,11 @@ in parallel mode, so do not add them together. Startup and the chosen footage af
 the result. `scripts/bench_watch_track_batch.py --video PATH --device cuda --batch 4`
 is a separate cross-frame shuttle batching experiment; it does not enable batching
 in Watch. On the tested RTX 5070 Ti it showed no speedup.
+
+Add `--detector-breakdown --pose-breakdown` to the offline profiler to time detector
+preprocessing, inference and postprocessing and pose crop preparation, session calls and
+postprocessing. These are instrumented host wall times, not CUDA event measurements;
+counts include extra recovery calls and can exceed the number of frames.
 
 The optional `watch.decoded_frames: true` bypasses the background worker's internal
 JPEG encode/decode. It is currently disabled; the model sees different pixels when enabled,

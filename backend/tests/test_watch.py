@@ -46,6 +46,7 @@ def test_watch_pulls_frames_and_saves_partial(
                 frame = ws.receive_json()
                 assert frame["index"] == index
                 assert set(frame["timing_ms"]) == {"read", "jpeg", "processing"}
+                assert "profile_ms" not in frame
                 assert frame["jpeg"]
                 assert any(e["type"] == "frame" and e["frame"] == index for e in frame["events"])
                 assert next(e for e in frame["events"] if e["type"] == "stats")["level"] == 0
@@ -60,6 +61,26 @@ def test_watch_pulls_frames_and_saves_partial(
         assert "partial" in client.get("/videos/" + job["video_id"]).json()["filename"]
         record = client.get("/jobs/" + saved["job_id"] + "/record").json()
         assert record["num_frames"] == 3
+
+
+def test_watch_profile_is_opt_in_and_frame_correlated(tmp_path, tiny_video):
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
+    with TestClient(app) as client:
+        with tiny_video.open("rb") as source:
+            video = client.post("/videos", files={"file": ("tiny.mp4", source)}).json()
+        with client.websocket_connect("/watch") as ws:
+            ws.send_json({"type": "start", "video_id": video["id"],
+                          "profile_diagnostics": True})
+            assert ws.receive_json()["type"] == "started"
+            for index in range(3):
+                ws.send_json({"type": "next"})
+                frame = ws.receive_json()
+                assert frame["index"] == index
+                assert frame["profile_ms"]["normalize_wall"] >= 0
+                assert frame["profile_ms"]["jpeg_decode_wall"] >= 0
+                assert frame["profile_ms"]["record_wall"] >= 0
+            ws.send_json({"type": "stop"})
+            assert ws.receive_json()["type"] == "saved"
 
 
 @pytest.mark.parametrize("finish", ["stop", "disconnect", "failure"])
