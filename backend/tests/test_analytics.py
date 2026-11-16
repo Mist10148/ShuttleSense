@@ -17,7 +17,17 @@ def test_player_position_uses_ankles() -> None:
     kps[15] = (100.0, 500.0, 0.9)
     kps[16] = (140.0, 520.0, 0.8)
     p = Player(bbox=(80, 300, 80, 240), keypoints=kps)
-    assert player_point(p) == (120.0, 510.0)
+    assert player_point(p, ankle_floor_ratio=0.0) == (120.0, 510.0)
+    # The ankle joint is above the floor: the point is lowered by 4% of the box height.
+    assert player_point(p) == pytest.approx((120.0, 510.0 + 0.04 * 240))
+
+
+def test_player_position_never_goes_below_the_box() -> None:
+    kps = [(0.0, 0.0, 0.9)] * 17
+    kps[15] = (100.0, 536.0, 0.9)
+    kps[16] = (140.0, 538.0, 0.9)
+    p = Player(bbox=(80, 300, 80, 240), keypoints=kps)  # the box ends at y = 540
+    assert player_point(p) == (120.0, 540.0)
 
 
 def test_falls_back_to_bbox_bottom() -> None:
