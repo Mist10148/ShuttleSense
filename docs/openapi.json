@@ -32,6 +32,11 @@
             "title": "Court",
             "type": "string"
           },
+          "focused_analysis": {
+            "default": false,
+            "title": "Focused Analysis",
+            "type": "boolean"
+          },
           "video_id": {
             "title": "Video Id",
             "type": "string"
@@ -1359,6 +1364,11 @@
               }
             ],
             "title": "Watch Analysis S"
+          },
+          "watch_focused_analysis": {
+            "default": false,
+            "title": "Watch Focused Analysis",
+            "type": "boolean"
           },
           "watch_position_s": {
             "anyOf": [

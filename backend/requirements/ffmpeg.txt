@@ -1,0 +1,2 @@
+# Optional portable FFmpeg for annotated-video export when no system FFmpeg is installed.
+imageio-ffmpeg==0.8.1

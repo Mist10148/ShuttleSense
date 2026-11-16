@@ -27,7 +27,8 @@ class _FallbackSession:
             return self.accelerated.run(*args, **kwargs)
         except Exception as exc:
             log.exception("TensorRT RTX inference failed; falling back to CUDA")
-            self.diagnostic.update(active="cuda", fallback_reason=str(exc))
+            self.diagnostic.update(active=self.diagnostic.get("fallback_active", "cuda"),
+                                   fallback_reason=str(exc))
             return self.fallback.run(*args, **kwargs)
 
 
@@ -91,7 +92,9 @@ def make_watch_body(body, provider, batch_size, device, cache_dir=None, opt_batc
         split = name == "detector" and split_detector
         selected = provider in (name, "both") or split
         requested = "split_tensorrt_rtx" if split else "tensorrt_rtx" if selected else "cuda"
-        info = {"requested": requested, "active": "cuda"}
+        fallback_active = "cuda" if str(device).startswith("cuda") else "cpu"
+        info = {"requested": requested, "active": fallback_active,
+                "fallback_active": fallback_active}
         if hasattr(original.session, "get_providers"):
             info["fallback_providers"] = original.session.get_providers()
         diagnostics["models"][name] = info
@@ -112,5 +115,6 @@ def make_watch_body(body, provider, batch_size, device, cache_dir=None, opt_batc
             component.session = _FallbackSession(accelerated, original.session, info)
         except Exception as exc:
             info["fallback_reason"] = str(exc)
-            log.exception("Could not initialize TensorRT RTX for %s; using CUDA", name)
+            log.exception("Could not initialize TensorRT RTX for %s; using %s", name,
+                          fallback_active)
     return clone, diagnostics

@@ -12,6 +12,11 @@ JPEG, and analysis events. The request after the last frame finishes the session
 `{"type":"stop"}` finishes early. Both return `saved` with a job ID if frames
 were processed. A disconnect also saves the analyzed portion. Pause by withholding
 the next request; timestamps follow video time rather than wall-clock time.
+The optional `provider_diagnostics` in `started` and `video_frame` identifies the
+configured detector and pose providers, including fallback; `timing_ms` on a frame
+reports server-side read, JPEG preparation and frame-processing durations. Older
+clients can ignore these fields. Frame-by-frame analysis processes every normalized
+frame: videos above the configured maximum frame rate may be sampled first.
 
 Servers advertising `watch_realtime` also accept `"playback":"realtime"` in
 the start message. In this mode clients play `GET /videos/{id}/source` separately

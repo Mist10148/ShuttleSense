@@ -130,12 +130,15 @@ def _rtmlib_detector(mode: str, device: str, body=None):
                 # RTMLib falls back to the whole image when YOLO returns no boxes.
                 if detected == 0:
                     boxes = [[0, 0, frame.shape[1], frame.shape[0]]]
+                start = time.perf_counter()
                 keep = candidates.select(boxes, frame.shape)
+                selection_s = time.perf_counter() - start
                 indices = [i for i, selected in enumerate(keep)
                            if selected or candidates.mode == "shadow"]
                 start = time.perf_counter()
                 if not indices:
-                    candidates.record(detected, keep, detection_s, time.perf_counter() - start)
+                    candidates.record(detected, keep, detection_s, time.perf_counter() - start,
+                                      selection_s)
                     return []
                 selected_boxes = [boxes[i] for i in indices]
                 if batch_size > 1:
@@ -150,7 +153,8 @@ def _rtmlib_detector(mode: str, device: str, body=None):
                 else:
                     keypoints, scores = body.pose_model(frame, selected_boxes)
                 pose_s = time.perf_counter() - start
-                candidates.record(detected, keep if detected else [], detection_s, pose_s)
+                candidates.record(detected, keep if detected else [], detection_s, pose_s,
+                                  selection_s)
                 people = players_from_pose(keypoints, scores)
                 if getattr(candidates, "proposal", None) is not None:
                     for index, kps, score in zip(indices, keypoints, scores, strict=True):

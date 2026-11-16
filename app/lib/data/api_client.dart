@@ -148,12 +148,14 @@ class ApiClient {
     required String videoId,
     required String court,
     required List<({double x, double y})> corners,
+    bool focusedAnalysis = false,
   }) => _call(() async {
     final res = await _dio.post<Json>(
       '/watch/background',
       data: {
         'video_id': videoId,
         'court': court,
+        if (focusedAnalysis) 'focused_analysis': true,
         if (corners.isNotEmpty)
           'corners': [
             for (final c in corners) [c.x, c.y],

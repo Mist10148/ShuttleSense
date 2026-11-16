@@ -31,6 +31,19 @@ void main() {
     expect(formatWatchElapsed(const Duration(hours: 12, minutes: 3, seconds: 4)), '12:03:04');
   });
 
+  test('acceleration diagnostics show actual provider and fallback', () {
+    expect(formatWatchAcceleration(null), isNull);
+    expect(
+      formatWatchAcceleration({
+        'models': {
+          'detector': {'active': 'cuda'},
+          'pose': {'active': 'cuda', 'fallback_reason': 'unavailable'},
+        },
+      }),
+      'Detector: CUDA · Pose: CUDA (fallback)',
+    );
+  });
+
   Health health(bool enabled) => Health(
     version: '0.1',
     schemaVersion: '1.6',
@@ -98,6 +111,11 @@ void main() {
     );
     await tester.tap(find.text('Choose video'));
     await tester.pumpAndSettle();
+    final faster = find.widgetWithText(SwitchListTile, 'Faster player analysis (experimental)');
+    expect(tester.widget<SwitchListTile>(faster).value, isFalse);
+    await tester.tap(faster);
+    await tester.pump();
+    expect(tester.widget<SwitchListTile>(faster).value, isTrue);
     expect(
       tester
           .widget<SegmentedButton<bool>>(
@@ -108,7 +126,7 @@ void main() {
     );
     await tester.tap(find.text('Analyze every frame'));
     await tester.pump();
-    expect(find.textContaining('Playback waits for analysis'), findsOneWidget);
+    expect(find.textContaining('Playback waits for every normalized frame'), findsOneWidget);
     await tester.ensureVisible(find.text('Start analysis'));
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start analysis')).onPressed,

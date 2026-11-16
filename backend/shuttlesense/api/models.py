@@ -263,3 +263,4 @@ class Job(BaseModel):
     watch_position_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
     watch_analysis_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
     watch_target_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
+    watch_focused_analysis: bool = False

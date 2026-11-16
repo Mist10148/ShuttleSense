@@ -60,6 +60,9 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
     manager: LiveManager = ws.app.state.live
     entry = None
     frames = None
+    watch_started = time.perf_counter()
+    perception_s = 0.0
+    processed = 0
     try:
         start = await asyncio.wait_for(ws.receive_json(), START_TIMEOUT_S)
         if not isinstance(start, dict) or start.get("type") != "start":
@@ -99,6 +102,17 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
         from shuttlesense.stream.perception import enable_watch_player_continuity
 
         enable_watch_player_continuity(session.perception)
+        if playback == "complete" and not manager.fake:
+            from shuttlesense.stream.watch_parallel import (
+                ParallelWatchPerception,
+                parallel_watch_enabled,
+            )
+
+            setting = (manager.state.jobs.config.get("watch") or {}).get(
+                "frame_parallel_perception", False
+            )
+            if parallel_watch_enabled(setting, manager.state.jobs.device):
+                session.perception = ParallelWatchPerception(session.perception)
         # Video playback waits for each result, so it must not lower perception resolution
         # merely because a frame took longer than the camera-live latency budget.
         if playback == "complete":
@@ -135,6 +149,10 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 "job_id": entry.job_id,
                 "stages": session.perception.available,
                 "playback": playback,
+                "provider_diagnostics": getattr(
+                    getattr(session.perception, "perception", session.perception),
+                    "provider_diagnostics", None,
+                ),
             }
         )
         while True:
@@ -164,18 +182,26 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                     packet = HEADER.pack(skipped_index, skipped_index * 1000.0 / reader.fps)
                     await asyncio.to_thread(_skip_watch_frame, session, packet + encoded.tobytes())
                     next_index = skipped_index + 1
+            read_started = time.perf_counter()
             item = await asyncio.to_thread(next, frames, None)
+            read_ms = (time.perf_counter() - read_started) * 1000
             if item is None:
                 session.request.name = "Watch & Analyze"
                 break
             index, frame = item
             next_index = index + 1
+            encode_started = time.perf_counter()
             ok, jpeg = await asyncio.to_thread(cv2.imencode, ".jpg", frame)
+            encode_ms = (time.perf_counter() - encode_started) * 1000
             if not ok:
                 raise ValueError("could not encode video frame")
             data = jpeg.tobytes()
             packet = HEADER.pack(index, index * 1000.0 / reader.fps) + data
+            processing_start = time.perf_counter()
             events = await asyncio.to_thread(_frames, session, [(packet, time.monotonic())])
+            frame_processing_s = time.perf_counter() - processing_start
+            perception_s += frame_processing_s
+            processed += 1
             await ws.send_json(
                 {
                     "type": "video_frame",
@@ -186,6 +212,12 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                         else {}
                     ),
                     "events": events,
+                    "timing_ms": {"read": round(read_ms, 2), "jpeg": round(encode_ms, 2),
+                                  "processing": round(frame_processing_s * 1000, 2)},
+                    "provider_diagnostics": getattr(
+                        getattr(session.perception, "perception", session.perception),
+                        "provider_diagnostics", None,
+                    ),
                 }
             )
     except LiveBusy:
@@ -202,12 +234,26 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             frames.close()
         if entry is not None:
             try:
-                job = await asyncio.to_thread(manager.finish, entry)
+                log.info("Frame Watch: %d frames, %.2fs elapsed including setup and pauses, "
+                         "%.2fs frame processing", processed,
+                         time.perf_counter() - watch_started, perception_s)
+                job = await asyncio.to_thread(_finish_watch, manager, entry)
                 with contextlib.suppress(Exception):
                     await ws.send_json({"type": "saved", "job_id": job.id if job else None})
                     await ws.close()
             except Exception:
                 log.exception("saving watch session failed")
+
+
+def _finish_watch(manager, entry):
+    """Close concurrent workers and save in one thread, even if the socket is cancelled."""
+    try:
+        close = getattr(entry.session.perception, "close", None)
+        if close is not None:
+            close()
+    finally:
+        job = manager.finish(entry)
+    return job
 
 
 def _skip_watch_frame(session: LiveSession, packet: bytes) -> None:
@@ -391,6 +437,7 @@ class LiveManager:
             game_service=list(record.score.game_service) if record.score else [],
             court_corners_px=list(session.corners) if session.corners else None,
             overlays=list(OVERLAYS),
+            watch_focused_analysis=existing_job.watch_focused_analysis if existing_job else False,
         )  # fmt: skip
         job_dir = self.storage.job_dir(job_id)
         job_dir.mkdir(parents=True, exist_ok=True)

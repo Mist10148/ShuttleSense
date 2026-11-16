@@ -94,6 +94,13 @@ def enable_watch_player_continuity(perception: Perception) -> None:
         provider = watch.get("player_provider", "cuda")
         provider_factory = getattr(getattr(perception, "detect", None), "with_provider", None)
         split_detector = bool(watch.get("split_detector", False))
+        if provider == "cuda" and getattr(perception, "available", {}).get("pose"):
+            active = "cuda" if str(perception.device).startswith("cuda") else "cpu"
+            perception.provider_diagnostics = {
+                "requested": provider,
+                "models": {name: {"requested": active, "active": active}
+                           for name in ("detector", "pose")},
+            }
         if (provider != "cuda" or split_detector) and provider_factory is not None:
             perception.detect = provider_factory(provider, batch_size,
                                                 int(watch.get("pose_opt_batch", 4)),
@@ -114,6 +121,8 @@ def enable_watch_player_continuity(perception: Perception) -> None:
                 float(watch.get("candidate_margin_m", 2.0)),
                 watch.get("candidate_shadow_margin_m"),
                 bool(watch.get("candidate_shadow_footpoint", False)),
+                candidates_per_player=watch.get("candidates_per_player", 0),
+                refresh_frames=watch.get("candidate_refresh_frames", 5),
             )
             perception.watch_detect = (watch_factory(batch_size, perception.watch_candidates, True)
                                        if use_lookup else

@@ -8,6 +8,7 @@ touching the others.
 from __future__ import annotations
 
 import logging
+import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from shuttlesense.render import style
 from shuttlesense.schema import ClipRecord
 from shuttlesense.stage import StageContext
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 
 # Overlay names accepted by the API and CLI (docs/API.md).
 OVERLAYS: tuple[str, ...] = (
@@ -508,6 +509,8 @@ def render_video(
     state = RenderState(config=config, scale=style.scale_for(record.height))
     render_cfg = config.get("stages", {}).get("render", {})
     total = max(record.num_frames, 1)
+    started = time.perf_counter()
+    draw_s = write_s = 0.0
     with VideoWriter(
         out_path,
         fps=record.fps or 30.0,
@@ -516,9 +519,19 @@ def render_video(
         codec=render_cfg.get("codec", "libx264"),
     ) as writer:
         for i, img in frames:
-            writer.write(draw_frame(img, record, i, overlays, state))
+            step = time.perf_counter()
+            drawn = draw_frame(img, record, i, overlays, state)
+            draw_s += time.perf_counter() - step
+            step = time.perf_counter()
+            writer.write(drawn)
+            write_s += time.perf_counter() - step
             if i % 25 == 0:
                 progress(i / total)
+    elapsed = time.perf_counter() - started
+    log.info("Render: %d frames in %.2fs; overlays %.2fs, writer/pipe %.2fs, "
+             "other (frame read, setup, finalization) %.2fs; encoder=%s",
+             writer.frames, elapsed, draw_s, write_s, max(0.0, elapsed - draw_s - write_s),
+             writer.codec if writer.backend == "ffmpeg" else writer.backend)
     progress(1.0)
     return out_path
 

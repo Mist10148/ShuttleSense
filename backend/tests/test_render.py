@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from shuttlesense.render.writer import VideoWriter
+from shuttlesense.render.writer import VideoWriter, ffmpeg_command, find_ffmpeg, nvenc_available
 
 
 def _frames(n: int, size: tuple[int, int] = (64, 48)):
@@ -28,13 +27,25 @@ def _count(path: Path) -> int:
     return n
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+@pytest.mark.skipif(find_ffmpeg() is None, reason="ffmpeg not installed")
 def test_writer_produces_playable_mp4(tmp_path: Path) -> None:
     out = tmp_path / "out.mp4"
     with VideoWriter(out, fps=25, size=(64, 48)) as writer:
         assert writer.backend == "ffmpeg"
         for img in _frames(12):
             writer.write(img)
+    assert _count(out) == 12
+
+
+def test_nvenc_produces_playable_video_when_available(tmp_path: Path) -> None:
+    exe = find_ffmpeg()
+    if exe is None or not nvenc_available(exe, (320, 240)):
+        pytest.skip("NVENC is not available on this machine")
+    out = tmp_path / "nvenc.mp4"
+    with VideoWriter(out, fps=25, size=(320, 240), codec="h264_nvenc") as writer:
+        assert writer.codec == "h264_nvenc"
+        for frame in _frames(12, (320, 240)):
+            writer.write(frame)
     assert _count(out) == 12
 
 
@@ -45,6 +56,36 @@ def test_writer_opencv_fallback(tmp_path: Path) -> None:
         for img in _frames(8):
             writer.write(img)
     assert _count(out) == 8
+
+
+def test_nvenc_uses_its_own_quality_options(tmp_path: Path) -> None:
+    nvenc = ffmpeg_command(tmp_path / "out.mp4", fps=25, size=(64, 48), crf=23,
+                           codec="h264_nvenc", exe="ffmpeg")
+    cpu = ffmpeg_command(tmp_path / "out.mp4", fps=25, size=(64, 48), crf=23,
+                         codec="libx264", exe="ffmpeg")
+    assert "-cq" in nvenc and "-crf" not in nvenc
+    assert "-crf" in cpu and "-cq" not in cpu
+
+
+def test_unavailable_nvenc_selects_cpu_before_writing(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    from shuttlesense.render import writer as writer_module
+
+    commands = []
+    monkeypatch.setattr(writer_module.shutil, "which", lambda _: sys.executable)
+    monkeypatch.setattr(writer_module, "nvenc_available", lambda *_: False)
+
+    def command(*args, **kwargs):
+        commands.append(kwargs["codec"])
+        return [sys.executable, "-c", "import sys; sys.stdin.buffer.read(); sys.exit(1)"]
+
+    monkeypatch.setattr(writer_module, "ffmpeg_command", command)
+    with (pytest.raises(RuntimeError, match="ffmpeg failed"),
+          VideoWriter(tmp_path / "out.mp4", fps=25, size=(64, 48), codec="h264_nvenc")):
+        pass
+    assert commands == ["libx264"]
+    assert not (tmp_path / "out.mp4").exists()
 
 
 def test_writer_reports_ffmpeg_error_instead_of_broken_pipe(

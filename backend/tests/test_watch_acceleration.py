@@ -49,3 +49,12 @@ def test_initialization_failure_retains_original_session(monkeypatch):
     assert clone.det_model.session is body.det_model.session
     assert clone.pose_model.session is body.pose_model.session
     assert all(x["active"] == "cuda" for x in info["models"].values())
+
+
+def test_cpu_fallback_is_not_reported_as_cuda():
+    body = SimpleNamespace(det_model=SimpleNamespace(session=Session()),
+                           pose_model=SimpleNamespace(session=Session()))
+    _, info = watch_acceleration.make_watch_body(body, "pose", 8, "cpu")
+    assert info["models"]["detector"]["active"] == "cpu"
+    assert info["models"]["pose"]["active"] == "cpu"
+    assert "fallback_reason" in info["models"]["pose"]

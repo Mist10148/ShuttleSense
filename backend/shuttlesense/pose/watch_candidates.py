@@ -16,12 +16,17 @@ class WatchCandidates:
     """
 
     def __init__(self, tracker, homography, frame_size, mode="shadow", margin_m=2.0,
-                 proposal_margin=None, proposal_footpoint=False, footpoint=False):
+                 proposal_margin=None, proposal_footpoint=False, footpoint=False,
+                 candidates_per_player=0, refresh_frames=5):
         self.tracker, self.homography, self.frame_size = tracker, homography, frame_size
         self.mode, self.margin = mode, margin_m
         self.footpoint = footpoint
+        self.candidates_per_player = max(0, int(candidates_per_player))
+        self.refresh_frames = max(1, int(refresh_frames))
+        self._selection_count = 0
         self.stats = {"frames": 0, "people": 0, "eligible": 0, "excluded": 0,
-                      "tracked_excluded": 0, "detection_s": 0.0, "pose_s": 0.0,
+                      "tracked_excluded": 0, "detection_s": 0.0, "selection_s": 0.0,
+                      "pose_s": 0.0,
                       "fallback": False}
         self.excluded_players = []
         self.proposal = (WatchCandidates(
@@ -31,12 +36,70 @@ class WatchCandidates:
         self.proposal_keep = []
         self.proposal_stats = {"frames": 0, "additional_excluded": 0, "tracked_excluded": 0}
         self.proposal_players = []
+        self._geometry_key = None
+        self._geometry_polygon = None
+        self._geometry_valid = False
+
+    def _focus(self, boxes, keep, image_shape):
+        """Optional speed tradeoff: restrict pose candidates only while all tracks are stable."""
+        tracks = list(self.tracker.slots.values())
+        if (not tracks or any(not t.locked or t.bbox is None or t.missing for t in tracks)
+                or self._selection_count % self.refresh_frames == 0):
+            return keep
+        h, w = image_shape[:2]
+        sx, sy = self.frame_size[0] / w, self.frame_size[1] / h
+        indices = [i for i, enabled in enumerate(keep) if enabled]
+        if len(indices) <= self.candidates_per_player * len(tracks):
+            return keep
+        ranked = set()
+        for track in tracks:
+            x, y, bw, bh = track.bbox
+            tx, ty = (x + bw / 2) / sx, (y + bh / 2) / sy
+            valid = []
+            for i in indices:
+                box = boxes[i]
+                x0, y0, x1, y1 = map(float, box[:4])
+                if not np.isfinite([x0, y0, x1, y1]).all() or x1 <= x0 or y1 <= y0:
+                    return keep
+                distance = np.hypot((x0 + x1) / 2 - tx, (y0 + y1) / 2 - ty)
+                # A missing nearby detection disables the shortcut for the whole frame.
+                if distance <= max(bh / sy, 1):
+                    valid.append((distance, i))
+            if not valid:
+                return keep
+            ranked.update(i for _, i in sorted(valid)[:self.candidates_per_player])
+        return [enabled and i in ranked for i, enabled in enumerate(keep)]
+
+    def _court_polygon(self, width, height, sx, sy):
+        """Cache fixed court geometry while leaving player protection dynamic."""
+        key = (width, height, sx, sy, self.margin, self.tracker.court,
+               tuple(self.tracker.court_size), np.asarray(self.homography).tobytes())
+        if key == self._geometry_key:
+            return self._geometry_polygon
+        xmin, xmax, ymin, ymax = play_bounds(self.tracker.court, self.tracker.court_size)
+        p = court_to_image(self.homography, np.array([
+            [xmin-self.margin, ymin-self.margin], [xmax+self.margin, ymin-self.margin],
+            [xmax+self.margin, ymax+self.margin], [xmin-self.margin, ymax+self.margin],
+        ])) / [sx, sy]
+        polygon = np.asarray(p, dtype=np.float32)
+        court = court_to_image(self.homography, np.array([
+            [xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax],
+        ])) / [sx, sy]
+        valid = (np.isfinite(p).all() and np.abs(p).max() <= max(width, height) * 20
+                 and cv2.isContourConvex(polygon) and np.isfinite(court).all()
+                 and all(0 <= x < width and 0 <= y < height for x, y in court))
+        self._geometry_key = key
+        self._geometry_polygon = polygon if valid else None
+        return self._geometry_polygon
 
     def select(self, boxes, image_shape):
         self.proposal_players = []
         if self.proposal is not None:
             self.proposal_keep = self.proposal.select(boxes, image_shape)
         keep = self._select(boxes, image_shape)
+        self._selection_count += 1
+        if self.mode == "filter" and self.candidates_per_player and self._geometry_valid:
+            keep = self._focus(boxes, keep, image_shape)
         if self.proposal is not None:
             self.proposal_stats["frames"] += 1
             self.proposal_stats["additional_excluded"] += sum(
@@ -46,30 +109,18 @@ class WatchCandidates:
 
     def _select(self, boxes, image_shape):
         self.excluded_players = []
+        self._geometry_valid = False
         keep = [True] * len(boxes)
         if self.homography is None or not len(boxes):
             return keep
         h, w = image_shape[:2]
         sx, sy = self.frame_size[0] / w, self.frame_size[1] / h
-        xmin, xmax, ymin, ymax = play_bounds(self.tracker.court, self.tracker.court_size)
         try:
-            p = court_to_image(self.homography, np.array([
-                [xmin-self.margin, ymin-self.margin], [xmax+self.margin, ymin-self.margin],
-                [xmax+self.margin, ymax+self.margin], [xmin-self.margin, ymax+self.margin],
-            ])) / [sx, sy]
-            if not np.isfinite(p).all() or np.abs(p).max() > max(w, h) * 20:
-                return keep
-            polygon = np.asarray(p, dtype=np.float32)
-            if not cv2.isContourConvex(polygon):
-                return keep
+            polygon = self._court_polygon(w, h, sx, sy)
             # If the playable court extends offscreen we cannot safely identify spectators.
-            court = court_to_image(self.homography, np.array([
-                [xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax],
-            ])) / [sx, sy]
-            if not np.isfinite(court).all() or any(
-                x < 0 or x >= w or y < 0 or y >= h for x, y in court
-            ):
+            if polygon is None:
                 return keep
+            self._geometry_valid = True
             protected = []
             for track in self.tracker.slots.values():
                 if not track.locked or track.bbox is None:
@@ -94,12 +145,13 @@ class WatchCandidates:
             return [True] * len(boxes)
         return keep
 
-    def record(self, total, keep, detection_s, pose_s):
+    def record(self, total, keep, detection_s, pose_s, selection_s=0.0):
         self.stats["frames"] += 1
         self.stats["people"] += total
         self.stats["eligible"] += sum(keep)
         self.stats["excluded"] += total - sum(keep)
         self.stats["detection_s"] += detection_s
+        self.stats["selection_s"] += selection_s
         self.stats["pose_s"] += pose_s
 
     def audit(self, players):

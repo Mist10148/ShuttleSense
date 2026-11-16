@@ -3,6 +3,11 @@
 from concurrent.futures import ThreadPoolExecutor
 
 
+def parallel_watch_enabled(setting, device: str) -> bool:
+    """Auto mode uses concurrent models only for CUDA; booleans remain overrides."""
+    return setting is True or (setting == "auto" and str(device).startswith("cuda"))
+
+
 class ParallelWatchPerception:
     def __init__(self, perception):
         self.perception = perception

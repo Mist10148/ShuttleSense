@@ -1,5 +1,7 @@
 from threading import Barrier
 
+import pytest
+
 from shuttlesense.stream.watch_parallel import ParallelWatchPerception
 
 
@@ -31,3 +33,27 @@ def test_parallel_watch_auto_uses_cuda_and_respects_explicit_override():
     assert not _parallel_watch_enabled("auto", "cpu")
     assert not _parallel_watch_enabled(False, "cuda")
     assert _parallel_watch_enabled(True, "cpu")
+
+
+def test_parallel_cleanup_waits_for_other_model_after_failure():
+    from threading import Event
+
+    class Models:
+        available = {"tracking": True, "pose": True}
+        finished = Event()
+
+        def _shuttle(self, _frame):
+            raise RuntimeError("tracking failed")
+
+        def _players(self, _frame):
+            self.finished.set()
+            return None
+
+    models = Models()
+    parallel = ParallelWatchPerception(models)
+    try:
+        with pytest.raises(RuntimeError, match="tracking failed"):
+            parallel(None, 0)
+    finally:
+        parallel.close()
+    assert models.finished.is_set()

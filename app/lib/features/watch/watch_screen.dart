@@ -29,6 +29,24 @@ String formatWatchElapsed(Duration elapsed) {
   return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remaining.toString().padLeft(2, '0')}';
 }
 
+String? formatWatchAcceleration(Object? value) {
+  if (value is! Map || value['models'] is! Map) return null;
+  final models = value['models'] as Map;
+  String describe(String name) {
+    final info = models[name];
+    if (info is! Map) return 'unavailable';
+    final active = switch (info['active']) {
+      'tensorrt_rtx' => 'TensorRT RTX',
+      'cuda' => 'CUDA',
+      'cpu' => 'CPU',
+      _ => 'unknown',
+    };
+    return info['fallback_reason'] != null ? '$active (fallback)' : active;
+  }
+
+  return 'Detector: ${describe('detector')} · Pose: ${describe('pose')}';
+}
+
 class WatchScreen extends ConsumerStatefulWidget {
   const WatchScreen({super.key});
   @override
@@ -51,6 +69,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   ApiClient? backgroundApi;
   double analysisSeconds = 0;
   String? candidateDiagnostics;
+  String? accelerationDiagnostics;
   Player? player;
   VideoController? videoController;
   StreamSubscription<Duration>? videoPositionSubscription;
@@ -60,6 +79,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   int lastRequestedIndex = -1;
   int lastAnalyzedIndex = -1;
   bool realTime = true;
+  bool focusedAnalysis = false;
+  bool focusedAnalysisActive = false;
   final Stopwatch frameClock = Stopwatch();
   Uint8List? image;
   bool uploading = false, playing = false, waiting = false, stopping = false, started = false;
@@ -287,6 +308,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         videoId: info.id,
         court: matchType!,
         corners: fullToSingles(corners) ?? [],
+        focusedAnalysis: focusedAnalysis,
       );
       if (!mounted) return;
       setState(() {
@@ -296,6 +318,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         frameWidth = result['width'] as int;
         frameHeight = result['height'] as int;
         final stages = result['stages'] as Map?;
+        focusedAnalysisActive = result['focused_analysis'] == true;
         synthetic = stages?['synthetic'] == true;
         modelsMissing = stages?['tracking'] == false || stages?['pose'] == false;
         started = true;
@@ -326,6 +349,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       if (!mounted) return;
       setState(() {
         analysisSeconds = (data['analyzed_s'] as num?)?.toDouble() ?? 0;
+        accelerationDiagnostics = formatWatchAcceleration(data['provider_diagnostics']);
         final diagnostics = data['candidate_diagnostics'];
         if (diagnostics is Map) {
           final people = (diagnostics['people'] as num?)?.toInt() ?? 0;
@@ -497,6 +521,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           frameHeight = msg['height'] as int;
           synthetic = (msg['stages'] as Map?)?['synthetic'] == true;
           final stages = msg['stages'] as Map?;
+          accelerationDiagnostics = formatWatchAcceleration(msg['provider_diagnostics']);
           modelsMissing = stages?['tracking'] == false || stages?['pose'] == false;
           started = true;
           playing = !realTime;
@@ -515,6 +540,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         }
         setState(() {
           if (!realTime) image = base64Decode(msg['jpeg'] as String);
+          accelerationDiagnostics = formatWatchAcceleration(msg['provider_diagnostics']);
           index = (msg['index'] as int) + 1;
           lastAnalyzedIndex = msg['index'] as int;
           waiting = false;
@@ -684,8 +710,21 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           Text(
             realTime
                 ? 'Video plays at normal speed while normalized frames are analyzed in the background.'
-                : 'Playback waits for analysis of every sampled frame and may run slower.',
+                : 'Playback waits for every normalized frame. High-frame-rate videos may '
+                      'be sampled to a lower frame rate.',
           ),
+          if (realTime && health?.watchBackground == true)
+            SwitchListTile(
+              title: const Text('Faster player analysis (experimental)'),
+              subtitle: const Text(
+                'May miss players or change hits and results; not always faster. '
+                'Requires calibrated court corners.',
+              ),
+              value: focusedAnalysis,
+              onChanged: scanning || detectingCourt
+                  ? null
+                  : (value) => setState(() => focusedAnalysis = value),
+            ),
           if (realTime && health?.watchBackground != true)
             const Text(
               'Update the backend to use background analysis, or choose Analyze every frame.',
@@ -880,6 +919,15 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               'Overlays are hidden when analysis is behind.',
             ),
           if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
+          if (backgroundStarted && focusedAnalysisActive)
+            const Text('Experimental faster player analysis is active.'),
+          if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
+            const Text('Faster analysis is unavailable; normal analysis is being used.'),
+          if (started && accelerationDiagnostics != null)
+            ExpansionTile(
+              title: const Text('Configured analysis providers'),
+              children: [Text(accelerationDiagnostics!)],
+            ),
           if (!stopping && started && error == null)
             Wrap(
               spacing: 8,
@@ -933,6 +981,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                   videoController = null;
                   videoPosition = Duration.zero;
                   candidateDiagnostics = null;
+                  accelerationDiagnostics = null;
                   lastRequestedIndex = -1;
                   lastAnalyzedIndex = -1;
                   started = false;

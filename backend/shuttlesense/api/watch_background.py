@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
@@ -18,16 +19,19 @@ from shuttlesense.api.routes import get_storage, require_token
 from shuttlesense.api.storage import Storage
 from shuttlesense.io import FrameReader
 from shuttlesense.stage import StageSkipped
+from shuttlesense.stream.watch_parallel import parallel_watch_enabled as _parallel_watch_enabled
 from shuttlesense.strokes import registry
 from shuttlesense.strokes.classify import load_classifier
 
 router = APIRouter(dependencies=[Depends(require_token)])
+log = logging.getLogger("uvicorn.error")
 
 
 class BackgroundStart(BaseModel):
     video_id: str
     court: str = "singles"
     corners: list[tuple[float, float]] | None = None
+    focused_analysis: bool = False
 
 
 class Position(BaseModel):
@@ -81,8 +85,10 @@ class BackgroundWatch:
                 "candidate_diagnostics": diagnostics,
                 "provider_diagnostics": getattr(perception, "provider_diagnostics", None)
                 or self.provider_diagnostics,
-                "track_provider_diagnostics": getattr(perception, "track_provider_diagnostics", None)
-                or self.track_provider_diagnostics,
+                "track_provider_diagnostics": (
+                    getattr(perception, "track_provider_diagnostics", None)
+                    or self.track_provider_diagnostics
+                ),
                 "watched_s": self.watched,
                 "analyzed_s": self.analyzed / self.reader.fps,
                 "target_s": self.target,
@@ -97,6 +103,8 @@ class BackgroundWatch:
         session = self.entry.session
         frames = iter(self.reader)
         last_update = 0.0
+        started = time.perf_counter()
+        processing_s = 0.0
         try:
             while True:
                 self.state.jobs.check_cancelled(self.entry.job_id)
@@ -123,6 +131,7 @@ class BackgroundWatch:
                     done = self.target is not None and self.analyzed >= target_count
                 if done:
                     break
+                step = time.perf_counter()
                 item = next(frames, None)
                 if item is None:
                     break
@@ -141,6 +150,7 @@ class BackgroundWatch:
                         raise ValueError("Could not encode video frame")
                     packet = HEADER.pack(index, index * 1000.0 / self.reader.fps) + jpeg.tobytes()
                     events = _frames(session, [(packet, time.monotonic())])
+                processing_s += time.perf_counter() - step
                 with self.condition:
                     self.analyzed = index + 1
                     for event in events:
@@ -193,11 +203,17 @@ class BackgroundWatch:
                 self.state.live.storage.delete_video(self.entry.video_id)
                 self.state.live.state.jobs.gpu.release()
         finally:
+            elapsed = time.perf_counter() - started
+            log.info("Watch analysis: %d frames (%.2fs video), elapsed %.2fs, "
+                     "frame processing %.2fs; elapsed includes waiting for playback and saving",
+                     self.analyzed, self.analyzed / self.reader.fps, elapsed, processing_s)
             frames.close()
             perception = getattr(session.perception, "perception", session.perception)
             candidates = getattr(perception, "watch_candidates", None)
             self.provider_diagnostics = getattr(perception, "provider_diagnostics", None)
-            self.track_provider_diagnostics = getattr(perception, "track_provider_diagnostics", None)
+            self.track_provider_diagnostics = getattr(
+                perception, "track_provider_diagnostics", None
+            )
             if candidates is not None:
                 with self.condition:
                     self.candidate_diagnostics = {
@@ -222,11 +238,6 @@ def start_background(
 ):
     with request.app.state.watch_background_lock:
         return _start_background(body, request, storage)
-
-
-def _parallel_watch_enabled(setting, device: str) -> bool:
-    """Auto mode uses concurrent models only for CUDA; booleans remain overrides."""
-    return setting is True or (setting == "auto" and str(device).startswith("cuda"))
 
 
 def _start_background(body: BackgroundStart, request: Request, storage: Storage):
@@ -271,6 +282,14 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
     session = entry.session
     from shuttlesense.stream.perception import enable_watch_player_continuity
 
+    # The speed option belongs to this session, not the shared server configuration.
+    if body.focused_analysis and not state.live.fake:
+        config = session.perception.config
+        session.perception.config = {
+            **config,
+            "watch": {**(config.get("watch") or {}), "candidate_filter": "filter",
+                      "candidates_per_player": 2, "candidate_refresh_frames": 5},
+        }
     enable_watch_player_continuity(session.perception)
     try:
         parallel = (state.jobs.config.get("watch") or {}).get("parallel_perception", False)
@@ -305,6 +324,11 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
             started_at=utcnow(),
             watch_position_s=0.0,
             watch_analysis_s=0.0,
+            watch_focused_analysis=bool(
+                corners
+                and getattr(getattr(getattr(session.perception, "perception", session.perception),
+                                    "watch_candidates", None), "candidates_per_player", 0)
+            ),
         )
         state.jobs.add(job)
         worker = BackgroundWatch(state, body.video_id, reader, entry)
@@ -318,6 +342,8 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
             session.perception.close()
         state.jobs.gpu.release()
         raise
+    perception = getattr(session.perception, "perception", session.perception)
+    selector = getattr(perception, "watch_candidates", None)
     return {
         "job_id": entry.job_id,
         "fps": reader.fps,
@@ -325,6 +351,8 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
         "width": reader.width,
         "height": reader.height,
         "stages": session.perception.available,
+        "focused_analysis": bool(corners and selector is not None
+                                 and selector.candidates_per_player > 0),
     }
 
 

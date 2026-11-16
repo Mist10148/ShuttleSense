@@ -26,6 +26,30 @@ def test_confirmed_track_keeps_nearby_outside_candidate():
     assert selector.select([[0, 0, 100, 100]], (720, 1280, 3)) == [True]
 
 
+def test_court_geometry_cache_keeps_tracking_dynamic_and_rechecks_calibration(monkeypatch):
+    from shuttlesense.pose import watch_candidates
+
+    selector = _selector()
+    original = watch_candidates.court_to_image
+    calls = []
+
+    def project(*args):
+        calls.append(1)
+        return original(*args)
+
+    monkeypatch.setattr(watch_candidates, "court_to_image", project)
+    boxes = [[0, 0, 100, 100]]
+    assert selector.select(boxes, (720, 1280, 3)) == [False]
+    assert len(calls) == 2
+    track = selector.tracker.slots["near"]
+    track.locked, track.bbox = True, (40, 50, 60, 150)
+    assert selector.select(boxes, (720, 1280, 3)) == [True]
+    assert len(calls) == 2
+    selector.homography = compute_homography([[-10, 650], [1068, 650], [880, 210], [400, 210]])
+    assert selector.select(boxes, (720, 1280, 3)) == [True]
+    assert len(calls) == 4
+
+
 def test_missing_calibration_and_offscreen_court_keep_everyone():
     selector = _selector()
     selector.homography = None
@@ -62,3 +86,19 @@ def test_footpoint_proposal_does_not_change_selected_boxes():
     boxes = [[x, 100, x + 80, 350] for x in range(0, 1200, 40)]
     assert proposed.select(boxes, (720, 1280, 3)) == base.select(boxes, (720, 1280, 3))
     assert proposed.proposal_stats["additional_excluded"] > 0
+
+
+def test_focused_candidates_refresh_and_fall_back_when_tracking_is_unstable():
+    base = _selector("filter")
+    focused = WatchCandidates(base.tracker, base.homography, (1280, 720), "filter",
+                              candidates_per_player=1, refresh_frames=2)
+    boxes = [[x, 350, x + 40, 500] for x in range(400, 900, 40)]
+    original = base.select(boxes, (720, 1280, 3))
+    assert focused.select(boxes, (720, 1280, 3)) == original  # unconfirmed
+    for i, track in enumerate(focused.tracker.slots.values()):
+        track.locked, track.bbox = True, (420 + i * 80, 350, 40, 150)
+    assert focused.select(boxes, (720, 1280, 3)) == original  # periodic refresh
+    selected = focused.select(boxes, (720, 1280, 3))
+    assert sum(selected) < sum(original)
+    next(iter(focused.tracker.slots.values())).missing = 1
+    assert focused.select(boxes, (720, 1280, 3)) == original

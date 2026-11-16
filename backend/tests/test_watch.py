@@ -39,11 +39,13 @@ def test_watch_pulls_frames_and_saves_partial(
             ws.send_json({"type": "start", "video_id": video["id"], "court": "doubles"})
             started = ws.receive_json()
             assert started["type"] == "started"
+            assert "provider_diagnostics" in started
             assert trackers[0].watch_outside_tracking is True
             for index in range(3):
                 ws.send_json({"type": "next"})
                 frame = ws.receive_json()
                 assert frame["index"] == index
+                assert set(frame["timing_ms"]) == {"read", "jpeg", "processing"}
                 assert frame["jpeg"]
                 assert any(e["type"] == "frame" and e["frame"] == index for e in frame["events"])
                 assert next(e for e in frame["events"] if e["type"] == "stats")["level"] == 0
@@ -58,6 +60,82 @@ def test_watch_pulls_frames_and_saves_partial(
         assert "partial" in client.get("/videos/" + job["video_id"]).json()["filename"]
         record = client.get("/jobs/" + saved["job_id"] + "/record").json()
         assert record["num_frames"] == 3
+
+
+@pytest.mark.parametrize("finish", ["stop", "disconnect", "failure"])
+def test_complete_watch_parallelizes_and_cleans_up(tmp_path, tiny_video, monkeypatch, finish):
+    import time
+    from threading import Barrier
+
+    from shuttlesense.schema import Players, Shuttle
+    from shuttlesense.stream import perception as perception_module
+    from shuttlesense.stream.watch_parallel import ParallelWatchPerception
+
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
+    closed = []
+    original_close = ParallelWatchPerception.close
+
+    def close(self):
+        closed.append(True)
+        original_close(self)
+
+    class Models:
+        available = {"tracking": True, "pose": True}
+        barrier = Barrier(2, timeout=3)
+        calls = 0
+
+        def _shuttle(self, _frame):
+            self.barrier.wait()
+            return Shuttle()
+
+        def _players(self, _frame):
+            self.barrier.wait()
+            self.calls += 1
+            if finish == "failure" and self.calls == 4:
+                raise RuntimeError("pose failed")
+            return Players()
+
+    with TestClient(app) as client:
+        manager = app.state.live
+        create_session = manager._session
+
+        def session(*args, **kwargs):
+            manager.fake = True
+            try:
+                result = create_session(*args, **kwargs)
+            finally:
+                manager.fake = False
+            result.perception = Models()
+            return result
+
+        monkeypatch.setattr(manager, "_session", session)
+        monkeypatch.setattr(perception_module, "enable_watch_player_continuity", lambda _: None)
+        monkeypatch.setattr(ParallelWatchPerception, "close", close)
+        manager.fake = False
+        app.state.jobs.config.setdefault("watch", {})["frame_parallel_perception"] = True
+        with tiny_video.open("rb") as source:
+            video = client.post("/videos", files={"file": ("tiny.mp4", source)}).json()
+        with client.websocket_connect("/watch") as ws:
+            ws.send_json({"type": "start", "video_id": video["id"]})
+            started = ws.receive_json()
+            assert started["type"] == "started"
+            for index in range(3):
+                ws.send_json({"type": "next"})
+                assert ws.receive_json()["index"] == index
+            if finish == "stop":
+                ws.send_json({"type": "stop"})
+                assert ws.receive_json()["type"] == "saved"
+            elif finish == "failure":
+                ws.send_json({"type": "next"})
+                assert ws.receive_json()["type"] == "error"
+        for _ in range(100):
+            response = client.get(f"/jobs/{started['job_id']}/record")
+            if response.status_code == 200:
+                break
+            time.sleep(.01)
+        assert closed == [True]
+        record = response.json()
+        assert [frame["frame"] for frame in record["frames"]] == [0, 1, 2]
 
 
 def test_watch_finishes_in_order_and_requires_token(tmp_path: Path, tiny_video: Path) -> None:

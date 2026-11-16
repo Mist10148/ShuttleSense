@@ -15,24 +15,61 @@ from types import TracebackType
 import numpy as np
 
 from shuttlesense.atomic import partial_path, replace
+from shuttlesense.config import BACKEND_DIR
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 
 # Windows cannot replace the old video while a player has it open: wait for the player to
 # let go rather than lose the render.
 REPLACE_TIMEOUT_S = 15.0
 
 
+def find_ffmpeg() -> str | None:
+    """Use system FFmpeg, the optional local build, or imageio-ffmpeg's binary."""
+    system = shutil.which("ffmpeg")
+    if system:
+        return system
+    local = BACKEND_DIR / ".bin" / "ffmpeg.exe"
+    if local.is_file():
+        return str(local)
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, OSError, RuntimeError):
+        return None
+
+
 def ffmpeg_command(
     out_path: Path, *, fps: float, size: tuple[int, int], crf: int, codec: str, exe: str
 ) -> list[str]:
     w, h = size
+    quality = (["-preset", "p4", "-rc", "vbr", "-cq", str(crf), "-b:v", "0"]
+               if codec == "h264_nvenc" else ["-crf", str(crf)])
     return [
         exe, "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", f"{fps:.6g}", "-i", "-",
-        "-an", "-c:v", codec, "-pix_fmt", "yuv420p", "-crf", str(crf),
+        "-an", "-c:v", codec, "-pix_fmt", "yuv420p", *quality,
         "-movflags", "+faststart", str(out_path),
     ]  # fmt: skip
+
+
+def nvenc_available(exe: str, size: tuple[int, int] = (256, 256)) -> bool:
+    """Check the actual encoder and driver, not just FFmpeg's compiled encoder list."""
+    try:
+        result = subprocess.run(
+            [exe, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+             f"color=size={size[0]}x{size[1]}:rate=1", "-frames:v", "1", "-c:v", "h264_nvenc",
+             "-f", "null", "-"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=15, check=False,
+        )
+        if result.returncode:
+            log.warning("NVENC unavailable; using libx264: %s",
+                        result.stderr.decode(errors="replace").strip()[:500])
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("NVENC probe failed; using libx264: %s", exc)
+        return False
 
 
 class VideoWriter:
@@ -59,7 +96,7 @@ class VideoWriter:
         self.size = (int(size[0]), int(size[1]))
         self.crf = crf
         self.codec = codec
-        self.exe = shutil.which("ffmpeg") if use_ffmpeg else None
+        self.exe = find_ffmpeg() if use_ffmpeg else None
         self.backend = "ffmpeg" if self.exe else "opencv"
         self.frames = 0
         self._proc: subprocess.Popen | None = None
@@ -69,11 +106,14 @@ class VideoWriter:
     def __enter__(self) -> VideoWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.exe:
+            if self.codec == "h264_nvenc" and not nvenc_available(self.exe, self.size):
+                self.codec = "libx264"
             cmd = ffmpeg_command(
                 self._tmp, fps=self.fps, size=self.size, crf=self.crf, codec=self.codec,
                 exe=self.exe,
             )  # fmt: skip
             self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            log.info("Video encoder: ffmpeg %s", self.codec)
         else:
             import cv2
 

@@ -239,6 +239,61 @@ to `false` to use sequential inference, or `true` to opt in on another device. C
 require a backend restart. `backend/scripts/bench_watch_parallel.py` compares the modes
 on a video; provide calibrated `--corners` to compare player tracking too.
 
+Frame-by-frame Watch uses the separate `watch.frame_parallel_perception` setting:
+`false` selects sequential inference, `auto` selects parallel inference on CUDA, and
+`true` forces it. Restart the backend after changing the setting. The client displays
+configured detector and pose providers when the server supplies the diagnostics.
+To measure the real frame-by-frame WebSocket without opening Flutter, use
+`python scripts/bench_watch_complete.py --video PATH --court doubles --corners X1 Y1 X2 Y2 X3 Y3 X4 Y4 --seconds 45 --parallel false`
+and repeat with `--parallel true`. It uses temporary storage, real models, and one
+request per frame; the in-process client excludes network latency and Flutter display,
+so also repeat the 45-second checkpoint in the app. Frames are normalized as in Watch.
+
+The optional **Faster player analysis (experimental)** switch limits pose candidates near
+confirmed players between periodic full-candidate refreshes. It uses normal selection if
+the court is uncalibrated, a player is unconfirmed or missing, or a nearby detection is not
+available. It can still miss players, change hits and other results, or run slower. It is
+off by default and requires labelled-footage validation. The saved job records whether it
+was selected and available in `watch_focused_analysis`. A status message confirms when it
+is enabled; this is not proof that the shortcut was used on every frame. The server-wide
+`watch.candidates_per_player` setting also enables this experimental behavior when greater
+than zero; use zero to disable it. Restart the backend after changing configuration.
+
+### Measuring analysis and export performance
+
+For a meaningful comparison, use the same clip, court calibration, playback mode and
+hardware. Note cold-start and warm-start runs separately. The backend terminal logs
+`Watch analysis` after a background session completes: elapsed time includes time waiting
+for playback and saving, while frame processing covers frame reading and processing.
+The `Render` log breaks export wall time into overlay drawing, writes to the encoder pipe,
+and other work such as frame reading and encoder finalization. Pipe time can include
+waiting for encoding; it is not a standalone encoder benchmark. These are wall-clock
+measurements, not CPU/GPU utilization, and do not include the full client experience.
+
+The standard upload pipeline writes `timings.json` in its job folder; cached stages can
+show zero time. Use fresh jobs when comparing full analyses. For Watch profiling and
+accuracy comparisons, use the commands below and check real outputs on representative
+footage. Monitor GPU compute, video encoding and memory separately in Windows Task Manager
+or NVIDIA tools. Compare total time and quality as well as utilization.
+
+### Optional NVIDIA video encoding
+
+The default remains `libx264`. To install the optional portable FFmpeg in the backend
+environment, run `python -m pip install -r requirements/ffmpeg.txt` from `backend/`.
+The writer prefers FFmpeg on PATH, then `backend/.bin/ffmpeg.exe`, then the portable
+`imageio-ffmpeg` binary. To try GPU video encoding, use a build with `h264_nvenc` support. Set
+`stages.render.codec` to `h264_nvenc` in `backend/configs/pipeline.yaml` and restart the
+backend. Before each export, ShuttleSense probes whether FFmpeg can actually initialize
+NVENC; if that probe fails it uses `libx264`. If FFmpeg is absent, it uses the existing
+OpenCV `mp4v` fallback, which may not play in browsers. An error after encoding starts is
+reported rather than silently replacing a partially written video. The `crf` setting maps
+to NVENC's constant-quality target for that encoder; equal values do not guarantee equal
+quality or size across encoders. Compare playback, seeking, file size and visual quality
+before choosing a setting. Hardware encoding affects export, not model analysis. A short
+265-frame saved-session comparison on the RTX 5070 Ti measured roughly 1.6 seconds for
+libx264 and 1.7–1.8 seconds for NVENC, so this does not establish a speedup for NVENC;
+longer clips, quality, and file size should be compared before changing the default.
+
 Watch can optionally batch per-frame RTMPose detections by setting
 `watch.pose_batch_size` (up to 16). It is currently set to 8; set it to 1 for the original sequential path.
 Batching is experimental: GPU numerical differences can move keypoints or change
