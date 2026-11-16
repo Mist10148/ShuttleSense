@@ -89,7 +89,10 @@ stages:
 
   hits:
     enabled: true
+    # Frame counts here and under referee are for 30 fps; other rates are converted
+    # (shuttlesense/timing.py). Pixel distances are for 720p.
     min_angle_deg: 60           # direction change threshold
+    min_flip_px: 2.0            # a down-to-up turn smaller than this per frame is jitter
     max_wrist_distance_px: 120  # at 720p
     min_frames_between_hits: 8
     rally_break_frames: 30      # shuttle unseen this long = new rally, same hitter allowed

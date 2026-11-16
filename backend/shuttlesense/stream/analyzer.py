@@ -45,6 +45,7 @@ from shuttlesense.schema import (
     Shuttle,
 )
 from shuttlesense.stage import StageContext, StageSkipped
+from shuttlesense.timing import frames_at
 
 log = logging.getLogger(__name__)
 
@@ -107,13 +108,15 @@ class StreamAnalyzer:
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})
-        self.min_gap = int(hits_cfg.get("min_frames_between_hits", 8))
+        # The stages convert their 30 fps frame counts to the session's rate (timing.py);
+        # the lags below must wait for the same number of frames.
+        self.min_gap = frames_at(hits_cfg.get("min_frames_between_hits", 8), fps)
         ahead = int(stages.get("strokes", {}).get("window_frames", 32)) // 2
         self.hit_lag = max(self.min_gap, ahead, 6, int(analytics_cfg.get("hit_speed_frames", 5)))
         self.hit_lag += 1
         # Offline ignores a rest followed by a hit within lost_frames_end (detector noise), so
         # a rally is final only once that long has passed and any such hit would be detected.
-        lost = int(stages.get("referee", {}).get("lost_frames_end", 30))
+        lost = frames_at(stages.get("referee", {}).get("lost_frames_end", 30), fps)
         self.rally_settle = lost + self.hit_lag
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
         self.min_keypoint_score = float(stages.get("pose", {}).get("min_keypoint_score", 0.3))
