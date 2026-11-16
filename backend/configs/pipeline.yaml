@@ -86,6 +86,9 @@ stages:
   court:
     enabled: true
     court_size_m: [5.18, 13.40]  # singles: width x length
+    refine: true                 # nudge the tapped corners onto the painted lines (court/refine.py)
+    refine_max_shift_px: 12      # at 720p; a corner is never moved further than this
+    refine_min_support: 0.6      # share of the projected lines that must lie on markings
 
   hits:
     enabled: true
