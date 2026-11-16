@@ -182,6 +182,67 @@ def test_a_change_of_ends_by_hand_is_a_decision_that_undo_takes_back() -> None:
     assert not any(r.ends_swapped for r in record.rallies)
 
 
+def _decision(kind: str, frame: int, winner: str | None = None, rally: int = 0):
+    from datetime import UTC, datetime
+
+    from shuttlesense.schema import ScoreCorrection
+
+    return ScoreCorrection(rally_index=rally, winner_before=None, winner_after=winner,
+                           at=datetime.now(UTC), kind=kind, frame=frame)  # fmt: skip
+
+
+def test_the_overlay_score_starts_from_the_session_start() -> None:
+    """Decisions given before the first rally ends: the score shown follows them from their
+    frames on, starting with the ends not changed (the app's scoreAt does the same)."""
+    from shuttlesense.fake import load_golden
+    from shuttlesense.referee.scoring import apply_corrections
+    from shuttlesense.render.overlays import score_at
+    from shuttlesense.schema import Score
+
+    start = ScorePair(near=5, far=3)
+    record = load_golden()
+    record.line_calls = []
+    # 5-3, the players cross at frame 10, then the near end wins rally 0: 4-5.
+    record.rallies = [Rally(index=0, start_frame=30, end_frame=40, winner="near")]
+    record.score = Score()
+    apply_corrections(record, [_decision("ends", 10)], start)
+    assert (record.score.near, record.score.far) == (4, 5) and record.score.ends_swapped
+    assert score_at(record, 5) == (5, 3)
+    assert score_at(record, 20) == (3, 5)
+    assert score_at(record, 45) == (4, 5)
+    # No rally at all: the final score is the start score as it stands after the change.
+    record.rallies = []
+    record.score = Score()
+    apply_corrections(record, [_decision("ends", 10)], start)
+    assert (record.score.near, record.score.far) == (3, 5)
+    assert score_at(record, 5) == (5, 3) and score_at(record, 20) == (3, 5)
+    # A point, a change of ends, a point, all before the first rally: each by the ends then.
+    record.rallies = [Rally(index=0, start_frame=50, end_frame=55, winner="far")]
+    record.score = Score()
+    decisions = [
+        _decision("award", 10, "near"),
+        _decision("ends", 20),
+        _decision("award", 30, "near"),
+    ]
+    apply_corrections(record, decisions, start)
+    assert [score_at(record, f) for f in (5, 15, 25, 35, 56)] == [
+        (5, 3), (6, 3), (3, 6), (4, 6), (4, 7),
+    ]  # fmt: skip
+
+
+def test_the_overlay_score_restarts_when_awards_alone_cross_a_game() -> None:
+    from shuttlesense.fake import load_golden
+    from shuttlesense.render.overlays import score_at
+
+    record = load_golden()
+    record.line_calls, record.rallies = [], []
+    awards = [_decision("award", 10 * (k + 1), "near") for k in range(3)]
+    record.score = apply_rallies([], ScorePair(near=19, far=4), best_of=3, awards=awards)
+    record.score.corrections = awards  # as apply_corrections keeps them
+    assert record.score.game == 2 and (record.score.near, record.score.far) == (1, 0)
+    assert [score_at(record, f) for f in (5, 15, 25, 35)] == [(19, 4), (20, 4), (21, 4), (1, 0)]
+
+
 def test_the_overlay_score_turns_after_a_change_by_rule() -> None:
     from shuttlesense.fake import load_golden
     from shuttlesense.render.overlays import score_at
