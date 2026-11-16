@@ -25,6 +25,7 @@ import 'widgets/status_strip.dart';
 import 'widgets/stroke_timeline.dart';
 import 'widgets/summary_chart.dart';
 import 'widgets/video_panel.dart';
+import '../../core/theme/tokens.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -149,13 +150,13 @@ class _OverlaySheetState extends State<_OverlaySheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        padding: const EdgeInsets.fromLTRB(Spacing.xl, 0, Spacing.xl, Spacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Overlays', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.sm),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -175,7 +176,7 @@ class _OverlaySheetState extends State<_OverlaySheet> {
                     ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Spacing.lg),
             FilledButton(
               onPressed: () => Navigator.pop(
                 context,
@@ -452,7 +453,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   record: record,
                   onSeek: widget.videoAvailable == true ? _seekMoment : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: Spacing.lg),
                 chart,
               ],
             ),

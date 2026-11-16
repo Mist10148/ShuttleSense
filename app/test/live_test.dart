@@ -296,7 +296,10 @@ void main() {
       ...frameEvent(0),
       'players': <String, dynamic>{},
       'display_players': {
-        'near': {'bbox': [10, 20, 30, 40], 'held': true},
+        'near': {
+          'bbox': [10, 20, 30, 40],
+          'held': true,
+        },
       },
     });
     await events(tester);

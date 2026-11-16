@@ -13,6 +13,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../core/theme/tokens.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -58,7 +59,7 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Appearance',
           child: SegmentedButton<ThemeMode>(
@@ -83,7 +84,7 @@ class SettingsScreen extends ConsumerWidget {
             onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Analysis mode',
           child: SegmentedButton<AppMode>(
@@ -113,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
             onSelectionChanged: (s) => ref.read(appModeProvider.notifier).set(s.first),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Notifications',
           child: SwitchListTile(
@@ -124,7 +125,7 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (on) => ref.read(notifyWhenDoneProvider.notifier).set(on),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Privacy',
           child: Text(
@@ -133,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
             '${health.valueOrNull?.chatAvailable == true ? 'on' : 'off'}.',
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         const SectionCard(
           title: 'About',
           child: Text(

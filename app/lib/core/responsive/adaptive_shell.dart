@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../shared/widgets/offline_banner.dart';
 import 'breakpoints.dart';
+import '../theme/tokens.dart';
 
 class ShellDestination {
   const ShellDestination(this.label, this.icon, this.selectedIcon);
@@ -59,7 +60,7 @@ class AdaptiveShell extends StatelessWidget {
               selectedIndex: navigationShell.currentIndex,
               onDestinationSelected: _select,
               leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: Spacing.md),
                 child: extended
                     ? Text('ShuttleSense', style: Theme.of(context).textTheme.titleLarge)
                     : const Icon(Icons.sports_tennis),

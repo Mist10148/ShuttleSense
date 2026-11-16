@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/responsive/breakpoints.dart';
+import '../../../core/theme/tokens.dart';
 
 /// Arranges the result zones for phone, tablet and laptop (docs/ARCHITECTURE.md §4).
 ///
@@ -66,10 +67,10 @@ class ResultsLayout extends StatelessWidget {
           child: TabBarView(
             children: [
               timeline,
-              SingleChildScrollView(padding: const EdgeInsets.all(12), child: minimap),
-              SingleChildScrollView(padding: const EdgeInsets.all(12), child: scoreboard),
+              SingleChildScrollView(padding: const EdgeInsets.all(Spacing.md), child: minimap),
+              SingleChildScrollView(padding: const EdgeInsets.all(Spacing.md), child: scoreboard),
               if (coach != null)
-                SingleChildScrollView(padding: const EdgeInsets.all(12), child: coach),
+                SingleChildScrollView(padding: const EdgeInsets.all(Spacing.md), child: coach),
             ],
           ),
         ),
@@ -80,9 +81,9 @@ class ResultsLayout extends StatelessWidget {
   Widget _panel() => SingleChildScrollView(
     child: Column(
       children: [
-        if (coach != null) ...[coach!, const SizedBox(height: 16)],
+        if (coach != null) ...[coach!, const SizedBox(height: Spacing.lg)],
         minimap,
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         scoreboard,
       ],
     ),
@@ -116,7 +117,7 @@ class ResultsLayout extends StatelessWidget {
 
   Widget _medium(double panel) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Spacing.lg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -128,12 +129,12 @@ class ResultsLayout extends StatelessWidget {
                 // timeline a few pixels, so the video gives up height first.
                 Flexible(flex: 3, child: video),
                 status,
-                const SizedBox(height: 8),
+                const SizedBox(height: Spacing.sm),
                 Expanded(flex: 2, child: timeline),
               ],
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: Spacing.lg),
           SizedBox(width: panel, child: _panel()),
         ],
       ),
@@ -142,7 +143,7 @@ class ResultsLayout extends StatelessWidget {
 
   Widget _expanded(double panel) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(Spacing.xl),
       child: Column(
         children: [
           Flexible(
@@ -159,12 +160,12 @@ class ResultsLayout extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: Spacing.xl),
                 SizedBox(width: panel, child: _panel()),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Spacing.lg),
           Expanded(flex: 2, child: timeline),
         ],
       ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/disclaimers.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../core/theme/tokens.dart';
 
 /// Seek requests from other screens (chat citations) to a job's results player.
 final seekRequestProvider = StateProvider.family<Moment?, String>((ref, jobId) => null);
@@ -139,7 +140,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             for (final goal in generalGoals) _goalCard(goal),
             for (final note in generalNotes) _noteTile(note),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           FilledButton.icon(
             onPressed: widget.chatAvailable ? widget.onAskCoach : null,
             icon: const Icon(Icons.forum_outlined),
@@ -147,13 +148,13 @@ class _SessionSummaryState extends State<SessionSummary> {
           ),
           if (!widget.chatAvailable)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: Spacing.xs),
               child: Text(
                 'Coach chat is off on this server (no Claude API key). Notes still work.',
                 style: theme.textTheme.bodySmall,
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Text(
             kCoachingDisclaimer,
             style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
@@ -181,7 +182,7 @@ class _NoteTile extends StatelessWidget {
         children: [
           if (rank != null)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: Spacing.md),
               child: CircleAvatar(radius: 14, child: Text('$rank')),
             ),
           Expanded(
@@ -190,7 +191,7 @@ class _NoteTile extends StatelessWidget {
               children: [
                 Text(note.text),
                 if (onSeek case final seek? when moments.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: Spacing.xs),
                   MomentChips(moments: moments, onSeek: seek),
                 ],
               ],

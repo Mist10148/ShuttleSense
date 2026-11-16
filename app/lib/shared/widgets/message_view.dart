@@ -24,7 +24,7 @@ class MessageView extends StatelessWidget {
     // large text sizes.
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Spacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -40,7 +40,7 @@ class MessageView extends StatelessWidget {
             const SizedBox(height: Spacing.lg),
             Text(message, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
             if (detail != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: Spacing.xs),
               Text(
                 detail!,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -49,7 +49,7 @@ class MessageView extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ],
-            if (action != null) ...[const SizedBox(height: 16), action!],
+            if (action != null) ...[const SizedBox(height: Spacing.lg), action!],
           ],
         ),
       ),

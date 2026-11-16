@@ -14,6 +14,7 @@ import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/start_score_field.dart';
 import '../../shared/widgets/stroke_model_field.dart';
 import 'upload_controller.dart';
+import '../../core/theme/tokens.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -116,7 +117,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 'Best results from a phone on a tripod, elevated and behind the baseline.',
                 style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: Spacing.md),
               if (file != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -149,7 +150,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: '2. Options',
           child: Column(
@@ -158,7 +159,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Calibrate court'),
-                subtitle: const Text('Tap 4 court corners for player detection and court features. Without calibration, players are not detected.'),
+                subtitle: const Text(
+                  'Tap 4 court corners for player detection and court features. Without calibration, players are not detected.',
+                ),
                 value: options.calibrate,
                 onChanged: (v) => notifier.set(options.copyWith(calibrate: v)),
               ),
@@ -190,9 +193,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 health: health,
                 onChanged: notifier.setStrokeModel,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.sm),
               Text('Overlays', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.sm),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -210,14 +213,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         if (uploading) ...[
           Semantics(
             label: 'Upload progress',
             value: '${(upload.progress! * 100).round()}%',
             child: LinearProgressIndicator(value: upload.progress),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Text(
             'Uploading ${formatBytes(upload.sent)} of ${formatBytes(upload.size)} '
             '(${(upload.progress! * 100).round()}%)',
@@ -231,7 +234,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             label: Text(options.calibrate ? 'Upload and calibrate' : 'Upload and analyze'),
           ),
         if (upload.error != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           Text(upload.error!, style: TextStyle(color: theme.colorScheme.error)),
         ],
       ],

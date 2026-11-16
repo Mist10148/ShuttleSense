@@ -17,13 +17,13 @@ class HitCallout extends StatelessWidget {
     final speed = hit.speedKmh == null ? '' : ' · ${hit.speedKmh!.round()} km/h (est.)';
     final side = playerLabel(hit.who);
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: Spacing.sm),
       child: Semantics(
         liveRegion: true,
         child: Row(
           children: [
             Icon(Icons.bolt, color: colors.forPlayer(hit.who), size: 20),
-            const SizedBox(width: 4),
+            const SizedBox(width: Spacing.xs),
             Flexible(
               child: Text(
                 '$stroke by $side$speed',

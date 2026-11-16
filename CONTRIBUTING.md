@@ -67,7 +67,12 @@ Keep commits small and focused; reference the task in the body (`Refs T2.2`).
 - One feature per folder under `lib/features/`; widgets in `*_screen.dart` / `widgets/`, state in `*_controller.dart`.
 - No network calls from widgets; go through repositories/providers.
 - Use `Breakpoints` from `core/responsive/` instead of hard-coded widths.
-- Colors from the theme (`Theme.of(context).colorScheme`, `PlayerColors`), never inline hex.
+- Colors from the theme (`Theme.of(context).colorScheme`, `PlayerColors`, `StatusColors`), never inline hex. Marks painted on video frames use `OverlayColors` (`core/theme/tokens.dart`).
+- Spacing from `Spacing.xs`–`xxl` (4/8/12/16/24/32) and corners from `Radii`, not raw numbers. Tap targets are at least `kMinTouchTarget` (48).
+- Build pages from the shared widgets in `lib/shared/widgets/`: `PageScaffold` for a page, `SectionCard` for a results panel, `MessageView` for empty, error and loading states. Add a new shared widget only when two screens need it.
+- Icon-only buttons get a `tooltip:` (screen readers read it); custom painters that carry meaning get a `Semantics` label.
+- A screen file past ~500 lines gets split: views into `widgets/`, logic into a `*_controller.dart`.
+- UI changes from Delariman and Agtoto go through the lead UI/UX developer (Limpin) for review, so layouts and interactions stay consistent.
 
 ## Team rhythm
 

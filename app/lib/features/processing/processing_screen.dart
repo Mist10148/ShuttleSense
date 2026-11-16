@@ -11,6 +11,7 @@ import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../core/theme/tokens.dart';
 import '../results/results_screen.dart' show hasResults;
 
 const kStageLabels = {
@@ -138,11 +139,11 @@ class ProcessingScreen extends ConsumerWidget {
         ],
         children: [
           _Header(job: job),
-          const SizedBox(height: 16),
+          const SizedBox(height: Spacing.lg),
           for (final stage in job.stages) _StageRow(stage: stage),
           if (job.status == JobStatus.done) ...[
             // Reached with Back from the results screen.
-            const SizedBox(height: 16),
+            const SizedBox(height: Spacing.lg),
             FilledButton.icon(
               onPressed: () => context.go(Routes.results(jobId)),
               icon: const Icon(Icons.insights),
@@ -150,19 +151,19 @@ class ProcessingScreen extends ConsumerWidget {
             ),
           ],
           if (job.status == JobStatus.cancelled) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: Spacing.lg),
             OutlinedButton(
               onPressed: () => context.go(Routes.home),
               child: const Text('Back to upload'),
             ),
           ],
           if (job.status == JobStatus.failed) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: Spacing.lg),
             Text(
               job.error ?? 'Processing failed',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.sm),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -220,7 +221,7 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(text, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SizedBox(height: Spacing.sm),
         Semantics(
           label: 'Overall progress',
           value: '$percent%',
@@ -229,7 +230,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         if (timing.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: Spacing.xs),
           Text(timing, style: Theme.of(context).textTheme.bodySmall),
         ],
       ],

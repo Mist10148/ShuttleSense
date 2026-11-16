@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/health.dart';
 import '../../data/models/job.dart';
+import '../../core/theme/tokens.dart';
 
 /// The stroke classifier choice: CNN, LSTM or Random Forest (Phase 11).
 ///
@@ -40,7 +41,7 @@ class StrokeModelField extends StatelessWidget {
       help = 'Not installed on this server: ${missing.join(', ')}.';
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: Spacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -61,7 +62,7 @@ class StrokeModelField extends StatelessWidget {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: Spacing.xs),
             child: Text(help, style: theme.textTheme.bodySmall),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/tokens.dart';
 
 /// Rally state, estimated speed and stroke count under the video (F11, F12, F14).
 class StatusStrip extends StatelessWidget {
@@ -24,7 +25,7 @@ class StatusStrip extends StatelessWidget {
       _ => '–',
     };
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: Spacing.sm, horizontal: Spacing.xs),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
