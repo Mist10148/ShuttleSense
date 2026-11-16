@@ -218,6 +218,93 @@ void main() {
       expect(find.text('G1 21–17'), findsOneWidget);
     });
 
+    testWidgets('games won before the session keep to the ends they were won from', (tester) async {
+      // Joined at 1-0 in games, 19-20 in game 2. Far takes game 2 (20-22), the players cross
+      // by rule, and the new near end wins the first rally of game 3.
+      Rally rally(int i, String winner, int near, int far, {int game = 2}) => Rally(
+        index: i,
+        startFrame: 10 * i,
+        endFrame: 10 * i + 5,
+        winner: winner,
+        scoreAfter: ScorePair(near: near, far: far),
+        game: game,
+        endsSwapped: game == 3,
+        changeEnds: i == 2,
+      );
+      final record = goldenRecord().copyWith(
+        rallies: [
+          rally(0, 'near', 20, 20),
+          rally(1, 'far', 20, 21),
+          rally(2, 'far', 20, 22),
+          rally(3, 'near', 1, 0, game: 3),
+        ],
+        score: const Score(
+          near: 1,
+          far: 0,
+          bestOf: 3,
+          game: 3,
+          games: [ScorePair(near: 22, far: 20)],
+          gamesWon: ScorePair(near: 1, far: 1),
+          startGames: ScorePair(near: 1, far: 0),
+          autoChangeEnds: true,
+          endsSwapped: true,
+        ),
+      );
+      // Back in game 2 the ends are as at the start: the game in hand is the near end's.
+      await pump(tester, Scoreboard(record: record, frameIndex: 12));
+      expect(find.text('Game 2 of 3 · games 1–0'), findsOneWidget);
+      expect(find.byKey(const Key('ends-changed')), findsNothing);
+      // In game 3, before its first rally ends: one game each, from the new ends.
+      await pump(tester, Scoreboard(record: record, frameIndex: 32));
+      expect(find.text('Game 3 of 3 · games 1–1'), findsOneWidget);
+      expect(find.text('G2 22–20'), findsOneWidget);
+      expect(find.byKey(const Key('ends-changed')), findsOneWidget);
+    });
+
+    testWidgets('Players changed ends goes through the API client, as on the results screen', (
+      tester,
+    ) async {
+      // What the results screen does with the menu item: ask the server at the playback
+      // position and show the score it answers with.
+      final api = FakeApiClient(
+        record: goldenRecord().copyWith(score: const Score(near: 3, far: 5, server: 'far')),
+      );
+      var record = api.record;
+      late StateSetter refresh;
+      await pump(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) {
+            refresh = setState;
+            return Scoreboard(
+              record: record,
+              frameIndex: 59,
+              onAward: (_) {},
+              onUndo: () {},
+              onSwapEnds: () async {
+                final update = await api.swapEnds('job1', frame: 59);
+                refresh(
+                  () => record = record.copyWith(rallies: update.rallies, score: update.score),
+                );
+              },
+            );
+          },
+        ),
+      );
+      expect(scoreLabel('Score: near 3, far 5. Far serves from the null court'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('decision-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Players changed ends'));
+      await tester.pumpAndSettle();
+      expect(api.calls, ['swapEnds job1 59']);
+      expect(find.byKey(const Key('ends-changed')), findsOneWidget);
+      expect(scoreLabel('Score: near 5, far 3. Near serves from the null court'), findsOneWidget);
+      expect(find.textContaining('1 change(s) of ends'), findsOneWidget);
+      // Undo takes the change back.
+      final undone = await api.undoScore('job1');
+      expect((undone.score.near, undone.score.far, undone.score.endsSwapped), (3, 5, false));
+    });
+
     testWidgets('Players changed ends is in the decision menu', (tester) async {
       var swaps = 0;
       await pump(

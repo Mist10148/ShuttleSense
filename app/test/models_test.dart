@@ -553,4 +553,197 @@ void main() {
     expect(newer.supportsChangeEnds, isTrue);
     expect(older.supportsChangeEnds, isFalse);
   });
+
+  group('the score at a playback position starts from the session start', () {
+    ClipRecord record(Score score, [List<Rally> rallies = const []]) => ClipRecord(
+      schemaVersion: '1.7',
+      clipId: 'ends',
+      fps: 30,
+      width: 640,
+      height: 360,
+      numFrames: 60,
+      frames: const [],
+      hits: const [],
+      rallies: rallies,
+      score: score,
+    );
+    ScoreCorrection ends(int frame, {int rally = 0}) =>
+        ScoreCorrection(rallyIndex: rally, kind: 'ends', frame: frame);
+    ScoreCorrection award(String side, int frame, {int rally = 0}) =>
+        ScoreCorrection(rallyIndex: rally, winnerAfter: side, kind: 'award', frame: frame);
+    void at(ClipRecord r, int frame, int near, int far, {required bool swapped}) {
+      expect(
+        r.scoreAt(frame),
+        ScorePair(near: near, far: far),
+        reason: 'frame $frame',
+      );
+      expect(r.endsSwappedAt(frame), swapped, reason: 'frame $frame');
+    }
+
+    test('ends changed by hand before the first rally ends', () {
+      // 5-3, the players cross at frame 10, then the near end wins rally 0: 4-5.
+      final r = record(Score(near: 4, far: 5, endsSwapped: true, corrections: [ends(10)]), const [
+        Rally(
+          index: 0,
+          startFrame: 30,
+          endFrame: 40,
+          winner: 'near',
+          scoreAfter: ScorePair(near: 4, far: 5),
+          endsSwapped: true,
+        ),
+      ]);
+      at(r, 5, 5, 3, swapped: false);
+      at(r, 20, 3, 5, swapped: true);
+      at(r, 45, 4, 5, swapped: true);
+      // No rally at all: the final score is the start score as it stands after the change.
+      final none = record(Score(near: 3, far: 5, endsSwapped: true, corrections: [ends(10)]));
+      at(none, 5, 5, 3, swapped: false);
+      at(none, 20, 3, 5, swapped: true);
+    });
+
+    test('a point awarded before the first rally goes to the end as it was then', () {
+      // 5-3, point near (6-3), the players cross (3-6), point near (4-6), far wins rally 0.
+      final r = record(
+        Score(
+          near: 4,
+          far: 7,
+          endsSwapped: true,
+          corrections: [award('near', 5), ends(10), award('near', 15)],
+        ),
+        const [
+          Rally(
+            index: 0,
+            startFrame: 30,
+            endFrame: 40,
+            winner: 'far',
+            scoreAfter: ScorePair(near: 4, far: 7),
+            endsSwapped: true,
+          ),
+        ],
+      );
+      at(r, 2, 5, 3, swapped: false);
+      at(r, 7, 6, 3, swapped: false);
+      at(r, 12, 3, 6, swapped: true);
+      at(r, 20, 4, 6, swapped: true);
+      at(r, 45, 4, 7, swapped: true);
+    });
+
+    test('awards alone cross a game boundary: the count restarts', () {
+      // Best of three from 19-20 with no rally found. Far takes the game (19-21), the players
+      // cross by rule, and the next point starts game 2 at the new near end.
+      final crossed = record(
+        Score(
+          near: 1,
+          far: 0,
+          bestOf: 3,
+          game: 2,
+          games: const [ScorePair(near: 21, far: 19)],
+          gamesWon: const ScorePair(near: 1, far: 0),
+          autoChangeEnds: true,
+          endsSwapped: true,
+          corrections: [award('far', 10), award('near', 20)],
+        ),
+      );
+      at(crossed, 5, 19, 20, swapped: false);
+      at(crossed, 15, 21, 19, swapped: true); // the finished game stays up, from the new ends
+      at(crossed, 25, 1, 0, swapped: true);
+      // After a scored rally, without the automatic change: 20-10, point near wins the game,
+      // point far opens game 2.
+      final after = record(
+        Score(
+          near: 0,
+          far: 1,
+          bestOf: 3,
+          game: 2,
+          games: const [ScorePair(near: 21, far: 10)],
+          gamesWon: const ScorePair(near: 1, far: 0),
+          corrections: [award('near', 10, rally: 1), award('far', 20, rally: 1)],
+        ),
+        const [
+          Rally(
+            index: 0,
+            startFrame: 0,
+            endFrame: 5,
+            winner: 'near',
+            scoreAfter: ScorePair(near: 20, far: 10),
+          ),
+        ],
+      );
+      at(after, 2, 19, 10, swapped: false);
+      at(after, 7, 20, 10, swapped: false);
+      at(after, 12, 21, 10, swapped: false);
+      at(after, 25, 0, 1, swapped: false);
+      // The match is won: a point awarded after it does not count.
+      final won = record(
+        Score(
+          near: 21,
+          far: 10,
+          games: const [ScorePair(near: 21, far: 10)],
+          gamesWon: const ScorePair(near: 1, far: 0),
+          matchWinner: 'near',
+          corrections: [award('near', 10, rally: 1), award('far', 20, rally: 1)],
+        ),
+        const [
+          Rally(
+            index: 0,
+            startFrame: 0,
+            endFrame: 5,
+            winner: 'near',
+            scoreAfter: ScorePair(near: 20, far: 10),
+          ),
+        ],
+      );
+      at(won, 12, 21, 10, swapped: false);
+      at(won, 25, 21, 10, swapped: false);
+    });
+
+    test('an award reaches 11 in a one-game match: the players cross by rule', () {
+      // 9-4: two points at the near end (11-4), the players cross (4-11), a point at the far
+      // end, where the leader now stands (4-12).
+      final r = record(
+        Score(
+          near: 4,
+          far: 12,
+          autoChangeEnds: true,
+          endsSwapped: true,
+          corrections: [award('near', 10), award('near', 20), award('far', 30)],
+        ),
+      );
+      at(r, 5, 9, 4, swapped: false);
+      at(r, 15, 10, 4, swapped: false);
+      at(r, 25, 4, 11, swapped: true);
+      at(r, 35, 4, 12, swapped: true);
+    });
+  });
+
+  test('a job keeps the change of ends and the games already won for a retry', () {
+    final json = <String, dynamic>{
+      'id': 'j1',
+      'video_id': 'v1',
+      'status': 'failed',
+      'progress': 0,
+      'created_at': '2026-11-16T00:00:00Z',
+      'referee': true,
+      'best_of': 3,
+    };
+    final job = Job.fromJson({
+      ...json,
+      'auto_change_ends': false,
+      'start_games': {'near': 1, 'far': 0},
+      'game_service': [
+        {'game': 2, 'server_id': 'near_1', 'receiver_id': 'far_2'},
+      ],
+    });
+    expect(job.autoChangeEnds, isFalse);
+    expect(job.startGames, (near: 1, far: 0));
+    expect((job.gameService.single.game, job.gameService.single.serverId), (2, 'near_1'));
+    expect(job.options.autoChangeEnds, isFalse);
+    expect(job.options.startGames, (near: 1, far: 0));
+    expect(job.options.copyWith(overlays: {}).withStrokeModel('rf').startGames, (near: 1, far: 0));
+    final on = Job.fromJson({...json, 'auto_change_ends': true});
+    expect(on.options.autoChangeEnds, isTrue);
+    expect(on.options.startGames, isNull);
+    // A job stored before clip record 1.7 has no change of ends, as the server scores it.
+    expect(Job.fromJson(json).options.autoChangeEnds, isFalse);
+  });
 }

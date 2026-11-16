@@ -158,6 +158,39 @@ class FakeApiClient extends ApiClient {
   Future<List<({double x, double y})>?> suggestCourtCorners(String videoId, int frame) =>
       _answer('suggestCourtCorners $videoId $frame', () => suggestedCorners);
 
+  /// What suggestMatchType answers (POST /videos/{id}/match-type).
+  Json matchType = {'suggestion': 'singles', 'detail': 'Two players found.'};
+
+  @override
+  Future<Json> suggestMatchType(String videoId, List<({double x, double y})> corners) =>
+      _answer('suggestMatchType $videoId ${corners.length}', () => matchType);
+
+  /// The background Watch job (POST /watch/background) and how far its analysis has got.
+  Json watchStarted = {
+    'job_id': 'watch1',
+    'fps': 30.0,
+    'frames': 60,
+    'width': 1280,
+    'height': 720,
+    'stages': {'tracking': true, 'pose': true},
+  };
+  Json watchStatus = {'analyzed_s': 0.0};
+
+  @override
+  Future<Json> startBackgroundWatch({
+    required String videoId,
+    required String court,
+    required List<({double x, double y})> corners,
+  }) => _answer('startBackgroundWatch $videoId $court ${corners.length}', () => watchStarted);
+
+  @override
+  Future<Json> backgroundWatchStatus(String jobId) =>
+      _answer('backgroundWatchStatus $jobId', () => watchStatus);
+
+  @override
+  Future<Json> updateBackgroundWatch(String jobId, double seconds, {bool stop = false}) =>
+      _answer('updateBackgroundWatch $jobId $seconds${stop ? ' stop' : ''}', () => watchStatus);
+
   @override
   Future<VideoInfo> getVideo(String videoId) => _answer('getVideo $videoId', () {
     final v = videos[videoId];
@@ -285,6 +318,35 @@ class FakeApiClient extends ApiClient {
         record = record.copyWith(score: score);
         return ScoreUpdate(score: score, rallies: record.rallies);
       });
+
+  /// The players cross: the points, games and server go with them, as on the backend.
+  @override
+  Future<ScoreUpdate> swapEnds(String jobId, {int? frame}) => _answer('swapEnds $jobId $frame', () {
+    final old = record.score ?? const Score(near: 0, far: 0);
+    _beforeAwards.add(old);
+    ScorePair turned(ScorePair p) => ScorePair(near: p.far, far: p.near);
+    String? across(String? side) => side == null ? null : (side == 'near' ? 'far' : 'near');
+    final score = Score(
+      near: old.far,
+      far: old.near,
+      bestOf: old.bestOf,
+      game: old.game,
+      games: old.games.map(turned).toList(),
+      gamesWon: turned(old.gamesWon),
+      startGames: old.startGames,
+      server: across(old.server),
+      serviceCourt: old.serviceCourt,
+      matchWinner: across(old.matchWinner),
+      autoChangeEnds: old.autoChangeEnds,
+      endsSwapped: !old.endsSwapped,
+      corrections: [
+        ...old.corrections,
+        ScoreCorrection(rallyIndex: record.rallies.length, kind: 'ends', frame: frame),
+      ],
+    );
+    record = record.copyWith(score: score);
+    return ScoreUpdate(score: score, rallies: record.rallies);
+  });
 
   @override
   Future<ScoreUpdate> setGameService(
