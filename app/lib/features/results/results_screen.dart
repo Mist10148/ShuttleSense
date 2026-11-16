@@ -25,6 +25,8 @@ import 'widgets/status_strip.dart';
 import 'widgets/stroke_timeline.dart';
 import 'widgets/summary_chart.dart';
 import 'widgets/video_panel.dart';
+import '../../shared/widgets/hit_burst.dart';
+import 'widgets/hit_anchor.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -407,6 +409,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               controller: _controller,
               available: widget.videoAvailable,
               aspectRatio: record.height == 0 ? null : record.width / record.height,
+              overlay: HitBurstLayer(events: hitBurstsAt(record, frameIndex)),
             ),
             status: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
