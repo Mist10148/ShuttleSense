@@ -185,9 +185,28 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
     source = [""] * n
     median = _background(reader) if bg_mode else None
 
-    # Non-overlapping windows bound memory. Only the final window is padded.
+    # window_stride below seq_len slides the window and averages each frame's heatmaps
+    # (upstream's default); absent or >= seq_len keeps one prediction per frame.
+    stride = int(cfg.get("window_stride") or seq_len)
+    overlapping = 0 < stride < seq_len
     with torch.inference_mode():
-        for start in range(0, n, seq_len * batch_size):
+        if overlapping:
+            from shuttlesense.tracking.ensemble import track_overlapping
+
+            xy, visible = track_overlapping(
+                model,
+                reader,
+                seq_len=seq_len,
+                stride=stride,
+                batch_size=batch_size,
+                device=ctx.device,
+                prepare=lambda frames: _track_input(frames, bg_mode, median),
+                input_size=INPUT_SIZE,
+                progress=ctx.progress,
+            )
+            source = ["net" if v else "" for v in visible]
+        # Non-overlapping windows bound memory. Only the final window is padded.
+        for start in () if overlapping else range(0, n, seq_len * batch_size):
             inputs, starts = [], []
             for window_start in range(start, min(start + seq_len * batch_size, n), seq_len):
                 frames = reader.batch(window_start, seq_len)

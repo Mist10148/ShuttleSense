@@ -308,3 +308,73 @@ def test_cached_tracknet_inputs_are_exact_for_all_background_modes(mode):
     prepared = [cv2.resize(frame[:, :, ::-1], tracknet.INPUT_SIZE) for frame in frames]
     assert np.array_equal(tracknet._track_input(frames, mode, median),
                           tracknet._track_input_rgb(prepared, mode, median))
+
+
+def test_ensemble_weights_favour_the_middle_of_a_window() -> None:
+    from shuttlesense.tracking.ensemble import ensemble_weights, window_starts
+
+    weights = ensemble_weights(8)
+    assert weights.sum() == pytest.approx(1.0)
+    assert weights.tolist() == pytest.approx(weights[::-1].tolist())
+    assert weights[3] > weights[1] > weights[0]
+    assert window_starts(10, 8, 4) == [0, 4, 8]
+    assert window_starts(10, 8, 99) == [0, 8]
+
+
+def test_overlapping_windows_average_out_a_one_window_miss(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A frame one window misses at its edge is found when the next window sees it mid-flight."""
+    torch = pytest.importorskip("torch")
+
+    class Reader:
+        width, height = 1024, 576
+
+        def __init__(self) -> None:
+            self.reads: list[int] = []
+
+        def __len__(self):
+            return 10
+
+        def batch(self, start, size):
+            self.reads.append(start)
+            # The frame's index rides in the pixel values so the model can tell windows apart.
+            return [
+                np.full((48, 64, 3), i, dtype=np.uint8) for i in range(start, min(start + size, 10))
+            ]
+
+    class Model:
+        def __call__(self, batch):
+            out = torch.zeros((batch.shape[0], 4, 288, 512))
+            out[:, :, 70:73, 120:123] = 0.9
+            for b in range(batch.shape[0]):
+                first = int(round(float(batch[b, 0, 0, 0]) * 255))
+                if first == 0:
+                    out[b, 3] = 0.0  # the window starting at 0 misses its last frame (3)
+            return out
+
+    monkeypatch.setattr(tracknet, "_load_model", lambda *_: (Model(), 4, ""))
+
+    def run(stride):
+        reader = Reader()
+        ctx = StageContext(
+            video_path=tmp_path / "v.mp4",
+            out_dir=tmp_path,
+            config={
+                "stages": {
+                    "tracking": {"batch_size": 2, "use_inpaintnet": False, "window_stride": stride}
+                }
+            },
+            reader=reader,
+        )
+        return (*tracknet.predict(ctx, tmp_path / "unused.pt"), reader.reads)
+
+    xy, visible, source, reads = run(None)
+    assert visible.tolist() == [1, 1, 1, 0, 1, 1, 1, 1, 1, 1]
+    assert reads == [0, 4, 8]
+
+    xy, visible, source, reads = run(2)
+    assert reads == [0, 2, 4, 6, 8]
+    assert visible.tolist() == [1] * 10
+    assert source == ["net"] * 10
+    assert xy.tolist() == [[242.0, 142.0]] * 10

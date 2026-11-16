@@ -41,6 +41,11 @@ stages:
     # InpaintNet is optional: raw TrackNet detections are kept if its weights are missing.
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
+    # Frames between window starts. Below the model's sequence length (8) each frame is
+    # predicted by several overlapping windows and the heatmaps are averaged, as upstream
+    # TrackNetV3 does. 4 = two predictions per frame, about twice the tracking time on
+    # uploads; remove the key for one prediction per frame. Live and Watch are not affected.
+    window_stride: 4
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)
     max_inpaint_gap_frames: 30  # InpaintNet repairs gaps up to this long; longer = out of play
     max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
