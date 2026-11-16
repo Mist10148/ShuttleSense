@@ -112,12 +112,48 @@ def test_appearance_prevents_replacement_and_returns_original():
     assert t.update([p], frame_height=720, homography=H, frame=red).near == p
 
 
-def test_uncalibrated_player_is_never_emitted():
+def test_uncalibrated_clip_still_gets_players_by_image_position():
+    # No corners: no court polygon to enforce, but hits and strokes still need the players.
     t = CourtPlayerTracker({}, "singles", COURT_SIZE_M)
-    p = Player(bbox=(200, 400, 60, 150), score=0.9)
-    for _ in range(4):
-        assert t.update([p], frame_height=720, homography=None).near is None
-    assert t.update([], frame_height=720, homography=None).near is None
+    near = Player(bbox=(200, 400, 60, 150), score=0.9)
+    far = Player(bbox=(600, 100, 30, 80), score=0.9)
+    result = t.update([near, far], frame_height=720, homography=None)
+    assert result.near == near and result.far == far
+    assert not t.view_valid  # their positions are not court positions
+
+
+RUN_OFF = {"confirmation_frames": 1, "candidate_margin_m": 2.0}  # as in pipeline.yaml
+
+
+def test_locked_player_is_followed_into_the_run_off_behind_the_baseline():
+    t = CourtPlayerTracker(RUN_OFF, "singles", COURT_SIZE_M)
+    assert update(t, [person(2.6, 0.4)]).near is not None
+    # Steps back behind the baseline to play a clear and stays there for a while.
+    for y in (0.1, -0.2, -0.5, -0.8, -1.0, *[-1.0] * 20):
+        seen = update(t, [person(2.6, y)]).near
+        assert seen is not None and (y >= 0 or not seen.court_position_valid)
+    for y in (-0.7, -0.3, 0.1):
+        assert update(t, [person(2.6, y)]).near is not None
+
+
+def test_locked_player_is_followed_wide_of_the_sideline():
+    t = CourtPlayerTracker(RUN_OFF, "singles", COURT_SIZE_M)
+    assert update(t, [person(0.2, 3)]).near is not None
+    for x in (-0.1, -0.4, -0.8, -1.1, -1.1, -1.1, -0.8, -0.4, 0.1):
+        assert update(t, [person(x, 3)]).near is not None
+
+
+def test_run_off_never_seeds_a_bystander_or_jumps_to_one():
+    t = CourtPlayerTracker(RUN_OFF, "singles", COURT_SIZE_M)
+    official = person(2.6, -1.2)
+    for _ in range(5):
+        assert update(t, [official]).near is None  # never seen inside the court
+    assert update(t, [person(2.6, 3), official]).near is not None
+    # The player is hidden: the official, metres away, does not take the slot.
+    for _ in range(10):
+        assert update(t, [official]).near is None
+    # Beyond the run-off nobody is a candidate at all.
+    assert update(t, [person(2.6, -2.6)]).near is None
 
 
 def test_locked_player_can_briefly_cross_boundary_but_strangers_cannot_enter():
