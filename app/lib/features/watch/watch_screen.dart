@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -22,6 +23,48 @@ import '../upload/upload_controller.dart';
 import 'court_geometry.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
+
+class _ProfiledCodec implements ui.Codec {
+  _ProfiledCodec(this.inner, this.stopwatch, this.frame);
+
+  final ui.Codec inner;
+  final Stopwatch stopwatch;
+  final int frame;
+
+  @override
+  int get frameCount => inner.frameCount;
+
+  @override
+  int get repetitionCount => inner.repetitionCount;
+
+  @override
+  Future<ui.FrameInfo> getNextFrame() async {
+    final decoded = await inner.getNextFrame();
+    stopwatch.stop();
+    debugPrint(
+      'WATCH_PROFILE ${jsonEncode({'event': 'image_stream_decode', 'frame': frame, 'decode_ms': stopwatch.elapsedMicroseconds / 1000})}',
+    );
+    return decoded;
+  }
+
+  @override
+  void dispose() => inner.dispose();
+}
+
+class _ProfiledMemoryImage extends MemoryImage {
+  const _ProfiledMemoryImage(super.bytes, this.frame);
+
+  final int frame;
+
+  @override
+  ImageStreamCompleter loadImage(MemoryImage key, ImageDecoderCallback decode) {
+    return super.loadImage(key, (buffer, {getTargetSize}) async {
+      final stopwatch = Stopwatch()..start();
+      final codec = await decode(buffer, getTargetSize: getTargetSize);
+      return _ProfiledCodec(codec, stopwatch, frame);
+    });
+  }
+}
 
 String formatWatchElapsed(Duration elapsed) {
   final seconds = elapsed.inSeconds;
@@ -85,6 +128,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   bool focusedAnalysisActive = false;
   final Stopwatch frameClock = Stopwatch();
   int? profileLastResponseUs;
+  int profileLastDecodedIndex = -1;
+  bool profileTimingsAttached = false;
   Uint8List? image;
   bool uploading = false, playing = false, waiting = false, stopping = false, started = false;
   String? error, jobId;
@@ -211,6 +256,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       ..reset()
       ..start();
     profileLastResponseUs = null;
+    profileLastDecodedIndex = -1;
+    if (_watchProfile && !profileTimingsAttached) {
+      WidgetsBinding.instance.addTimingsCallback(recordProfileFrameTimings);
+      profileTimingsAttached = true;
+    }
     if (_watchProfile) debugPrint('WATCH_PROFILE {"event":"start"}');
     elapsedTimer?.cancel();
     elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -229,7 +279,19 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       );
     }
     analysisClock.stop();
+    if (profileTimingsAttached) {
+      WidgetsBinding.instance.removeTimingsCallback(recordProfileFrameTimings);
+      profileTimingsAttached = false;
+    }
     elapsedTimer?.cancel();
+  }
+
+  void recordProfileFrameTimings(List<ui.FrameTiming> timings) {
+    for (final timing in timings) {
+      debugPrint(
+        'WATCH_PROFILE ${jsonEncode({'event': 'frame_timing', 'build_ms': timing.buildDuration.inMicroseconds / 1000, 'raster_ms': timing.rasterDuration.inMicroseconds / 1000, 'total_ms': timing.totalSpan.inMicroseconds / 1000})}',
+      );
+    }
   }
 
   Future<void> pollSavedRender() async {
@@ -524,6 +586,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   void onMessage(dynamic raw) {
     if (!mounted || raw is! String) return;
     final receivedUs = _watchProfile ? analysisClock.elapsedMicroseconds : 0;
+    final receivedEpochUs = _watchProfile ? DateTime.now().microsecondsSinceEpoch : 0;
     final msg = jsonDecode(raw) as Map<String, dynamic>;
     switch (msg['type']) {
       case 'started':
@@ -611,7 +674,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           final frame = msg['index'];
           final handledUs = analysisClock.elapsedMicroseconds;
           debugPrint(
-            'WATCH_PROFILE ${jsonEncode({'event': 'received', 'frame': frame, 'elapsed_ms': receivedUs / 1000, 'video_fps': fps, 'round_trip_ms': roundTripUs / 1000, 'json_ms': (decodeStartUs - receivedUs) / 1000, 'handle_ms': (handledUs - decodeStartUs) / 1000, 'server_ms': msg['timing_ms'], 'profile_ms': msg['profile_ms']})}',
+            'WATCH_PROFILE ${jsonEncode({'event': 'received', 'frame': frame, 'elapsed_ms': receivedUs / 1000, 'video_fps': fps, 'round_trip_ms': roundTripUs / 1000, 'json_ms': (decodeStartUs - receivedUs) / 1000, 'handle_ms': (handledUs - decodeStartUs) / 1000, 'server_ms': msg['timing_ms'], 'profile_ms': msg['profile_ms'], 'previous_transport': msg['previous_transport'], 'server_serialize_epoch_us': msg['server_serialize_epoch_us'], 'client_receive_epoch_us': receivedEpochUs})}',
           );
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -932,7 +995,26 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.memory(image!, gaplessPlayback: true, fit: BoxFit.fill),
+                  Image(
+                    image: _watchProfile
+                        ? _ProfiledMemoryImage(image!, lastAnalyzedIndex)
+                        : MemoryImage(image!),
+                    gaplessPlayback: true,
+                    fit: BoxFit.fill,
+                    frameBuilder: !_watchProfile
+                        ? null
+                        : (context, child, imageFrame, synchronouslyLoaded) {
+                            if (imageFrame != null &&
+                                lastAnalyzedIndex != profileLastDecodedIndex &&
+                                profileLastResponseUs != null) {
+                              profileLastDecodedIndex = lastAnalyzedIndex;
+                              debugPrint(
+                                'WATCH_PROFILE ${jsonEncode({'event': 'image_ready', 'frame': lastAnalyzedIndex, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000, 'synchronous': synchronouslyLoaded})}',
+                              );
+                            }
+                            return child;
+                          },
+                  ),
                   CustomPaint(painter: _WatchOverlay(frameData, frameWidth, frameHeight)),
                 ],
               ),

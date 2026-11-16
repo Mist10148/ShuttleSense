@@ -264,6 +264,14 @@ For the actual Windows app, run `flutter run -d windows --profile
 lines in the Flutter console correlate client request/receive, response handling and
 post-frame callbacks with frame indexes and server timing. A Flutter post-frame callback
 indicates a UI frame was scheduled, not that JPEG decoding or pixels were displayed.
+The profile build also logs image-ready callbacks, actual image-stream codec timings,
+and application build/raster frame timings. Codec time includes asynchronous scheduling
+and codec creation after the image buffer is made. Raster timing is not physical screen
+presentation. Profiling and per-frame logging can change performance.
+The backend reports JSON serialization and send-await time for the preceding frame. With
+server and client on the same machine, the optional `--same-host` summarizer flag also
+reports serialization-start-to-client-receive wall time, including buffering and scheduling;
+do not use it across machines without independently synchronized clocks.
 The `WATCH_PROFILE` events exclude video pixels and file paths but contain per-session
 performance data. The full Flutter console log can include local URLs or other diagnostic
 details; keep it local and review it before sharing. Normal runs do not enable this

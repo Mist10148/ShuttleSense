@@ -8,7 +8,7 @@ import statistics
 from pathlib import Path
 
 
-def summarize(rows):
+def summarize(rows, *, same_host=False):
     received = [row for row in rows if row.get("event") == "received"]
     checkpoints = [row for row in received if row.get("elapsed_ms", 0) >= 45_000]
 
@@ -23,6 +23,13 @@ def summarize(rows):
                 "p95": round(sorted(items)[math.ceil(len(items) * .95) - 1], 2)}
 
     checkpoint = checkpoints[0] if checkpoints else None
+    transports = [row["previous_transport"] for row in received
+                  if isinstance(row.get("previous_transport"), dict)]
+    delivery = [(row["client_receive_epoch_us"] - row["server_serialize_epoch_us"]) / 1000
+                for row in received
+                if same_host and isinstance(row.get("client_receive_epoch_us"), (int, float))
+                and isinstance(row.get("server_serialize_epoch_us"), (int, float))
+                and row["client_receive_epoch_us"] >= row["server_serialize_epoch_us"]]
     if checkpoint and checkpoint.get("video_fps"):
         checkpoint = {"elapsed_s": round(checkpoint["elapsed_ms"] / 1000, 2),
                       "video_s": round((checkpoint["frame"] + 1) / checkpoint["video_fps"], 2)}
@@ -34,6 +41,16 @@ def summarize(rows):
             "handling_ms": stats(values("received", "handle_ms")),
             "next_request_delay_ms": stats(values("next", "since_response_ms")),
             "ui_callback_delay_ms": stats(values("ui_frame", "since_response_ms")),
+            "image_ready_since_response_ms": stats(values("image_ready", "since_response_ms")),
+            "jpeg_codec_sample_ms": stats(values("jpeg_codec_sample", "decode_ms")),
+            "image_stream_decode_ms": stats(values("image_stream_decode", "decode_ms")),
+            "frame_build_ms": stats(values("frame_timing", "build_ms")),
+            "frame_raster_ms": stats(values("frame_timing", "raster_ms")),
+            "server_serialize_ms": stats([row["serialize_ms"] for row in transports
+                                          if isinstance(row.get("serialize_ms"), (int, float))]),
+            "server_send_await_ms": stats([row["send_await_ms"] for row in transports
+                                           if isinstance(row.get("send_await_ms"), (int, float))]),
+            "serialize_start_to_client_receive_ms_same_host": stats(delivery),
             "analysis_saved_ms": values("analysis_saved", "elapsed_ms"),
             "clock_stopped_ms": values("clock_stopped", "elapsed_ms"),
             "stop_status": [row.get("status") for row in rows
@@ -43,9 +60,14 @@ def summarize(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
+    parser.add_argument("--same-host", action="store_true",
+                        help="server and Flutter use the same machine wall clock")
     args = parser.parse_args()
     sessions, current = [], None
-    for line in args.log.read_text(encoding="utf-8", errors="replace").splitlines():
+    data = args.log.read_bytes()
+    # Windows PowerShell 5.1 Tee-Object writes UTF-16LE with a BOM by default.
+    encoding = "utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
+    for line in data.decode(encoding, errors="replace").splitlines():
         marker = line.find("WATCH_PROFILE ")
         if marker < 0:
             continue
@@ -60,7 +82,7 @@ def main():
             current.append(row)
     if not sessions:
         raise SystemExit("No complete WATCH_PROFILE start marker found")
-    print(json.dumps([summarize(session) for session in sessions], indent=2))
+    print(json.dumps([summarize(session, same_host=args.same_host) for session in sessions], indent=2))
 
 
 if __name__ == "__main__":

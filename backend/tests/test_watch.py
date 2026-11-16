@@ -47,6 +47,8 @@ def test_watch_pulls_frames_and_saves_partial(
                 assert frame["index"] == index
                 assert set(frame["timing_ms"]) == {"read", "jpeg", "processing"}
                 assert "profile_ms" not in frame
+                assert "previous_transport" not in frame
+                assert "server_serialize_epoch_us" not in frame
                 assert frame["jpeg"]
                 assert any(e["type"] == "frame" and e["frame"] == index for e in frame["events"])
                 assert next(e for e in frame["events"] if e["type"] == "stats")["level"] == 0
@@ -79,6 +81,15 @@ def test_watch_profile_is_opt_in_and_frame_correlated(tmp_path, tiny_video):
                 assert frame["profile_ms"]["normalize_wall"] >= 0
                 assert frame["profile_ms"]["jpeg_decode_wall"] >= 0
                 assert frame["profile_ms"]["record_wall"] >= 0
+                assert isinstance(frame["server_serialize_epoch_us"], int)
+                if index == 0:
+                    assert "previous_transport" not in frame
+                else:
+                    transport = frame["previous_transport"]
+                    assert transport["frame"] == index - 1
+                    assert transport["serialize_ms"] >= 0
+                    assert transport["send_await_ms"] >= 0
+                    assert transport["utf8_bytes"] > 0
             ws.send_json({"type": "stop"})
             assert ws.receive_json()["type"] == "saved"
 

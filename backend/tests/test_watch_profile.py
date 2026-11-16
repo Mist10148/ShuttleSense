@@ -21,3 +21,27 @@ def test_flutter_summary_uses_first_frame_after_45_seconds():
 def test_p95_handles_empty_and_small_samples():
     assert p95([]) is None
     assert p95([1, 2, 3]) == 3
+
+
+def test_flutter_summary_separates_decode_frame_and_transport_timings():
+    result = summarize([
+        {"event": "received", "frame": 1, "previous_transport":
+         {"frame": 0, "serialize_ms": 2.5, "send_await_ms": 3.0}},
+        {"event": "image_ready", "frame": 0, "since_response_ms": 8},
+        {"event": "image_stream_decode", "frame": 0, "decode_ms": 6.5},
+        {"event": "frame_timing", "build_ms": 1.0, "raster_ms": 4.0},
+    ])
+    assert result["image_ready_since_response_ms"]["median"] == 8
+    assert result["image_stream_decode_ms"]["median"] == 6.5
+    assert result["frame_build_ms"]["median"] == 1
+    assert result["frame_raster_ms"]["median"] == 4
+    assert result["server_serialize_ms"]["median"] == 2.5
+    assert result["server_send_await_ms"]["median"] == 3
+
+
+def test_delivery_interval_requires_same_host_opt_in():
+    rows = [{"event": "received", "frame": 1, "server_serialize_epoch_us": 1000000,
+             "client_receive_epoch_us": 1012500}]
+    key = "serialize_start_to_client_receive_ms_same_host"
+    assert summarize(rows)[key] is None
+    assert summarize(rows, same_host=True)[key]["median"] == 12.5

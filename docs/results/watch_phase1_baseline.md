@@ -2,11 +2,140 @@
 
 ## Status
 
-Phase 1 is **not complete**: no controlled Flutter client baseline, labeled accuracy
-evaluation, precise GPU event timing, or exhaustive resource profile has been recorded.
-The Windows profile app was built, but computer-use access to it was not approved.
-The in-process measurements below are diagnostic and cannot replace the actual Flutter
-workflow. Do not advance to accuracy-sensitive optimizations on this evidence.
+Phase 1 is **not complete**: no repeated controlled Flutter client baseline, labeled accuracy
+evaluation, or exhaustive resource profile has been recorded.
+One preliminary Flutter profile run is recorded below. The in-process measurements below
+are diagnostic and cannot replace repeated actual Flutter trials. Do not advance to
+accuracy-sensitive optimizations on this evidence.
+
+## Preliminary actual Flutter run — November 16, 2026
+
+With user approval, the Windows profile app loaded the original 565.28-second, 50 fps
+Paris 2024 broadcast, selected **Analyze every frame**, and used doubles court calibration.
+Automatic court detection failed; the manually placed corners recorded in the saved job
+were `[[299.79, 674.30], [995.42, 670.80], [812.28, 325.92], [453.09, 322.10]]`
+in the job's normalized coordinate space. Experimental focused player analysis was off.
+The app displayed configured detector CUDA and pose TensorRT RTX providers; that display
+does not establish graph placement or absence of fallback. The already-running backend
+was warm and was not restarted; current configuration requests CUDA concurrency with
+`frame_parallel_perception: auto`, but the running process configuration was not separately
+verified. The app was built with `WATCH_PROFILE=true`, enabling client logging and server
+diagnostics. Other desktop applications were active.
+
+At 45.08 seconds on the client clock, the first completed response had processed 12.04
+seconds of normalized video. The run was manually stopped after 426 frames (17.04 seconds
+of normalized video); median/p95 client round trip was 137.12/201.84 ms. The saved
+acknowledgement arrived at 65.28 seconds and the UI reported session saved at 69.01 seconds;
+the 3.72-second difference is an observed interval, not an isolated encoder benchmark.
+Median/p95 client handling was 0.98/1.50 ms and post-frame callback delay was 8.02/11.77 ms;
+the latter is not a measurement of completed JPEG decode or display. The ignored local raw
+log is `backend/.cache/watch_flutter_phase1.log`; saved job `85277c316c68` contains the
+record and export. PowerShell 5.1 produced a UTF-16 log; the summarizer now reads it.
+
+This single, instrumented, manually stopped run is not a complete fixed-section test,
+does not measure profiler overhead or resource usage, and cannot validate a comparison
+between sequential and concurrent modes. It is close to the previously mentioned 12-second
+observation but does not establish that observation's conditions. Keep the Phase 1 gate open.
+
+## Focused profiling follow-up — November 16, 2026
+
+A dedicated **offline**, non-recording 35-frame run of `profile_watch_pipeline.py`
+used the original Paris clip, the same doubles court (the saved normalized corners scaled
+to source pixels), CUDA, concurrent perception, and the requested TensorRT RTX pose
+provider. PyTorch/Kineto captured CPU and CUDA activities for the whole process, including
+model setup and warmup, not just the 35 measured frames. The local trace is
+`backend/.cache/phase1_cuda_trace.json`; the local invocation and trace summarizer are
+`.cache/phase1_cuda_trace.py` and `.cache/phase1_trace_summary.py` under `backend`.
+This is an intrusive diagnostic trace, not a throughput baseline or an actual Flutter run.
+
+The trace recorded 57,019 kernel events; sampled CUDA activity included 1,036 pageable
+host-to-device copies totaling 100.58 ms and 3,169 device-to-pageable-host copies totaling
+8.89 ms, plus other copies and memset operations. It also recorded 6,763
+`cudaStreamSynchronize` runtime calls totaling 396.77 ms host time. These are aggregate
+event durations across initialization and processing, potentially overlapping, and cannot
+be added to wall time or attributed to one model without correlating the trace. The offline
+provider diagnostics reported detector CUDA and 247 pose nodes assigned to TensorRT RTX;
+ONNX Runtime warned that some nodes were not assigned to preferred providers, without
+identifying them in that output. This does not establish complete node placement or the
+actual Flutter session's fallback state. Nsight Systems was not found on PATH or in the
+usual NVIDIA application directory; its absence elsewhere was not established.
+
+A separate offline OpenCV reader split measured three passes of 250 normalized frames on
+the same 50 fps source, downsampled to 25 fps at 720p. Across the three passes, median
+`cap.read()` times were 4.435–4.513 ms, skipped-frame `cap.grab()` medians were
+0.067–0.074 ms, and resize medians were 0.978–1.025 ms. The second and third passes had
+`grab()` p95 of 0.088 ms; the first had 0.350 ms. These isolated samples exclude the
+thread scheduling and rest of the live app and are not a proof that input reading is
+immaterial on other clips. The local measurement script is `.cache/phase1_read_split.py`.
+
+These initial measurements were followed by the model-attributed and client measurements below.
+
+## Model attribution and Flutter response measurements — November 16, 2026
+
+A second 35-frame offline Kineto run used the same source and approximate calibration.
+It recorded host timing ranges on the shuttle, detector and pose worker threads and
+associated CUDA activities through their launch correlation IDs. The timestamps were
+aligned using a host-clock anchor; attribution near a range boundary is approximate and
+launches from other threads and initialization remain unattributed. Summed device kernel
+event durations were approximately 291.36 ms for shuttle, 269.27 ms for detector and
+159.11 ms for pose; 33.86 ms was unattributed. These sums overlap and are neither end-to-end
+latencies nor evidence of separate exclusive device occupancy. Pageable host-to-device
+copies associated with those paths totaled 48.83, 12.91 and 17.39 ms respectively;
+device-to-pageable-host copies totaled 0.98, 3.15 and 0.27 ms. CUDA synchronization
+runtime events attributed to those paths totaled 1.65, 140.11 and 163.75 ms host time,
+respectively; those waits can include work submitted elsewhere. The capture includes
+warmup, is highly instrumented, and excludes Flutter and recording. The trace, ranges,
+and analysis script are in the ignored `backend/.cache/phase1_attributed_*` files.
+
+ONNX Runtime's graph-assignment API reported 247 pose nodes assigned to TensorRT RTX for
+the constructed pose session. A separately recreated detector session with assignment
+recording and the configured CUDA/CPU providers reported 411 CUDA and 4 CPU nodes; this is
+not proof that an already-running detector has identical session options or placement.
+Names, types and providers are in `backend/.cache/phase1_node_placement.json`. Verify the
+real session's activation and fallback separately; the provider review gate remains open.
+
+A Windows Flutter profile run against an isolated backend on the **same machine** analyzed
+259 normalized frames from the approved original video, with manual doubles calibration,
+diagnostics and console logging enabled, and other applications and backend processes
+active. At 45.08 s the cold-start-inclusive clock showed 5.80 s video; do not compare this
+single instrumented startup to the earlier warm run as a speed change. Median/p95 were:
+
+| Measurement | Median | p95 | Samples and meaning |
+| --- | ---: | ---: | --- |
+| Flutter response round trip | 158.28 ms | 247.82 ms | 259 responses; includes server processing and client delivery |
+| Server JSON serialization | 0.98 ms | 1.34 ms | 258 responses; reported with the following frame |
+| Server send await | 14.05 ms | 16.74 ms | 258 responses; not proof of client receipt |
+| Serialization start to client receive | 22.21 ms | 42.51 ms | 259 same-host wall-clock samples; includes serialization, buffering, transmission and callback scheduling |
+| Flutter JPEG codec sample | 10.17 ms | 11.32 ms | 13 separate diagnostic decodes of every 20th JPEG; includes async scheduling and codec creation |
+| Response to image widget ready | 23.82 ms | 27.89 ms | 259 callbacks; includes scheduling and decoding, not physical display |
+| Flutter build / raster | 0.88 / 0.75 ms | 1.80 / 1.19 ms | 653 application UI frames, not exclusively video frames |
+
+The local log is `backend/.cache/watch_flutter_delivery.log`; reproduce the summary with
+`python scripts/summarize_watch_flutter.py .cache/watch_flutter_delivery.log --same-host`
+from `backend`. The same-host flag is invalid for different machines without independently
+verified clock synchronization. The sampled codec performed an additional decode and may
+have perturbed that run. Flutter raster timing is not physical presentation or screen
+scanout, and the wall-clock delivery interval is not pure network transit. Profiling/logging
+overhead and repeat trials have not been validated, so these figures are diagnostic, not
+the final baseline.
+
+A subsequent 384-frame actual Flutter run on the original, already-running backend used
+an opt-in wrapper around the image stream's own codec, rather than a second decode. The
+median/p95 interval from codec creation request through the first decoded image was
+7.52/9.25 ms over 384 images. This includes asynchronous scheduling and codec setup but
+excludes earlier immutable-buffer creation and later painting/presentation. Response to
+image-widget-ready was 23.61/27.47 ms; raster for all 890 observed app frames was
+0.66/1.12 ms. The video was normalized to 25 fps, manually calibrated for doubles, and
+stopped and saved after 384 frames; at 45.09 s the clock showed 12.00 s of video. The
+backend was warm and was not the newly instrumented server used for the delivery run, so
+these measurements are not a controlled before/after comparison. Raw local data is in
+`backend/.cache/watch_flutter_image_stream.log`. The actual image-stream decode now has
+diagnostic evidence; OS composition, physical presentation and scanout remain unmeasured.
+Windows Performance Recorder lists a `DesktopComposition` profile, but a requested
+`wpr -start DesktopComposition -filemode` returned `0x80070005` (access denied); `wpr
+-status` confirmed no recording was started. A future composition trace requires an
+administrator-capable recording environment. Even an OS composition trace does not by
+itself establish the moment photons appear on the physical display.
 
 ## Audited frame lifecycle
 

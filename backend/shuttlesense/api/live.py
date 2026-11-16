@@ -161,6 +161,7 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 ),
             }
         )
+        previous_transport = None
         while True:
             msg = await ws.receive_json()
             if msg.get("type") == "stop":
@@ -210,8 +211,7 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             frame_processing_s = time.perf_counter() - processing_start
             perception_s += frame_processing_s
             processed += 1
-            await ws.send_json(
-                {
+            response = {
                     "type": "video_frame",
                     "index": index,
                     **(
@@ -228,7 +228,24 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                         "provider_diagnostics", None,
                     ),
                 }
-            )
+            if profiler is None:
+                await ws.send_json(response)
+            else:
+                # A send's duration is only known after it finishes, so return it
+                # with the next frame and identify the frame it describes.
+                if previous_transport is not None:
+                    response["previous_transport"] = previous_transport
+                # Comparable with the client's wall clock only on the same host;
+                # this marks the start of serialization, before the send.
+                response["server_serialize_epoch_us"] = time.time_ns() // 1000
+                serialize_start = time.perf_counter()
+                encoded_response = json.dumps(response, separators=(",", ":"), ensure_ascii=False)
+                serialize_ms = (time.perf_counter() - serialize_start) * 1000
+                send_start = time.perf_counter()
+                await ws.send_text(encoded_response)
+                previous_transport = {"frame": index, "serialize_ms": round(serialize_ms, 3),
+                                      "send_await_ms": round((time.perf_counter() - send_start) * 1000, 3),
+                                      "utf8_bytes": len(encoded_response.encode("utf-8"))}
     except LiveBusy:
         await _error(ws, "busy", "the GPU is busy with another job or live session", 4409)
     except (ValueError, TypeError, KeyError) as exc:
