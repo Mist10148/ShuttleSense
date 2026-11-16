@@ -37,7 +37,7 @@ class Health(BaseModel):
     device: str
     auth_required: bool
     stages: list[str]
-    # Stroke models whose weights and packages are installed: "cnn", "lstm", "rf" (D28).
+    # Stroke models whose weights and packages are installed: "cnn", "lstm", "rf", "ensemble" (D28, D37).
     stroke_models: list[str] = Field(default_factory=list)
     chat_available: bool = False  # a Claude API key is configured on this backend
     chat_max_messages: int = 0  # questions allowed per session

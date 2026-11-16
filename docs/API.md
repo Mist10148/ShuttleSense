@@ -90,14 +90,14 @@ Liveness and capability check used by the connect screen.
   "device": "cuda",
   "auth_required": true,
   "stages": ["io", "tracking", "pose", "court", "hits", "strokes", "feedback", "analytics", "referee", "render"],
-  "stroke_models": ["cnn", "lstm", "rf"],
+  "stroke_models": ["cnn", "lstm", "rf", "ensemble"],
   "chat_available": true,
   "chat_max_messages": 20
 }
 ```
 
 `stroke_models` lists the stroke classifiers whose weights and packages are installed on this
-server, in menu order: `cnn` (1D CNN), `lstm` and `rf` (Random Forest). It is checked on every
+server, in menu order: `cnn` (1D CNN), `lstm`, `rf` (Random Forest) and `ensemble` (the three averaged, listed only when all three are installed; [D37](DECISIONS.md)). It is checked on every
 call. The app disables a model that is not listed.
 
 `stages` lists the stages whose dependencies and weights are installed on this host, so the app can grey out overlays that cannot be produced.
@@ -168,7 +168,7 @@ Start processing.
 | `first_server` | no | `"near"` or `"far"`: who serves the first rally, for the server and service court; default unknown until a rally is won |
 | `court` | no | `"singles"` (default) or `"doubles"` (Phase 9, [D22](DECISIONS.md)): doubles tracks four players, credits each hit to a partner and calls the doubles lines. Sent even without `referee` |
 | `first_server_id`, `first_receiver_id` | no | Doubles: the slots (`near_1`, `near_2`, `far_1`, `far_2`) who serve and receive the first rally, both or neither, on opposite sides; `first_server` defaults to the server's side. With them the record says who serves and receives every rally of the first game (later games: `POST /jobs/{job_id}/score/service`). `422` if only one is given, both are on one side, the server is not on `first_server`'s side, or `court` is not `"doubles"` |
-| `stroke_model` | no | Which stroke classifier labels the hits: `"cnn"`, `"lstm"` or `"rf"` ([D28](DECISIONS.md)). Default: the server's `stages.strokes.algorithm` (`cnn` as shipped). `422` for any other value. A model that is not installed (`/health` `stroke_models`) leaves the hits unlabelled and the `strokes` stage `skipped`. Running the same video again with another model reuses the cached tracking, pose and hits |
+| `stroke_model` | no | Which stroke classifier labels the hits: `"cnn"`, `"lstm"`, `"rf"` or `"ensemble"` ([D28](DECISIONS.md), [D37](DECISIONS.md)). Default: the server's `stages.strokes.algorithm` (`cnn` as shipped). `422` for any other value. A model that is not installed (`/health` `stroke_models`) leaves the hits unlabelled and the `strokes` stage `skipped`. Running the same video again with another model reuses the cached tracking, pose and hits |
 
 Response `202`: a Job object (below). `404` for an unknown video, including one deleted while the job was being created.
 

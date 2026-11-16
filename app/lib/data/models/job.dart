@@ -298,8 +298,14 @@ class JobOptions {
   }
 }
 
-/// Stroke models a job can choose from (backend/shuttlesense/strokes/registry.py).
-const kStrokeModels = <String, String>{'cnn': 'CNN', 'lstm': 'LSTM', 'rf': 'Random Forest'};
+/// Stroke models a job can choose from (backend/shuttlesense/strokes/registry.py). The
+/// ensemble runs the other three and averages their answers.
+const kStrokeModels = <String, String>{
+  'cnn': 'CNN',
+  'lstm': 'LSTM',
+  'rf': 'Random Forest',
+  'ensemble': 'Ensemble',
+};
 
 /// The stroke model to ask [health]'s server for, given the remembered choice: the choice
 /// when it is installed, else the first installed model. Null (send nothing, the server

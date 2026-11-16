@@ -322,7 +322,10 @@ def test_installed_models_follow_weights_and_packages(
     for name in ("cnn.pt", "lstm.pt", "rf.npz"):
         (tmp_path / name).write_bytes(b"x")
     monkeypatch.setattr(registry, "_has", lambda module: True)
-    assert registry.installed_models(config) == ["cnn", "lstm", "rf"]
+    assert registry.installed_models(config) == ["cnn", "lstm", "rf", "ensemble"]
+    (tmp_path / "lstm.pt").unlink()  # the ensemble needs all three
+    assert registry.installed_models(config) == ["cnn", "rf"]
+    (tmp_path / "lstm.pt").write_bytes(b"x")
     assert registry.installed_models({"stages": {"strokes": {**strokes, "enabled": False}}}) == []
 
     # Without torch only the forest is left, and the stage follows the chosen model.
@@ -528,3 +531,56 @@ def test_shift_range_and_shifted_copies() -> None:
     assert all(row.tolist() == x[:, 1].tolist() for row in still)
     starts = {int(np.argmax(augment(x.copy(), rng, False, 0.0, 4)[:, 1] > 0)) for _ in range(200)}
     assert max(starts) == 4  # up to four frames late
+
+
+# --- ensemble -------------------------------------------------------------------------
+
+
+def test_average_probabilities_follows_each_models_class_order() -> None:
+    a = (np.array([[0.9, 0.1]]), ["smash", "drop"])
+    b = (np.array([[0.6, 0.4]]), ["drop", "smash"])  # the other order
+    out = classify.average_probabilities([a, b], ["smash", "drop"])
+    assert out[0] == pytest.approx([0.65, 0.35])
+    # A class one model does not know counts as 0 for it, and the rows still sum to 1.
+    c = (np.array([[1.0]]), ["smash"])
+    out = classify.average_probabilities([a, c], ["smash", "drop"])
+    assert out[0] == pytest.approx([0.95, 0.05]) and out.sum() == pytest.approx(1.0)
+
+
+def test_ensemble_runs_the_three_models_and_averages(monkeypatch: pytest.MonkeyPatch) -> None:
+    record = load_golden()
+    classes = list(STROKE_CLASSES)
+    seen = []
+
+    def fake(_record, _ctx, name, _slots):
+        seen.append(name)
+        p = np.full((len(record.hits), len(classes)), 0.02)
+        # CNN and LSTM lean towards a drop, the forest is sure of a smash.
+        p[:, classes.index("drop")] = {"cnn": 0.5, "lstm": 0.5, "rf": 0.02}[name]
+        p[:, classes.index("smash")] = {"cnn": 0.4, "lstm": 0.4, "rf": 0.9}[name]
+        return p, classes
+
+    monkeypatch.setattr(classify, "model_probabilities", fake)
+    ctx = stroke_ctx(algorithm="ensemble", context={"enabled": False})
+    record = classify.run(record, ctx)
+    assert seen == ["cnn", "lstm", "rf"]
+    assert record.stroke_model == "ensemble"
+    assert all(h.stroke == "smash" for h in record.hits)
+    assert all(abs(sum(h.class_probs.values()) - 1) < 1e-2 for h in record.hits)
+
+    seen.clear()
+    record = classify.run(record, stroke_ctx(algorithm="rf", context={"enabled": False}))
+    assert seen == ["rf"] and record.stroke_model == "rf"
+
+
+def test_ensemble_names_the_member_that_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(classify, "BACKEND_DIR", tmp_path)
+    with pytest.raises(StageSkipped, match="stroke model not installed$"):
+        classify.run(load_golden(), stroke_ctx(algorithm="ensemble", weights="none.pt"))
+    # Live and Watch sessions load "the model's checkpoint": for the ensemble, its lead's.
+    assert registry.weights_path({"weights": "a.pt"}, "ensemble") == "a.pt"
+    assert registry.all_weights({}, "ensemble") == [
+        registry.DEFAULT_WEIGHTS[m] for m in ("cnn", "lstm", "rf")
+    ]

@@ -137,11 +137,15 @@ def fit_table(strokes: dict, matches: set[int]) -> dict:
 def model_probs(split: Path, device: str = "cpu") -> dict[str, np.ndarray]:
     """[N, classes] probabilities of each installed stroke model on a feature file."""
     from shuttlesense.strokes import registry
-    from shuttlesense.strokes.classify import load_classifier, predict_proba
+    from shuttlesense.strokes.classify import (
+        average_probabilities,
+        load_classifier,
+        predict_proba,
+    )
 
     x = np.load(split)["X"]
     out = {}
-    for name in registry.ALGORITHMS:
+    for name in registry.MEMBERS:
         try:
             model, ckpt = load_classifier(registry.DEFAULT_WEIGHTS[name], device)
         except Exception as exc:  # weights or torch missing: report the others
@@ -159,6 +163,10 @@ def model_probs(split: Path, device: str = "cpu") -> dict[str, np.ndarray]:
             for i in range(0, len(x), 512)
         ]
         out[name] = np.concatenate(parts)
+    if len(out) == len(registry.MEMBERS):  # the ensemble choice: the mean of the three
+        out[registry.ENSEMBLE] = average_probabilities(
+            [(p, CLASSES) for p in out.values()], CLASSES
+        )
     return out
 
 

@@ -110,7 +110,7 @@ stages:
 
   strokes:
     enabled: true
-    algorithm: cnn              # cnn | lstm | rf (D28); a job's stroke_model replaces it
+    algorithm: cnn              # cnn | lstm | rf | ensemble (D28, D37); a job's stroke_model replaces it
     weights: weights/strokes/stroke_cnn.pt
     weights_lstm: weights/strokes/stroke_lstm.pt
     weights_rf: weights/strokes/stroke_rf.npz

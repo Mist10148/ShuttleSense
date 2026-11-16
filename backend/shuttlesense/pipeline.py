@@ -98,7 +98,7 @@ def available_stages(config: dict[str, Any] | None = None) -> list[str]:
             if name not in registry.ALGORITHMS:
                 continue
             requires = registry.REQUIRES[name]
-            paths = [registry.weights_path(cfg, name)]
+            paths = registry.all_weights(cfg, name)
         if not all(_installed(m) for m in requires):
             continue
         if not all(p and (BACKEND_DIR / p).exists() for p in paths):

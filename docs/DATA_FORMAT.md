@@ -239,7 +239,7 @@ v1.1 (Oct 31, [D19](DECISIONS.md)) adds optional fields only: `mode`, `feedback[
     ]
   },
 
-  "stroke_model": "cnn"                                        // v1.4; cnn, lstm or rf; null if no model ran
+  "stroke_model": "cnn"                                        // v1.4; cnn, lstm, rf or ensemble (D37); null if no model ran
 }
 ```
 

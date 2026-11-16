@@ -1985,7 +1985,8 @@
           "enum": [
             "cnn",
             "lstm",
-            "rf"
+            "rf",
+            "ensemble"
           ],
           "type": "string"
         },

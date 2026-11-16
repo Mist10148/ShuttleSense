@@ -1,4 +1,4 @@
-"""Stroke inference stage (F6, FR-6): 1D CNN, LSTM or Random Forest (D28)."""
+"""Stroke inference stage (F6, FR-6): 1D CNN, LSTM, Random Forest (D28), or all three (D37)."""
 
 from __future__ import annotations
 
@@ -102,14 +102,29 @@ def predict_proba(
     return softmax(logits.float().cpu().numpy() / max(float(temperature), 1e-3))
 
 
-def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
-    """Fill hits[].stroke (argmax), confidence and class_probs; note the model used."""
-    if not record.hits:
-        raise StageSkipped("no hits to classify")
+def average_probabilities(
+    parts: list[tuple[np.ndarray, list[str]]], classes: list[str]
+) -> np.ndarray:
+    """Mean of several models' [N, classes] probabilities, each given with its class order.
+
+    The models' confidences are already calibrated (temperature for the networks, leaf
+    frequencies for the forest), so a plain mean lets a confident model outvote two unsure
+    ones. A class a model does not know counts as 0 for it.
+    """
+    total = np.zeros((len(parts[0][0]), len(classes)), dtype=np.float64)
+    for probs, order in parts:
+        for j, c in enumerate(order):
+            if c in classes:
+                total[:, classes.index(c)] += probs[:, j]
+    total /= len(parts)
+    return total / np.maximum(total.sum(axis=1, keepdims=True), 1e-12)
+
+
+def model_probabilities(
+    record: ClipRecord, ctx: StageContext, name: str, slots: list[str]
+) -> tuple[np.ndarray, list[str]]:
+    """([hits, classes] probabilities, class order) of one trained model for record.hits."""
     cfg = ctx.stage_config("strokes")
-    name = registry.algorithm(cfg)
-    if name not in registry.ALGORITHMS:
-        raise StageSkipped(f"stroke model {name!r} is not implemented")
     try:
         model, ckpt = load_classifier(registry.weights_path(cfg, name), ctx.device)
     except StageSkipped as exc:
@@ -129,7 +144,6 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     # Optional keys of newer checkpoints; without them the window is the clip's own frames
     # and the confidence is the plain softmax, as for the first weights.
     window_fps = ckpt.get("window_fps")
-    slots = pose_slots(record, ctx.stage_config("hits"))
     x = np.stack(
         [
             build_window(record, h.frame, slot, window, use_traj, pose_norm, window_fps)
@@ -137,7 +151,22 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         ]
     )
     temperature = float(ckpt.get("temperature", 1.0))
-    probs = predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device, temperature)
+    return predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device, temperature), classes
+
+
+def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
+    """Fill hits[].stroke (argmax), confidence and class_probs; note the model used."""
+    if not record.hits:
+        raise StageSkipped("no hits to classify")
+    name = registry.algorithm(ctx.stage_config("strokes"))
+    if name not in registry.ALGORITHMS:
+        raise StageSkipped(f"stroke model {name!r} is not implemented")
+    slots = pose_slots(record, ctx.stage_config("hits"))
+    parts = [model_probabilities(record, ctx, m, slots) for m in registry.members(name)]
+    probs, classes = parts[0]
+    if len(parts) > 1:
+        classes = list(STROKE_CLASSES)
+        probs = average_probabilities(parts, classes)
     for hit, p in zip(record.hits, probs, strict=True):
         best = int(p.argmax())
         hit.stroke = classes[best]

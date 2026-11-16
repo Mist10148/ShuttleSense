@@ -3,6 +3,9 @@
 All three read the same feature window (strokes/features.py) and give the same classes.
 `stages.strokes.algorithm` picks one; each has its own weights key in the same config block,
 so the stage cache sees both the choice and a replaced file (cache.py).
+
+"ensemble" (D37) is a fourth choice that runs the three and averages their probabilities
+(strokes/classify.py). It has no weights of its own: it is installed when all three are.
 """
 
 from __future__ import annotations
@@ -16,16 +19,49 @@ from shuttlesense.schema import StrokeModel
 ALGORITHMS: tuple[StrokeModel, ...] = get_args(StrokeModel)
 DEFAULT_ALGORITHM: StrokeModel = "cnn"
 
-LABELS: dict[str, str] = {"cnn": "1D CNN", "lstm": "LSTM", "rf": "Random Forest"}
+ENSEMBLE: StrokeModel = "ensemble"
+# The trained models, in the order the ensemble runs them. The first is its lead member.
+MEMBERS: tuple[StrokeModel, ...] = ("cnn", "lstm", "rf")
+
+LABELS: dict[str, str] = {
+    "cnn": "1D CNN",
+    "lstm": "LSTM",
+    "rf": "Random Forest",
+    "ensemble": "Ensemble",
+}
 # Config key under stages.strokes holding each model's weights path, and the default path.
-WEIGHT_KEYS: dict[str, str] = {"cnn": "weights", "lstm": "weights_lstm", "rf": "weights_rf"}
+# The ensemble's entry is its lead member's file: code that loads "the model's checkpoint"
+# to learn the window length (live and Watch sessions) gets a real one, and the three
+# members share that layout.
+WEIGHT_KEYS: dict[str, str] = {
+    "cnn": "weights",
+    "lstm": "weights_lstm",
+    "rf": "weights_rf",
+    "ensemble": "weights",
+}
 DEFAULT_WEIGHTS: dict[str, str] = {
     "cnn": "weights/strokes/stroke_cnn.pt",
     "lstm": "weights/strokes/stroke_lstm.pt",
     "rf": "weights/strokes/stroke_rf.npz",
+    "ensemble": "weights/strokes/stroke_cnn.pt",
 }
 # Packages each model imports at inference. The forest is plain NumPy arrays.
-REQUIRES: dict[str, tuple[str, ...]] = {"cnn": ("torch",), "lstm": ("torch",), "rf": ()}
+REQUIRES: dict[str, tuple[str, ...]] = {
+    "cnn": ("torch",),
+    "lstm": ("torch",),
+    "rf": (),
+    "ensemble": ("torch",),
+}
+
+
+def members(name: str) -> tuple[str, ...]:
+    """The trained models a choice runs: the three for the ensemble, else itself."""
+    return MEMBERS if name == ENSEMBLE else (name,)
+
+
+def all_weights(strokes_cfg: dict[str, Any], name: str) -> list[str]:
+    """Every weights file a choice needs."""
+    return [weights_path(strokes_cfg, m) for m in members(name)]
 
 
 def algorithm(strokes_cfg: dict[str, Any]) -> str:
@@ -50,7 +86,7 @@ def installed(strokes_cfg: dict[str, Any], name: str) -> bool:
         return False
     if not all(_has(m) for m in REQUIRES[name]):
         return False
-    return (BACKEND_DIR / weights_path(strokes_cfg, name)).is_file()
+    return all((BACKEND_DIR / path).is_file() for path in all_weights(strokes_cfg, name))
 
 
 def installed_models(config: dict[str, Any] | None) -> list[str]:
