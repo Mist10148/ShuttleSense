@@ -259,6 +259,21 @@ short session in the same server process; without it each invocation starts a ne
 although the disk cache may already be warm. `--seconds 0` runs the complete normalized
 clip. The 45-second checkpoint is the first completed response at or after 45 seconds.
 
+For an isolated prefetch experiment, the benchmark accepts `--prefetch-depth 2` (default
+`0`). This is confined to the benchmark process; it does not enable prefetching in the
+application. The worker only reads and normalizes frames, with at most two queued or
+currently decoding frames; analysis and recording still happen on requests. Use identical
+inputs and alternate runs with and without the option. This in-process experiment cannot
+establish Flutter, real-network, pause/resume or production throughput behavior.
+
+The corresponding frame-by-frame Watch prototype is separately configured with
+`watch.frame_prefetch_depth: 2` in `configs/pipeline.yaml`; its default is `0` (off).
+Restart the backend after changing it. It prefetches only normalized frames for
+**Analyze every frame**, never runs inference on unrequested frames, and discards queued
+frames on stop or disconnect. It is experimental until the fixed-section Flutter and
+output-alignment comparisons in the performance roadmap pass; it does not change
+background or real-time Watch. A blocked video read can delay producer shutdown.
+
 For the actual Windows app, run `flutter run -d windows --profile
 --dart-define=WATCH_PROFILE=true` and select **Analyze every frame**. `WATCH_PROFILE`
 lines in the Flutter console correlate client request/receive, response handling and

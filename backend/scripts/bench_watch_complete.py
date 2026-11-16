@@ -102,7 +102,17 @@ def main() -> None:
     parser.add_argument("--warmup-frames", type=int, default=0,
                         help="run a previous session in the same process before measuring")
     parser.add_argument("--out", type=Path, help="optional JSON output path")
+    parser.add_argument("--prefetch-depth", type=int, choices=(0, 2), default=0,
+                        help="benchmark-only decoded-frame queue; 0 disables it")
     args = parser.parse_args()
+    if args.prefetch_depth:
+        from shuttlesense.io.prefetch import PrefetchFrames
+        from shuttlesense.io import FrameReader
+
+        # Process-local experiment only: production Watch retains its normal reader.
+        FrameReader.__iter__ = lambda reader: PrefetchFrames(
+            lambda: reader.frames(0, len(reader)), args.prefetch_depth
+        )
     with tempfile.TemporaryDirectory(prefix="shuttlesense-complete-bench-") as temp:
         app = create_app(Settings(storage_dir=Path(temp), device="cuda"))
         with TestClient(app) as client:
@@ -187,6 +197,7 @@ def main() -> None:
             if job["status"] != "done":
                 raise RuntimeError(f"export failed: {job.get('error')}")
             report = {"parallel": args.parallel == "true", "setup_s": round(setup, 2),
+                              "prefetch_depth": args.prefetch_depth,
                               "profile": args.profile, "warmup_frames": args.warmup_frames,
                               "elapsed_s": round(elapsed, 2), "frames": count,
                               "video_s": round(count / first["fps"], 2),

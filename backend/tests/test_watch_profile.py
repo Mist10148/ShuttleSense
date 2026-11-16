@@ -45,3 +45,17 @@ def test_delivery_interval_requires_same_host_opt_in():
     key = "serialize_start_to_client_receive_ms_same_host"
     assert summarize(rows)[key] is None
     assert summarize(rows, same_host=True)[key]["median"] == 12.5
+
+
+def test_delivery_analysis_accounts_for_frame_pacing():
+    rows = [
+        {"event": "received", "round_trip_ms": 100, "video_fps": 25,
+         "server_ms": {"read": 10, "jpeg": 2, "processing": 80}},
+        {"event": "received", "round_trip_ms": 30, "video_fps": 25,
+         "server_ms": {"read": 5, "jpeg": 2, "processing": 20}},
+    ]
+    result = summarize(rows)
+    assert result["server_read_ms"]["median"] == 7.5
+    assert result["pacing_below_frame_interval"] == {"count": 1, "frames": 2}
+    # The second read is hidden by pacing even without prefetch.
+    assert result["ideal_read_overlap_cycle_reduction_pct"] == 7.14

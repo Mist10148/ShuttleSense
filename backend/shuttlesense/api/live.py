@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from shuttlesense.api.models import Job, VideoInfoOut, utcnow
@@ -60,6 +61,7 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
     manager: LiveManager = ws.app.state.live
     entry = None
     frames = None
+    prefetch_active = False
     watch_started = time.perf_counter()
     perception_s = 0.0
     processed = 0
@@ -143,7 +145,14 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             session.analyzer.hit_lag = max(session.analyzer.hit_lag, ahead + 1)
         except (StageSkipped, ImportError, OSError, ValueError, KeyError):
             log.warning("Watch stroke model unavailable; hits will remain unclassified")
-        frames = iter(reader)
+        watch_cfg = manager.state.jobs.config.get("watch") or {}
+        prefetch_active = playback == "complete" and watch_cfg.get("frame_prefetch_depth", 0) == 2
+        if prefetch_active:
+            from shuttlesense.io.prefetch import PrefetchFrames
+
+            frames = PrefetchFrames(lambda: iter(reader), depth=2)
+        else:
+            frames = iter(reader)
         next_index = 0
         await ws.send_json(
             {
@@ -256,19 +265,26 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
         log.exception("watch session failed")
         await _error(ws, "internal", "video analysis failed", 1011)
     finally:
-        if frames is not None:
-            frames.close()
-        if entry is not None:
-            try:
-                log.info("Frame Watch: %d frames, %.2fs elapsed including setup and pauses, "
-                         "%.2fs frame processing", processed,
-                         time.perf_counter() - watch_started, perception_s)
-                job = await asyncio.to_thread(_finish_watch, manager, entry)
-                with contextlib.suppress(Exception):
-                    await ws.send_json({"type": "saved", "job_id": job.id if job else None})
-                    await ws.close()
-            except Exception:
-                log.exception("saving watch session failed")
+        # A client disconnect can cancel the request scope. Ensure queue shutdown
+        # and the partial save are not interrupted at their await points.
+        with anyio.CancelScope(shield=True):
+            if frames is not None:
+                if prefetch_active:
+                    # VideoCapture is owned and closed by the producer thread.
+                    await asyncio.to_thread(frames.close)
+                else:
+                    frames.close()
+            if entry is not None:
+                try:
+                    log.info("Frame Watch: %d frames, %.2fs elapsed including setup and pauses, "
+                             "%.2fs frame processing", processed,
+                             time.perf_counter() - watch_started, perception_s)
+                    job = await asyncio.to_thread(_finish_watch, manager, entry)
+                    with contextlib.suppress(Exception):
+                        await ws.send_json({"type": "saved", "job_id": job.id if job else None})
+                        await ws.close()
+                except Exception:
+                    log.exception("saving watch session failed")
 
 
 def _finish_watch(manager, entry):

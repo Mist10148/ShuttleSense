@@ -25,6 +25,24 @@ def summarize(rows, *, same_host=False):
     checkpoint = checkpoints[0] if checkpoints else None
     transports = [row["previous_transport"] for row in received
                   if isinstance(row.get("previous_transport"), dict)]
+    server_stages = {
+        key: [row["server_ms"][key] for row in received
+              if isinstance(row.get("server_ms"), dict)
+              and isinstance(row["server_ms"].get(key), (int, float))]
+        for key in ("read", "jpeg", "processing")
+    }
+    paced = [row for row in received
+             if isinstance(row.get("round_trip_ms"), (int, float))
+             and isinstance(row.get("video_fps"), (int, float)) and row["video_fps"] > 0]
+    paced_below_interval = sum(row["round_trip_ms"] < 1000 / row["video_fps"] for row in paced)
+    read_pairs = [row for row in paced if isinstance(row.get("server_ms"), dict)
+                  and isinstance(row["server_ms"].get("read"), (int, float))]
+    # Idealized savings if every measured read were completely overlapped. The
+    # playback interval still caps the benefit when round trips are very fast.
+    cycle_ms = sum(max(row["round_trip_ms"], 1000 / row["video_fps"]) for row in read_pairs)
+    overlap_ms = sum(min(max(row["server_ms"]["read"], 0),
+                         max(row["round_trip_ms"] - 1000 / row["video_fps"], 0))
+                     for row in read_pairs)
     delivery = [(row["client_receive_epoch_us"] - row["server_serialize_epoch_us"]) / 1000
                 for row in received
                 if same_host and isinstance(row.get("client_receive_epoch_us"), (int, float))
@@ -37,6 +55,13 @@ def summarize(rows, *, same_host=False):
         checkpoint = None
     return {"frames_received": len(received), "checkpoint_45s": checkpoint,
             "round_trip_ms": stats(values("received", "round_trip_ms")),
+            "server_read_ms": stats(server_stages["read"]),
+            "server_jpeg_encode_ms": stats(server_stages["jpeg"]),
+            "server_processing_ms": stats(server_stages["processing"]),
+            "pacing_below_frame_interval": {"count": paced_below_interval,
+                                             "frames": len(paced)} if paced else None,
+            "ideal_read_overlap_cycle_reduction_pct":
+                round(100 * overlap_ms / cycle_ms, 2) if cycle_ms else None,
             "json_ms": stats(values("received", "json_ms")),
             "handling_ms": stats(values("received", "handle_ms")),
             "next_request_delay_ms": stats(values("next", "since_response_ms")),
