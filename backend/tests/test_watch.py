@@ -140,19 +140,16 @@ def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, m
     monkeypatch.setattr(shuttlesense.io, "FrameReader", lambda *a, **kw: [])
 
     def render(*args, progress, **kwargs):
-        progress(0.25)
-        progress(0.75)
+        progress(.25)
+        progress(.75)
         progress(1.0)
 
     monkeypatch.setattr(shuttlesense.render, "render_video", render)
-    manager._render(
-        SimpleNamespace(id="job", video_id="v", overlays=[]),
-        SimpleNamespace(height=720, fps=30),
-        tmp_path / "source.mp4",
-    )
+    manager._render(SimpleNamespace(id="job", video_id="v", overlays=[]),
+                    SimpleNamespace(height=720, fps=30), tmp_path / "source.mp4")
     values = [call.kwargs["progress"] for call in jobs._update.call_args_list]
-    assert values[0] == pytest.approx(0.92475)
-    assert values[-1] == pytest.approx(0.999)
+    assert values[0] == pytest.approx(.92475)
+    assert values[-1] == pytest.approx(.999)
     assert all(a <= b for a, b in zip(values, values[1:], strict=False))
     assert jobs.check_cancelled.call_count == 4
     jobs.finish_outside.assert_called_once_with("job")

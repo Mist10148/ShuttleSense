@@ -266,14 +266,11 @@ def test_batched_pose_uses_same_boxes_and_chunk_order():
     from shuttlesense.pose.estimator import _batched_body_pose
 
     sizes = []
-
     class Session:
         def get_inputs(self):
             return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
-
         def get_outputs(self):
             return [SimpleNamespace(name="output")]
-
         def run(self, names, inputs):
             batch = inputs["input"]
             sizes.append(len(batch))
@@ -281,17 +278,14 @@ def test_batched_pose_uses_same_boxes_and_chunk_order():
 
     class Pose:
         backend, to_openpose, session = "onnxruntime", False, Session()
-
         def preprocess(self, image, box):
             return np.full((2, 2, 3), box[0]), box[0], 1
-
         def postprocess(self, outputs, center, scale):
             assert outputs[0][0, 0] == center
             return np.array([[[center, scale]]]), np.array([[center]])
 
-    body = SimpleNamespace(
-        one_stage=False, pose_model=Pose(), det_model=lambda frame: [[i, 0, 1, 1] for i in range(5)]
-    )
+    body = SimpleNamespace(one_stage=False, pose_model=Pose(),
+                           det_model=lambda frame: [[i, 0, 1, 1] for i in range(5)])
     keypoints, scores = _batched_body_pose(body, np.zeros((10, 10, 3)), 2)
     assert sizes == [2, 2, 1]
     assert keypoints[:, 0, 0].tolist() == list(range(5))
@@ -306,23 +300,17 @@ def test_batched_pose_uses_full_frame_when_no_boxes():
     class Session:
         def get_inputs(self):
             return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
-
         def get_outputs(self):
             return [SimpleNamespace(name="output")]
-
         def run(self, names, inputs):
             return [np.ones((1, 1))]
-
     class Pose:
         backend, to_openpose, session = "onnxruntime", False, Session()
-
         def preprocess(self, image, box):
             assert box == [0, 0, 10, 8]
             return np.zeros((2, 2, 3)), 0, 1
-
         def postprocess(self, outputs, center, scale):
             return np.ones((1, 17, 2)), np.ones((1, 17))
-
     body = SimpleNamespace(one_stage=False, pose_model=Pose(), det_model=lambda frame: [])
     keypoints, scores = _batched_body_pose(body, np.zeros((8, 10, 3)), 8)
     assert keypoints.shape == (1, 17, 2) and scores.shape == (1, 17)
@@ -341,32 +329,25 @@ def test_rtmpose_batched_postprocessing_matches_each_crop_exactly():
     y = rng.random((5, 17, 512), dtype=np.float32)
     centers = rng.random((5, 2), dtype=np.float32) * 500
     scales = rng.random((5, 2), dtype=np.float32) * 400
-
     class Session:
         def get_inputs(self):
             return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
-
         def get_outputs(self):
             return [SimpleNamespace(name="x"), SimpleNamespace(name="y")]
-
         def run(self, outputs, inputs):
             count = len(inputs["input"])
             return [x[:count], y[:count]]
-
     pose = rtmlib.RTMPose.__new__(rtmlib.RTMPose)
     pose.backend, pose.to_openpose, pose.session = "onnxruntime", False, Session()
     pose.model_input_size = np.array([192, 256])
     pose.preprocess = lambda frame, box: (np.zeros((2, 2, 3)), centers[box[0]], scales[box[0]])
     body = SimpleNamespace(one_stage=False, pose_model=pose)
-    actual = _batched_body_pose(
-        body, np.zeros((10, 10, 3)), 8, [[i] for i in range(5)], vectorized=True
-    )
-    sequential = _batched_body_pose(
-        body, np.zeros((10, 10, 3)), 8, [[i] for i in range(5)], vectorized=False
-    )
-    expected = [
-        pose.postprocess([x[i : i + 1], y[i : i + 1]], centers[i], scales[i]) for i in range(5)
-    ]
+    actual = _batched_body_pose(body, np.zeros((10, 10, 3)), 8, [[i] for i in range(5)],
+                                vectorized=True)
+    sequential = _batched_body_pose(body, np.zeros((10, 10, 3)), 8, [[i] for i in range(5)],
+                                    vectorized=False)
+    expected = [pose.postprocess([x[i:i + 1], y[i:i + 1]], centers[i], scales[i])
+                for i in range(5)]
     assert np.array_equal(actual[0], np.concatenate([v[0] for v in expected]))
     assert np.array_equal(actual[1], np.concatenate([v[1] for v in expected]))
     assert np.array_equal(actual[0], sequential[0])
@@ -386,15 +367,12 @@ def test_pose_crop_lookup_matches_rtmlib_inputs_and_geometry():
     frame = np.random.default_rng(3).integers(0, 256, (300, 420, 3), dtype=np.uint8)
     boxes = [[10, 20, 100, 280], [-10, 30, 90, 250], [180, 40, 400, 260]]
     prepared = [pose.preprocess(frame, box) for box in boxes]
-    expected = np.stack(
-        [np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32) for img, _, _ in prepared]
-    )
+    expected = np.stack([np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
+                         for img, _, _ in prepared])
     actual, geometry = PoseCropLookup(pose).prepare(frame, boxes)
     assert np.array_equal(expected, actual)
-    assert all(
-        np.array_equal(center, original[1]) and np.array_equal(scale, original[2])
-        for (center, scale), original in zip(geometry, prepared, strict=True)
-    )
+    assert all(np.array_equal(center, original[1]) and np.array_equal(scale, original[2])
+               for (center, scale), original in zip(geometry, prepared, strict=True))
 
 
 def test_failed_crop_lookup_falls_back_for_remaining_batches():
@@ -405,35 +383,26 @@ def test_failed_crop_lookup_falls_back_for_remaining_batches():
     class Lookup:
         enabled = True
         calls = 0
-
         def prepare(self, frame, boxes):
             self.calls += 1
             raise ValueError("unsupported crop")
-
     class Session:
         def get_inputs(self):
             return [SimpleNamespace(name="input", shape=["batch", 3, 2, 2])]
-
         def get_outputs(self):
             return [SimpleNamespace(name="x")]
-
         def run(self, outputs, inputs):
             return [inputs["input"][:, 0, 0, 0:1]]
-
     class Pose:
         backend, to_openpose, session = "onnxruntime", False, Session()
-
         def preprocess(self, image, box):
             return np.full((2, 2, 3), box[0]), box[0], 1
-
         def postprocess(self, outputs, center, scale):
             return np.array([[[center, scale]]]), np.array([[center]])
-
     lookup = Lookup()
     body = SimpleNamespace(one_stage=False, pose_model=Pose())
-    kps, _ = _batched_body_pose(
-        body, np.zeros((10, 10, 3)), 2, [[i] for i in range(5)], crop_lookup=lookup
-    )
+    kps, _ = _batched_body_pose(body, np.zeros((10, 10, 3)), 2, [[i] for i in range(5)],
+                                crop_lookup=lookup)
     assert kps[:, 0, 0].tolist() == list(range(5))
     assert lookup.calls == 1 and not lookup.enabled
 
@@ -448,18 +417,15 @@ def test_watch_batch_failure_falls_back_once(monkeypatch):
     class Body:
         def __init__(self, **kwargs):
             self.calls = 0
-
         def __call__(self, frame):
             self.calls += 1
-            keypoints = np.array([[[i * 2.0, i * 3.0] for i in range(17)]])
+            keypoints = np.array([[[i * 2., i * 3.] for i in range(17)]])
             return keypoints, np.ones((1, 17))
 
     attempts = []
-
     def failed(*args):
         attempts.append(1)
         raise RuntimeError("unsupported batch")
-
     monkeypatch.setattr(rtmlib, "Body", Body)
     monkeypatch.setattr(estimator, "_batched_body_pose", failed)
     sequential = estimator._rtmlib_detector("balanced", "cpu")
@@ -473,14 +439,12 @@ def test_watch_batch_failure_falls_back_once(monkeypatch):
 def test_watch_candidate_shadow_and_filter_keep_original_order(monkeypatch):
 
     import pytest
-
     rtmlib = pytest.importorskip("rtmlib")
     from shuttlesense.pose import estimator
 
     class Body:
         def __init__(self, **kwargs):
             self.det_model = lambda frame: [[0, 0, 3, 3], [5, 5, 9, 9]]
-
         def __call__(self, frame):
             raise AssertionError("unexpected unfiltered fallback")
 
@@ -491,10 +455,8 @@ def test_watch_candidate_shadow_and_filter_keep_original_order(monkeypatch):
     class Candidates:
         def __init__(self, mode):
             self.mode, self.excluded_players, self.records = mode, [], []
-
         def select(self, boxes, shape):
             return [False, True]
-
         def record(self, *args):
             self.records.append(args)
 
@@ -518,24 +480,19 @@ def test_watch_candidate_failure_falls_back_to_unfiltered(monkeypatch):
     from shuttlesense.pose import estimator
 
     rtmlib = pytest.importorskip("rtmlib")
-
     class Body:
         def __init__(self, **kwargs):
             self.det_model = lambda frame: [[0, 0, 3, 3]]
-
         def __call__(self, frame):
             return np.array([[[n, n] for n in range(17)]], float), np.ones((1, 17))
-
     class Candidates:
         mode = "filter"
         excluded_players = []
         stats = {"fallback": False}
         calls = 0
-
         def select(self, boxes, shape):
             self.calls += 1
             raise ValueError("bad projection")
-
     monkeypatch.setattr(rtmlib, "Body", Body)
     baseline = estimator._rtmlib_detector("balanced", "cpu")
     candidates = Candidates()

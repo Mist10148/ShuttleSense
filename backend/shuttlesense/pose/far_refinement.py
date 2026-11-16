@@ -1,5 +1,4 @@
-"""Run a focused pretrained pose pass when an already locked far player is missing."""
-
+﻿"""Run a focused pretrained pose pass when an already locked far player is missing."""
 from __future__ import annotations
 
 import math
@@ -23,20 +22,12 @@ class FarPlayerRefiner:
         self.remaining = 0
         self.court = court
         self.size = size
-        self.min_score = float(cfg.get("min_person_score", 0.4))
+        self.min_score = float(cfg.get("min_person_score", .4))
         self.margin = float(cfg.get("far_locked_jump_margin_m", 1.5))
-        self.side_margin = float(cfg.get("locked_jump_margin_m", 0.3))
+        self.side_margin = float(cfg.get("locked_jump_margin_m", .3))
 
-    def refine(
-        self,
-        frame: np.ndarray,
-        detect,
-        tracker,
-        people: list[Player],
-        *,
-        homography: np.ndarray | None,
-        scale: tuple[float, float] = (1, 1),
-    ) -> list[Player]:
+    def refine(self, frame: np.ndarray, detect, tracker, people: list[Player], *,
+               homography: np.ndarray | None, scale: tuple[float, float] = (1, 1)) -> list[Player]:
         if not self.enabled or homography is None:
             return people
         far = [track for name, track in tracker.slots.items() if name.startswith("far")]
@@ -55,18 +46,18 @@ class FarPlayerRefiner:
         xmin, xmax, ymin, ymax = play_bounds(self.court, self.size)
         net = (ymin + ymax) / 2
         try:
-            points = court_to_image(
-                homography, np.array([[xmin, net], [xmax, net], [xmax, ymax], [xmin, ymax]])
-            )
+            points = court_to_image(homography, np.array([
+                [xmin, net], [xmax, net], [xmax, ymax], [xmin, ymax]
+            ]))
         except (ValueError, np.linalg.LinAlgError):
             return people
         if not np.isfinite(points).all() or sx <= 0 or sy <= 0:
             return people
         points = points / np.array([sx, sy])
-        x0 = max(0, int(math.floor(points[:, 0].min() - width * 0.02)))
-        x1 = min(width, int(math.ceil(points[:, 0].max() + width * 0.02)))
-        y0 = max(0, int(math.floor(points[:, 1].min() - height * 0.25)))
-        y1 = min(height, int(math.ceil(points[:, 1].max() + height * 0.02)))
+        x0 = max(0, int(math.floor(points[:, 0].min() - width * .02)))
+        x1 = min(width, int(math.ceil(points[:, 0].max() + width * .02)))
+        y0 = max(0, int(math.floor(points[:, 1].min() - height * .25)))
+        y1 = min(height, int(math.ceil(points[:, 1].max() + height * .02)))
         if x1 - x0 < 32 or y1 - y0 < 32:
             return people
         crop = frame[y0:y1, x0:x1]
@@ -80,18 +71,15 @@ class FarPlayerRefiner:
                 continue
             translated = Player(
                 bbox=((x + x0) * sx, (y + y0) * sy, w * sx, h * sy),
-                keypoints=[
-                    ((kx + x0) * sx, (ky + y0) * sy, score) for kx, ky, score in p.keypoints
-                ],
+                keypoints=[((kx + x0) * sx, (ky + y0) * sy, score)
+                           for kx, ky, score in p.keypoints],
                 score=p.score,
             )
-            ankles = [(x, y) for x, y, score in translated.keypoints[15:17] if score >= 0.3]
+            ankles = [(x, y) for x, y, score in translated.keypoints[15:17] if score >= .3]
             anchor = np.mean(ankles, axis=0) if ankles else foot_point(translated)
             xy = image_to_court(homography, np.array([anchor]))[0]
-            if (
-                np.isfinite(xy).all()
-                and xmin - self.side_margin <= xy[0] <= xmax + self.side_margin
-                and net + 0.25 <= xy[1] <= ymax + self.margin
-            ):
+            if (np.isfinite(xy).all() and
+                    xmin - self.side_margin <= xy[0] <= xmax + self.side_margin
+                    and net + .25 <= xy[1] <= ymax + self.margin):
                 extra.append(translated)
         return [*people, *extra]

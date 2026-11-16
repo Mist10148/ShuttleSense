@@ -15,10 +15,6 @@ import numpy as np
 
 from shuttlesense.schema import ClipRecord, Hit, PlayerId, PlayerSide, slot_attr
 from shuttlesense.stage import StageContext
-from shuttlesense.timing import scaled
-
-# stages.hits keys that count frames.
-FRAME_KEYS = ("min_frames_between_hits", "rally_break_frames", "hitter_window_frames")
 
 LEFT_WRIST, RIGHT_WRIST = 9, 10
 MIN_KEYPOINT_SCORE = 0.3
@@ -40,18 +36,12 @@ def direction_changes(xy: np.ndarray, min_angle_deg: float) -> list[int]:
     return [i + 1 for i in np.flatnonzero(angles > min_angle_deg)]
 
 
-def vertical_flips(xy: np.ndarray, min_px: float = 0.0) -> list[int]:
-    """Indices where the shuttle stops moving down the image and starts moving up.
-
-    Gravity never turns a falling shuttle upwards, so such a turn is a hit. Both steps must
-    cover more than `min_px`: a shuttle held in the hand before a serve, or lying on the
-    floor, jitters by a pixel or two in either direction and is not being hit. The opposite
-    turn (up, then down) is the top of every flight, so it is not a candidate.
-    """
+def vertical_flips(xy: np.ndarray) -> list[int]:
+    """Indices where the shuttle stops moving down the image and starts moving up."""
     if len(xy) < 3:
         return []
     vy = np.diff(xy[:, 1])
-    return [i + 1 for i in range(len(vy) - 1) if vy[i] > min_px and vy[i + 1] < -min_px]
+    return [i + 1 for i in range(len(vy) - 1) if vy[i] > 0 and vy[i + 1] < 0]
 
 
 def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
@@ -62,23 +52,6 @@ def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
     if len(good) == 0:
         return float("inf")
     return float(np.min(np.linalg.norm(good[:, :2] - point, axis=1)))
-
-
-def same_rally(
-    hidden: np.ndarray, a: int, b: int, break_len: int, unobserved: set[int] | None = None
-) -> bool:
-    """Whether frames a and b belong to one rally: the shuttle was never out of sight for
-    `break_len` frames in between. `hidden` is per frame; unobserved frames (live mode: no
-    perception ran) are neither hidden nor seen."""
-    unobserved = unobserved or set()
-    run = 0
-    for f in range(a, b):
-        if f in unobserved:
-            continue
-        run = run + 1 if hidden[f] else 0
-        if run >= break_len:
-            return False
-    return True
 
 
 def detect_hits(
@@ -114,11 +87,9 @@ def detect_hits(
          if any(f not in unobserved for f in range(int(idx[k]) + 1, int(idx[k + 1])))],
         dtype=int,
     )  # fmt: skip
-    min_flip = float(cfg.get("min_flip_px", 0.0)) * cfg.get("scale", 1.0)
     for start, end in zip([0, *breaks], [*breaks, len(idx)], strict=True):
         run = pts[start:end]
-        local = set(direction_changes(run, cfg.get("min_angle_deg", 60)))
-        local |= set(vertical_flips(run, min_flip))
+        local = set(direction_changes(run, cfg.get("min_angle_deg", 60))) | set(vertical_flips(run))
         cand |= {start + i for i in local}
     max_dist = cfg.get("max_wrist_distance_px", 120) * cfg.get("scale", 1.0)
 
@@ -143,13 +114,19 @@ def detect_hits(
     hidden = np.asarray(visible) <= 0
     break_len = int(cfg.get("rally_break_frames", 30))
 
+    def same_rally(a: int, b: int) -> bool:
+        run = 0
+        for f in range(a, b):
+            if f in unobserved:
+                continue  # no observation: neither hidden nor seen
+            run = run + 1 if hidden[f] else 0
+            if run >= break_len:
+                return False
+        return True
+
     alternating: list[tuple[float, int, PlayerSide]] = []
     for hit in kept:
-        if (
-            alternating
-            and alternating[-1][2] == hit[2]
-            and same_rally(hidden, alternating[-1][1], hit[1], break_len, unobserved)
-        ):
+        if alternating and alternating[-1][2] == hit[2] and same_rally(alternating[-1][1], hit[1]):
             if hit[0] < alternating[-1][0]:
                 alternating[-1] = hit
             continue
@@ -179,37 +156,6 @@ def wrist_arrays(record: ClipRecord, side: str) -> list[np.ndarray | None]:
     return out
 
 
-def partner_distances(
-    record: ClipRecord, hit: Hit, xy: np.ndarray, visible: np.ndarray, window: int
-) -> dict[PlayerId, float]:
-    """Each partner's closest confident wrist to the shuttle within +-window frames of a hit
-    (inf when the partner or the shuttle was not seen)."""
-    slots: tuple[PlayerId, PlayerId] = (f"{hit.player}_1", f"{hit.player}_2")  # type: ignore[assignment]
-    dist = {}
-    for slot in slots:
-        best = float("inf")
-        for i in range(max(0, hit.frame - window), min(len(record.frames), hit.frame + window + 1)):
-            if not visible[i]:
-                continue
-            wrists = _wrists(getattr(record.frames[i].players, slot_attr(slot)))
-            best = min(best, _wrist_distance(xy[i], wrists))
-        dist[slot] = best
-    return dist
-
-
-def closest_partner(record: ClipRecord, hit: Hit, cfg: dict[str, Any]) -> str | None:
-    """Players field of the partner nearer the shuttle at a hit, however small the margin;
-    None when neither was seen."""
-    from shuttlesense.timing import frames_at
-    from shuttlesense.tracking import track_arrays
-
-    xy, visible = track_arrays(record)
-    window = frames_at(cfg.get("hitter_window_frames", 3), record.fps)
-    dist = partner_distances(record, hit, xy, visible, window)
-    slot = min(dist, key=dist.get)
-    return slot_attr(slot) if np.isfinite(dist[slot]) else None
-
-
 def attribute_hitters(record: ClipRecord, cfg: dict[str, Any]) -> None:
     """Doubles: credit each hit to one partner (Hit.hitter, hitter_confidence).
 
@@ -228,8 +174,23 @@ def attribute_hitters(record: ClipRecord, cfg: dict[str, Any]) -> None:
     window = int(cfg.get("hitter_window_frames", 3))
     ambiguous = float(cfg.get("ambiguous_px", 25)) * scale
     for hit in record.hits:
-        dist = partner_distances(record, hit, xy, visible, window)
-        a, b = dist
+        slots: tuple[PlayerId, PlayerId] = (f"{hit.player}_1", f"{hit.player}_2")  # type: ignore[assignment]
+        dist = {}
+        for slot in slots:
+            best = float("inf")
+            for i in range(
+                max(0, hit.frame - window), min(len(record.frames), hit.frame + window + 1)
+            ):
+                if not visible[i]:
+                    continue
+                best = min(
+                    best,
+                    _wrist_distance(
+                        xy[i], _wrists(getattr(record.frames[i].players, slot_attr(slot)))
+                    ),
+                )
+            dist[slot] = best
+        a, b = slots
         da, db = dist[a], dist[b]
         if not np.isfinite(min(da, db)):
             hit.hitter, hit.hitter_confidence = None, None
@@ -247,8 +208,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill record.hits with (id, frame, time_s, player)."""
     from shuttlesense.tracking import track_arrays
 
-    # Frame counts in the config are for 30 fps; pixel distances for 720p.
-    cfg = scaled(ctx.stage_config("hits"), FRAME_KEYS, record.fps)
+    cfg = dict(ctx.stage_config("hits"))
     cfg["scale"] = (record.height or 720) / 720
     xy, visible = track_arrays(record)
     hits = detect_hits(

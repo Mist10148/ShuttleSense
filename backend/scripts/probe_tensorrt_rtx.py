@@ -4,7 +4,6 @@ Run with a separate environment containing ONNX Runtime GPU and the NVIDIA
 TensorRT RTX EP. The input NPZ should contain ``inputs``, ``out0`` and ``out1``
 produced by the application's CUDA provider for the same model.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -36,14 +35,9 @@ def main():
     profile = f"{input_name}:{shape}"
     opts = ort.SessionOptions()
     opts.add_session_config_entry("session.record_ep_graph_assignment_info", "1")
-    opts.add_provider_for_devices(
-        devices,
-        {
-            "nv_profile_min_shapes": profile,
-            "nv_profile_opt_shapes": profile,
-            "nv_profile_max_shapes": profile,
-        },
-    )
+    opts.add_provider_for_devices(devices, {"nv_profile_min_shapes": profile,
+                                            "nv_profile_opt_shapes": profile,
+                                            "nv_profile_max_shapes": profile})
     start = time.perf_counter()
     session = ort.InferenceSession(str(args.model), sess_options=opts)
     print(f"session setup: {time.perf_counter() - start:.3f}s, profile={profile}", flush=True)

@@ -227,8 +227,6 @@ class ApiClient {
         if (options.startScore != null)
           'start_score': {'near': options.startScore!.near, 'far': options.startScore!.far},
         if (options.referee) ...options.match.toJson(),
-        if (options.referee && options.startGames != null)
-          'start_games': {'near': options.startGames!.near, 'far': options.startGames!.far},
         // Doubles tracks four players even without the referee layer (Phase 9).
         if (options.court == 'doubles') 'court': 'doubles',
         if (options.strokeModel != null) 'stroke_model': options.strokeModel,

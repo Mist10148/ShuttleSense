@@ -1,5 +1,4 @@
 """Experimental TrackNet TensorRT RTX runner with stable device bindings."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,24 +34,16 @@ class TrackNetRtx:
         # Per-session cache directory is keyed by the source weights by the caller.
         if not model_path.exists():
             with torch.inference_mode(), torch.autocast("cuda"):
-                torch.onnx.export(
-                    Latest(model).eval(),
-                    (self.input,),
-                    str(model_path),
-                    input_names=["input"],
-                    output_names=["heatmaps"],
-                    opset_version=17,
-                    dynamo=False,
-                )
+                torch.onnx.export(Latest(model).eval(), (self.input,), str(model_path),
+                                  input_names=["input"], output_names=["heatmaps"],
+                                  opset_version=17, dynamo=False)
         spec = SimpleNamespace(name="input", shape=list(self.input.shape))
-        original = SimpleNamespace(
-            onnx_model=str(model_path), session=SimpleNamespace(get_inputs=lambda: [spec])
-        )
+        original = SimpleNamespace(onnx_model=str(model_path),
+                                   session=SimpleNamespace(get_inputs=lambda: [spec]))
         self.session, self.assignments = _rtx_session(original, 1, False, cache / "engines")
         self.binding = self.session.io_binding()
-        self.binding.bind_input(
-            "input", "cuda", 0, np.float32, tuple(self.input.shape), self.input.data_ptr()
-        )
+        self.binding.bind_input("input", "cuda", 0, np.float32, tuple(self.input.shape),
+                                self.input.data_ptr())
         self.binding.bind_output("heatmaps", "cuda")
 
     def run(self, batch):

@@ -76,54 +76,16 @@ def check_court_area(
         raise ValueError(f"corners look wrong: the court covers {frac:.0%} of the frame")
 
 
-def job_corners(ctx: StageContext) -> list[list[float]] | None:
-    """The job's court corners in the record's pixels, snapped onto the painted lines.
-
-    The app taps corners on the source frame; the record uses normalized pixels. With
-    `stages.court.refine` the taps are then nudged onto the court markings of the first
-    frame (court/refine.py), or left as tapped when the markings do not support a better
-    fit. The court stage uses this for record.court, which line calls and court positions
-    read. Player selection in the pose stage keeps the corners exactly as tapped.
-    """
-    from shuttlesense.court.refine import DEFAULTS, refine_corners
-
-    corners = ctx.config.get("court_corners_px")
-    if not corners:
-        return None
-    if "_court_corners" in ctx.config:
-        return ctx.config["_court_corners"]
-    corners = [[float(x), float(y)] for x, y in corners]
-    reader = ctx.reader
-    if reader is not None and reader.resized:
-        sx = reader.width / reader.source.width
-        sy = reader.height / reader.source.height
-        corners = [[x * sx, y * sy] for x, y in corners]
-    cfg = {**DEFAULTS, **ctx.stage_config("court")}
-    if cfg["refine"] and reader is not None:
-        frame = next((f for _, f in reader), None)
-        if frame is not None:
-            size = tuple(cfg.get("court_size_m", COURT_SIZE_M))
-            refined, _ = refine_corners(
-                frame,
-                corners,
-                size,
-                max_shift_px=float(cfg["refine_max_shift_px"]),
-                min_support=float(cfg["refine_min_support"]),
-            )
-            try:
-                validate_corners(refined)
-                corners = refined
-            except ValueError:
-                pass
-    ctx.config["_court_corners"] = corners
-    return corners
-
-
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill record.court from the job's corners (ctx.config["court_corners_px"])."""
-    corners = job_corners(ctx)
+    corners = ctx.config.get("court_corners_px")
     if not corners:
         raise StageSkipped("no court corners provided")
+    # The app taps corners on the source frame; the record uses normalized pixels.
+    if ctx.reader is not None and ctx.reader.resized:
+        sx = ctx.reader.width / ctx.reader.source.width
+        sy = ctx.reader.height / ctx.reader.source.height
+        corners = [[x * sx, y * sy] for x, y in corners]
     size = tuple(ctx.stage_config("court").get("court_size_m", COURT_SIZE_M))
     h = compute_homography(corners, size)
     record.court = Court(

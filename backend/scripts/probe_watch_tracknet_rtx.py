@@ -1,5 +1,4 @@
 """Compare TrackNet CUDA and TensorRT RTX on real Watch inputs, without changing Watch."""
-
 from __future__ import annotations
 
 import argparse
@@ -34,7 +33,6 @@ def main():
     cache = BACKEND_DIR / ".cache" / "tracknet_rtx_probe"
     cache.mkdir(parents=True, exist_ok=True)
     model_path = cache / "tracknet.onnx"
-
     class Latest(torch.nn.Module):
         def __init__(self, network):
             super().__init__()
@@ -44,24 +42,15 @@ def main():
             return self.network(value)[:, -1:]
 
     with torch.inference_mode(), torch.autocast("cuda"):
-        torch.onnx.export(
-            Latest(model).eval(),
-            (sample,),
-            str(model_path),
-            input_names=["input"],
-            output_names=["heatmaps"],
-            opset_version=17,
-            dynamo=False,
-        )
+        torch.onnx.export(Latest(model).eval(), (sample,), str(model_path), input_names=["input"],
+                          output_names=["heatmaps"], opset_version=17, dynamo=False)
     spec = SimpleNamespace(name="input", shape=list(sample.shape))
-    model_info = SimpleNamespace(
-        onnx_model=str(model_path), session=SimpleNamespace(get_inputs=lambda: [spec])
-    )
+    model_info = SimpleNamespace(onnx_model=str(model_path),
+                                 session=SimpleNamespace(get_inputs=lambda: [spec]))
     start = time.perf_counter()
     session, assignments = _rtx_session(model_info, 1, False, cache / "engines")
-    cuda_onnx = ort.InferenceSession(
-        str(model_path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-    )
+    cuda_onnx = ort.InferenceSession(str(model_path),
+                                     providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
     host_session, _ = _rtx_session(model_info, 1, False, cache / "engines")
     print(f"setup={time.perf_counter() - start:.2f}s; assignment={assignments}", flush=True)
     # CUDA Graph replay can retain addresses: keep both the tensor and binding alive.
@@ -72,10 +61,8 @@ def main():
     samples, window = [], deque(maxlen=seq_len)
     names = ("onnx_cuda", "rtx_host", "rtx_stable_gpu")
     times = {name: [] for name in ("pytorch", *names)}
-    differences = {
-        name: {"max_heatmap": 0.0, "points": 0, "visibility": 0, "max_point_px": 0.0}
-        for name in names
-    }
+    differences = {name: {"max_heatmap": 0.0, "points": 0, "visibility": 0,
+                          "max_point_px": 0.0} for name in names}
     visible = 0
     source = FrameReader(args.video).frames(args.start_frame, args.start_frame + args.frames)
     for _, frame in source:
@@ -121,10 +108,8 @@ def main():
     print(f"frames={count}; visible={visible}; point errors in 512x288 model pixels")
     print(f"differences: {differences}")
     for name, values in times.items():
-        print(
-            f"{name}: median={statistics.median(values[warm:]):.2f}ms "
-            f"total={sum(values[warm:]) / 1000:.2f}s"
-        )
+        print(f"{name}: median={statistics.median(values[warm:]):.2f}ms "
+              f"total={sum(values[warm:])/1000:.2f}s")
 
 
 if __name__ == "__main__":

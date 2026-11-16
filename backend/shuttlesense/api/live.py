@@ -376,14 +376,9 @@ class LiveManager:
         # Watch background registers its job before analysis. Preserve that start
         # when the saved session replaces it with the rendering job.
         watch_started = (
-            (
-                existing_job.started_at
-                if existing_job and existing_job.started_at
-                else datetime.fromtimestamp(session.started_at, UTC)
-            )
-            if name.startswith("Watch & Analyze")
-            else utcnow()
-        )
+            existing_job.started_at if existing_job and existing_job.started_at else
+            datetime.fromtimestamp(session.started_at, UTC)
+        ) if name.startswith("Watch & Analyze") else utcnow()
         job = Job(
             id=job_id, video_id=entry.video_id, status="running", current_stage="render",
             started_at=watch_started, progress=0.9, mode="live", referee=True, start_score=start,

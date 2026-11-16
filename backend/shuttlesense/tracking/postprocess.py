@@ -42,43 +42,12 @@ def scale_to_video(
     return np.asarray(xy, dtype=float) * np.array([sx, sy])
 
 
-# A burst is a short run of detections that no shuttle could have reached: more than this
-# many times `outlier_px` per frame away from the track on both sides. 2.5 x 80 px is about
-# 6 m a frame at 720p, far beyond the fastest smash.
-BURST_SPEED = 2.5
-
-
-def _drop_bursts(xy: np.ndarray, visible: np.ndarray, jump_px: float, max_burst: int) -> None:
-    """Hide runs of up to `max_burst` detections that sit off the track (in place).
-
-    A run is cut wherever the shuttle would have had to move more than `jump_px` per frame.
-    A short run between two such cuts is a false detection (a racket, a shoe, a light) when
-    the track on either side of it joins up without it.
-    """
-    idx = np.flatnonzero(visible)
-    if len(idx) < 3:
-        return
-    step = np.linalg.norm(np.diff(xy[idx], axis=0), axis=1) / np.diff(idx)
-    cuts = [0, *(np.flatnonzero(step > jump_px) + 1), len(idx)]
-    for a, b in zip(cuts[1:-2], cuts[2:-1], strict=True):
-        before, after = idx[a - 1], idx[b]
-        joins = np.linalg.norm(xy[after] - xy[before]) <= jump_px * (after - before)
-        if b - a <= max_burst and joins:
-            visible[idx[a:b]] = 0
-
-
 def remove_outliers(
-    xy: np.ndarray, visible: np.ndarray, outlier_px: float, window: int = 2, max_burst: int = 3
+    xy: np.ndarray, visible: np.ndarray, outlier_px: float, window: int = 2
 ) -> np.ndarray:
-    """Hide false detections. Returns a new visible array.
-
-    Two rules: short bursts that jump off the track and back (`_drop_bursts`), then isolated
-    detections, with no visible neighbour within +-window frames, farther than `outlier_px`
-    from the last kept point.
-    """
+    """Hide isolated detections: no visible neighbour within +-window frames and farther than
+    `outlier_px` from the last kept point. Returns a new visible array."""
     visible = visible.astype(int).copy()
-    if max_burst > 0:
-        _drop_bursts(np.asarray(xy, dtype=float), visible, BURST_SPEED * outlier_px, max_burst)
     n = len(visible)
     last: np.ndarray | None = None
     for i in range(n):

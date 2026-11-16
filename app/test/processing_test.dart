@@ -88,27 +88,6 @@ void main() {
     expect(visited, ['/jobs/job2']);
   });
 
-  testWidgets('a retry keeps the change of ends off and the games already won', (tester) async {
-    final api = FakeApiClient(
-      jobs: [
-        Job.fromJson({
-          ...jobJson(status: 'failed', error: 'stage pose failed', referee: true),
-          'best_of': 3,
-          'auto_change_ends': false,
-          'start_games': {'near': 1, 'far': 0},
-        }),
-      ],
-    );
-    JobOptions? sent;
-    api.onCreateJob = (options) => sent = options;
-    await pumpScreen(tester, const ProcessingScreen(jobId: 'job1'), api: api);
-    await tester.tap(find.text('Try again'));
-    await tester.pumpAndSettle();
-    expect(sent!.autoChangeEnds, isFalse);
-    expect(sent!.startGames, (near: 1, far: 0));
-    expect(sent!.bestOf, 3);
-  });
-
   testWidgets('a live session whose video failed to render opens its results', (tester) async {
     final json = jobJson(status: 'failed', error: 'render failed: disk full');
     final failed = Job.fromJson({

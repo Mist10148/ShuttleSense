@@ -45,11 +45,7 @@ Every pipeline stage reads and writes one JSON document per processed clip, the 
 | 7 | left elbow | 16 | right ankle |
 | 8 | right elbow | | |
 
-## Schema v1.7, part 1: player display and jump observations
-
-Clip record 1.7 has two parts that were written on two branches and merged on Nov 15: these
-player flags, and the [change of ends](#schema-v17-part-2-change-of-ends) further down. A
-server that reports 1.7 has both; there is no 1.7 with only one of them on `main`.
+## Schema v1.7 (player display and jump observations)
 
 Two optional flags are omitted when true and default to true in older records.
 `frames[].player_hold_safe` may be false in historical recordings when the former camera-view
@@ -305,7 +301,7 @@ All three stroke models read this window. The CNN takes it as `[F, T]`, the LSTM
 
 - **Statistics per player are still per end.** `near` and `far` are ends of the court.
   Since v1.7 the score follows the players across a change of ends
-  ([below](#schema-v17-part-2-change-of-ends)), but `summary.per_player`, the heatmaps, the
+  ([below](#schema-v17-change-of-ends)), but `summary.per_player`, the heatmaps, the
   coaching notes, practice goals and `hits[].player` are still by end: in a session that
   runs past a change of ends they mix the two players (or pairs).
 - **Doubles after a change of ends.** The tracker numbers the partners at each end, so
@@ -331,13 +327,12 @@ All additions are optional; 1.0–1.5 records migrate without invented history.
   optional rally and Moment, and self-reported `completed`. This user-authored list
   sits outside derived `coaching`, so recomputing notes cannot erase goals.
 
-These 1.6 fields are unchanged in 1.7.
+These fields remain compatible with the current 1.7 models and golden fixtures.
 Derived JSON exports include goals and a deterministic recap of match result, stroke
 counts and the existing evidence-linked top fixes. No goal improvement is inferred.
 
-## Schema v1.7, part 2: change of ends
+## Schema v1.7 (change of ends)
 
-The other half of 1.7 (see [part 1](#schema-v17-part-1-player-display-and-jump-observations)).
 All additions are optional. A record without them never changed ends, so 1.0–1.6 records
 read exactly as before.
 

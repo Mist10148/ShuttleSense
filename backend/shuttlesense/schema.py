@@ -384,10 +384,8 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
     optional doubles fields only, 1.2 -> 1.3 the optional per-game doubles service, and
     1.3 -> 1.4 the optional `stroke_model`, and 1.4 -> 1.5 the optional mid-match start,
     decision reasons, concessions and interval length. 1.5 -> 1.6 adds the optional decision
-    log, interval clock and practice goals, and 1.6 -> 1.7 the optional change of ends (an
-    older record has none, so its `near` and `far` read as they always did) and the two
-    optional player display flags, `player_hold_safe` and `court_position_valid`, which
-    read as true when absent.
+    log, interval clock and practice goals, and 1.6 -> 1.7 the optional change of ends: an
+    older record has none, so its `near` and `far` read as they always did.
     """
     version = str(data.get("schema_version", "1.0"))
     if version == SCHEMA_VERSION:

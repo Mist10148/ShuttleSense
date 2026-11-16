@@ -1,10 +1,6 @@
 # Backend API
 
-REST contract between the Flutter app and the FastAPI backend. The server implements it in [`backend/shuttlesense/api/routes.py`](../backend/shuttlesense/api/routes.py); the app's client is [`app/lib/data/api_client.dart`](../app/lib/data/api_client.dart). FastAPI also serves live interactive docs at `/docs` (Swagger UI) and the OpenAPI JSON at `/openapi.json` on any running server.
-
-Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [clip record](DATA_FORMAT.md): breaking changes need the lead's approval and must update server, app client and this page in one PR.
-
-## Watch & Analyze
+### Watch & Analyze WebSocket
 
 `GET /health` advertises `watch_video` when `WS /watch` is available. Upload a
 video with `POST /videos`, then connect to `/watch` with the optional `token`
@@ -37,23 +33,9 @@ The watch-only `watch.stroke_min_confidence` setting is an unvalidated heuristic
 hits lacking a complete window, sufficient pose/shuttle observations, or sufficient
 confidence remain unclassified and do not receive stroke-specific feedback.
 
-### Background Watch
+REST contract between the Flutter app and the FastAPI backend. The server implements it in [`backend/shuttlesense/api/routes.py`](../backend/shuttlesense/api/routes.py); the app's client is [`app/lib/data/api_client.dart`](../app/lib/data/api_client.dart). FastAPI also serves live interactive docs at `/docs` (Swagger UI) and the OpenAPI JSON at `/openapi.json` on any running server.
 
-The app's real-time Watch mode plays the video itself and lets the server analyze on its own
-thread, through four REST routes (advertised as `watch_background` in `/health`):
-
-| Route | Body | Answer |
-| --- | --- | --- |
-| `POST /watch/background` | `{"video_id", "court": "singles" \| "doubles", "corners"?}` | 201 with the session's status (below). 404 for an unknown video, 400 for one with no readable frames, 409 while the server is busy |
-| `GET /watch/background/{job_id}` | none | The status: `job_id`, `status`, `stage`, `error`, `watched_s`, `analyzed_s`, `target_s`, the latest `frame`, the recent `events`, and the candidate and provider diagnostics. 404 for an unknown session |
-| `POST /watch/background/{job_id}/position` | `{"seconds": >= 0}` | The status. Reports how far the viewer has watched: analysis runs up to that point and waits there |
-| `POST /watch/background/{job_id}/stop` | `{"seconds": >= 0}` | The status. Analysis finishes up to that point and the job is saved |
-
-If no position arrives for 15 s (the app went to the background, the network stalled), the
-session stops at the last position reported and saves what it has.
-
-A background Watch session takes no stroke model or match settings: it uses the server's
-default model and scores a single game with ends changing by the rules.
+Frozen at the end of Phase 1 (task T1.2), with the same change policy as the [clip record](DATA_FORMAT.md): breaking changes need the lead's approval and must update server, app client and this page in one PR.
 
 ## Basics
 

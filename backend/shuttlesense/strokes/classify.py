@@ -9,7 +9,7 @@ import numpy as np
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.schema import STROKE_CLASSES, ClipRecord
 from shuttlesense.stage import StageContext, StageSkipped
-from shuttlesense.strokes import context, registry
+from shuttlesense.strokes import registry
 from shuttlesense.strokes.features import POSE_FEATURES, build_window
 
 _MODELS: dict[tuple[str, str, int, int], Any] = {}
@@ -52,27 +52,6 @@ def load_classifier(path: str, device: str):
     model.to(device).eval()
     _MODELS[key] = (model, ckpt)
     return _MODELS[key]
-
-
-def pose_slots(record: ClipRecord, hits_cfg: dict[str, Any]) -> list[str]:
-    """The Players field whose pose each hit's window is built from.
-
-    Singles: the side. Doubles: the credited partner; when the two partners' wrists were too
-    close to credit one (Hit.hitter is None), the closer of the two is still the better
-    guess than always the first partner, so the window follows that one. The hit itself
-    stays uncredited.
-    """
-    from shuttlesense.hits.detector import closest_partner
-    from shuttlesense.schema import is_doubles
-
-    if not is_doubles(record):
-        return [h.player_attr for h in record.hits]
-    cfg = dict(hits_cfg)
-    cfg["scale"] = (record.height or 720) / 720
-    return [
-        h.player_attr if h.hitter else closest_partner(record, h, cfg) or h.player_attr
-        for h in record.hits
-    ]
 
 
 def softmax(logits: np.ndarray) -> np.ndarray:
@@ -129,11 +108,10 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     # Optional keys of newer checkpoints; without them the window is the clip's own frames
     # and the confidence is the plain softmax, as for the first weights.
     window_fps = ckpt.get("window_fps")
-    slots = pose_slots(record, ctx.stage_config("hits"))
     x = np.stack(
         [
-            build_window(record, h.frame, slot, window, use_traj, pose_norm, window_fps)
-            for h, slot in zip(record.hits, slots, strict=True)
+            build_window(record, h.frame, h.player_attr, window, use_traj, pose_norm, window_fps)
+            for h in record.hits
         ]
     )
     temperature = float(ckpt.get("temperature", 1.0))
@@ -143,8 +121,6 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         hit.stroke = classes[best]
         hit.confidence = round(float(p[best]), 4)
         hit.class_probs = {c: round(float(v), 4) for c, v in zip(classes, p, strict=True)}
-    # Where the hit sits in the rally and on the court, on top of whichever model ran.
-    context.refine(record, ctx.config)
     record.stroke_model = name
     ctx.progress(1.0)
     return record

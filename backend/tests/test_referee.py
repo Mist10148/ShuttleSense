@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from shuttlesense.court.lines import play_bounds
-from shuttlesense.referee.linecalls import call_landing
-from shuttlesense.referee.rally import rally_winner, segment_rallies
+from shuttlesense.referee.rally import landing_call, rally_winner, segment_rallies
 from shuttlesense.referee.scoring import apply_rallies, game_winner
 from shuttlesense.schema import Landing, Rally, ScorePair
 
@@ -56,11 +54,6 @@ def test_landing_frame_is_after_last_hit() -> None:
     assert segs[0].landing_frame == 50
 
 
-def landing_call(point: np.ndarray, size: tuple[float, float], band: float) -> tuple[bool, float]:
-    call, _, confidence, _ = call_landing(point, play_bounds("singles", size), band)
-    return call == "in", confidence
-
-
 def test_inside_court_is_in() -> None:
     inside, conf = landing_call(np.array([2.5, 10.0]), SIZE, 0.05)
     assert inside and conf == 1.0
@@ -83,22 +76,9 @@ def test_in_shot_wins_rally() -> None:
 
 
 def test_out_shot_loses_rally() -> None:
-    long = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
-    assert rally_winner(long, "near", 6.7) == "far"
-    wide = Landing(x_m=-0.6, y_m=2.0, in_court=False, confidence=0.9)
-    assert rally_winner(wide, "far", 6.7) == "near"
-
-
-def test_out_on_the_last_hitters_own_half_is_left_to_the_referee() -> None:
-    # Far is the last detected hitter and the shuttle is out behind far's own baseline:
-    # a mishit, or near's reply was missed and near hit it long. Opposite points: no guess.
-    long = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
-    assert rally_winner(long, "far", 6.7) is None
-    assert rally_winner(long, None, 6.7) is None
-    # In calls do not depend on who was seen hitting.
-    assert rally_winner(Landing(x_m=2.0, y_m=11.0, in_court=True, confidence=0.9), "far", 6.7) == (
-        "near"
-    )
+    out = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
+    assert rally_winner(out, "near", 6.7) == "far"
+    assert rally_winner(out, "far", 6.7) == "near"
 
 
 def _rallies(winners: list[str | None]) -> list[Rally]:
@@ -180,67 +160,6 @@ def test_a_change_of_ends_by_hand_is_a_decision_that_undo_takes_back() -> None:
     assert undo_last_decision(record) == []
     assert (record.score.near, record.score.far) == (4, 0) and not record.score.ends_swapped
     assert not any(r.ends_swapped for r in record.rallies)
-
-
-def _decision(kind: str, frame: int, winner: str | None = None, rally: int = 0):
-    from datetime import UTC, datetime
-
-    from shuttlesense.schema import ScoreCorrection
-
-    return ScoreCorrection(rally_index=rally, winner_before=None, winner_after=winner,
-                           at=datetime.now(UTC), kind=kind, frame=frame)  # fmt: skip
-
-
-def test_the_overlay_score_starts_from_the_session_start() -> None:
-    """Decisions given before the first rally ends: the score shown follows them from their
-    frames on, starting with the ends not changed (the app's scoreAt does the same)."""
-    from shuttlesense.fake import load_golden
-    from shuttlesense.referee.scoring import apply_corrections
-    from shuttlesense.render.overlays import score_at
-    from shuttlesense.schema import Score
-
-    start = ScorePair(near=5, far=3)
-    record = load_golden()
-    record.line_calls = []
-    # 5-3, the players cross at frame 10, then the near end wins rally 0: 4-5.
-    record.rallies = [Rally(index=0, start_frame=30, end_frame=40, winner="near")]
-    record.score = Score()
-    apply_corrections(record, [_decision("ends", 10)], start)
-    assert (record.score.near, record.score.far) == (4, 5) and record.score.ends_swapped
-    assert score_at(record, 5) == (5, 3)
-    assert score_at(record, 20) == (3, 5)
-    assert score_at(record, 45) == (4, 5)
-    # No rally at all: the final score is the start score as it stands after the change.
-    record.rallies = []
-    record.score = Score()
-    apply_corrections(record, [_decision("ends", 10)], start)
-    assert (record.score.near, record.score.far) == (3, 5)
-    assert score_at(record, 5) == (5, 3) and score_at(record, 20) == (3, 5)
-    # A point, a change of ends, a point, all before the first rally: each by the ends then.
-    record.rallies = [Rally(index=0, start_frame=50, end_frame=55, winner="far")]
-    record.score = Score()
-    decisions = [
-        _decision("award", 10, "near"),
-        _decision("ends", 20),
-        _decision("award", 30, "near"),
-    ]
-    apply_corrections(record, decisions, start)
-    assert [score_at(record, f) for f in (5, 15, 25, 35, 56)] == [
-        (5, 3), (6, 3), (3, 6), (4, 6), (4, 7),
-    ]  # fmt: skip
-
-
-def test_the_overlay_score_restarts_when_awards_alone_cross_a_game() -> None:
-    from shuttlesense.fake import load_golden
-    from shuttlesense.render.overlays import score_at
-
-    record = load_golden()
-    record.line_calls, record.rallies = [], []
-    awards = [_decision("award", 10 * (k + 1), "near") for k in range(3)]
-    record.score = apply_rallies([], ScorePair(near=19, far=4), best_of=3, awards=awards)
-    record.score.corrections = awards  # as apply_corrections keeps them
-    assert record.score.game == 2 and (record.score.near, record.score.far) == (1, 0)
-    assert [score_at(record, f) for f in (5, 15, 25, 35)] == [(19, 4), (20, 4), (21, 4), (1, 0)]
 
 
 def test_the_overlay_score_turns_after_a_change_by_rule() -> None:

@@ -14,14 +14,6 @@ String playerLabel(String who) {
 /// The side (near or far) of a side or a doubles slot (near_2 -> near).
 String sideOf(String who) => who.startsWith('near') ? 'near' : 'far';
 
-/// The side that has won a game at this score, or null while it is still on: 21 with a
-/// 2-point lead, capped at 30 (backend/shuttlesense/referee/scoring.py).
-String? _gameWinner(int near, int far) {
-  if (near == 30 || (near >= 21 && near - far >= 2)) return 'near';
-  if (far == 30 || (far >= 21 && far - near >= 2)) return 'far';
-  return null;
-}
-
 /// Dart mirror of the parts of the clip record the app displays.
 /// Source of truth: backend/shuttlesense/schema.py and docs/DATA_FORMAT.md.
 class ClipRecord {
@@ -155,8 +147,7 @@ class ClipRecord {
 
   /// Score shown at [frameIndex]: after the last rally that ended at or before it, plus the
   /// points awarded since (an award counts from its frame on). Before the first scored rally
-  /// ends this is the starting score. A finished game's score stays up until the next point,
-  /// which starts the next game from 0-0. Null without a referee.
+  /// ends this is the starting score. Null without a referee.
   ScorePair? scoreAt(int frameIndex) => _scoreAndEnds(frameIndex)?.score;
 
   /// Whether the players had changed ends at [frameIndex] (clip record 1.7): near and far
@@ -166,107 +157,51 @@ class ClipRecord {
   ({ScorePair score, bool swapped})? _scoreAndEnds(int frameIndex) {
     final total = score;
     if (total == null) return null;
-    // The decisions that sit between rallies (points awarded, a concession, changes of ends
-    // by hand) in match order: before the rally whose index they carry, as given within one
-    // (backend/shuttlesense/referee/scoring.py).
-    final placed =
-        [
-          for (final (i, c) in total.corrections.indexed)
-            if (c.isEnds || ((c.isAward || c.isConcede) && c.winnerAfter != null)) (i, c),
-        ]..sort(
-          (a, b) =>
-              a.$2.rallyIndex != b.$2.rallyIndex ? a.$2.rallyIndex - b.$2.rallyIndex : a.$1 - b.$1,
-        );
+    final awards = total.corrections.where((c) => c.isAward && c.winnerAfter != null).toList();
+    ScorePair shift(ScorePair s, String? winner, int by) => ScorePair(
+      near: max(0, s.near + (winner == 'near' ? by : 0)),
+      far: max(0, s.far + (winner == 'far' ? by : 0)),
+    );
     final first = rallies.where((r) => r.scoreAfter != null).firstOrNull;
-    Rally? last;
+    // Awards placed before rally k count in rally k's score_after; the start score has none.
+    // No scored rally (none detected, or the start score is already a finished game): the
+    // final score is the start score plus every award.
+    var current = ScorePair(near: total.near, far: total.far);
+    var counted = (int rallyIndex) => true; // awards already in `current`
+    if (first != null) {
+      current = shift(first.scoreAfter!, first.winner, -1);
+      counted = (i) => i <= first.index;
+    }
+    for (final a in awards.where((a) => counted(a.rallyIndex))) {
+      current = shift(current, a.winnerAfter, -1);
+    }
+    int? last;
+    // `shown` is how the ends stood when `current` was true, `now` how they stand at the
+    // frame: the pair is turned when they differ, so the score follows the players.
+    var shown = first?.endsSwapped ?? false;
+    var now = shown;
     for (final r in rallies) {
-      if (r.endFrame <= frameIndex && r.scoreAfter != null) last = r;
-    }
-    // Near and far are the ends as they stand at the moment the walk has reached.
-    var near = 0, far = 0, game = 1;
-    var swapped = false;
-    void turn() {
-      (near, far) = (far, near);
-      swapped = !swapped;
-    }
-
-    // The match was won by this game: nothing after it counts.
-    bool decided() => total.matchOver && game == total.game && _gameWinner(near, far) != null;
-    final List<ScoreCorrection> since;
-    if (last != null) {
-      // A scored rally says how things stood when it ended; the decisions after it follow.
-      near = last.scoreAfter!.near;
-      far = last.scoreAfter!.far;
-      game = last.game;
-      swapped = last.endsSwapped;
-      if (last.changeEnds) turn();
-      since = [
-        for (final (_, c) in placed)
-          if (c.rallyIndex > last.index) c,
-      ];
-    } else {
-      // Before the first scored rally: the session starts with the ends not changed, at the
-      // start score. The record does not hold that score, so the decisions placed before the
-      // first scored rally are taken back from how things stood when it began (from the
-      // final score when no rally was scored), newest first.
-      since = [
-        for (final (_, c) in placed)
-          if (first == null || c.rallyIndex <= first.index) c,
-      ];
-      near = max(0, (first?.scoreAfter ?? total).near - (first?.winner == 'near' ? 1 : 0));
-      far = max(0, (first?.scoreAfter ?? total).far - (first?.winner == 'far' ? 1 : 0));
-      game = first?.game ?? total.game;
-      swapped = first?.endsSwapped ?? total.endsSwapped;
-      // Every change of ends is by hand, after a game or at 11 in the deciding game: the
-      // count says whether one at 11 is among these decisions.
-      var atEleven =
-          total.autoChangeEnds &&
-          (swapped != since.where((c) => c.isEnds).length.isOdd) != (game - total.firstGame).isOdd;
-      for (final c in since.reversed) {
-        if (c.isEnds) turn();
-        if (!c.isAward) continue;
-        final finished = game - 1 - total.firstGame;
-        if (near == 0 && far == 0 && finished >= 0 && finished < total.games.length) {
-          // This point won the game before: back to that game's final score. The finished
-          // games are by the ends at the end of the session.
-          final g = total.games[finished];
-          game--;
-          near = swapped == total.endsSwapped ? g.near : g.far;
-          far = swapped == total.endsSwapped ? g.far : g.near;
-          if (total.autoChangeEnds) turn();
-        } else if (atEleven &&
-            game == total.bestOf &&
-            (c.winnerAfter == 'near' ? far == 11 && near <= 10 : near == 11 && far <= 10)) {
-          // This point reached 11 at the other end and the players crossed after it.
-          turn();
-          atEleven = false;
-        }
-        near = max(0, near - (c.winnerAfter == 'near' ? 1 : 0));
-        far = max(0, far - (c.winnerAfter == 'far' ? 1 : 0));
+      if (r.endFrame <= frameIndex && r.scoreAfter != null) {
+        current = r.scoreAfter!;
+        last = r.index;
+        shown = r.endsSwapped;
+        now = r.endsSwapped != r.changeEnds;
       }
     }
-    // Forward, as the backend plays the match (referee/match.py): the decisions that
-    // playback has passed, each by the ends at that moment.
-    for (final c in since) {
-      if ((c.frame ?? 0) > frameIndex) continue;
-      if (decided()) break;
-      if (c.isConcede) break;
-      if (c.isEnds) {
-        turn();
-        continue;
-      }
-      if (_gameWinner(near, far) != null) {
-        near = far = 0;
-        game++;
-      }
-      c.winnerAfter == 'near' ? near++ : far++;
-      final (mine, theirs) = c.winnerAfter == 'near' ? (near, far) : (far, near);
-      // By rule: at 11 in the deciding (or only) game, and after a game the match goes on from.
-      final atEleven = game == total.bestOf && mine == 11 && theirs <= 10;
-      final gameOver = _gameWinner(near, far) != null && !decided();
-      if (total.autoChangeEnds && (atEleven || gameOver)) turn();
+    for (final a in awards) {
+      final after = last == null ? true : a.rallyIndex > last;
+      if (after && (a.frame ?? 0) <= frameIndex) current = shift(current, a.winnerAfter, 1);
     }
-    return (score: ScorePair(near: near, far: far), swapped: swapped);
+    for (final c in total.corrections.where((c) => c.isEnds)) {
+      final since = last == null
+          ? (first == null || c.rallyIndex <= first.index)
+          : c.rallyIndex > last;
+      if (since && (c.frame ?? 0) <= frameIndex) now = !now;
+    }
+    return (
+      score: now == shown ? current : ScorePair(near: current.far, far: current.near),
+      swapped: now,
+    );
   }
 
   /// Strokes so far in the rally containing [frameIndex] (whole clip without rallies).

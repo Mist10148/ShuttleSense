@@ -1,5 +1,4 @@
 """Measure and compare Watch shuttle input construction without concurrent player work."""
-
 from __future__ import annotations
 
 import argparse
@@ -23,9 +22,8 @@ def main():
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=120)
     args = parser.parse_args()
-    model, count, mode = _load_model(
-        BACKEND_DIR / "weights/tracknet/TrackNet_best.pt", "cuda", "tracknet"
-    )
+    model, count, mode = _load_model(BACKEND_DIR / "weights/tracknet/TrackNet_best.pt",
+                                     "cuda", "tracknet")
     if mode != "concat":
         raise RuntimeError("GPU window supports TrackNet concat background only")
     gpu = WatchGpuWindow(count, "cuda")
@@ -60,16 +58,12 @@ def main():
             timings["pytorch_inference"].append((time.perf_counter() - start) * 1000)
             actual = model(candidate)[:, -1:].float().cpu().numpy()
         heatmap_error = max(heatmap_error, float(np.max(np.abs(expected - actual))))
-    print(
-        f"frames={len(timings['cpu_prepare'])}, input mismatches={mismatch}, "
-        f"max heatmap difference={heatmap_error:.8g}"
-    )
+    print(f"frames={len(timings['cpu_prepare'])}, input mismatches={mismatch}, "
+          f"max heatmap difference={heatmap_error:.8g}")
     for name, values in timings.items():
         warm = min(10, len(values) // 4)
-        print(
-            f"{name}: median={statistics.median(values[warm:]):.2f}ms "
-            f"total={sum(values[warm:]) / 1000:.2f}s"
-        )
+        print(f"{name}: median={statistics.median(values[warm:]):.2f}ms "
+              f"total={sum(values[warm:]) / 1000:.2f}s")
     print("Isolated synchronized measurements; player inference and playback are not included.")
 
 

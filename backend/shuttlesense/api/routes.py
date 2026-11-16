@@ -145,8 +145,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
 
 @router.post("/videos/{video_id}/court-corners")
 def suggest_court_corners(
-    video_id: str,
-    storage: StorageDep,
+    video_id: str, storage: StorageDep,
     frame: Annotated[int, Query(ge=0)] = 0,
 ) -> dict:
     """Suggest singles-reference corners on a source frame for user review."""

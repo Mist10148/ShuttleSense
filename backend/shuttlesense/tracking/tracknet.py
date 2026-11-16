@@ -110,19 +110,11 @@ def _track_input_rgb(
     return np.concatenate(channels).astype(np.float32) / 255.0
 
 
-def _inpaint_mask(
-    xy: np.ndarray, visible: np.ndarray, height: int, max_gap: int | None = None
-) -> np.ndarray:
-    """Mask internal gaps with plausible endpoints below the image's top 5 percent.
-
-    Gaps longer than `max_gap` frames are left alone: InpaintNet repairs a flight, and a
-    longer absence is the shuttle out of play (between rallies), which must stay a gap.
-    """
+def _inpaint_mask(xy: np.ndarray, visible: np.ndarray, height: int) -> np.ndarray:
+    """Mask internal gaps with plausible endpoints below the image's top 5 percent."""
     mask = np.zeros(len(visible), dtype=np.float32)
     good = np.flatnonzero(visible)
     for left, right in zip(good[:-1], good[1:], strict=False):
-        if max_gap is not None and right - left - 1 > max_gap:
-            continue
         if right > left + 1 and xy[left, 1] > height * 0.05 and xy[right, 1] > height * 0.05:
             mask[left + 1 : right] = 1
     return mask
@@ -219,9 +211,7 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
                 log.warning("InpaintNet weights missing; keeping raw TrackNet detections")
             else:
                 inpaint, inpaint_len, _ = _load_model(inpaint_path, ctx.device, "inpaintnet")
-                mask = _inpaint_mask(
-                    xy, visible, reader.height, cfg.get("max_inpaint_gap_frames", 30)
-                )
+                mask = _inpaint_mask(xy, visible, reader.height)
                 if np.any(mask):
                     normalized = xy / np.array([reader.width, reader.height])
                     for start in range(0, n, inpaint_len * batch_size):

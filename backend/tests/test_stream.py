@@ -85,12 +85,9 @@ def test_override_and_correction_rescore() -> None:
     assert live.rallies[uncertain.rally_index].winner is None
     events = a.override(uncertain.id, "out")
     assert events[0]["line_call"]["override"]["call"] == "out"
-    # Out on the far half with far as the last detected hitter: a mishit, or near's reply was
-    # missed. The call is settled, the point is not, so the referee names the winner.
-    assert a.record.rallies[uncertain.rally_index].winner is None
-    assert events[1]["score"]["near"] == 2
-    a.correct(uncertain.rally_index, "near")
-    assert a.record.score.near == 3
+    # The far player hit the last shot of that rally out.
+    assert a.record.rallies[uncertain.rally_index].winner == "near"
+    assert events[1]["score"]["near"] == 3
     a.correct(0, "far")
     assert (a.record.score.near, a.record.score.far) == (2, 1)
     with pytest.raises(KeyError):
@@ -152,9 +149,9 @@ def test_degraded_pose_scaling_uses_both_frame_dimensions(monkeypatch) -> None:
     model.min_person_score = 0.0
     model.homography = None
     model.court_size = (6.1, 13.4)
-    model.tracker = type(
-        "Tracker", (), {"update": lambda self, people, **kwargs: Players(near=people[0])}
-    )()
+    model.tracker = type("Tracker", (), {
+        "update": lambda self, people, **kwargs: Players(near=people[0])
+    })()
     # Rounded resize dimensions can yield different horizontal and vertical scales.
     scaled = model._players(np.zeros((268, 480, 3), np.uint8)).near
     assert scaled.bbox[0] == pytest.approx(player.bbox[0] * (640 / 480))
@@ -285,7 +282,8 @@ def test_model_perception_returns_full_size_players_for_a_small_frame() -> None:
 
     p.min_person_score, p.court_size = 0.4, COURT_SIZE_M
     p.homography = compute_homography([[0, 359], [639, 359], [639, 0], [0, 0]])
-    p.tracker = CourtPlayerTracker({"confirmation_frames": 1}, "singles", COURT_SIZE_M)
+    p.tracker = CourtPlayerTracker({"confirmation_frames": 1},
+                                   "singles", COURT_SIZE_M)
     _, players = p(np.zeros((180, 320, 3), np.uint8), 0)  # half-size frame
     seen = players.near or players.far
     assert seen.bbox == pytest.approx((200, 200, 40, 120))
@@ -395,15 +393,13 @@ def test_watch_cache_preserves_model_inputs_across_sliding_windows(monkeypatch):
     pytest.importorskip("torch")
     inputs = []
 
-    def track(
-        model, windows, bg_mode, median, device, size, *, prepared_rgb=False, latest_only=False
-    ):
+    def track(model, windows, bg_mode, median, device, size, *, prepared_rgb=False,
+              latest_only=False):
         prepare = tracknet._track_input_rgb if prepared_rgb else tracknet._track_input
         inputs.append(prepare(windows[0], bg_mode, median))
         return [[(0.0, 0.0, 0)] * len(windows[0])]
 
     monkeypatch.setattr(tracknet, "track_windows", track)
-
     def perception(cache):
         obj = ModelPerception.__new__(ModelPerception)
         obj.model, obj.seq_len, obj.bg_mode = object(), 3, "subtract_concat"
@@ -440,7 +436,6 @@ def test_watch_experimental_pose_batch_is_session_local():
 
     def original(frame):
         return ["original"]
-
     original.with_batch = lambda size: lambda frame: ["batch", size]
     model = ModelPerception.__new__(ModelPerception)
     model.detect = original

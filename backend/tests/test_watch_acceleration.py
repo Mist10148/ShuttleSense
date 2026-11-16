@@ -28,11 +28,8 @@ def test_failed_inference_retries_cuda_and_stays_on_cuda():
 def test_provider_sessions_do_not_mutate_shared_models(monkeypatch):
     detector, pose = SimpleNamespace(session=Session()), SimpleNamespace(session=Session())
     shared = SimpleNamespace(det_model=detector, pose_model=pose)
-    monkeypatch.setattr(
-        watch_acceleration,
-        "_rtx_session",
-        lambda *args: (Session(result=[1]), [{"provider": "test"}]),
-    )
+    monkeypatch.setattr(watch_acceleration, "_rtx_session",
+                        lambda *args: (Session(result=[1]), [{"provider": "test"}]))
     clone, info = watch_acceleration.make_watch_body(shared, "pose", 8, "cuda")
     assert clone is not shared and clone.pose_model is not pose
     assert clone.det_model.session is detector.session
@@ -45,11 +42,9 @@ def test_provider_sessions_do_not_mutate_shared_models(monkeypatch):
 def test_initialization_failure_retains_original_session(monkeypatch):
     def fail(*args):
         raise RuntimeError("engine failed")
-
     monkeypatch.setattr(watch_acceleration, "_rtx_session", fail)
-    body = SimpleNamespace(
-        det_model=SimpleNamespace(session=Session()), pose_model=SimpleNamespace(session=Session())
-    )
+    body = SimpleNamespace(det_model=SimpleNamespace(session=Session()),
+                           pose_model=SimpleNamespace(session=Session()))
     clone, info = watch_acceleration.make_watch_body(body, "both", 8, "cuda")
     assert clone.det_model.session is body.det_model.session
     assert clone.pose_model.session is body.pose_model.session

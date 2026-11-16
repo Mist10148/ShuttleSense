@@ -1,5 +1,4 @@
 """Experimental exact TrackNet concat-window construction on CUDA."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -40,7 +39,7 @@ class WatchGpuWindow:
         target[:, :3].copy_(self.background)
         if self.current is None:
             for index in range(self.seq_len):
-                target[:, 3 + index * 3 : 6 + index * 3].copy_(frame)
+                target[:, 3 + index * 3:6 + index * 3].copy_(frame)
             self.current = 0
         else:
             previous = self.buffers[self.current]

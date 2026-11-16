@@ -82,16 +82,12 @@ class Scoreboard extends StatelessWidget {
     return shown?.game ?? total.firstGame;
   }
 
-  /// Games each side had won before [game] started, by the ends as they stood at the moment
-  /// shown ([swapped]). The games won before the session are by the ends at its start and
-  /// the finished games by the ends at its end, so each is turned on its own.
-  ScorePair _gamesWonBefore(Score total, int game, bool swapped) {
-    var near = (swapped ? total.startGames?.far : total.startGames?.near) ?? 0;
-    var far = (swapped ? total.startGames?.near : total.startGames?.far) ?? 0;
-    final turn = swapped != total.endsSwapped;
+  /// Games each side had won before [game] started.
+  ScorePair _gamesWonBefore(Score total, int game) {
+    var near = total.startGames?.near ?? 0, far = total.startGames?.far ?? 0;
     for (var i = 0; i < total.games.length && total.firstGame + i < game; i++) {
       final g = total.games[i];
-      if ((g.near > g.far) != turn) {
+      if (g.near > g.far) {
         near++;
       } else {
         far++;
@@ -124,7 +120,7 @@ class Scoreboard extends StatelessWidget {
         ? null
         : atEnd
         ? total.gamesWon
-        : _gamesWonBefore(total, game, swapped);
+        : seen(_gamesWonBefore(total, game));
     return SectionCard(
       title: 'Score and stats',
       child: Column(

@@ -1,5 +1,4 @@
-"""Conservative player selection shared by live and recorded-video perception."""
-
+﻿"""Conservative player selection shared by live and recorded-video perception."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -33,9 +32,8 @@ def _same_person_pose(a: Player, b: Player, *, iou_min: float, pose_max: float) 
         ak, bk = a.keypoints[joint], b.keypoints[joint]
         if min(ak[2], bk[2]) >= 0.3:
             distances.append(float(np.linalg.norm(np.asarray(ak[:2]) - bk[:2])))
-    return (
-        len(distances) >= 3 and float(np.mean(distances)) / max(a.bbox[3], b.bbox[3], 1) <= pose_max
-    )
+    return (len(distances) >= 3 and
+            float(np.mean(distances)) / max(a.bbox[3], b.bbox[3], 1) <= pose_max)
 
 
 @dataclass
@@ -89,22 +87,13 @@ class CourtPlayerTracker:
         self.ambiguity = float(cfg.get("match_ambiguity", 0.15))
         self.duplicate_iou = float(cfg.get("duplicate_iou", 0.65))
         self.duplicate_pose = float(cfg.get("duplicate_pose_fraction", 0.1))
-        self.slots = {
-            name: Track()
-            for name in (
-                ("near", "far", "near_2", "far_2") if court == "doubles" else ("near", "far")
-            )
-        }
+        self.slots = {name: Track() for name in (
+            ("near", "far", "near_2", "far_2") if court == "doubles" else ("near", "far")
+        )}
 
-    def update(
-        self,
-        people: list[Player],
-        *,
-        frame_height: float,
-        homography: np.ndarray | None,
-        frame: np.ndarray | None = None,
-        image_scale: tuple[float, float] = (1, 1),
-    ) -> Players:
+    def update(self, people: list[Player], *, frame_height: float, homography: np.ndarray | None,
+               frame: np.ndarray | None = None,
+               image_scale: tuple[float, float] = (1, 1)) -> Players:
         from shuttlesense.court import image_to_court
 
         # Without calibrated corners there is no reliable court polygon to enforce.
@@ -128,16 +117,13 @@ class CourtPlayerTracker:
             xmin, xmax, ymin, ymax = play_bounds(self.court, self.court_size)
             # Small numerical tolerance only: never extend the playing boundary.
             eps = 1e-5
-            inside = all(
-                xmin - eps <= x <= xmax + eps and ymin - eps <= y <= ymax + eps
-                for x, y in projected
-            )
+            inside = all(xmin-eps <= x <= xmax+eps and ymin-eps <= y <= ymax+eps
+                         for x, y in projected)
             side = "near" if pos[1] < self.court_size[1] / 2 else "far"
             y_margin = self.far_jump_margin if side == "far" else self.jump_margin
             if not self.watch_outside_tracking and not all(
-                xmin - self.jump_margin <= x <= xmax + self.jump_margin
-                and ymin - y_margin <= y <= ymax + y_margin
-                for x, y in projected
+                xmin-self.jump_margin <= x <= xmax+self.jump_margin and
+                ymin-y_margin <= y <= ymax+y_margin for x, y in projected
             ):
                 continue
             hist = torso_histogram(frame, p, image_scale) if frame is not None else None
@@ -147,13 +133,9 @@ class CourtPlayerTracker:
         # overlap. They are not independent people and must not create a false match tie.
         unique = []
         for candidate in sorted(candidates, key=lambda c: (c[3], c[0].score), reverse=True):
-            if not any(
-                candidate[4] == kept[4]
-                and _same_person_pose(
-                    candidate[0], kept[0], iou_min=self.duplicate_iou, pose_max=self.duplicate_pose
-                )
-                for kept in unique
-            ):
+            if not any(candidate[4] == kept[4] and _same_person_pose(
+                candidate[0], kept[0], iou_min=self.duplicate_iou, pose_max=self.duplicate_pose
+            ) for kept in unique):
                 unique.append(candidate)
         candidates = unique
 
@@ -168,9 +150,8 @@ class CourtPlayerTracker:
             # A player can move while occluded. Widen the matching gate gradually, not
             # on the first missed frame, and keep it bounded to prevent instant jumps.
             allowed_step = min(self.max_gap_step, self.max_step + track.missing * self.gap_step)
-            allowed_box_step = min(
-                self.max_gap_box_step, self.max_box_step + track.missing * self.gap_box_step
-            )
+            allowed_box_step = min(self.max_gap_box_step,
+                                   self.max_box_step + track.missing * self.gap_box_step)
             for j, (person, pos, hist, inside, side, spread) in enumerate(candidates):
                 if not track.locked and not inside:
                     continue
@@ -178,12 +159,8 @@ class CourtPlayerTracker:
                     continue
                 # A mixed pose can combine the feet of two overlapping far players.
                 # Do not accept it as a landing immediately after a locked jump.
-                if (
-                    side == "far"
-                    and inside
-                    and track.outside_frames > 0
-                    and spread > self.far_jump_max_ankle_spread
-                ):
+                if (side == "far" and inside and track.outside_frames > 0 and
+                        spread > self.far_jump_max_ankle_spread):
                     continue
                 dist = float(np.linalg.norm(pos - track.pos))
                 if track.bbox is not None:
@@ -193,30 +170,23 @@ class CourtPlayerTracker:
                     if box_dist > allowed_box_step * max(h, nh, 1):
                         continue
                 appearance = appearance_distance(track.hist, hist)
-                far_continuity = (
-                    side == "far"
-                    and track.locked
-                    and track.missing <= self.jump_max_missing
-                    and track.bbox is not None
-                    and track.hist is not None
-                    and hist is not None
-                    and appearance <= self.jump_max_appearance
-                    and _bbox_iou(track.bbox, person.bbox) >= self.far_jump_iou
-                )
+                far_continuity = (side == "far" and track.locked and
+                                  track.missing <= self.jump_max_missing and
+                                  track.bbox is not None and
+                                  track.hist is not None and hist is not None and
+                                  appearance <= self.jump_max_appearance and
+                                  _bbox_iou(track.bbox, person.bbox) >= self.far_jump_iou)
                 # For Watch, established tracks can continue outside the court using
                 # consecutive image observations. Court-plane distances are unreliable
                 # for a jumping person, so do not compare their projected feet to the
                 # last trusted floor position. Never seed identities from these candidates.
                 watch_continuity = (
-                    self.watch_outside_tracking
-                    and track.locked
-                    and (not inside or track.outside_frames > 0)
-                    and track.missing <= self.watch_max_missing
-                    and track.bbox is not None
-                    and track.hist is not None
-                    and hist is not None
-                    and appearance <= self.jump_max_appearance
-                    and _bbox_iou(track.bbox, person.bbox) >= self.watch_min_iou
+                    self.watch_outside_tracking and track.locked and
+                    (not inside or track.outside_frames > 0) and
+                    track.missing <= self.watch_max_missing and track.bbox is not None and
+                    track.hist is not None and hist is not None and
+                    appearance <= self.jump_max_appearance and
+                    _bbox_iou(track.bbox, person.bbox) >= self.watch_min_iou
                 )
                 if not inside and self.watch_outside_tracking:
                     if not watch_continuity:
@@ -225,15 +195,11 @@ class CourtPlayerTracker:
                     if side == "far":
                         if not far_continuity or track.outside_frames >= self.far_jump_max_frames:
                             continue
-                    elif (
-                        not track.locked
-                        or track.missing > self.jump_max_missing
-                        or track.outside_frames >= self.jump_max_frames
-                        or track.hist is None
-                        or hist is None
-                        or dist > self.jump_max_distance
-                        or appearance > self.jump_max_appearance
-                    ):
+                    elif (not track.locked or track.missing > self.jump_max_missing or
+                          track.outside_frames >= self.jump_max_frames or
+                          track.hist is None or hist is None or
+                          dist > self.jump_max_distance or
+                          appearance > self.jump_max_appearance):
                         continue
                 if track.locked and track.missing and (track.hist is None or hist is None):
                     continue
@@ -264,10 +230,8 @@ class CourtPlayerTracker:
             if not inside:
                 p = p.model_copy(update={"court_position_valid": False})
             if track.locked and track.missing >= self.recovery_after:
-                if (
-                    track.recovery_pos is None
-                    or float(np.linalg.norm(pos - track.recovery_pos)) > self.max_step
-                ):
+                if (track.recovery_pos is None or
+                        float(np.linalg.norm(pos - track.recovery_pos)) > self.max_step):
                     track.recovery_count = 0
                 track.recovery_pos = pos
                 track.recovery_count += 1
@@ -284,11 +248,8 @@ class CourtPlayerTracker:
             track.recovery_pos, track.recovery_count = None, 0
             # Do not let an uncertain outside observation overwrite the identity template.
             if inside or not self.watch_outside_tracking:
-                track.hist = (
-                    hist
-                    if track.hist is None
-                    else (track.hist if hist is None else 0.9 * track.hist + 0.1 * hist)
-                )
+                track.hist = hist if track.hist is None else (track.hist if hist is None else
+                                                              0.9 * track.hist + 0.1 * hist)
             track.count += 1
             track.locked = track.locked or track.count >= self.confirm
             if track.locked:
@@ -307,17 +268,11 @@ class CourtPlayerTracker:
         # Seed unoccupied slots from inside the entry area. Stable spatial ordering gives
         # doubles slots predictable initial identities; never seed a previously locked slot.
         for side in ("near", "far"):
-            free = [
-                n
-                for n, t in self.slots.items()
-                if n.startswith(side) and not t.locked and n not in matched
-            ]
+            free = [n for n, t in self.slots.items() if n.startswith(side) and not t.locked
+                    and n not in matched]
             contested = {j for _, name, j in pairs if self.slots[name].locked}
-            available = [
-                j
-                for j, c in enumerate(candidates)
-                if j not in used and j not in contested and c[3] and c[4] == side
-            ]
+            available = [j for j, c in enumerate(candidates)
+                         if j not in used and j not in contested and c[3] and c[4] == side]
             available.sort(key=lambda j: candidates[j][1][0])
             for name, j in zip(free, available, strict=False):
                 p, pos, hist, _, _, _ = candidates[j]

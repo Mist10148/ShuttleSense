@@ -263,10 +263,8 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         ys = [p[1] for line in segments for p in line]
         state.cache["court_region_key"] = key
         state.cache["court_region"] = (
-            max(0, min(xs) - pad),
-            max(0, min(ys) - pad),
-            min(img.shape[1], max(xs) + pad + 1),
-            min(img.shape[0], max(ys) + pad + 1),
+            max(0, min(xs) - pad), max(0, min(ys) - pad),
+            min(img.shape[1], max(xs) + pad + 1), min(img.shape[0], max(ys) + pad + 1),
         )
     x0, y0, x1, y1 = state.cache["court_region"]
     if x0 >= x1 or y0 >= y1:
@@ -274,19 +272,13 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     region = img[y0:y1, x0:x1]
     overlay = region.copy()
     for a, b in segments:
-        cv2.line(
-            overlay, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0), style.COURT, thick, cv2.LINE_AA
-        )
+        cv2.line(overlay, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0),
+                 style.COURT, thick, cv2.LINE_AA)
     cv2.addWeighted(overlay, 0.6, region, 0.4, 0, dst=region)
 
 
-def status_text(
-    record: ClipRecord,
-    i: int,
-    *,
-    peak_history: list | None = None,
-    stroke_counts: list[int] | None = None,
-) -> str:
+def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None,
+                stroke_counts: list[int] | None = None) -> str:
     """'In play · 182 km/h (est.) · peak 241 · 3 strokes' for frame i."""
     from shuttlesense.analytics.stage import strokes_so_far
 
@@ -395,116 +387,45 @@ def draw_minimap(img: np.ndarray, record: ClipRecord, i: int, state: RenderState
 
 
 def score_at(record: ClipRecord, i: int) -> tuple[int, int] | None:
-    """Score at frame i, near and far being the ends as they stood then; None without a
-    referee. The same walk as the app's ClipRecord.scoreAt (clip_record.dart).
-
-    After the last rally that ended by frame i, plus the decisions given since (a point
-    awarded, a change of ends), each from its frame on and by the ends at that moment.
-    Before the first scored rally ends the walk starts from the session start, with the
-    ends not changed. A finished game's score stays up until the next point, which starts
-    the next game from 0-0.
-    """
-    from shuttlesense.referee.scoring import game_winner
-
-    total = record.score
-    if total is None:
+    """Score at frame i: after the last rally that ended by then, plus the points awarded
+    since (an award counts from its frame on). None without a referee. Same as the app's
+    ClipRecord.scoreAt."""
+    if record.score is None:
         return None
-    # The decisions that sit between rallies, in match order (referee/scoring.py).
-    placed = sorted(
-        (
-            c
-            for c in total.corrections
-            if c.kind == "ends" or (c.kind in ("award", "concede") and c.winner_after)
-        ),
-        key=lambda c: c.rally_index,
-    )
-    scored = [r for r in record.rallies if r.score_after is not None]
-    first = scored[0] if scored else None
-    last = next((r for r in reversed(scored) if r.end_frame <= i), None)
-    first_game = 1 + (total.start_games.near + total.start_games.far if total.start_games else 0)
+    awards = [c for c in record.score.corrections if c.kind == "award" and c.winner_after]
 
-    near = far = 0
-    game, swapped = 1, False
+    def shift(score: tuple[int, int], winner: str | None, by: int) -> tuple[int, int]:
+        near, far = score
+        return (max(0, near + (by if winner == "near" else 0)),
+                max(0, far + (by if winner == "far" else 0)))  # fmt: skip
 
-    def won() -> bool:
-        return game_winner(near, far) is not None
-
-    def decided() -> bool:  # the match was won by this game: nothing after it counts
-        return total.match_winner is not None and game == total.game and won()
-
-    if last is not None:
-        # A scored rally says how things stood when it ended; the decisions after it follow.
-        near, far = last.score_after.near, last.score_after.far
-        game, swapped = last.game, last.ends_swapped
-        if last.change_ends:
-            near, far, swapped = far, near, not swapped
-        since = [c for c in placed if c.rally_index > last.index]
-    else:
-        # Before the first scored rally. The record does not hold the start score, so the
-        # decisions placed before that rally are taken back, newest first, from how things
-        # stood when it began (from the final score when no rally was scored).
-        since = [c for c in placed if first is None or c.rally_index <= first.index]
-        after = first.score_after if first is not None else total
-        near = max(0, after.near - (1 if first is not None and first.winner == "near" else 0))
-        far = max(0, after.far - (1 if first is not None and first.winner == "far" else 0))
-        game = first.game if first is not None else total.game
-        swapped = first.ends_swapped if first is not None else total.ends_swapped
-        # Every change of ends is by hand, after a game or at 11 in the deciding game: the
-        # count says whether one at 11 is among these decisions.
-        by_hand = sum(c.kind == "ends" for c in since) % 2 == 1
-        at_eleven = total.auto_change_ends and (
-            (swapped != by_hand) != ((game - first_game) % 2 == 1)
-        )
-        for c in reversed(since):
-            if c.kind == "ends":
-                near, far, swapped = far, near, not swapped
-            if c.kind != "award":
-                continue
-            finished = game - 1 - first_game
-            if near == 0 and far == 0 and 0 <= finished < len(total.games):
-                # This point won the game before: back to that game's final score. The
-                # finished games are by the ends at the end of the session.
-                g = total.games[finished]
-                game -= 1
-                near, far = (g.near, g.far) if swapped == total.ends_swapped else (g.far, g.near)
-                if total.auto_change_ends:
-                    near, far, swapped = far, near, not swapped
-            elif (
-                at_eleven
-                and game == total.best_of
-                and (
-                    (far == 11 and near <= 10)
-                    if c.winner_after == "near"
-                    else (near == 11 and far <= 10)
-                )
-            ):
-                # This point reached 11 at the other end and the players crossed after it.
-                near, far, swapped = far, near, not swapped
-                at_eleven = False
-            near = max(0, near - (1 if c.winner_after == "near" else 0))
-            far = max(0, far - (1 if c.winner_after == "far" else 0))
-
-    # Forward, as the match is played (referee/match.py): the decisions playback has passed.
-    for c in since:
-        if (c.frame or 0) > i:
-            continue
-        if decided() or c.kind == "concede":
-            break
-        if c.kind == "ends":
-            near, far, swapped = far, near, not swapped
-            continue
-        if won():
-            near, far, game = 0, 0, game + 1
-        if c.winner_after == "near":
-            near += 1
-        else:
-            far += 1
-        mine, theirs = (near, far) if c.winner_after == "near" else (far, near)
-        # By rule: at 11 in the deciding (or only) game, and after a game the match goes on from.
-        eleven = game == total.best_of and mine == 11 and theirs <= 10
-        if total.auto_change_ends and (eleven or (won() and not decided())):
-            near, far, swapped = far, near, not swapped
-    return near, far
+    # Awards placed before rally k count in its score_after; the start score has none.
+    current = (record.score.near, record.score.far)  # no counted rally: start + every award
+    first = next((r for r in record.rallies if r.score_after is not None), None)
+    if first is not None:
+        current = shift((first.score_after.near, first.score_after.far), first.winner, -1)
+    for a in awards:
+        if first is None or a.rally_index <= first.index:
+            current = shift(current, a.winner_after, -1)
+    last = None
+    # v1.7: near / far are the ends at that moment. `shown` is how the ends stood when
+    # `current` was true, `now` how they stand at frame i; the pair is turned when they differ.
+    shown = first.ends_swapped if first is not None else False
+    now = shown
+    for r in record.rallies:
+        if r.end_frame <= i and r.score_after is not None:
+            current, last = (r.score_after.near, r.score_after.far), r.index
+            shown, now = r.ends_swapped, r.ends_swapped != r.change_ends
+    for a in awards:
+        if (last is None or a.rally_index > last) and (a.frame or 0) <= i:
+            current = shift(current, a.winner_after, 1)
+    for c in record.score.corrections:  # changes of ends made by hand since then
+        if c.kind == "ends" and (c.frame or 0) <= i and (
+            c.rally_index > last if last is not None
+            else first is None or c.rally_index <= first.index
+        ):  # fmt: skip
+            now = not now
+    return current if now == shown else (current[1], current[0])
 
 
 def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
@@ -521,9 +442,8 @@ def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         state.cache["score_events"] = events
         state.cache["score_values"] = [score_at(record, frame) for frame in events]
     events = state.cache["score_events"]
-    score = (
-        state.cache["score_values"][bisect_right(events, i) - 1] if i >= 0 else score_at(record, i)
-    )
+    score = (state.cache["score_values"][bisect_right(events, i) - 1]
+             if i >= 0 else score_at(record, i))
     if score is None:
         return
     s = state.scale

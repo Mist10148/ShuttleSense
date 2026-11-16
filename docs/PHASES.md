@@ -614,56 +614,6 @@ models and ships trained weights for all of them. All thirteen tasks are done:
   - the new app pieces on a phone, tablet or Windows desktop ([device checks](phases/phase-12-courtside.md#device-checks-open));
   - release builds, which were not re-run.
 
-### Accuracy and merge pass (Nov 16)
-
-A pass over stroke labels, shuttle tracking, court calibration and scoring, and over the
-places where the Watch & Analyze branch (LXED, Nov 15–16) and `main` met. Nothing here was
-measured on the team's own footage: there is none labelled yet.
-
-- **Strokes, all three models ([D38](DECISIONS.md)):** a context step after the 1D CNN,
-  LSTM or Random Forest reweights their probabilities by where the hit sits in the rally,
-  the time to the opponent's reply and the court zones of both players. On the held-out
-  ShuttleSet test matches macro accuracy goes 91.8% → 93.4%, 89.1% → 91.2% and
-  84.3% → 89.4% ([results and limits](results/stroke_context.md)). In doubles an
-  uncredited hit takes its pose window from the closer partner, not always the first.
-- **Hits:** frame-count thresholds follow the clip's frame rate (a 25 fps upload or a
-  10 fps webcam no longer waits longer in real time); a shuttle wobbling in the hand before
-  a serve is not a hit.
-- **Shuttle tracking:** bursts of two or three false detections are dropped; short gaps
-  are filled along the flight, not with a straight line; InpaintNet no longer invents a
-  track across the break between rallies; Live gets the same clean-up on its window.
-- **Court calibration:** the tapped corners are nudged onto the painted lines of the first
-  frame when the lines support it, for line calls and court positions on uploads. Player
-  selection, Live and Watch use the corners as given.
-- **Line calls and points:** a rally that ends on its opening hit is judged against the
-  service court whatever the stroke label; an out landing on the last detected hitter's own
-  half awards nobody and waits for the referee.
-- **Watch & Analyze and player selection are as LXED left them** (owner's decision, Nov
-  16): the court-aware player tracker, its boundary rules, the Watch performance settings
-  and the candidate filter are unchanged, and Watch sessions get neither the track clean-up
-  nor the stroke context. Three changes from earlier in this pass (players on uploads
-  without corners, following a player into the run-off, a `shadow` filter default) were
-  taken back. Consequence, by that tracker's design: an upload without court corners has
-  no players, so no hits and no strokes; calibrate the court to get them.
-- **Scores shown during playback, app and rendered video:** right from the session start
-  when ends change before the first rally ends; the count restarts when awarded points alone
-  finish a game; games won before joining mid-match keep to the right side. Retrying a job
-  keeps its change-ends setting and games already won. Live: Stop is taken while a decision
-  is pending; the key hint lists E.
-- **Docs:** clip record 1.7 was claimed by both branches for different fields; it is now
-  documented as one version with two parts ([DATA_FORMAT](DATA_FORMAT.md)). Watch & Analyze
-  has a decision record ([D37](DECISIONS.md)) and its background routes are in
-  [API.md](API.md).
-- **Verified:** backend `ruff` and `pytest -m "not gpu"` pass; app `flutter analyze`,
-  `dart format` and `flutter test` pass (308 tests); `check_links.py` passes.
-- **Not done, and why:**
-  - landing taken at first floor contact instead of at rest, and an estimated landing
-    when the shuttle is lost: both need labelled landings to get right (T8.12);
-  - a net-height model and lens undistortion: one homography does not give the camera pose;
-  - stroke model and match settings for background Watch, and a second device following a
-    live session as coach: not started;
-  - retry cannot resend `game_service`: `POST /jobs` has no such field.
-
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |
@@ -697,13 +647,9 @@ acceptance criteria. Code for these tasks is on `main` with tests.
     It is tested on synthetic matches only. Check a full best-of-three courtside or on
     footage, including a change marked by hand. Still open: per-player statistics and
     doubles identities across a change ([known limits](DATA_FORMAT.md#known-limits)).
-  - **Service court for line calls.** Since Nov 16 the service lines apply when a
-    rally's only hit is the one that opened it, whatever the stroke model called it; a
-    single hit in a rally already under way when the clip started stays an ordinary shot.
-    Still to check on labelled rallies (T6.7).
-  - **Out calls with a doubtful last hitter.** Since Nov 16 an out landing on the last
-    detected hitter's own half awards nobody. Count on labelled rallies how often that
-    leaves a real mishit for the referee, against how often it stops a wrong point.
+  - **Service court for line calls.** The service lines apply only when the stroke
+    model labelled a rally's single hit `serve`. Treating the first hit as the serve
+    is wrong for a clip that starts mid-rally; it needs labelled rallies to choose.
   - **A `drive` class** (T9.7) and the `rush` / `push` label mapping (T3.3, M4).
 - **Footage and labels (consent needed):** two singles test rallies (T0.10), phone
   footage with a second labeller (T7.1), doubles rallies (T9.2), landing labels
@@ -744,8 +690,8 @@ acceptance criteria. Code for these tasks is on `main` with tests.
   API reviews (T1.1, T1.2), slides, backup video and rehearsal (T7.9–T7.11).
 - **Smaller code items left open on purpose:** a job shows `running` while it waits for
   a live session to free the GPU; tapping the job-finished notification does not open
-  the job (needs a device); the scoreboard's "Game n" label comes from rallies, so it lags
-  when awarded points alone open a new game (the count itself restarts since Nov 16).
+  the job (needs a device); `scoreAt` in the app does not restart the count when awards
+  alone cross a game boundary.
 
 ### Verification on Oct 30
 

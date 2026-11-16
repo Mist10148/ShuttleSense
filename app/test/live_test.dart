@@ -296,10 +296,7 @@ void main() {
       ...frameEvent(0),
       'players': <String, dynamic>{},
       'display_players': {
-        'near': {
-          'bbox': [10, 20, 30, 40],
-          'held': true,
-        },
+        'near': {'bbox': [10, 20, 30, 40], 'held': true},
       },
     });
     await events(tester);
@@ -1077,83 +1074,6 @@ void main() {
     });
   }
 
-  testWidgets('Stop is taken while a decision waits for its echo, and sent after it', (
-    tester,
-  ) async {
-    final sockets = await pumpLive(
-      tester,
-      onHello: (_) => {...startedEvent(), 'decision_ack': true},
-    );
-    await startWithoutCourt(tester);
-    final socket = sockets.single;
-    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
-    final controller = container.read(liveControllerProvider.notifier);
-    controller.award('near');
-    await tester.pump();
-    expect(controller.canDecide, isFalse);
-    expect(controller.canStop, isTrue);
-    await tapStop(tester);
-    // Kept until the award is confirmed: a stop cannot be taken back, a lost award could
-    // not be sent again after it.
-    expect([for (final m in socket.sent.skip(1)) m['type']], ['award']);
-    expect(find.text('Stopping once the last action is confirmed…'), findsOneWidget);
-    expect(controller.canStop, isFalse); // asked once
-    socket.emit({
-      'type': 'score',
-      'score': {'near': 1, 'far': 0},
-      'rallies': <dynamic>[],
-      'decision_id': socket.sent[1]['decision_id'],
-    });
-    await events(tester);
-    expect([for (final m in socket.sent.skip(1)) m['type']], ['award', 'stop']);
-    await events(tester);
-    await tester.pump(const Duration(seconds: 6)); // past the decision timeout: no reconnect
-    expect(sockets, hasLength(1));
-    expect(find.text('Open results'), findsOneWidget);
-    expect(container.read(liveControllerProvider).score!.near, 1);
-  });
-
-  testWidgets('Stop after a lost echo: the decision is retried once on resume, then the stop', (
-    tester,
-  ) async {
-    final sockets = await pumpLive(
-      tester,
-      onHello: (hello) => {
-        ...startedEvent(resumed: hello['type'] == 'resume'),
-        'decision_ack': true,
-        'decision_dedup': true,
-      },
-    );
-    await startWithoutCourt(tester);
-    final container = ProviderScope.containerOf(tester.element(find.byType(LiveScreen)));
-    final controller = container.read(liveControllerProvider.notifier);
-    controller.award('near');
-    final award = sockets.first.sent.last;
-    await tester.pump();
-    await tapStop(tester);
-    await tester.pump(const Duration(seconds: 5)); // no echo: reconnect
-    await tester.pump(kReconnectDelays.first);
-    await events(tester);
-    expect(sockets, hasLength(2));
-    // The same command, under the same decision id, so the server applies it once.
-    expect(sockets.last.sent.map((m) => m['type']), ['resume', 'award']);
-    expect(sockets.last.sent.last, award);
-    expect(sockets.first.sent.where((m) => m['type'] == 'stop'), isEmpty);
-    sockets.last.emit({
-      'type': 'score',
-      'score': {'near': 1, 'far': 0},
-      'rallies': <dynamic>[],
-      'decision_id': award['decision_id'],
-    });
-    await events(tester);
-    expect(sockets.last.sent.map((m) => m['type']), ['resume', 'award', 'stop']);
-    await events(tester);
-    await tester.pump(const Duration(seconds: 6));
-    expect(sockets, hasLength(2));
-    expect(find.text('Open results'), findsOneWidget);
-    expect(container.read(liveControllerProvider).score!.near, 1);
-  });
-
   testWidgets('a start score also counts without a court', (tester) async {
     final sockets = await pumpLive(tester, size: laptop);
     await tester.tap(find.text('Game already under way'));
@@ -1635,7 +1555,6 @@ void main() {
     await startWithoutCourt(tester);
     final socket = sockets.single;
     expect(socket.sent.first['auto_change_ends'], isTrue);
-    expect(find.textContaining('E change ends'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.pump();
     expect(socket.sent.last['type'], 'ends');
@@ -1668,8 +1587,6 @@ void main() {
   testWidgets('an older server gets no change-of-ends key or menu item', (tester) async {
     final sockets = await pumpLive(tester, size: const Size(1280, 800));
     await startWithoutCourt(tester);
-    expect(find.byKey(const Key('live-keys')), findsOneWidget);
-    expect(find.textContaining('E change ends'), findsNothing);
     final sent = sockets.single.sent.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.pump();

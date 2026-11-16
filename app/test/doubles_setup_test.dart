@@ -54,16 +54,9 @@ void main() {
     expect(adapter.bodies.single, containsPair('first_receiver_id', 'far_1'));
     expect(adapter.bodies.single, containsPair('best_of', 3));
     expect((job.court, job.firstServerId), ('doubles', 'near_2'));
-    // The answer has no auto_change_ends (a job from before clip record 1.7): off, as the
-    // server scores it.
     expect(
       job.options.match,
-      const MatchSetup(
-        court: 'doubles',
-        firstServerId: 'near_2',
-        firstReceiverId: 'far_1',
-        autoChangeEnds: false,
-      ),
+      const MatchSetup(court: 'doubles', firstServerId: 'near_2', firstReceiverId: 'far_1'),
     );
     // Singles requests stay as they were: no court, no slots.
     await api.createJob(
@@ -79,20 +72,6 @@ void main() {
     );
     expect(adapter.bodies.last['court'], 'doubles');
     expect(adapter.bodies.last.containsKey('best_of'), isFalse);
-    expect(adapter.bodies.last.containsKey('start_games'), isFalse);
-    // A retry of a match joined mid-way, with the players staying put.
-    await api.createJob(
-      videoId: 'v1',
-      options: const JobOptions(
-        overlays: {},
-        referee: true,
-        bestOf: 3,
-        autoChangeEnds: false,
-        startGames: (near: 1, far: 0),
-      ),
-    );
-    expect(adapter.bodies.last['auto_change_ends'], isFalse);
-    expect(adapter.bodies.last['start_games'], {'near': 1, 'far': 0});
   });
 
   test('the service order is sent only when both slots are known', () {
