@@ -35,6 +35,44 @@ def test_outlier_removed() -> None:
     assert remove_outliers(near, visible, outlier_px=80)[5] == 1
 
 
+def test_burst_of_false_detections_is_removed() -> None:
+    # A steady flight with three frames where the tracker jumped to a racket far away.
+    xy = np.array([[100 + 10 * i, 200 + 4 * i] for i in range(12)], float)
+    xy[5:8] = [[900, 80], [905, 82], [903, 81]]
+    visible = np.ones(12, dtype=int)
+    assert remove_outliers(xy, visible, outlier_px=80).tolist() == [1] * 5 + [0] * 3 + [1] * 4
+    # The fastest real flight (a smash, well under 200 px a frame) is left alone.
+    smash = np.array([[100 + 150 * i, 100 + 60 * i] for i in range(6)], float)
+    assert remove_outliers(smash, np.ones(6, dtype=int), outlier_px=80).all()
+    # A long run off the track is not a burst: the track may simply have moved there.
+    moved = xy.copy()
+    moved[5:] = [[900 + i, 80] for i in range(7)]
+    assert remove_outliers(moved, visible, outlier_px=80).all()
+
+
+def test_gap_fill_follows_a_curved_flight() -> None:
+    # A parabola with three frames missing at the top: the fill keeps the curve, where a
+    # straight line would leave a corner at each end of the gap.
+    t = np.arange(11, dtype=float)
+    xy = np.stack([100 + 20 * t, 300 - 60 * t + 6 * t**2], axis=1)
+    visible = np.ones(11, dtype=int)
+    visible[4:7] = 0
+    out_xy, out_vis, source = rectify(xy * visible[:, None], visible, max_gap=8, outlier_px=1000)
+    assert out_vis.all() and source[4:7] == ["interp"] * 3
+    assert np.abs(out_xy[4:7] - xy[4:7]).max() < 8.0
+    linear = xy[3] + (xy[7] - xy[3]) * (np.arange(1, 4)[:, None] / 4)
+    assert np.abs(linear - xy[4:7]).max() > 15.0
+
+
+def test_inpaint_mask_leaves_long_gaps_alone() -> None:
+    xy = np.full((40, 2), 50.0)
+    visible = np.zeros(40, dtype=int)
+    visible[[0, 4, 39]] = 1
+    mask = tracknet._inpaint_mask(xy, visible, 100, max_gap=30)
+    assert mask[1:4].all() and not mask[5:39].any()
+    assert tracknet._inpaint_mask(xy, visible, 100)[5:39].all()  # no limit given
+
+
 def test_long_gap_not_filled() -> None:
     xy = np.array([[0, 0]] + [[0, 0]] * 5 + [[60, 0], [70, 0], [0, 0], [90, 0]], float)
     visible = np.array([1, 0, 0, 0, 0, 0, 1, 1, 0, 1])
