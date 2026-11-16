@@ -1,4 +1,5 @@
 """Optional per-Watch TensorRT RTX sessions, isolated from shared RTMLib models."""
+
 from __future__ import annotations
 
 import copy
@@ -58,27 +59,34 @@ def _rtx_session(original, batch_size, is_pose, cache_dir, opt_batch=4):
     maximum = [batch_size if is_pose else 1, *shape[1:]] if dynamic else shape
     opt_size = min(batch_size, max(1, opt_batch)) if is_pose else 1
     optimum = [opt_size, *shape[1:]] if dynamic else shape
+
     def profile(dims):
         return f"{spec.name}:{'x'.join(str(x) for x in dims)}"
+
     opts = ort.SessionOptions()
     opts.add_session_config_entry("session.record_ep_graph_assignment_info", "1")
-    options = {"nv_profile_min_shapes": profile(minimum),
-               "nv_profile_opt_shapes": profile(optimum),
-               "nv_profile_max_shapes": profile(maximum)}
+    options = {
+        "nv_profile_min_shapes": profile(minimum),
+        "nv_profile_opt_shapes": profile(optimum),
+        "nv_profile_max_shapes": profile(maximum),
+    }
     if cache_dir:
         Path(cache_dir).mkdir(parents=True, exist_ok=True)
         options["nv_runtime_cache_path"] = str(Path(cache_dir).resolve())
     opts.add_provider_for_devices(devices, options)
     session = ort.InferenceSession(original.onnx_model, sess_options=opts)
-    assignments = [{"provider": item.ep_name, "nodes": len(item.get_nodes())}
-                   for item in session.get_provider_graph_assignment_info()]
+    assignments = [
+        {"provider": item.ep_name, "nodes": len(item.get_nodes())}
+        for item in session.get_provider_graph_assignment_info()
+    ]
     if not any(item["provider"] == "NvTensorRTRTXExecutionProvider" for item in assignments):
         raise RuntimeError("TensorRT RTX was not assigned any model nodes")
     return session, assignments
 
 
-def make_watch_body(body, provider, batch_size, device, cache_dir=None, opt_batch=4,
-                    split_detector=False):
+def make_watch_body(
+    body, provider, batch_size, device, cache_dir=None, opt_batch=4, split_detector=False
+):
     """Copy model wrappers, retaining their original CUDA sessions as fallbacks."""
     if provider not in ("cuda", "detector", "pose", "both"):
         raise ValueError(f"unknown Watch provider mode: {provider}")

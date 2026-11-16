@@ -215,9 +215,9 @@ class LiveSession:
         if isinstance(jpeg, np.ndarray):
             frame = jpeg
             if frame.dtype != np.uint8 or frame.shape != (self.height, self.width, 3):
-                return None, [{
-                    "type": "error", "code": "bad_frame", "detail": "invalid decoded frame"
-                }]
+                return None, [
+                    {"type": "error", "code": "bad_frame", "detail": "invalid decoded frame"}
+                ]
         else:
             frame = self._decode(jpeg)
         if frame is None:

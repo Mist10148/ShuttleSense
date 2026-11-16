@@ -263,8 +263,10 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         ys = [p[1] for line in segments for p in line]
         state.cache["court_region_key"] = key
         state.cache["court_region"] = (
-            max(0, min(xs) - pad), max(0, min(ys) - pad),
-            min(img.shape[1], max(xs) + pad + 1), min(img.shape[0], max(ys) + pad + 1),
+            max(0, min(xs) - pad),
+            max(0, min(ys) - pad),
+            min(img.shape[1], max(xs) + pad + 1),
+            min(img.shape[0], max(ys) + pad + 1),
         )
     x0, y0, x1, y1 = state.cache["court_region"]
     if x0 >= x1 or y0 >= y1:
@@ -272,13 +274,19 @@ def draw_court(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     region = img[y0:y1, x0:x1]
     overlay = region.copy()
     for a, b in segments:
-        cv2.line(overlay, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0),
-                 style.COURT, thick, cv2.LINE_AA)
+        cv2.line(
+            overlay, (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0), style.COURT, thick, cv2.LINE_AA
+        )
     cv2.addWeighted(overlay, 0.6, region, 0.4, 0, dst=region)
 
 
-def status_text(record: ClipRecord, i: int, *, peak_history: list | None = None,
-                stroke_counts: list[int] | None = None) -> str:
+def status_text(
+    record: ClipRecord,
+    i: int,
+    *,
+    peak_history: list | None = None,
+    stroke_counts: list[int] | None = None,
+) -> str:
     """'In play · 182 km/h (est.) · peak 241 · 3 strokes' for frame i."""
     from shuttlesense.analytics.stage import strokes_so_far
 
@@ -442,8 +450,9 @@ def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         state.cache["score_events"] = events
         state.cache["score_values"] = [score_at(record, frame) for frame in events]
     events = state.cache["score_events"]
-    score = (state.cache["score_values"][bisect_right(events, i) - 1]
-             if i >= 0 else score_at(record, i))
+    score = (
+        state.cache["score_values"][bisect_right(events, i) - 1] if i >= 0 else score_at(record, i)
+    )
     if score is None:
         return
     s = state.scale

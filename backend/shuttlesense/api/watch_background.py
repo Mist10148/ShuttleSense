@@ -72,16 +72,25 @@ class BackgroundWatch:
             perception = getattr(session, "perception", None)
             perception = getattr(perception, "perception", perception)
             candidates = getattr(perception, "watch_candidates", None)
-            diagnostics = ({"mode": candidates.mode, **candidates.stats,
-                            "proposal": candidates.proposal_stats
-                            if getattr(candidates, "proposal", None) else None}
-                           if candidates is not None else self.candidate_diagnostics)
+            diagnostics = (
+                {
+                    "mode": candidates.mode,
+                    **candidates.stats,
+                    "proposal": candidates.proposal_stats
+                    if getattr(candidates, "proposal", None)
+                    else None,
+                }
+                if candidates is not None
+                else self.candidate_diagnostics
+            )
             return {
                 "job_id": self.entry.job_id,
                 "candidate_diagnostics": diagnostics,
                 "provider_diagnostics": getattr(perception, "provider_diagnostics", None)
                 or self.provider_diagnostics,
-                "track_provider_diagnostics": getattr(perception, "track_provider_diagnostics", None)
+                "track_provider_diagnostics": getattr(
+                    perception, "track_provider_diagnostics", None
+                )
                 or self.track_provider_diagnostics,
                 "watched_s": self.watched,
                 "analyzed_s": self.analyzed / self.reader.fps,
@@ -197,13 +206,17 @@ class BackgroundWatch:
             perception = getattr(session.perception, "perception", session.perception)
             candidates = getattr(perception, "watch_candidates", None)
             self.provider_diagnostics = getattr(perception, "provider_diagnostics", None)
-            self.track_provider_diagnostics = getattr(perception, "track_provider_diagnostics", None)
+            self.track_provider_diagnostics = getattr(
+                perception, "track_provider_diagnostics", None
+            )
             if candidates is not None:
                 with self.condition:
                     self.candidate_diagnostics = {
-                        "mode": candidates.mode, **candidates.stats,
+                        "mode": candidates.mode,
+                        **candidates.stats,
                         "proposal": candidates.proposal_stats
-                        if getattr(candidates, "proposal", None) else None,
+                        if getattr(candidates, "proposal", None)
+                        else None,
                     }
             if hasattr(session.perception, "close"):
                 session.perception.close()

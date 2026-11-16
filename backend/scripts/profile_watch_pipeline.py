@@ -3,6 +3,7 @@
 Times for shuttle and players overlap when parallel perception is enabled; they
 must not be added together. The optional recording uses a temporary directory.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,44 +32,80 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=100)
-    parser.add_argument("--wall-seconds", type=float,
-                        help="stop processing after this many wall-clock seconds")
+    parser.add_argument(
+        "--wall-seconds", type=float, help="stop processing after this many wall-clock seconds"
+    )
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     parser.add_argument("--court", choices=["singles", "doubles"], default="singles")
     parser.add_argument("--corners", type=float, nargs=8)
     parser.add_argument("--record", action="store_true")
-    parser.add_argument("--decoded-frames", action="store_true",
-                        help="bypass the background Watch JPEG round trip")
-    parser.add_argument("--ort-threads", type=int, default=0,
-                        help="experiment with a smaller ONNX Runtime CPU thread pool")
-    parser.add_argument("--player-provider", choices=["cuda", "detector", "pose", "both"],
-                        default="cuda", help="experimental TensorRT RTX model selection")
-    parser.add_argument("--pose-batch-size", type=int, choices=range(1, 17),
-                        help="override Watch pose batch size")
-    parser.add_argument("--pose-opt-batch", type=int, choices=range(1, 17),
-                        help="override TensorRT RTX pose optimal batch shape")
-    parser.add_argument("--shadow-margin", type=float,
-                        help="observe a tighter candidate margin without changing selection")
-    parser.add_argument("--shadow-footpoint", action="store_true",
-                        help="observe footpoint-based candidate filtering without excluding")
+    parser.add_argument(
+        "--decoded-frames", action="store_true", help="bypass the background Watch JPEG round trip"
+    )
+    parser.add_argument(
+        "--ort-threads",
+        type=int,
+        default=0,
+        help="experiment with a smaller ONNX Runtime CPU thread pool",
+    )
+    parser.add_argument(
+        "--player-provider",
+        choices=["cuda", "detector", "pose", "both"],
+        default="cuda",
+        help="experimental TensorRT RTX model selection",
+    )
+    parser.add_argument(
+        "--pose-batch-size", type=int, choices=range(1, 17), help="override Watch pose batch size"
+    )
+    parser.add_argument(
+        "--pose-opt-batch",
+        type=int,
+        choices=range(1, 17),
+        help="override TensorRT RTX pose optimal batch shape",
+    )
+    parser.add_argument(
+        "--shadow-margin",
+        type=float,
+        help="observe a tighter candidate margin without changing selection",
+    )
+    parser.add_argument(
+        "--shadow-footpoint",
+        action="store_true",
+        help="observe footpoint-based candidate filtering without excluding",
+    )
     parser.add_argument("--nvtx", action="store_true", help="add NVTX ranges for Nsight Systems")
-    parser.add_argument("--gpu-window", action="store_true",
-                        help="experiment with GPU shuttle input")
+    parser.add_argument(
+        "--gpu-window", action="store_true", help="experiment with GPU shuttle input"
+    )
     parser.add_argument("--track-provider", choices=["pytorch", "rtx"], default="pytorch")
-    parser.add_argument("--pose-crop-lookup", action="store_true",
-                        help="experiment with lookup-table pose crop normalization")
-    parser.add_argument("--split-detector", action="store_true",
-                        help="experiment with the TensorRT / CUDA split detector")
-    parser.add_argument("--pose-breakdown", action="store_true",
-                        help="measure pose crop, inference and postprocessing calls")
+    parser.add_argument(
+        "--pose-crop-lookup",
+        action="store_true",
+        help="experiment with lookup-table pose crop normalization",
+    )
+    parser.add_argument(
+        "--split-detector",
+        action="store_true",
+        help="experiment with the TensorRT / CUDA split detector",
+    )
+    parser.add_argument(
+        "--pose-breakdown",
+        action="store_true",
+        help="measure pose crop, inference and postprocessing calls",
+    )
     args = parser.parse_args()
     setup_start = time.perf_counter()
     config = with_court(load_config(), args.court)
-    config = {**config, "watch": {**config.get("watch", {}),
-                                   "player_provider": args.player_provider,
-                                   "candidate_shadow_margin_m": args.shadow_margin,
-                                   "candidate_shadow_footpoint": args.shadow_footpoint}}
+    config = {
+        **config,
+        "watch": {
+            **config.get("watch", {}),
+            "player_provider": args.player_provider,
+            "candidate_shadow_margin_m": args.shadow_margin,
+            "candidate_shadow_footpoint": args.shadow_footpoint,
+        },
+    }
     config["watch"]["track_gpu_window"] = args.gpu_window
     config["watch"]["track_provider"] = args.track_provider
     config["watch"]["pose_crop_lookup"] = args.pose_crop_lookup
@@ -95,7 +132,8 @@ def main():
             options.intra_op_num_threads = args.ort_threads
             options.add_session_config_entry("session.intra_op.allow_spinning", "0")
             component.session = ort.InferenceSession(
-                component.onnx_model, sess_options=options,
+                component.onnx_model,
+                sess_options=options,
                 providers=component.session.get_providers(),
             )
     enable_watch_player_continuity(model)
@@ -110,6 +148,7 @@ def main():
             start = time.perf_counter()
             if args.nvtx:
                 import torch
+
                 torch.cuda.nvtx.range_push(label)
             try:
                 return original(*a, **kw)
@@ -117,6 +156,7 @@ def main():
                 if args.nvtx:
                     torch.cuda.nvtx.range_pop()
                 timings[label].append((time.perf_counter() - start) * 1000)
+
         setattr(obj, name, wrapped)
 
     measure(model, "_shuttle", "shuttle")
@@ -139,11 +179,22 @@ def main():
     parallel = ParallelWatchPerception(model)
     with tempfile.TemporaryDirectory(prefix="shuttlesense-profile-") as temp:
         recording = Path(temp) / "recording.mp4" if args.record else None
-        request = StartRequest(fps=reader.fps, width=reader.width, height=reader.height,
-                               court=args.court, corners=corners)
-        session = LiveSession(session_id="profile", request=request, config=config,
-                              perception=parallel, court_corners=corners,
-                              recording=recording, device=device)
+        request = StartRequest(
+            fps=reader.fps,
+            width=reader.width,
+            height=reader.height,
+            court=args.court,
+            corners=corners,
+        )
+        session = LiveSession(
+            session_id="profile",
+            request=request,
+            config=config,
+            perception=parallel,
+            court_corners=corners,
+            recording=recording,
+            device=device,
+        )
         session.live["scales"] = [1.0]
         session.analyzer.watch_stroke_guard = True
         stroke_config = session.config.get("stages", {}).get("strokes", {})
@@ -166,8 +217,10 @@ def main():
         frames = iter(reader.frames(args.start_frame, args.start_frame + args.frames))
         try:
             while True:
-                if (args.wall_seconds is not None and
-                        time.perf_counter() - run_start >= args.wall_seconds):
+                if (
+                    args.wall_seconds is not None
+                    and time.perf_counter() - run_start >= args.wall_seconds
+                ):
                     break
                 start = time.perf_counter()
                 item = next(frames, None)
@@ -199,16 +252,22 @@ def main():
             close_s = time.perf_counter() - close_start
         elapsed = time.perf_counter() - run_start
     count = len(timings["frame"])
-    print(f"device={device}, frames={count}, recording={args.record}, "
-          f"decoded_frames={args.decoded_frames}")
-    print(f"processing_wall={elapsed:.2f}s, throughput={count / elapsed:.2f} fps, "
-          f"recording_close={close_s:.2f}s, video_duration={count / reader.fps:.2f}s")
+    print(
+        f"device={device}, frames={count}, recording={args.record}, "
+        f"decoded_frames={args.decoded_frames}"
+    )
+    print(
+        f"processing_wall={elapsed:.2f}s, throughput={count / elapsed:.2f} fps, "
+        f"recording_close={close_s:.2f}s, video_duration={count / reader.fps:.2f}s"
+    )
     print("Frame timings include inference warmup; shuttle and player work may overlap.")
     for name, values in timings.items():
         if values:
-            print(f"{name:14s} count={len(values):4d} total={sum(values)/1000:8.2f}s "
-                  f"mean={statistics.mean(values):7.1f}ms "
-                  f"median={statistics.median(values):7.1f}ms")
+            print(
+                f"{name:14s} count={len(values):4d} total={sum(values) / 1000:8.2f}s "
+                f"mean={statistics.mean(values):7.1f}ms "
+                f"median={statistics.median(values):7.1f}ms"
+            )
     candidates = getattr(model, "watch_candidates", None)
     if candidates is not None:
         print(f"candidate diagnostics: {candidates.stats}")

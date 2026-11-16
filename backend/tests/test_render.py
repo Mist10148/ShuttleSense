@@ -98,10 +98,12 @@ def test_optimized_trail_matches_full_frame_blending_at_edges() -> None:
     from shuttlesense.schema import ClipRecord, Frame, Shuttle
 
     positions = [(0, 0), (159, 89), (80, 45), (-2, 30)]
-    frames = [Frame(frame=i, shuttle=Shuttle(x=x, y=y, visible=1))
-              for i, (x, y) in enumerate(positions)]
-    record = ClipRecord(clip_id="c", fps=25, width=160, height=90,
-                        num_frames=len(frames), frames=frames)
+    frames = [
+        Frame(frame=i, shuttle=Shuttle(x=x, y=y, visible=1)) for i, (x, y) in enumerate(positions)
+    ]
+    record = ClipRecord(
+        clip_id="c", fps=25, width=160, height=90, num_frames=len(frames), frames=frames
+    )
     rng = np.random.default_rng(7)
     image = rng.integers(0, 256, (90, 160, 3), dtype=np.uint8)
     expected = image.copy()
@@ -109,8 +111,14 @@ def test_optimized_trail_matches_full_frame_blending_at_edges() -> None:
         age = (3 - frame.frame) / 12
         radius = max(1, round(6 - 4 * age))
         overlay = expected.copy()
-        cv2.circle(overlay, (int(frame.shuttle.x), int(frame.shuttle.y)), radius,
-                   style.SHUTTLE, -1, cv2.LINE_AA)
+        cv2.circle(
+            overlay,
+            (int(frame.shuttle.x), int(frame.shuttle.y)),
+            radius,
+            style.SHUTTLE,
+            -1,
+            cv2.LINE_AA,
+        )
         cv2.addWeighted(overlay, 1 - 0.8 * age, expected, 0.8 * age, 0, dst=expected)
     draw_trail(image, record, 3, RenderState())
     assert np.array_equal(image, expected)
@@ -120,8 +128,7 @@ def test_speed_overlay_uses_the_same_running_peak_when_seeking() -> None:
     from shuttlesense.render import overlays, style
 
     record = _record_with_track()
-    for frame, speed in zip(record.frames, [None, 0, 30, 20, 50, 0, None, 45, 60, 10],
-                            strict=True):
+    for frame, speed in zip(record.frames, [None, 0, 30, 20, 50, 0, None, 45, 60, 10], strict=True):
         frame.shuttle_speed_kmh = speed
     state = overlays.RenderState()
     for i in (8, 2, 9, 0, 4):
@@ -297,11 +304,14 @@ def test_doubles_render_draws_every_layer(tmp_path) -> None:
     assert img.any()
 
 
-@pytest.mark.parametrize("corners", [
-    [[20, 80], [140, 80], [120, 20], [40, 20]],
-    [[-40, 100], [190, 100], [140, -10], [20, -10]],
-    [[-80, 60], [-10, 60], [-20, 20], [-70, 20]],
-])
+@pytest.mark.parametrize(
+    "corners",
+    [
+        [[20, 80], [140, 80], [120, 20], [40, 20]],
+        [[-40, 100], [190, 100], [140, -10], [20, -10]],
+        [[-80, 60], [-10, 60], [-20, 20], [-70, 20]],
+    ],
+)
 def test_court_region_matches_full_frame_blend(corners):
     import cv2
 
@@ -310,16 +320,21 @@ def test_court_region_matches_full_frame_blend(corners):
     from shuttlesense.render.overlays import RenderState, court_segments_px, draw_court
     from shuttlesense.schema import ClipRecord, Court
 
-    record = ClipRecord(clip_id="c", fps=25, width=160, height=90, num_frames=1,
-                        court=Court(corners_px=corners,
-                                    homography=compute_homography(corners).tolist()))
+    record = ClipRecord(
+        clip_id="c",
+        fps=25,
+        width=160,
+        height=90,
+        num_frames=1,
+        court=Court(corners_px=corners, homography=compute_homography(corners).tolist()),
+    )
     state = RenderState(scale=1)
     img = np.random.default_rng(7).integers(0, 256, (90, 160, 3), dtype=np.uint8)
     expected = img.copy()
     overlay = expected.copy()
     for a, b in court_segments_px(record, state):
         cv2.line(overlay, a, b, style.COURT, 3, cv2.LINE_AA)
-    cv2.addWeighted(overlay, .6, expected, .4, 0, dst=expected)
+    cv2.addWeighted(overlay, 0.6, expected, 0.4, 0, dst=expected)
     draw_court(img, record, 0, state)
     assert np.array_equal(img, expected)
 
@@ -333,6 +348,7 @@ def test_cached_hit_and_stroke_counts_match_original_at_random_frames():
         draw_speed,
         status_text,
     )
+
     record = load_golden("doubles")
     state = RenderState()
     for index in [0, len(record.frames) - 1, 10, 25, 3, 50]:
@@ -341,7 +357,9 @@ def test_cached_hit_and_stroke_counts_match_original_at_random_frames():
         assert _cached_last_hit(record, index, state) == _last_hit_before(record, index)
         draw_speed(np.zeros((record.height, record.width, 3), np.uint8), record, index, state)
         assert status_text(record, index) == status_text(
-            record, index, peak_history=state.cache["peak_history"],
+            record,
+            index,
+            peak_history=state.cache["peak_history"],
             stroke_counts=state.cache["stroke_counts"],
         )
 
@@ -349,6 +367,7 @@ def test_cached_hit_and_stroke_counts_match_original_at_random_frames():
 def test_cached_score_overlay_matches_score_at_every_frame(monkeypatch):
     from shuttlesense.fake import load_golden
     from shuttlesense.render import overlays
+
     record = load_golden("doubles")
     state = overlays.RenderState()
     # Exercise arbitrary seek order and compare the labels to the uncached score function.

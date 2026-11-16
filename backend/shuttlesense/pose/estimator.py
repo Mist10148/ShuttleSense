@@ -100,8 +100,9 @@ def _rtmlib_detector(mode: str, device: str, body=None):
                 return detect(frame)
             try:
                 if lookup is not None:
-                    return players_from_pose(*_batched_body_pose(body, frame, batch_size,
-                                                                crop_lookup=lookup))
+                    return players_from_pose(
+                        *_batched_body_pose(body, frame, batch_size, crop_lookup=lookup)
+                    )
                 return players_from_pose(*_batched_body_pose(body, frame, batch_size))
             except Exception:
                 # Unsupported model/runtime or resource pressure: fall back for the
@@ -131,8 +132,9 @@ def _rtmlib_detector(mode: str, device: str, body=None):
                 if detected == 0:
                     boxes = [[0, 0, frame.shape[1], frame.shape[0]]]
                 keep = candidates.select(boxes, frame.shape)
-                indices = [i for i, selected in enumerate(keep)
-                           if selected or candidates.mode == "shadow"]
+                indices = [
+                    i for i, selected in enumerate(keep) if selected or candidates.mode == "shadow"
+                ]
                 start = time.perf_counter()
                 if not indices:
                     candidates.record(detected, keep, detection_s, time.perf_counter() - start)
@@ -172,6 +174,7 @@ def _rtmlib_detector(mode: str, device: str, body=None):
 
     detect.with_batch = with_batch
     detect.with_watch = with_watch
+
     def with_provider(provider, batch_size, opt_batch=4, split_detector=False):
         from shuttlesense.config import BACKEND_DIR
         from shuttlesense.pose.watch_acceleration import make_watch_body
@@ -189,9 +192,9 @@ def _rtmlib_detector(mode: str, device: str, body=None):
     return detect
 
 
-
-def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None, *, vectorized=False,
-                       crop_lookup=None):
+def _batched_body_pose(
+    body, frame: np.ndarray, batch_size: int, boxes=None, *, vectorized=False, crop_lookup=None
+):
     """RTMLib's normal detection and pose preprocessing, grouped per frame."""
     if body.one_stage or body.pose_model.backend != "onnxruntime":
         raise ValueError("batching requires a two-stage ONNX RTMPose model")
@@ -209,7 +212,7 @@ def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None, *, 
     keypoints, scores = [], []
     outputs = [output.name for output in session.get_outputs()]
     for start in range(0, len(boxes), max(1, batch_size)):
-        selected = boxes[start:start + batch_size]
+        selected = boxes[start : start + batch_size]
         batch = None
         if crop_lookup is not None and crop_lookup.enabled:
             try:
@@ -220,13 +223,18 @@ def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None, *, 
                 crop_lookup.enabled = False
         if batch is None:
             prepared = [pose.preprocess(frame, b) for b in selected]
-            batch = np.stack([
-                np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
-                for img, _, _ in prepared
-            ])
+            batch = np.stack(
+                [
+                    np.ascontiguousarray(img.transpose(2, 0, 1), dtype=np.float32)
+                    for img, _, _ in prepared
+                ]
+            )
         result = session.run(outputs, {input_info.name: batch})
-        native_pose = (vectorized and type(pose).__name__ == "RTMPose" and
-                       type(pose).__module__ == "rtmlib.tools.pose_estimation.rtmpose")
+        native_pose = (
+            vectorized
+            and type(pose).__name__ == "RTMPose"
+            and type(pose).__module__ == "rtmlib.tools.pose_estimation.rtmpose"
+        )
         if native_pose:
             centers = np.asarray([center for _, center, _ in prepared])
             scales = np.asarray([scale for _, _, scale in prepared])
@@ -241,7 +249,7 @@ def _batched_body_pose(body, frame: np.ndarray, batch_size: int, boxes=None, *, 
             scores.append(score)
         else:
             for index, (_, center, scale) in enumerate(prepared):
-                kps, score = pose.postprocess([r[index:index + 1] for r in result], center, scale)
+                kps, score = pose.postprocess([r[index : index + 1] for r in result], center, scale)
                 keypoints.append(kps)
                 scores.append(score)
     return np.concatenate(keypoints, axis=0), np.concatenate(scores, axis=0)
