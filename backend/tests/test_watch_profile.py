@@ -1,5 +1,8 @@
-from scripts.bench_watch_complete import p95
-from scripts.summarize_watch_flutter import summarize
+from test_eval_scripts import load_script
+
+# scripts/ is not a package; CI's bare `pytest` cannot import it by name.
+p95 = load_script("bench_watch_complete").p95
+summarize = load_script("summarize_watch_flutter").summarize
 
 
 def test_flutter_summary_uses_first_frame_after_45_seconds():
