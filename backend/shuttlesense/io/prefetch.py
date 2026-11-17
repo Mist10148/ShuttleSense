@@ -3,6 +3,7 @@
 The worker owns and closes the source iterator. It may decode ahead but does not
 perform inference or commit a frame.
 """
+
 from __future__ import annotations
 
 import queue

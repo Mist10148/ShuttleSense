@@ -1,4 +1,5 @@
 """Experimental YOLOX split around TensorRT RTX's unsupported TopK."""
+
 from __future__ import annotations
 
 import hashlib
@@ -71,8 +72,9 @@ def make_split_detector(component, cache_dir):
         onnx.save(post, post_path)
     model = SimpleNamespace(session=component.session, onnx_model=str(front_path))
     front, assignments = _rtx_session(model, 1, False, cache / "engines")
-    post = ort.InferenceSession(str(post_path),
-                                providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    post = ort.InferenceSession(
+        str(post_path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+    )
     if "CUDAExecutionProvider" not in post.get_providers():
         raise RuntimeError("CUDA postprocessing provider is unavailable")
     return SplitDetectorSession(component.session, front, post), assignments

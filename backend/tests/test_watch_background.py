@@ -61,11 +61,12 @@ def test_focused_mode_is_not_claimed_on_demo_server(tmp_path: Path, tiny_video: 
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
     with TestClient(app) as client:
         with tiny_video.open("rb") as f:
-            video_id = client.post(
-                "/videos", files={"file": ("tiny.mp4", f, "video/mp4")}
-            ).json()["id"]
-        response = client.post("/watch/background", json={"video_id": video_id,
-                                                         "focused_analysis": True})
+            video_id = client.post("/videos", files={"file": ("tiny.mp4", f, "video/mp4")}).json()[
+                "id"
+            ]
+        response = client.post(
+            "/watch/background", json={"video_id": video_id, "focused_analysis": True}
+        )
         assert response.status_code == 201
         assert response.json()["focused_analysis"] is False
         job_id = response.json()["job_id"]
@@ -101,12 +102,14 @@ def test_focused_mode_is_session_local_and_survives_save(
         monkeypatch.setattr(perception_module, "enable_watch_player_continuity", enable)
         manager.fake = False
         with tiny_video.open("rb") as f:
-            video_id = client.post(
-                "/videos", files={"file": ("tiny.mp4", f, "video/mp4")}
-            ).json()["id"]
+            video_id = client.post("/videos", files={"file": ("tiny.mp4", f, "video/mp4")}).json()[
+                "id"
+            ]
         corners = [[10, 80], [150, 80], [120, 20], [40, 20]]
-        start = client.post("/watch/background", json={"video_id": video_id,
-                            "focused_analysis": True, "corners": corners})
+        start = client.post(
+            "/watch/background",
+            json={"video_id": video_id, "focused_analysis": True, "corners": corners},
+        )
         assert start.status_code == 201, start.text
         assert start.json()["focused_analysis"] is True
         assert app.state.jobs.config["watch"]["candidates_per_player"] == 0
@@ -116,7 +119,7 @@ def test_focused_mode_is_session_local_and_survives_save(
             job = client.get(f"/jobs/{job_id}").json()
             if job["status"] in ("done", "failed"):
                 break
-            time.sleep(.05)
+            time.sleep(0.05)
         assert job["status"] == "done", job
         assert job["watch_focused_analysis"] is True
 

@@ -76,10 +76,17 @@ class BackgroundWatch:
             perception = getattr(session, "perception", None)
             perception = getattr(perception, "perception", perception)
             candidates = getattr(perception, "watch_candidates", None)
-            diagnostics = ({"mode": candidates.mode, **candidates.stats,
-                            "proposal": candidates.proposal_stats
-                            if getattr(candidates, "proposal", None) else None}
-                           if candidates is not None else self.candidate_diagnostics)
+            diagnostics = (
+                {
+                    "mode": candidates.mode,
+                    **candidates.stats,
+                    "proposal": candidates.proposal_stats
+                    if getattr(candidates, "proposal", None)
+                    else None,
+                }
+                if candidates is not None
+                else self.candidate_diagnostics
+            )
             return {
                 "job_id": self.entry.job_id,
                 "candidate_diagnostics": diagnostics,
@@ -204,9 +211,14 @@ class BackgroundWatch:
                 self.state.live.state.jobs.gpu.release()
         finally:
             elapsed = time.perf_counter() - started
-            log.info("Watch analysis: %d frames (%.2fs video), elapsed %.2fs, "
-                     "frame processing %.2fs; elapsed includes waiting for playback and saving",
-                     self.analyzed, self.analyzed / self.reader.fps, elapsed, processing_s)
+            log.info(
+                "Watch analysis: %d frames (%.2fs video), elapsed %.2fs, "
+                "frame processing %.2fs; elapsed includes waiting for playback and saving",
+                self.analyzed,
+                self.analyzed / self.reader.fps,
+                elapsed,
+                processing_s,
+            )
             frames.close()
             perception = getattr(session.perception, "perception", session.perception)
             candidates = getattr(perception, "watch_candidates", None)
@@ -217,9 +229,11 @@ class BackgroundWatch:
             if candidates is not None:
                 with self.condition:
                     self.candidate_diagnostics = {
-                        "mode": candidates.mode, **candidates.stats,
+                        "mode": candidates.mode,
+                        **candidates.stats,
                         "proposal": candidates.proposal_stats
-                        if getattr(candidates, "proposal", None) else None,
+                        if getattr(candidates, "proposal", None)
+                        else None,
                     }
             if hasattr(session.perception, "close"):
                 session.perception.close()
@@ -287,8 +301,12 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
         config = session.perception.config
         session.perception.config = {
             **config,
-            "watch": {**(config.get("watch") or {}), "candidate_filter": "filter",
-                      "candidates_per_player": 2, "candidate_refresh_frames": 5},
+            "watch": {
+                **(config.get("watch") or {}),
+                "candidate_filter": "filter",
+                "candidates_per_player": 2,
+                "candidate_refresh_frames": 5,
+            },
         }
     enable_watch_player_continuity(session.perception)
     try:
@@ -326,8 +344,15 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
             watch_analysis_s=0.0,
             watch_focused_analysis=bool(
                 corners
-                and getattr(getattr(getattr(session.perception, "perception", session.perception),
-                                    "watch_candidates", None), "candidates_per_player", 0)
+                and getattr(
+                    getattr(
+                        getattr(session.perception, "perception", session.perception),
+                        "watch_candidates",
+                        None,
+                    ),
+                    "candidates_per_player",
+                    0,
+                )
             ),
         )
         state.jobs.add(job)
@@ -351,8 +376,9 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
         "width": reader.width,
         "height": reader.height,
         "stages": session.perception.available,
-        "focused_analysis": bool(corners and selector is not None
-                                 and selector.candidates_per_player > 0),
+        "focused_analysis": bool(
+            corners and selector is not None and selector.candidates_per_player > 0
+        ),
     }
 
 

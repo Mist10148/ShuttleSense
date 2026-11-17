@@ -1,4 +1,5 @@
 """Opt-in per-frame wall-clock timings; model durations may overlap on CUDA."""
+
 from __future__ import annotations
 
 import threading
@@ -39,9 +40,9 @@ class WatchFrameProfiler:
                 return original(*args, **kwargs)
             finally:
                 with self.lock:
-                    self.values[label] = self.values.get(label, 0.0) + (
-                        time.perf_counter() - start
-                    ) * 1000
+                    self.values[label] = (
+                        self.values.get(label, 0.0) + (time.perf_counter() - start) * 1000
+                    )
 
         setattr(obj, name, wrapped)
 

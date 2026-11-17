@@ -5,6 +5,7 @@ Example: python scripts/bench_watch_complete.py --video PATH --court doubles
 
 Includes server and in-process WebSocket round trips, but not Flutter display/network.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,6 +37,7 @@ class ResourceSampler:
     def _sample(self):
         try:
             import psutil
+
             process = psutil.Process(os.getpid())
             process.cpu_percent()
             psutil.cpu_percent()
@@ -45,22 +47,37 @@ class ResourceSampler:
             sample = {}
             if process is not None:
                 memory = psutil.virtual_memory()
-                sample.update(cpu_percent=process.cpu_percent(),
-                              rss_bytes=process.memory_info().rss,
-                              system_cpu_percent=psutil.cpu_percent(),
-                              system_memory_used_bytes=memory.used,
-                              system_memory_percent=memory.percent)
+                sample.update(
+                    cpu_percent=process.cpu_percent(),
+                    rss_bytes=process.memory_info().rss,
+                    system_cpu_percent=psutil.cpu_percent(),
+                    system_memory_used_bytes=memory.used,
+                    system_memory_percent=memory.percent,
+                )
             try:
-                command = ["nvidia-smi", "--query-gpu=utilization.gpu,utilization.memory,"
-                           "memory.used,clocks.current.graphics,temperature.gpu,power.draw",
-                           "--format=csv,noheader,nounits"]
-                result = subprocess.run(command, capture_output=True, text=True, timeout=2,
-                                        check=False)
+                command = [
+                    "nvidia-smi",
+                    "--query-gpu=utilization.gpu,utilization.memory,"
+                    "memory.used,clocks.current.graphics,temperature.gpu,power.draw",
+                    "--format=csv,noheader,nounits",
+                ]
+                result = subprocess.run(
+                    command, capture_output=True, text=True, timeout=2, check=False
+                )
                 if result.returncode == 0:
                     values = result.stdout.strip().splitlines()[0].split(",")
-                    for key, value in zip(("gpu_percent", "gpu_memory_percent", "gpu_used_mib",
-                                           "gpu_clock_mhz", "gpu_temperature_c", "gpu_power_w"),
-                                          values, strict=True):
+                    for key, value in zip(
+                        (
+                            "gpu_percent",
+                            "gpu_memory_percent",
+                            "gpu_used_mib",
+                            "gpu_clock_mhz",
+                            "gpu_temperature_c",
+                            "gpu_power_w",
+                        ),
+                        values,
+                        strict=True,
+                    ):
                         with contextlib.suppress(ValueError):
                             sample[key] = float(value.strip())
             except (OSError, subprocess.TimeoutExpired, IndexError, ValueError):
@@ -79,13 +96,15 @@ class ResourceSampler:
 
     def summary(self):
         keys = {key for item in self.samples for key in item}
-        return {key: {"max": max(values), "median": statistics.median(values)}
-                for key in sorted(keys)
-                if (values := [sample[key] for sample in self.samples if key in sample])}
+        return {
+            key: {"max": max(values), "median": statistics.median(values)}
+            for key in sorted(keys)
+            if (values := [sample[key] for sample in self.samples if key in sample])
+        }
 
 
 def p95(values):
-    return round(sorted(values)[max(0, math.ceil(len(values) * .95) - 1)], 2) if values else None
+    return round(sorted(values)[max(0, math.ceil(len(values) * 0.95) - 1)], 2) if values else None
 
 
 def main() -> None:
@@ -95,19 +114,30 @@ def main() -> None:
     parser.add_argument("--court", choices=("singles", "doubles"), default="singles")
     parser.add_argument("--seconds", type=float, default=45)
     parser.add_argument("--parallel", choices=("true", "false"), default="false")
-    parser.add_argument("--profile", action="store_true",
-                        help="enable per-frame diagnostic timings")
-    parser.add_argument("--resources", action="store_true",
-                        help="sample GPU and optional psutil CPU")
-    parser.add_argument("--warmup-frames", type=int, default=0,
-                        help="run a previous session in the same process before measuring")
+    parser.add_argument(
+        "--profile", action="store_true", help="enable per-frame diagnostic timings"
+    )
+    parser.add_argument(
+        "--resources", action="store_true", help="sample GPU and optional psutil CPU"
+    )
+    parser.add_argument(
+        "--warmup-frames",
+        type=int,
+        default=0,
+        help="run a previous session in the same process before measuring",
+    )
     parser.add_argument("--out", type=Path, help="optional JSON output path")
-    parser.add_argument("--prefetch-depth", type=int, choices=(0, 2), default=0,
-                        help="benchmark-only decoded-frame queue; 0 disables it")
+    parser.add_argument(
+        "--prefetch-depth",
+        type=int,
+        choices=(0, 2),
+        default=0,
+        help="benchmark-only decoded-frame queue; 0 disables it",
+    )
     args = parser.parse_args()
     if args.prefetch_depth:
-        from shuttlesense.io.prefetch import PrefetchFrames
         from shuttlesense.io import FrameReader
+        from shuttlesense.io.prefetch import PrefetchFrames
 
         # Process-local experiment only: production Watch retains its normal reader.
         FrameReader.__iter__ = lambda reader: PrefetchFrames(
@@ -123,11 +153,18 @@ def main() -> None:
                 response = client.post("/videos", files={"file": (args.video.name, source)})
             response.raise_for_status()
             video_id = response.json()["id"]
-            corners = [args.corners[i:i+2] for i in range(0, 8, 2)]
+            corners = [args.corners[i : i + 2] for i in range(0, 8, 2)]
             if args.warmup_frames > 0:
                 with client.websocket_connect("/watch") as warm:
-                    warm.send_json({"type": "start", "video_id": video_id, "court": args.court,
-                                    "corners": corners, "playback": "complete"})
+                    warm.send_json(
+                        {
+                            "type": "start",
+                            "video_id": video_id,
+                            "court": args.court,
+                            "corners": corners,
+                            "playback": "complete",
+                        }
+                    )
                     warm_started = warm.receive_json()
                     if warm_started.get("type") != "started":
                         raise RuntimeError(str(warm_started))
@@ -144,15 +181,22 @@ def main() -> None:
                         if status["status"] == "failed":
                             raise RuntimeError(f"warmup export failed: {status.get('error')}")
                         break
-                    time.sleep(.1)
+                    time.sleep(0.1)
                 else:
                     raise TimeoutError("warmup export did not complete")
             started = time.perf_counter()
             sampler = ResourceSampler() if args.resources else contextlib.nullcontext()
             with sampler as resources, client.websocket_connect("/watch") as ws:
-                ws.send_json({"type": "start", "video_id": video_id, "court": args.court,
-                              "corners": corners, "playback": "complete",
-                              "profile_diagnostics": args.profile})
+                ws.send_json(
+                    {
+                        "type": "start",
+                        "video_id": video_id,
+                        "court": args.court,
+                        "corners": corners,
+                        "playback": "complete",
+                        "profile_diagnostics": args.profile,
+                    }
+                )
                 first = ws.receive_json()
                 if first.get("type") != "started":
                     raise RuntimeError(str(first))
@@ -162,8 +206,9 @@ def main() -> None:
                 stages = {"read": [], "jpeg": [], "processing": []}
                 details = {}
                 checkpoint = None
-                while ((args.seconds <= 0 or time.perf_counter() - started < args.seconds)
-                       and count < first["frames"]):
+                while (
+                    args.seconds <= 0 or time.perf_counter() - started < args.seconds
+                ) and count < first["frames"]:
                     frame_start = time.perf_counter()
                     ws.send_json({"type": "next"})
                     frame = ws.receive_json()
@@ -172,8 +217,10 @@ def main() -> None:
                         raise RuntimeError(f"Unexpected frame: {frame.get('type')}")
                     count += 1
                     if checkpoint is None and time.perf_counter() - started >= 45:
-                        checkpoint = {"elapsed_s": round(time.perf_counter() - started, 2),
-                                      "video_s": round(count / first["fps"], 2)}
+                        checkpoint = {
+                            "elapsed_s": round(time.perf_counter() - started, 2),
+                            "video_s": round(count / first["fps"], 2),
+                        }
                     for name in stages:
                         value = (frame.get("timing_ms") or {}).get(name)
                         if value is not None:
@@ -191,31 +238,43 @@ def main() -> None:
                 job = client.get(f"/jobs/{saved['job_id']}").json()
                 if job["status"] in ("done", "failed"):
                     break
-                time.sleep(.1)
+                time.sleep(0.1)
             else:
                 raise TimeoutError("export did not complete")
             if job["status"] != "done":
                 raise RuntimeError(f"export failed: {job.get('error')}")
-            report = {"parallel": args.parallel == "true", "setup_s": round(setup, 2),
-                              "prefetch_depth": args.prefetch_depth,
-                              "profile": args.profile, "warmup_frames": args.warmup_frames,
-                              "elapsed_s": round(elapsed, 2), "frames": count,
-                              "video_s": round(count / first["fps"], 2),
-                              "completed": count == first["frames"], "checkpoint_45s": checkpoint,
-                              "normalized_fps_per_wall_s": round(count / elapsed, 2),
-                              "median_round_trip_ms": round(statistics.median(frame_times), 2)
-                              if frame_times else None,
-                              "p95_round_trip_ms": p95(frame_times),
-                              "median_stage_ms": {name: round(statistics.median(values), 2)
-                                                  for name, values in stages.items() if values},
-                              "profile_medians": {name: round(statistics.median(values), 2)
-                                                  for name, values in details.items() if values},
-                              "profile_p95": {name: p95(values) for name, values in details.items()
-                                              if values},
-                              "resources": resources.summary() if resources else None,
-                              "export_after_saved_s": round(time.perf_counter()-export_start, 2),
-                              "providers": first.get("provider_diagnostics"),
-                              "stages": first.get("stages")}
+            report = {
+                "parallel": args.parallel == "true",
+                "setup_s": round(setup, 2),
+                "prefetch_depth": args.prefetch_depth,
+                "profile": args.profile,
+                "warmup_frames": args.warmup_frames,
+                "elapsed_s": round(elapsed, 2),
+                "frames": count,
+                "video_s": round(count / first["fps"], 2),
+                "completed": count == first["frames"],
+                "checkpoint_45s": checkpoint,
+                "normalized_fps_per_wall_s": round(count / elapsed, 2),
+                "median_round_trip_ms": round(statistics.median(frame_times), 2)
+                if frame_times
+                else None,
+                "p95_round_trip_ms": p95(frame_times),
+                "median_stage_ms": {
+                    name: round(statistics.median(values), 2)
+                    for name, values in stages.items()
+                    if values
+                },
+                "profile_medians": {
+                    name: round(statistics.median(values), 2)
+                    for name, values in details.items()
+                    if values
+                },
+                "profile_p95": {name: p95(values) for name, values in details.items() if values},
+                "resources": resources.summary() if resources else None,
+                "export_after_saved_s": round(time.perf_counter() - export_start, 2),
+                "providers": first.get("provider_diagnostics"),
+                "stages": first.get("stages"),
+            }
             rendered = json.dumps(report, indent=2)
             if args.out:
                 args.out.parent.mkdir(parents=True, exist_ok=True)

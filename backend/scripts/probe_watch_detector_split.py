@@ -1,4 +1,5 @@
 """Experiment: split YOLOX before unsupported TopK; never changes Watch settings."""
+
 from __future__ import annotations
 
 import argparse
@@ -86,11 +87,13 @@ def main():
             max_delta = max(max_delta, delta)
             different += int(delta > 0.01)
     warm = min(10, len(original_times) // 4)
-    print(f"frames={len(original_times)}; count changes={count_changes}; "
-          f"frames with matched box delta > 0.01px={different}; "
-          f"max box/score delta={max_delta:.6g}")
+    print(
+        f"frames={len(original_times)}; count changes={count_changes}; "
+        f"frames with matched box delta > 0.01px={different}; "
+        f"max box/score delta={max_delta:.6g}"
+    )
     for name, values in (("CUDA", original_times[warm:]), ("split", split_times[warm:])):
-        print(f"{name}: median={statistics.median(values):.2f}ms total={sum(values)/1000:.3f}s")
+        print(f"{name}: median={statistics.median(values):.2f}ms total={sum(values) / 1000:.3f}s")
 
 
 if __name__ == "__main__":

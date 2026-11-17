@@ -1,4 +1,5 @@
-﻿"""Display-only player boxes, including brief holds for missed observations."""
+"""Display-only player boxes, including brief holds for missed observations."""
+
 from __future__ import annotations
 
 import math

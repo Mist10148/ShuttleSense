@@ -77,14 +77,13 @@ def test_prefetch_preserves_real_reader_indices_and_pixels(tiny_video):
 
 
 @pytest.mark.parametrize("finish", ["stop", "disconnect", "failure"])
-def test_opt_in_queue_does_not_commit_unrequested_frames(
-    tmp_path, tiny_video, monkeypatch, finish
-):
+def test_opt_in_queue_does_not_commit_unrequested_frames(tmp_path, tiny_video, monkeypatch, finish):
     from fastapi.testclient import TestClient
+
+    import shuttlesense.api.live as live_module
+    import shuttlesense.io.prefetch as prefetch_module
     from shuttlesense.api.main import create_app
     from shuttlesense.api.settings import Settings
-    import shuttlesense.io.prefetch as prefetch_module
-    import shuttlesense.api.live as live_module
 
     readers = []
 
@@ -145,6 +144,7 @@ def test_opt_in_queue_does_not_commit_unrequested_frames(
 
 def test_opt_in_queue_preserves_complete_watch_preview_and_timestamps(tmp_path, tiny_video):
     from fastapi.testclient import TestClient
+
     from shuttlesense.api.main import create_app
     from shuttlesense.api.settings import Settings
 
@@ -163,8 +163,14 @@ def test_opt_in_queue_preserves_complete_watch_preview_and_timestamps(tmp_path, 
                     ws.send_json({"type": "next"})
                     response = ws.receive_json()
                     frame_event = next(e for e in response["events"] if e["type"] == "frame")
-                    frames.append((response["index"], response["jpeg"],
-                                   frame_event.get("client_frame"), frame_event.get("ts")))
+                    frames.append(
+                        (
+                            response["index"],
+                            response["jpeg"],
+                            frame_event.get("client_frame"),
+                            frame_event.get("ts"),
+                        )
+                    )
                     assert response["index"] == index
                 ws.send_json({"type": "next"})
                 saved = ws.receive_json()

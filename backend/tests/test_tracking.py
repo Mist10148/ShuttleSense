@@ -141,6 +141,7 @@ def test_latest_only_decodes_the_same_final_point(monkeypatch) -> None:
         return float(heatmap[0, 0]), 2.0, 1
 
     monkeypatch.setattr(tracknet, "heatmap_to_xy", decode)
+
     def model(batch):
         return torch.tensor([[[[1.0]], [[2.0]], [[3.0]]]]).repeat(len(batch), 1, 1, 1)
 
@@ -149,8 +150,7 @@ def test_latest_only_decodes_the_same_final_point(monkeypatch) -> None:
     full = tracknet.track_windows(model, windows, "", None, "cpu", (512, 288))
     assert len(calls) == 6
     calls.clear()
-    latest = tracknet.track_windows(model, windows, "", None, "cpu", (512, 288),
-                                    latest_only=True)
+    latest = tracknet.track_windows(model, windows, "", None, "cpu", (512, 288), latest_only=True)
     assert latest == [[sequence[-1]] for sequence in full]
     assert len(calls) == 2
 
@@ -306,8 +306,10 @@ def test_cached_tracknet_inputs_are_exact_for_all_background_modes(mode):
     frames = [rng.integers(0, 256, (73, 121, 3), dtype=np.uint8) for _ in range(3)]
     median = rng.integers(0, 256, (73, 121, 3), dtype=np.uint8) if mode else None
     prepared = [cv2.resize(frame[:, :, ::-1], tracknet.INPUT_SIZE) for frame in frames]
-    assert np.array_equal(tracknet._track_input(frames, mode, median),
-                          tracknet._track_input_rgb(prepared, mode, median))
+    assert np.array_equal(
+        tracknet._track_input(frames, mode, median),
+        tracknet._track_input_rgb(prepared, mode, median),
+    )
 
 
 def test_ensemble_weights_favour_the_middle_of_a_window() -> None:
