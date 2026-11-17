@@ -45,6 +45,7 @@ from shuttlesense.schema import (
     Shuttle,
 )
 from shuttlesense.stage import StageContext, StageSkipped
+from shuttlesense.timing import frames_at
 
 log = logging.getLogger(__name__)
 
@@ -107,13 +108,15 @@ class StreamAnalyzer:
         )  # fmt: skip
         stages = config.get("stages", {})
         hits_cfg, analytics_cfg = stages.get("hits", {}), stages.get("analytics", {})
-        self.min_gap = int(hits_cfg.get("min_frames_between_hits", 8))
+        # The stages convert their 30 fps frame counts to the session's rate (timing.py);
+        # the lags below must wait for the same number of frames.
+        self.min_gap = frames_at(hits_cfg.get("min_frames_between_hits", 8), fps)
         ahead = int(stages.get("strokes", {}).get("window_frames", 32)) // 2
         self.hit_lag = max(self.min_gap, ahead, 6, int(analytics_cfg.get("hit_speed_frames", 5)))
         self.hit_lag += 1
         # Offline ignores a rest followed by a hit within lost_frames_end (detector noise), so
         # a rally is final only once that long has passed and any such hit would be detected.
-        lost = int(stages.get("referee", {}).get("lost_frames_end", 30))
+        lost = frames_at(stages.get("referee", {}).get("lost_frames_end", 30), fps)
         self.rally_settle = lost + self.hit_lag
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
         self.min_keypoint_score = float(stages.get("pose", {}).get("min_keypoint_score", 0.3))
@@ -234,6 +237,29 @@ class StreamAnalyzer:
                     "line_calls": [], "rally_events": [], "score": None, "summary": None}
         )  # fmt: skip
 
+    def _rectify(self, window: ClipRecord) -> None:
+        """Outlier removal and short-gap fill on the window's track, as the offline stage.
+
+        The live perception gives raw per-frame detections. Only the window copy is changed
+        (the stages read it); the session's record keeps what the model saw.
+        """
+        if not self.config.get("live", {}).get("rectify_track", True):
+            return
+        from shuttlesense.tracking.postprocess import apply_track, rectify, track_arrays
+
+        xy, visible = track_arrays(window)
+        if not visible.any():
+            return
+        cfg = self.config.get("stages", {}).get("tracking", {})
+        scale = (window.height or 720) / 720
+        xy, visible, _ = rectify(
+            np.nan_to_num(xy),
+            visible,
+            max_gap=int(cfg.get("max_gap_frames", 8)),
+            outlier_px=float(cfg.get("outlier_px", 80)) * scale,
+        )
+        apply_track(window, xy, visible)
+
     def _run_stages(self, window: ClipRecord) -> None:
         from shuttlesense import analytics, feedback, hits, referee, strokes
 
@@ -242,6 +268,7 @@ class StreamAnalyzer:
             "_unobserved_frames": {i - self.anchor for i in self._unobserved if i >= self.anchor},
         }
         ctx = StageContext(video_path=None, out_dir=None, config=config, device=self.device)
+        self._rectify(window)
         hits.run(window, ctx)
         if window.hits:
             if self.classify is not None:

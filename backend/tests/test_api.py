@@ -989,7 +989,7 @@ def test_stroke_model_is_a_job_option(tmp_path: Path, tiny_video: Path) -> None:
     from shuttlesense.api.models import Job
 
     with make_client(tmp_path, fake_pipeline=True) as client:
-        assert client.get("/health").json()["stroke_models"] == ["cnn", "lstm", "rf"]
+        assert client.get("/health").json()["stroke_models"] == ["cnn", "lstm", "rf", "ensemble"]
         vid = upload(client, tiny_video).json()["id"]
         assert client.post("/jobs", json={"video_id": vid}).json()["stroke_model"] == "cnn"
         job = client.post("/jobs", json={"video_id": vid, "stroke_model": "rf"}).json()

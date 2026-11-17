@@ -17,6 +17,7 @@ class VideoPanel extends StatelessWidget {
     required this.controller,
     required this.available,
     this.aspectRatio,
+    this.overlay,
   });
 
   /// Only needed when [available]: there is no player to make for a missing video.
@@ -25,6 +26,9 @@ class VideoPanel extends StatelessWidget {
   /// Null while the job is still loading, so "not available" is not claimed too early.
   final bool? available;
   final double? aspectRatio;
+
+  /// Drawn over the playing video, the same size (the hit bursts).
+  final Widget? overlay;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +41,13 @@ class VideoPanel extends StatelessWidget {
           child: switch (available) {
             true when controller != null => Semantics(
               label: 'Annotated rally video',
-              child: Video(controller: controller!),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Video(controller: controller!),
+                  ?overlay,
+                ],
+              ),
             ),
             true => const Center(child: CircularProgressIndicator()),
             false => const MessageView(

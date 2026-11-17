@@ -29,8 +29,9 @@ RallyEventType = Literal["rally_start", "rally_end", "hit", "landing", "score"]
 ServiceCourt = Literal["right", "left"]
 
 STROKE_CLASSES: tuple[StrokeClass, ...] = ("smash", "clear", "drop", "net_shot", "lift", "serve")
-# The stroke classifiers a job can choose from (D28): 1D CNN, LSTM, Random Forest.
-StrokeModel = Literal["cnn", "lstm", "rf"]
+# The stroke classifiers a job can choose from (D28): 1D CNN, LSTM, Random Forest, and
+# "ensemble", the average of the three (D37).
+StrokeModel = Literal["cnn", "lstm", "rf", "ensemble"]
 NUM_KEYPOINTS = 17  # COCO layout
 
 # Singles court in meters: width (sideline to sideline) x length (baseline to baseline).
@@ -363,8 +364,8 @@ class ClipRecord(BaseModel):
     rally_events: list[RallyEvent] = Field(default_factory=list)
     coaching: Coaching | None = None
     chat: Chat | None = None
-    # v1.4: the stroke model that labelled the hits ("cnn", "lstm" or "rf", D28); None when
-    # no model ran.
+    # v1.4: the stroke model that labelled the hits ("cnn", "lstm", "rf" or "ensemble", D28);
+    # None when no model ran.
     stroke_model: StrokeModel | None = None
     decision_log: list[DecisionEntry] = Field(default_factory=list, exclude_if=lambda v: not v)
     interval_state: IntervalState | None = _omit_none()

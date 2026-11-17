@@ -41,7 +41,13 @@ stages:
     # InpaintNet is optional: raw TrackNet detections are kept if its weights are missing.
     inpaintnet_weights: weights/tracknet/InpaintNet_best.pt
     batch_size: 16
+    # Frames between window starts. Below the model's sequence length (8) each frame is
+    # predicted by several overlapping windows and the heatmaps are averaged, as upstream
+    # TrackNetV3 does. 4 = two predictions per frame, about twice the tracking time on
+    # uploads; remove the key for one prediction per frame. Live and Watch are not affected.
+    window_stride: 4
     use_inpaintnet: true        # TrackNetV3 trajectory rectification (T2.3)
+    max_inpaint_gap_frames: 30  # InpaintNet repairs gaps up to this long; longer = out of play
     max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
     outlier_px: 80              # isolated detection this far from the track is dropped
     # precomputed_csv: path/to/upstream_predict.csv   # use TrackNetV3 predict.py output
@@ -88,10 +94,16 @@ stages:
   court:
     enabled: true
     court_size_m: [5.18, 13.40]  # singles: width x length
+    refine: true                 # nudge the tapped corners onto the painted lines (court/refine.py)
+    refine_max_shift_px: 12      # at 720p; a corner is never moved further than this
+    refine_min_support: 0.6      # share of the projected lines that must lie on markings
 
   hits:
     enabled: true
+    # Frame counts here and under referee are for 30 fps; other rates are converted
+    # (shuttlesense/timing.py). Pixel distances are for 720p.
     min_angle_deg: 60           # direction change threshold
+    min_flip_px: 2.0            # a down-to-up turn smaller than this per frame is jitter
     max_wrist_distance_px: 120  # at 720p
     min_frames_between_hits: 8
     rally_break_frames: 30      # shuttle unseen this long = new rally, same hitter allowed
@@ -101,7 +113,7 @@ stages:
 
   strokes:
     enabled: true
-    algorithm: cnn              # cnn | lstm | rf (D28); a job's stroke_model replaces it
+    algorithm: cnn              # cnn | lstm | rf | ensemble (D28, D37); a job's stroke_model replaces it
     weights: weights/strokes/stroke_cnn.pt
     weights_lstm: weights/strokes/stroke_lstm.pt
     weights_rf: weights/strokes/stroke_rf.npz
@@ -110,6 +122,11 @@ stages:
     # frames after a hit before classifying it.
     window_frames: 32
     use_trajectory: true        # false = pose-only ablation
+    context:                    # rally and court context on top of any model (strokes/context.py)
+      enabled: true
+      # weight / floor: default to the values fitted on the validation matches
+      max_flight_s: 2.5         # a longer wait for the reply means a hit was missed
+      doubles_tables: false     # the flight and zone tables are counted from singles
 
   feedback:
     enabled: true               # rules: docs/FEEDBACK_RULES.md
@@ -159,6 +176,7 @@ live:
   tick_every: 5                # frames between runs of the windowed hits/referee stages
   max_window_frames: 900       # the window never grows past 30 s at 30 fps
   background_frames: 30        # TrackNet background median from the first frames
+  rectify_track: true          # outlier removal and short-gap fill on the window, as offline
   check_every: 30              # processed frames between quality checks
   max_drop_rate: 0.2           # skipping more than this share of frames lowers quality
   scales: [1.0, 0.75, 0.5]     # perception input scale per quality level (0, 1, 2)

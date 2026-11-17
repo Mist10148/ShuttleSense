@@ -110,11 +110,19 @@ def _track_input_rgb(
     return np.concatenate(channels).astype(np.float32) / 255.0
 
 
-def _inpaint_mask(xy: np.ndarray, visible: np.ndarray, height: int) -> np.ndarray:
-    """Mask internal gaps with plausible endpoints below the image's top 5 percent."""
+def _inpaint_mask(
+    xy: np.ndarray, visible: np.ndarray, height: int, max_gap: int | None = None
+) -> np.ndarray:
+    """Mask internal gaps with plausible endpoints below the image's top 5 percent.
+
+    Gaps longer than `max_gap` frames are left alone: InpaintNet repairs a flight, and a
+    longer absence is the shuttle out of play (between rallies), which must stay a gap.
+    """
     mask = np.zeros(len(visible), dtype=np.float32)
     good = np.flatnonzero(visible)
     for left, right in zip(good[:-1], good[1:], strict=False):
+        if max_gap is not None and right - left - 1 > max_gap:
+            continue
         if right > left + 1 and xy[left, 1] > height * 0.05 and xy[right, 1] > height * 0.05:
             mask[left + 1 : right] = 1
     return mask
@@ -177,9 +185,28 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
     source = [""] * n
     median = _background(reader) if bg_mode else None
 
-    # Non-overlapping windows bound memory. Only the final window is padded.
+    # window_stride below seq_len slides the window and averages each frame's heatmaps
+    # (upstream's default); absent or >= seq_len keeps one prediction per frame.
+    stride = int(cfg.get("window_stride") or seq_len)
+    overlapping = 0 < stride < seq_len
     with torch.inference_mode():
-        for start in range(0, n, seq_len * batch_size):
+        if overlapping:
+            from shuttlesense.tracking.ensemble import track_overlapping
+
+            xy, visible = track_overlapping(
+                model,
+                reader,
+                seq_len=seq_len,
+                stride=stride,
+                batch_size=batch_size,
+                device=ctx.device,
+                prepare=lambda frames: _track_input(frames, bg_mode, median),
+                input_size=INPUT_SIZE,
+                progress=ctx.progress,
+            )
+            source = ["net" if v else "" for v in visible]
+        # Non-overlapping windows bound memory. Only the final window is padded.
+        for start in () if overlapping else range(0, n, seq_len * batch_size):
             inputs, starts = [], []
             for window_start in range(start, min(start + seq_len * batch_size, n), seq_len):
                 frames = reader.batch(window_start, seq_len)
@@ -211,7 +238,9 @@ def predict(ctx: StageContext, weights: Path) -> tuple[np.ndarray, np.ndarray, l
                 log.warning("InpaintNet weights missing; keeping raw TrackNet detections")
             else:
                 inpaint, inpaint_len, _ = _load_model(inpaint_path, ctx.device, "inpaintnet")
-                mask = _inpaint_mask(xy, visible, reader.height)
+                mask = _inpaint_mask(
+                    xy, visible, reader.height, cfg.get("max_inpaint_gap_frames", 30)
+                )
                 if np.any(mask):
                     normalized = xy / np.array([reader.width, reader.height])
                     for start in range(0, n, inpaint_len * batch_size):

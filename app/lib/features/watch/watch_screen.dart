@@ -17,6 +17,7 @@ import '../../data/models/video_info.dart';
 import '../../data/models/job.dart';
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../shared/widgets/hit_burst.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
@@ -139,6 +140,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   int index = 0, total = 0;
   String rally = 'Waiting', latestHit = '', score = '', coaching = '', lineCall = '';
   Map<String, dynamic>? frameData;
+  final watchHits = <Object?, Map<dynamic, dynamic>>{}; // every hit so far, for HitBurstLayer
   String? pendingFrame;
   int frameWidth = 1, frameHeight = 1;
   bool synthetic = false;
@@ -452,6 +454,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           if (e is! Map) continue;
           if (e['type'] == 'hit' && e['hit'] is Map) {
             final hit = e['hit'] as Map;
+            watchHits[hit['id']] = hit;
             latestHit = hit['stroke'] == null ? 'Unclassified hit' : 'Stroke: ${hit['stroke']}';
             if (hit['time_s'] is num) {
               latestHit += ' at ${(hit['time_s'] as num).toStringAsFixed(1)} s';
@@ -639,6 +642,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             }
             if (event['type'] == 'hit') {
               final hit = event['hit'] as Map;
+              watchHits[hit['id']] = hit;
               latestHit = hit['stroke'] == null ? 'Unclassified hit' : 'Stroke: ${hit['stroke']}';
               if (realTime && hit['time_s'] is num) {
                 latestHit += ' at ${(hit['time_s'] as num).toStringAsFixed(1)} s';
@@ -987,6 +991,13 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                         painter: _WatchOverlay(frameData, frameWidth, frameHeight),
                       ),
                     ),
+                  HitBurstLayer.watch(
+                    hits: watchHits,
+                    frame: frameData,
+                    frameWidth: frameWidth,
+                    frameHeight: frameHeight,
+                    nowS: videoPosition.inMilliseconds / 1000,
+                  ),
                 ],
               ),
             )
@@ -1017,6 +1028,12 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                           },
                   ),
                   CustomPaint(painter: _WatchOverlay(frameData, frameWidth, frameHeight)),
+                  HitBurstLayer.watch(
+                    hits: watchHits,
+                    frame: frameData,
+                    frameWidth: frameWidth,
+                    frameHeight: frameHeight,
+                  ),
                 ],
               ),
             ),

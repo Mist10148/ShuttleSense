@@ -40,11 +40,38 @@ def augment(
     use_trajectory: bool,
     noise: float = 0.01,
     max_shift: int = 2,
+    scale_jitter: float = 0.0,
+    keypoint_dropout: float = 0.0,
+    shuttle_dropout: float = 0.0,
 ) -> np.ndarray:
-    """Random time shift (+-max_shift frames), horizontal flip (p=0.5) and Gaussian noise."""
+    """Random time shift (+-max_shift frames), horizontal flip (p=0.5) and Gaussian noise.
+
+    Three optional steps make the windows look more like footage the models were not
+    trained on (all off at 0, which is the original augmentation):
+
+    - scale_jitter: the pose is scaled by a factor in 1 +- scale_jitter, as a looser or
+      tighter player box does;
+    - keypoint_dropout: each joint is zeroed for the whole window with this probability,
+      as a joint the pose model keeps missing;
+    - shuttle_dropout: with this probability the shuttle is hidden for a run of 2 to 8
+      frames, as a gap in the track.
+    """
     x = shift_window(x, int(rng.integers(-max_shift, max_shift + 1)))
     if rng.random() < 0.5:
         x = flip_window(x, use_trajectory)
+    if scale_jitter > 0:
+        x[:, :POSE_FEATURES] *= 1.0 + rng.uniform(-scale_jitter, scale_jitter)
+    if keypoint_dropout > 0:
+        lost = np.repeat(rng.random(POSE_FEATURES // 2) < keypoint_dropout, 2)
+        x[:, :POSE_FEATURES][:, lost] = 0
+    has_shuttle = use_trajectory and x.shape[1] > POSE_FEATURES
+    if shuttle_dropout > 0 and has_shuttle and rng.random() < shuttle_dropout:
+        length = int(rng.integers(2, 9))
+        start = int(rng.integers(0, max(1, len(x) - length + 1)))
+        x[start : start + length, POSE_FEATURES:] = 0
+        # The frame after the gap has no previous position, so its step is 0 (features.py).
+        if start + length < len(x):
+            x[start + length, POSE_FEATURES + 3 : POSE_FEATURES + 5] = 0
     return x + rng.normal(0, noise, x.shape).astype(np.float32)
 
 
@@ -60,12 +87,17 @@ class StrokeDataset:
         seed: int = 42,
         max_shift: int = 2,
         noise: float = 0.01,
+        scale_jitter: float = 0.0,
+        keypoint_dropout: float = 0.0,
+        shuttle_dropout: float = 0.0,
     ) -> None:
         x, self.y = load_npz(features_dir, match_ids)
         self.x = x if use_trajectory or x.size == 0 else x[:, :, :POSE_FEATURES]
         self.use_trajectory = use_trajectory
         self.augment_data = augment_data
         self.max_shift, self.noise = max_shift, noise
+        self.scale_jitter, self.keypoint_dropout = scale_jitter, keypoint_dropout
+        self.shuttle_dropout = shuttle_dropout
         self.rng = np.random.default_rng(seed)
 
     @property
@@ -78,7 +110,16 @@ class StrokeDataset:
     def __getitem__(self, i: int):
         x = self.x[i]
         if self.augment_data:
-            x = augment(x.copy(), self.rng, self.use_trajectory, self.noise, self.max_shift)
+            x = augment(
+                x.copy(),
+                self.rng,
+                self.use_trajectory,
+                self.noise,
+                self.max_shift,
+                self.scale_jitter,
+                self.keypoint_dropout,
+                self.shuttle_dropout,
+            )
         return np.ascontiguousarray(x.T, dtype=np.float32), self.y[i]
 
     def class_weights(self, num_classes: int) -> np.ndarray:

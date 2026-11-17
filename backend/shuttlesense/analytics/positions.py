@@ -1,7 +1,8 @@
 """Court-plane positions for players and the shuttle (F10, FR-10).
 
 Players stand on the court, so their foot point projects correctly: the ankle midpoint
-(keypoints 15, 16) when both are confident, else the bottom-centre of the box.
+(keypoints 15, 16) when both are confident, lowered from the ankle joint to the floor,
+else the bottom-centre of the box.
 The shuttle is in the air, so its projection is only an approximation (it lands
 "behind" its true ground point when high); it is clamped to the court +- 1 m and used for
 the minimap and speed estimates only. Speeds are labelled "estimated" everywhere.
@@ -15,16 +16,28 @@ from shuttlesense.schema import ClipRecord, CourtPositions, Player
 
 LEFT_ANKLE, RIGHT_ANKLE = 15, 16
 MIN_KEYPOINT_SCORE = 0.3
+# The ankle keypoint is the joint, 7 to 8 cm above the floor: about 4% of a standing
+# player's box height. Mapped onto the floor as it is, the point lands beyond the player
+# (a few centimetres at the near baseline, tens at the far one, where a pixel covers more
+# court), always away from the camera. The point is lowered by this share of the box
+# height, and never below the box, whose bottom edge is the sole of the shoe.
+ANKLE_FLOOR_RATIO = 0.04
 
 
-def player_point(p: Player, min_score: float = MIN_KEYPOINT_SCORE) -> tuple[float, float]:
-    """Foot point in image pixels."""
+def player_point(
+    p: Player,
+    min_score: float = MIN_KEYPOINT_SCORE,
+    ankle_floor_ratio: float = ANKLE_FLOOR_RATIO,
+) -> tuple[float, float]:
+    """Foot point on the floor, in image pixels."""
     kps = p.keypoints
-    if len(kps) > RIGHT_ANKLE and min(kps[LEFT_ANKLE][2], kps[RIGHT_ANKLE][2]) >= min_score:
-        return (kps[LEFT_ANKLE][0] + kps[RIGHT_ANKLE][0]) / 2, (
-            kps[LEFT_ANKLE][1] + kps[RIGHT_ANKLE][1]
-        ) / 2
     x, y, w, h = p.bbox
+    if len(kps) > RIGHT_ANKLE and min(kps[LEFT_ANKLE][2], kps[RIGHT_ANKLE][2]) >= min_score:
+        ankle_y = (kps[LEFT_ANKLE][1] + kps[RIGHT_ANKLE][1]) / 2
+        floor_y = ankle_y + ankle_floor_ratio * h
+        if h > 0 and ankle_y <= y + h:  # ankles inside the box: its bottom is the limit
+            floor_y = min(floor_y, y + h)
+        return (kps[LEFT_ANKLE][0] + kps[RIGHT_ANKLE][0]) / 2, floor_y
     return x + w / 2, y + h
 
 

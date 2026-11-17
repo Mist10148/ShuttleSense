@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../data/repositories/analysis_repository.dart';
 import '../../../shared/widgets/courtside_tools.dart';
+import '../../../shared/widgets/hit_burst.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../results/widgets/court_minimap.dart';
 import '../../results/widgets/line_call_banner.dart';
@@ -107,6 +108,16 @@ class _LiveViewState extends ConsumerState<LiveView> {
                       ),
               ),
             ),
+            if (state.phase == LivePhase.live && state.hits.isNotEmpty)
+              HitBurstLayer(
+                events: [
+                  HitBurstEvent(
+                    id: state.hits.last.id,
+                    who: state.hits.last.who,
+                    stroke: state.hits.last.stroke,
+                  ),
+                ],
+              ),
             if (state.phase != LivePhase.live)
               ColoredBox(
                 color: Colors.black54,

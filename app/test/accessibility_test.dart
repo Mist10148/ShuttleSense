@@ -1,4 +1,7 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/features/chat/chat_screen.dart';
 import 'package:shuttlesense_app/features/connect/connect_screen.dart';
@@ -8,6 +11,18 @@ import 'package:shuttlesense_app/features/settings/settings_screen.dart';
 import 'package:shuttlesense_app/features/upload/upload_screen.dart';
 
 import 'helpers.dart';
+
+/// The contrast guideline leaves out disabled controls (WCAG 1.4.3 exempts them), but it reads
+/// "disabled" from a node's own flags. A disabled SegmentedButton segment carries the flag on
+/// the button merged into it, so the stock guideline measures its greyed-out label (Settings:
+/// "Watch video" where Watch is not available). This one asks the merged node.
+class _EnabledTextContrast extends MinimumTextContrastGuideline {
+  const _EnabledTextContrast();
+
+  @override
+  bool shouldSkipNode(SemanticsData data) =>
+      super.shouldSkipNode(data) || data.flagsCollection.isEnabled == Tristate.isFalse;
+}
 
 /// T4.11: tap targets are large enough and labelled, and text meets contrast guidelines.
 void main() {
@@ -24,7 +39,7 @@ void main() {
       await pumpScreen(tester, screen);
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      await expectLater(tester, meetsGuideline(const _EnabledTextContrast()));
       semantics.dispose();
     });
   }

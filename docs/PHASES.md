@@ -614,6 +614,44 @@ models and ships trained weights for all of them. All thirteen tasks are done:
   - the new app pieces on a phone, tablet or Windows desktop ([device checks](phases/phase-12-courtside.md#device-checks-open));
   - release builds, which were not re-run.
 
+### Accuracy, court map and hit burst pass (Nov 16, later)
+
+Asked for by the owner: more accurate strokes and shuttle tracking, a court map that shows
+the whole court, and a comic burst at each hit, without changing the Watch & Analyze code.
+Decisions: [D37](DECISIONS.md) to [D40](DECISIONS.md).
+
+- **Strokes:**
+  - The rally and court context is back on top of every model (`strokes/context.py`).
+  - `ensemble` is a fourth `stroke_model` choice: the mean of the three. The default stays `cnn`.
+  - Training has three more augmentation steps (scale, a missing joint, a gap in the shuttle track).
+  - The LSTM and the Random Forest were retrained and replaced; the retrained CNN was no
+    better than the shipped one and was not kept ([results](results/strokes.md)).
+- **Shuttle tracking:**
+  - Uploads average each frame over overlapping TrackNetV3 windows (`tracking.window_stride`).
+  - Bursts of false detections are dropped and gaps are filled along the flight.
+  - Live and Watch sessions clean the window they hand to hit detection.
+  - Hit thresholds follow the clip's frame rate.
+- **Court map:**
+  - The court scales to the height of its panel, lies on its side where the space is short
+    and wide, and is clipped; it no longer needs scrolling or paints over other cards.
+  - Heatmap: frames in play only, shared with neighbouring cells, scale capped at the 95th percentile.
+  - The shuttle is placed between the two hitters; players are placed at the floor; the
+    court stage snaps the tapped corners onto the lines.
+- **Hit burst:** HIT!, SMASH!, POW! and the other stroke words over the results video, the
+  live preview and the Watch video (added lines only in the Watch screen).
+- **Watch & Analyze code:** no existing line of the player tracker, the Watch pipeline, its
+  settings or the Watch screen was changed or removed, apart from two lines re-wrapped by
+  the formatter. Checked with `git blame` against `2dae2f9`.
+- **Verified:**
+  - backend `pytest -m "not gpu"` passes, and `ruff check` and `ruff format --check` pass on
+    every file this pass touched (the Watch files still carry the formatting they came with);
+  - app `flutter analyze`, `dart format`, `flutter test` and `flutter build web --release` pass;
+  - the court map was looked at in the built web app against a demo server.
+- **Not verified:**
+  - tracking, hit and map accuracy on real footage (no labels; [EVALUATION](EVALUATION.md));
+  - Watch timings with the added steps on the RTX machine;
+  - the burst playing over a real video on a device (widget tests and a rendered image only).
+
 ### Remaining phase work by dependency
 
 | Tasks | Owners | Next action and evidence |

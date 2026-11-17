@@ -35,6 +35,44 @@ def test_outlier_removed() -> None:
     assert remove_outliers(near, visible, outlier_px=80)[5] == 1
 
 
+def test_burst_of_false_detections_is_removed() -> None:
+    # A steady flight with three frames where the tracker jumped to a racket far away.
+    xy = np.array([[100 + 10 * i, 200 + 4 * i] for i in range(12)], float)
+    xy[5:8] = [[900, 80], [905, 82], [903, 81]]
+    visible = np.ones(12, dtype=int)
+    assert remove_outliers(xy, visible, outlier_px=80).tolist() == [1] * 5 + [0] * 3 + [1] * 4
+    # The fastest real flight (a smash, well under 200 px a frame) is left alone.
+    smash = np.array([[100 + 150 * i, 100 + 60 * i] for i in range(6)], float)
+    assert remove_outliers(smash, np.ones(6, dtype=int), outlier_px=80).all()
+    # A long run off the track is not a burst: the track may simply have moved there.
+    moved = xy.copy()
+    moved[5:] = [[900 + i, 80] for i in range(7)]
+    assert remove_outliers(moved, visible, outlier_px=80).all()
+
+
+def test_gap_fill_follows_a_curved_flight() -> None:
+    # A parabola with three frames missing at the top: the fill keeps the curve, where a
+    # straight line would leave a corner at each end of the gap.
+    t = np.arange(11, dtype=float)
+    xy = np.stack([100 + 20 * t, 300 - 60 * t + 6 * t**2], axis=1)
+    visible = np.ones(11, dtype=int)
+    visible[4:7] = 0
+    out_xy, out_vis, source = rectify(xy * visible[:, None], visible, max_gap=8, outlier_px=1000)
+    assert out_vis.all() and source[4:7] == ["interp"] * 3
+    assert np.abs(out_xy[4:7] - xy[4:7]).max() < 8.0
+    linear = xy[3] + (xy[7] - xy[3]) * (np.arange(1, 4)[:, None] / 4)
+    assert np.abs(linear - xy[4:7]).max() > 15.0
+
+
+def test_inpaint_mask_leaves_long_gaps_alone() -> None:
+    xy = np.full((40, 2), 50.0)
+    visible = np.zeros(40, dtype=int)
+    visible[[0, 4, 39]] = 1
+    mask = tracknet._inpaint_mask(xy, visible, 100, max_gap=30)
+    assert mask[1:4].all() and not mask[5:39].any()
+    assert tracknet._inpaint_mask(xy, visible, 100)[5:39].all()  # no limit given
+
+
 def test_long_gap_not_filled() -> None:
     xy = np.array([[0, 0]] + [[0, 0]] * 5 + [[60, 0], [70, 0], [0, 0], [90, 0]], float)
     visible = np.array([1, 0, 0, 0, 0, 0, 1, 1, 0, 1])
@@ -270,3 +308,73 @@ def test_cached_tracknet_inputs_are_exact_for_all_background_modes(mode):
     prepared = [cv2.resize(frame[:, :, ::-1], tracknet.INPUT_SIZE) for frame in frames]
     assert np.array_equal(tracknet._track_input(frames, mode, median),
                           tracknet._track_input_rgb(prepared, mode, median))
+
+
+def test_ensemble_weights_favour_the_middle_of_a_window() -> None:
+    from shuttlesense.tracking.ensemble import ensemble_weights, window_starts
+
+    weights = ensemble_weights(8)
+    assert weights.sum() == pytest.approx(1.0)
+    assert weights.tolist() == pytest.approx(weights[::-1].tolist())
+    assert weights[3] > weights[1] > weights[0]
+    assert window_starts(10, 8, 4) == [0, 4, 8]
+    assert window_starts(10, 8, 99) == [0, 8]
+
+
+def test_overlapping_windows_average_out_a_one_window_miss(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A frame one window misses at its edge is found when the next window sees it mid-flight."""
+    torch = pytest.importorskip("torch")
+
+    class Reader:
+        width, height = 1024, 576
+
+        def __init__(self) -> None:
+            self.reads: list[int] = []
+
+        def __len__(self):
+            return 10
+
+        def batch(self, start, size):
+            self.reads.append(start)
+            # The frame's index rides in the pixel values so the model can tell windows apart.
+            return [
+                np.full((48, 64, 3), i, dtype=np.uint8) for i in range(start, min(start + size, 10))
+            ]
+
+    class Model:
+        def __call__(self, batch):
+            out = torch.zeros((batch.shape[0], 4, 288, 512))
+            out[:, :, 70:73, 120:123] = 0.9
+            for b in range(batch.shape[0]):
+                first = int(round(float(batch[b, 0, 0, 0]) * 255))
+                if first == 0:
+                    out[b, 3] = 0.0  # the window starting at 0 misses its last frame (3)
+            return out
+
+    monkeypatch.setattr(tracknet, "_load_model", lambda *_: (Model(), 4, ""))
+
+    def run(stride):
+        reader = Reader()
+        ctx = StageContext(
+            video_path=tmp_path / "v.mp4",
+            out_dir=tmp_path,
+            config={
+                "stages": {
+                    "tracking": {"batch_size": 2, "use_inpaintnet": False, "window_stride": stride}
+                }
+            },
+            reader=reader,
+        )
+        return (*tracknet.predict(ctx, tmp_path / "unused.pt"), reader.reads)
+
+    xy, visible, source, reads = run(None)
+    assert visible.tolist() == [1, 1, 1, 0, 1, 1, 1, 1, 1, 1]
+    assert reads == [0, 4, 8]
+
+    xy, visible, source, reads = run(2)
+    assert reads == [0, 2, 4, 6, 8]
+    assert visible.tolist() == [1] * 10
+    assert source == ["net"] * 10
+    assert xy.tolist() == [[242.0, 142.0]] * 10

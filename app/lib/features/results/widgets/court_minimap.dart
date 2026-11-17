@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -23,6 +25,60 @@ const double kHeatCellM = 0.5;
 
 /// Frames between heatmap rebuilds while a live session grows.
 const int kHeatRebuildFrames = 30;
+
+/// Run-off drawn around the court lines, in meters. A player or a landing outside the
+/// lines stays inside the picture; anything further out is shown at the edge of this band.
+const double kRunOffM = 1.5;
+
+/// The court's long side is never drawn shorter than this, however little room there is.
+const double kMinCourtLength = 220;
+
+/// Height the card needs besides the court itself: padding, the title row and the gap.
+const double _kCardChrome = 100;
+
+/// Width / height of the picture: the court, the doubles alleys and the run-off band.
+double courtViewAspect({required bool doubles}) =>
+    (kCourtWidthM + (doubles ? 2 * kDoublesAlleyM : 0) + 2 * kRunOffM) /
+    (kCourtLengthM + 2 * kRunOffM);
+
+/// The height the minimap card may take, set by the layout that holds it (the visible
+/// height of the side panel or tab). The court is a tall shape in a short panel: sized by
+/// width alone it runs far below the fold, so the card scales the court down to fit here.
+class CourtMaxHeight extends InheritedWidget {
+  const CourtMaxHeight({super.key, required this.height, required super.child});
+
+  final double height;
+
+  static double? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CourtMaxHeight>()?.height;
+
+  @override
+  bool updateShouldNotify(CourtMaxHeight old) => old.height != height;
+}
+
+/// Size of the court picture for a card [maxWidth] wide that may be [maxHeight] tall, and
+/// whether the court lies on its side (near end on the left).
+///
+/// Upright, the court is as wide as the card when that fits, else as tall as the room
+/// allows. Where the room is short and wide (the tab under the video on a phone) an upright
+/// court would be a sliver, so it is laid on its side when that draws it larger.
+(Size, bool) courtViewLayout(double maxWidth, double maxHeight, {required bool doubles}) {
+  final aspect = courtViewAspect(doubles: doubles); // short side / long side
+  final room = maxHeight - _kCardChrome;
+  Size fit(double shortMax, double longMax) {
+    var long = shortMax / aspect;
+    if (long > longMax) long = longMax < kMinCourtLength ? kMinCourtLength : longMax;
+    if (long * aspect > shortMax) long = shortMax / aspect;
+    return Size(long * aspect, long);
+  }
+
+  final upright = fit(maxWidth, room);
+  // On its side the long side runs across the card, which bounds it without a minimum.
+  final across = fit(room < 0 ? 0 : room, maxWidth).flipped;
+  return across.width * across.height > upright.width * upright.height
+      ? (across, true)
+      : (upright, false);
+}
 
 /// F10: top-down court with both players, the shuttle trail, the current rally's hits and
 /// the landing of every line call so far (F20: green in, red out, amber still uncertain).
@@ -96,23 +152,45 @@ class _CourtMinimapState extends State<CourtMinimap> {
                   'Highlighted landing for rally ${call.rallyIndex + 1}.',
                 ?heat?.describe(),
               ].join(' '),
-              child: AspectRatio(
-                aspectRatio: (kCourtWidthM + (doubles ? 2 * kDoublesAlleyM : 0)) / kCourtLengthM,
-                child: CustomPaint(
-                  painter: CourtPainter.fromRecord(
-                    record,
-                    frameIndex,
-                    lines: Theme.of(context).colorScheme.outline,
-                    surface: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    players: PlayerColors.of(context),
-                    status: StatusColors.of(context),
-                    heat: heat,
-                    reviewLanding: widget.reviewCall?.landing,
-                    live: widget.live,
-                    rallyStart: widget.rallyStart,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // The whole court has to be on screen at once: the layout says how tall
+                  // the card may be, else most of the window is assumed.
+                  final room =
+                      CourtMaxHeight.maybeOf(context) ?? MediaQuery.sizeOf(context).height * 0.7;
+                  final (size, onSide) = courtViewLayout(
+                    constraints.maxWidth,
+                    room,
                     doubles: doubles,
-                  ),
-                ),
+                  );
+                  final scheme = Theme.of(context).colorScheme;
+                  return Center(
+                    child: SizedBox.fromSize(
+                      size: size,
+                      // Nothing is painted outside the picture (heat cells and marks used
+                      // to spill over the card and the panels around it).
+                      child: ClipRect(
+                        child: CustomPaint(
+                          painter: CourtPainter.fromRecord(
+                            record,
+                            frameIndex,
+                            lines: scheme.outline,
+                            surface: scheme.surfaceContainerHighest,
+                            runOff: scheme.surfaceContainerLow,
+                            players: PlayerColors.of(context),
+                            status: StatusColors.of(context),
+                            heat: heat,
+                            reviewLanding: widget.reviewCall?.landing,
+                            live: widget.live,
+                            rallyStart: widget.rallyStart,
+                            doubles: doubles,
+                            onSide: onSide,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             )
           : Text(
@@ -143,12 +221,80 @@ String minimapLabel(ClipRecord record, int frameIndex) {
       '${at('Shuttle', f.shuttlePos)}.';
 }
 
-/// How often each player stood in each [kHeatCellM] cell of the court (and up to 1 m
-/// beyond the lines), over every frame of the clip.
-class HeatGrid {
-  HeatGrid._(this.near, this.far, this.nearMax, this.farMax, {this.doubles = false});
+/// Where the shuttle is over the court at [frameIndex], and whether that is worked out
+/// from the rally (true) or only the camera's view pushed onto the floor (false).
+///
+/// The court positions come from a floor-plane mapping, which is right for feet and for a
+/// landing but not for a shuttle in the air: seen from behind the court, a high shuttle
+/// lands far beyond where it really is. Between two hits the shuttle travels from the
+/// player who hit it to the player who hits it next (or to where it landed), so its place
+/// over the court is taken along that line by time. Before the first hit of a rally, after
+/// the last one without a landing, and in a live rally whose next hit is not known yet,
+/// only the floor mapping is left.
+(CourtPoint, bool)? shuttleOverCourt(ClipRecord record, int frameIndex, {bool? doubles}) {
+  // Only frames where the shuttle was seen are drawn: the line says where it is, not
+  // whether it was tracked.
+  final raw = record.frame(frameIndex)?.shuttlePos;
+  if (raw == null) return null;
+  (CourtPoint, bool)? fallback() => (raw, false);
 
-  static const double margin = 1.0;
+  Hit? before, after;
+  for (final h in record.hits) {
+    if (h.frame <= frameIndex) {
+      before = h;
+    } else {
+      after = h;
+      break;
+    }
+  }
+  if (before == null) return fallback();
+  final isDoubles = doubles ?? record.isDoubles;
+  // A doubles hit with no credited partner has no single place on the court.
+  CourtPoint? standing(Hit h) =>
+      isDoubles && h.hitter == null ? null : record.frame(h.frame)?.positionOf(h.who);
+  final from = standing(before);
+  if (from == null) return fallback();
+
+  CourtPoint? to;
+  int? toFrame;
+  final sameRally =
+      after != null &&
+      (before.rallyIndex == null || after.rallyIndex == null
+          ? after.frame - before.frame <= 3 * record.fps
+          : before.rallyIndex == after.rallyIndex);
+  if (sameRally) {
+    to = standing(after);
+    toFrame = after.frame;
+  } else {
+    // The rally's last hit: the shuttle goes to where it was called in or out.
+    for (final c in record.lineCalls) {
+      if (c.frame > before.frame && (after == null || c.frame < after.frame)) {
+        to = c.landing;
+        toFrame = c.frame;
+        break;
+      }
+    }
+  }
+  if (to == null || toFrame == null || toFrame <= before.frame) return fallback();
+  if (frameIndex > toFrame) return (to, true);
+  final t = (frameIndex - before.frame) / (toFrame - before.frame);
+  return ((x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t), true);
+}
+
+/// How often each player stood in each [kHeatCellM] cell of the court (and up to 2 m
+/// beyond the lines, as far as the backend keeps a position), over the rallies of the clip.
+class HeatGrid {
+  HeatGrid._(
+    this.near,
+    this.far,
+    this.nearMax,
+    this.farMax,
+    this.nearShade,
+    this.farShade, {
+    this.doubles = false,
+  });
+
+  static const double margin = 2.0;
   static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
   static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
 
@@ -161,7 +307,19 @@ class HeatGrid {
       if (c >= 0 && c < cols && r >= 0 && r < rows) grid[r * cols + c]++;
     }
 
+    // Only frames in play count: between rallies a player waits or fetches the shuttle,
+    // and those minutes in one spot would outweigh every rally. A record without rallies
+    // (referee off, or a live session before its first rally closes) counts every frame.
+    final rallies = record.rallies;
+    var rally = 0;
     for (final f in record.frames) {
+      if (rallies.isNotEmpty) {
+        while (rally < rallies.length && rallies[rally].endFrame < f.frame) {
+          rally++;
+        }
+        if (rally >= rallies.length) break;
+        if (f.frame < rallies[rally].startFrame) continue;
+      }
       // A side's heat covers both partners in doubles.
       add(near, f.nearPos);
       add(near, f.near2Pos);
@@ -169,15 +327,61 @@ class HeatGrid {
       add(far, f.far2Pos);
     }
     int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
-    return HeatGrid._(near, far, max(near), max(far), doubles: record.isDoubles);
+    return HeatGrid._(
+      near,
+      far,
+      max(near),
+      max(far),
+      shade(near),
+      shade(far),
+      doubles: record.isDoubles,
+    );
   }
 
   /// Frame counts per cell, row-major from the near-left corner (court y grows away).
   final List<int> near, far;
   final int nearMax, farMax;
 
+  /// How strongly each cell is shaded, 0 to 1 (see [shade]).
+  final List<double> nearShade, farShade;
+
   /// Doubles: each grid covers both partners of a side.
   final bool doubles;
+
+  /// Counts spread over the neighbouring cells and scaled to 0..1.
+  ///
+  /// A position is good to a few tens of centimetres, less than a cell, so a count is
+  /// shared with the cells around it (weights 4 for the cell, 2 for its sides, 1 for its
+  /// corners): a player standing on a cell border no longer makes a checkerboard. The scale
+  /// tops out at the 95th percentile of the shaded cells, so the single busiest cell does
+  /// not leave the rest of the court too faint to read.
+  static List<double> shade(List<int> counts) {
+    final out = List.filled(cols * rows, 0.0);
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final n = counts[r * cols + c];
+        if (n == 0) continue;
+        for (var dr = -1; dr <= 1; dr++) {
+          for (var dc = -1; dc <= 1; dc++) {
+            final rr = r + dr, cc = c + dc;
+            if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+            out[rr * cols + cc] += n * (dr == 0 ? 2 : 1) * (dc == 0 ? 2 : 1) / 16;
+          }
+        }
+      }
+    }
+    final seen = [
+      for (final v in out)
+        if (v > 0) v,
+    ]..sort();
+    if (seen.isEmpty) return out;
+    // Never below 60% of the busiest cell, so a clip with few cells keeps its gradient.
+    final top = math.max(seen[((seen.length - 1) * 0.95).round()], seen.last * 0.6);
+    for (var i = 0; i < out.length; i++) {
+      out[i] = (out[i] / top).clamp(0.0, 1.0);
+    }
+    return out;
+  }
 
   /// Near-left corner of a cell in court meters.
   static CourtPoint cellOrigin(int index) => (
@@ -211,11 +415,13 @@ class CourtPainter extends CustomPainter {
     this.reviewLanding,
     required this.lines,
     required this.surface,
+    Color? runOff,
     required this.players,
     this.status = StatusColors.light,
     this.heat,
     this.doubles = false,
-  });
+    this.onSide = false,
+  }) : runOff = runOff ?? surface;
 
   /// Collects the current frame, the trail and the hitters' positions in this rally.
   factory CourtPainter.fromRecord(
@@ -223,6 +429,7 @@ class CourtPainter extends CustomPainter {
     int frameIndex, {
     required Color lines,
     required Color surface,
+    Color? runOff,
     required PlayerColors players,
     StatusColors status = StatusColors.light,
     HeatGrid? heat,
@@ -230,12 +437,13 @@ class CourtPainter extends CustomPainter {
     bool live = false,
     int? rallyStart,
     bool? doubles,
+    bool onSide = false,
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
-    final trail = <CourtPoint>[
+    final trail = <(CourtPoint, bool)>[
       for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
-        ?record.frame(i)?.shuttlePos,
+        ?shuttleOverCourt(record, i, doubles: isDoubles),
     ];
     // Marks belong to the rally on screen. Live, that is the open rally (none between
     // rallies). Offline between rallies: the hits since the last rally ended.
@@ -274,23 +482,31 @@ class CourtPainter extends CustomPainter {
       reviewLanding: reviewLanding,
       lines: lines,
       surface: surface,
+      runOff: runOff,
       players: players,
       status: status,
       heat: heat,
       doubles: isDoubles,
+      onSide: onSide,
     );
   }
 
   final int frameIndex;
   final FrameInfo? frame;
-  final List<CourtPoint> trail;
+
+  /// Shuttle positions, oldest first, each with whether it is placed along the rally's
+  /// flight line (true) or only mapped onto the floor (false; see [shuttleOverCourt]).
+  final List<(CourtPoint, bool)> trail;
   final List<(String, CourtPoint)> hitMarks;
 
   /// (landing point, called in, waiting for review), oldest first.
   final List<(CourtPoint, bool, bool)> landings;
   final CourtPoint? reviewLanding;
   final Color lines;
+
+  /// The court inside the lines, and the run-off band around it.
   final Color surface;
+  final Color runOff;
   final StatusColors status;
   final PlayerColors players;
 
@@ -300,30 +516,53 @@ class CourtPainter extends CustomPainter {
   /// Draws the doubles alleys and long service lines, and both partners.
   final bool doubles;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final alley = doubles ? kDoublesAlleyM : 0.0;
-    final sx = size.width / (kCourtWidthM + 2 * alley);
-    final sy = size.height / kCourtLengthM;
-    // Court y grows toward the far baseline; draw the near side at the bottom. x is from the
-    // singles sideline, so the doubles alley lies left of 0.
-    Offset toCanvas(CourtPoint p) => Offset((p.x + alley) * sx, size.height - p.y * sy);
-    final left = alley * sx, right = (alley + kCourtWidthM) * sx;
+  /// The court lies on its side: near end on the left, far end on the right.
+  final bool onSide;
 
-    canvas.drawRect(Offset.zero & size, Paint()..color = surface);
+  @override
+  void paint(Canvas canvas, Size box) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & box);
+    // Everything below is drawn upright; on its side the picture is turned a quarter so
+    // that the near baseline (the bottom edge) becomes the left edge.
+    var size = box;
+    if (onSide) {
+      canvas.translate(box.width, 0);
+      canvas.rotate(math.pi / 2);
+      size = box.flipped;
+    }
+    final alley = doubles ? kDoublesAlleyM : 0.0;
+    final sx = size.width / (kCourtWidthM + 2 * alley + 2 * kRunOffM);
+    final sy = size.height / (kCourtLengthM + 2 * kRunOffM);
+    // Court y grows toward the far baseline; draw the near side at the bottom. x is from the
+    // singles sideline, so the doubles alley lies left of 0 and the run-off left of that.
+    Offset toCanvas(CourtPoint p) =>
+        Offset((p.x + alley + kRunOffM) * sx, size.height - (p.y + kRunOffM) * sy);
+    // A mark outside the picture is shown at its edge, a little inside so it stays whole.
+    const inset = 0.15;
+    Offset mark(CourtPoint p) => toCanvas((
+      x: p.x.clamp(-alley - kRunOffM + inset, kCourtWidthM + alley + kRunOffM - inset),
+      y: p.y.clamp(-kRunOffM + inset, kCourtLengthM + kRunOffM - inset),
+    ));
+    // The outer lines of the court (doubles sidelines when there are alleys).
+    final court = Rect.fromPoints(
+      toCanvas((x: -alley, y: kCourtLengthM)),
+      toCanvas((x: kCourtWidthM + alley, y: 0)),
+    );
+    final left = toCanvas((x: 0, y: 0)).dx, right = toCanvas((x: kCourtWidthM, y: 0)).dx;
+
+    canvas.drawRect(Offset.zero & size, Paint()..color = runOff);
+    canvas.drawRect(court, Paint()..color = surface);
     final h = heat;
     if (h != null) {
-      for (final (grid, max, color) in [
-        (h.near, h.nearMax, players.near),
-        (h.far, h.farMax, players.far),
-      ]) {
-        if (max == 0) continue;
-        for (var i = 0; i < grid.length; i++) {
-          if (grid[i] == 0) continue;
+      for (final (shade, color) in [(h.nearShade, players.near), (h.farShade, players.far)]) {
+        for (var i = 0; i < shade.length; i++) {
+          // Below this a cell only holds what spread over from a neighbour's edge.
+          if (shade[i] < 0.04) continue;
           final o = HeatGrid.cellOrigin(i);
           canvas.drawRect(
             toCanvas((x: o.x, y: o.y + kHeatCellM)) & Size(kHeatCellM * sx, kHeatCellM * sy),
-            Paint()..color = color.withValues(alpha: 0.1 + 0.5 * grid[i] / max),
+            Paint()..color = color.withValues(alpha: 0.08 + 0.55 * shade[i]),
           );
         }
       }
@@ -332,26 +571,33 @@ class CourtPainter extends CustomPainter {
       ..color = lines
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-    canvas.drawRect(Offset.zero & size, line);
+    canvas.drawRect(court, line);
     if (doubles) {
       // Singles sidelines inside the doubles outline, and the doubles long service lines.
-      canvas.drawLine(Offset(left, 0), Offset(left, size.height), line);
-      canvas.drawLine(Offset(right, 0), Offset(right, size.height), line);
-      for (final y in [kDoublesLongServiceM * sy, size.height - kDoublesLongServiceM * sy]) {
-        canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+      canvas.drawLine(Offset(left, court.top), Offset(left, court.bottom), line);
+      canvas.drawLine(Offset(right, court.top), Offset(right, court.bottom), line);
+      for (final y in [
+        court.top + kDoublesLongServiceM * sy,
+        court.bottom - kDoublesLongServiceM * sy,
+      ]) {
+        canvas.drawLine(Offset(court.left, y), Offset(court.right, y), line);
       }
     }
-    final netY = size.height / 2;
-    canvas.drawLine(Offset(0, netY), Offset(size.width, netY), line..strokeWidth = 2.5);
+    final netY = court.center.dy;
+    canvas.drawLine(Offset(court.left, netY), Offset(court.right, netY), line..strokeWidth = 2.5);
     line.strokeWidth = 1;
     for (final dy in [-kShortServiceFromNetM * sy, kShortServiceFromNetM * sy]) {
-      canvas.drawLine(Offset(0, netY + dy), Offset(size.width, netY + dy), line);
+      canvas.drawLine(Offset(court.left, netY + dy), Offset(court.right, netY + dy), line);
     }
     final centre = (left + right) / 2;
-    canvas.drawLine(Offset(centre, 0), Offset(centre, netY - kShortServiceFromNetM * sy), line);
+    canvas.drawLine(
+      Offset(centre, court.top),
+      Offset(centre, netY - kShortServiceFromNetM * sy),
+      line,
+    );
     canvas.drawLine(
       Offset(centre, netY + kShortServiceFromNetM * sy),
-      Offset(centre, size.height),
+      Offset(centre, court.bottom),
       line,
     );
 
@@ -359,12 +605,8 @@ class CourtPainter extends CustomPainter {
       final (p, isIn, review) = landings[i];
       final color = status.forCall(isIn: isIn, review: review);
       final latest = i == landings.length - 1;
-      final o = toCanvas((
-        x: p.x.clamp(-0.5 - alley, kCourtWidthM + alley + 0.5),
-        y: p.y.clamp(-0.5, kCourtLengthM + 0.5),
-      ));
       canvas.drawCircle(
-        o,
+        mark(p),
         latest ? 6 : 4,
         Paint()
           ..color = color.withValues(alpha: latest ? 1 : 0.6)
@@ -374,27 +616,30 @@ class CourtPainter extends CustomPainter {
     }
     for (final (who, p) in hitMarks) {
       final c = players.forPlayer(who);
-      final mark = Paint()
+      final cross = Paint()
         ..color = c
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
-      final o = toCanvas(p);
-      canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), mark);
-      canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), mark);
+      final o = mark(p);
+      canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
+      canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
     }
     for (var i = 0; i < trail.length; i++) {
       final age = (trail.length - 1 - i) / kTrailLength; // 0 = newest
+      final (p, placed) = trail[i];
+      // A position that is only the floor mapping of a shuttle in the air is a rough
+      // guide: it is drawn smaller and fainter than one placed along the flight line.
       canvas.drawCircle(
-        toCanvas(trail[i]),
-        4 - 2.5 * age,
-        Paint()..color = players.shuttle.withValues(alpha: 1 - 0.85 * age),
+        mark(p),
+        (4 - 2.5 * age) * (placed ? 1 : 0.7),
+        Paint()..color = players.shuttle.withValues(alpha: (1 - 0.85 * age) * (placed ? 1 : 0.45)),
       );
     }
     if (trail.isNotEmpty) {
       // The light theme's yellow is faint on the court; a ring in the line colour keeps the
       // newest position visible (3:1, T4.11).
       canvas.drawCircle(
-        toCanvas(trail.last),
+        mark(trail.last.$1),
         5,
         Paint()
           ..color = lines
@@ -405,17 +650,17 @@ class CourtPainter extends CustomPainter {
 
     final f = frame;
     if (f?.nearPos case final near?) {
-      canvas.drawCircle(toCanvas(near), 7, Paint()..color = players.near);
+      canvas.drawCircle(mark(near), 7, Paint()..color = players.near);
     }
     if (f?.farPos case final far?) {
-      canvas.drawCircle(toCanvas(far), 7, Paint()..color = players.far);
+      canvas.drawCircle(mark(far), 7, Paint()..color = players.far);
     }
     // Doubles partners: their own colour, with a ring so they differ by shape too.
     for (final (p, color) in [(f?.near2Pos, players.near2), (f?.far2Pos, players.far2)]) {
       if (p == null) continue;
-      canvas.drawCircle(toCanvas(p), 6, Paint()..color = color);
+      canvas.drawCircle(mark(p), 6, Paint()..color = color);
       canvas.drawCircle(
-        toCanvas(p),
+        mark(p),
         8,
         Paint()
           ..color = color
@@ -424,9 +669,8 @@ class CourtPainter extends CustomPainter {
       );
     }
     if (reviewLanding case final landing?) {
-      final p = toCanvas(landing);
-      // Keep an outside landing visible at the corresponding court edge.
-      final o = Offset(p.dx.clamp(0, size.width).toDouble(), p.dy.clamp(0, size.height).toDouble());
+      // An outside landing stays visible at the edge of the run-off.
+      final o = mark(landing);
       canvas.drawCircle(o, 9, Paint()..color = surface);
       canvas.drawCircle(o, 6, Paint()..color = status.uncertain);
       canvas.drawCircle(
@@ -438,9 +682,12 @@ class CourtPainter extends CustomPainter {
           ..style = PaintingStyle.stroke,
       );
     }
+    canvas.restore();
   }
 
   /// Only repaint when playback moves to another frame, the record or the theme changes.
+  /// The trail and the marks are compared by content: in a live session the frame index can
+  /// stay put while a new hit or a corrected position arrives.
   @override
   bool shouldRepaint(CourtPainter old) =>
       old.frameIndex != frameIndex ||
@@ -448,11 +695,13 @@ class CourtPainter extends CustomPainter {
       old.frame != frame ||
       old.lines != lines ||
       old.surface != surface ||
+      old.runOff != runOff ||
       old.players != players ||
       old.status != status ||
       old.heat != heat ||
       old.doubles != doubles ||
-      old.trail.length != trail.length ||
-      old.hitMarks.length != hitMarks.length ||
+      old.onSide != onSide ||
+      !listEquals(old.trail, trail) ||
+      !listEquals(old.hitMarks, hitMarks) ||
       !listEquals(old.landings, landings);
 }

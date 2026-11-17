@@ -33,8 +33,14 @@ def write_csv(path: Path, header: list[str], rows: list[list]) -> Path:
 
 def test_benchmark_on_cpu_with_skipped_stages(tiny_video: Path, tmp_path: Path) -> None:
     benchmark = load_script("benchmark")
-    # No TrackNet weights in tests: tracking skips itself. Pose is off to stay fast.
-    config = {"stages": {"pose": {"enabled": False}}}
+    # No TrackNet weights in tests: tracking skips itself, also on a machine that has the
+    # real weights installed. Pose is off to stay fast.
+    config = {
+        "stages": {
+            "pose": {"enabled": False},
+            "tracking": {"tracknet_weights": str(tmp_path / "missing.pt")},
+        }
+    }
     result = benchmark.benchmark(tiny_video, runs=2, config=config, work_dir=tmp_path)
     assert result["runs"] == 2 and result["num_frames"] == 10
     assert "io" in result["stage_median_s"] and "tracking" in result["skipped_stages"]

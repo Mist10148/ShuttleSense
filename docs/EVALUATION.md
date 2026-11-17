@@ -37,9 +37,10 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 
 | What | Result | Report |
 | --- | --- | --- |
-| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2%. Target ≥ 70%. (second evaluation on this test split, after the Nov 15 import fix, D35; Nov 14: 89.5%, 88.1%, 82.1%) | [results/strokes.md](results/strokes.md) |
+| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 91.2% ± 0.6%, LSTM 90.2% ± 0.5%, Random Forest 84.7% ± 0.3%. Target ≥ 70%. (third evaluation on this test split: the LSTM and the forest were retrained on Nov 16, the CNN was not replaced; Nov 15: 91.2%, 89.0%, 84.3%; Nov 14: 89.5%, 88.1%, 82.1%) | [results/strokes.md](results/strokes.md) |
+| The same with rally and court context, shipped weights (one seed each) | 1D CNN 91.8% → 93.4%, LSTM 90.7% → 92.3%, Random Forest 85.0% → 89.5%, ensemble of the three 91.6% → 93.8%. Annotated hit frames stand in for the hit detector, so the gain in the app will be smaller | [results/stroke_context.md](results/stroke_context.md) |
 | Ablation: shuttle trajectory features (1D CNN) | pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN) | [results/strokes.md](results/strokes.md) |
-| Stroke confidence | The networks store a softmax temperature fitted on the validation split (0.53 for the CNN, 0.61 for the LSTM), so `confidence` is calibrated on broadcast data; the predicted class is unchanged. Not measured on phone footage | [results/strokes.md](results/strokes.md) |
+| Stroke confidence | The networks store a softmax temperature fitted on the validation split (0.53 for the CNN, 0.60 for the LSTM), so `confidence` is calibrated on broadcast data; the predicted class is unchanged. Not measured on phone footage | [results/strokes.md](results/strokes.md) |
 | Stroke stage latency, CPU, 40 hits in a 1-minute clip | Under 0.1 s for each of the three models | [results/stroke_latency.md](results/stroke_latency.md) |
 | Live pipeline overhead with fake perception (420 frames paced at 30 fps) | p50 12.9 ms and p95 26.2 ms frame round trip, with p95 22.9 ms on the server | [results/live_latency.md](results/live_latency.md) |
 | The same, 300 frames on Nov 12 | p50 15.7 ms and p95 36.7 ms round trip, p95 31.0 ms on the server; hits 0.74 s and line calls 1.73 s at p95 | [results/live_latency_fake.md](results/live_latency_fake.md) |
@@ -86,6 +87,10 @@ timing during rallies.
   rally is given one of the six labels, usually with a low confidence.
 
 **Not measured yet** (no labelled team footage):
+
+- Shuttle tracking after the Nov 16 changes (overlapping windows on uploads, burst and gap clean-up, clean-up of the live and Watch window before hit detection). Each has unit tests on synthetic tracks; none has an accuracy number, because no frame of team footage has a labelled shuttle position (`scripts/label_shuttle.py`, `scripts/eval_tracking.py`).
+- The court map after the Nov 16 changes: the floor point under the ankles, the snapped corners and the shuttle placed between the two hitters. These follow from geometry and are tested on constructed cases, not against surveyed positions.
+- What the extra clean-up and the stroke context cost per frame in Watch & Analyze on its target GPU. This pass ran on a CPU without the pose stack.
 
 - Where hit detection fails: shuttle out of frame, occlusion by the player, net shots with little direction change. The stroke models were trained on annotated hit frames; a detected hit a few frames off is covered only by the ±2 to ±4 frame shift used in training.
 - Broadcast vs phone gap: camera height and angle, motion blur, frame rate. A clip at another frame rate is now sampled over the same one-second span the models were trained on, which has a unit test but no accuracy measurement.

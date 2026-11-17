@@ -21,8 +21,11 @@ from shuttlesense.schema import (
     ScorePair,
 )
 from shuttlesense.stage import StageContext, StageSkipped
+from shuttlesense.timing import scaled
 
 STATIONARY_PX = 3.0
+# stages.referee keys that count frames.
+FRAME_KEYS = ("stationary_frames_end", "lost_frames_end")
 
 
 @dataclass(frozen=True)
@@ -185,7 +188,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
 
     if not record.hits:
         raise StageSkipped("no hits, so no rallies")
-    cfg = ctx.stage_config("referee")
+    # Frame counts in the config are for 30 fps.
+    cfg = scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps)
     xy, visible = track_arrays(record)
     segments = segment_rallies(
         visible,

@@ -326,7 +326,7 @@ Results are filled in as experiments complete. Targets are the team's own goals,
 | --- | --- | --- | --- |
 | Shuttle detection accuracy (within 4 px) | Trajectory test clips | ≥ 85% | TBD |
 | Hit detection F1 (±3 frames) | ShuttleSet test matches | ≥ 0.75 | TBD |
-| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 91.2% ± 0.6%, LSTM 89.0% ± 0.3%, Random Forest 84.3% ± 0.2% ([strokes.md](docs/results/strokes.md)) |
+| Stroke macro accuracy, 6 classes | ShuttleSet test matches (BST feature split, 3,136 strokes) | ≥ 70% | 1D CNN 91.2% ± 0.6%, LSTM 90.2% ± 0.5%, Random Forest 84.7% ± 0.3% ([strokes.md](docs/results/strokes.md)); with rally and court context on the shipped weights 93.4%, 92.3% and 89.5%, and 93.8% for the ensemble of the three ([stroke_context.md](docs/results/stroke_context.md)) |
 | Stroke accuracy | Team phone footage | ≥ 55% | TBD |
 | Stroke count error per rally | Team phone footage | ≤ 1 | TBD |
 | Rally boundary accuracy (P3) | Team phone footage | ≥ 80% | TBD |
