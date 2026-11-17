@@ -166,7 +166,8 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 "playback": playback,
                 "provider_diagnostics": getattr(
                     getattr(session.perception, "perception", session.perception),
-                    "provider_diagnostics", None,
+                    "provider_diagnostics",
+                    None,
                 ),
             }
         )
@@ -221,22 +222,26 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             perception_s += frame_processing_s
             processed += 1
             response = {
-                    "type": "video_frame",
-                    "index": index,
-                    **(
-                        {"jpeg": base64.b64encode(data).decode("ascii")}
-                        if playback == "complete"
-                        else {}
-                    ),
-                    "events": events,
-                    **({"profile_ms": profiler.finish()} if profiler is not None else {}),
-                    "timing_ms": {"read": round(read_ms, 2), "jpeg": round(encode_ms, 2),
-                                  "processing": round(frame_processing_s * 1000, 2)},
-                    "provider_diagnostics": getattr(
-                        getattr(session.perception, "perception", session.perception),
-                        "provider_diagnostics", None,
-                    ),
-                }
+                "type": "video_frame",
+                "index": index,
+                **(
+                    {"jpeg": base64.b64encode(data).decode("ascii")}
+                    if playback == "complete"
+                    else {}
+                ),
+                "events": events,
+                **({"profile_ms": profiler.finish()} if profiler is not None else {}),
+                "timing_ms": {
+                    "read": round(read_ms, 2),
+                    "jpeg": round(encode_ms, 2),
+                    "processing": round(frame_processing_s * 1000, 2),
+                },
+                "provider_diagnostics": getattr(
+                    getattr(session.perception, "perception", session.perception),
+                    "provider_diagnostics",
+                    None,
+                ),
+            }
             if profiler is None:
                 await ws.send_json(response)
             else:
@@ -252,9 +257,12 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 serialize_ms = (time.perf_counter() - serialize_start) * 1000
                 send_start = time.perf_counter()
                 await ws.send_text(encoded_response)
-                previous_transport = {"frame": index, "serialize_ms": round(serialize_ms, 3),
-                                      "send_await_ms": round((time.perf_counter() - send_start) * 1000, 3),
-                                      "utf8_bytes": len(encoded_response.encode("utf-8"))}
+                previous_transport = {
+                    "frame": index,
+                    "serialize_ms": round(serialize_ms, 3),
+                    "send_await_ms": round((time.perf_counter() - send_start) * 1000, 3),
+                    "utf8_bytes": len(encoded_response.encode("utf-8")),
+                }
     except LiveBusy:
         await _error(ws, "busy", "the GPU is busy with another job or live session", 4409)
     except (ValueError, TypeError, KeyError) as exc:
@@ -276,9 +284,13 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                     frames.close()
             if entry is not None:
                 try:
-                    log.info("Frame Watch: %d frames, %.2fs elapsed including setup and pauses, "
-                             "%.2fs frame processing", processed,
-                             time.perf_counter() - watch_started, perception_s)
+                    log.info(
+                        "Frame Watch: %d frames, %.2fs elapsed including setup and pauses, "
+                        "%.2fs frame processing",
+                        processed,
+                        time.perf_counter() - watch_started,
+                        perception_s,
+                    )
                     job = await asyncio.to_thread(_finish_watch, manager, entry)
                     with contextlib.suppress(Exception):
                         await ws.send_json({"type": "saved", "job_id": job.id if job else None})
@@ -464,9 +476,14 @@ class LiveManager:
         # Watch background registers its job before analysis. Preserve that start
         # when the saved session replaces it with the rendering job.
         watch_started = (
-            existing_job.started_at if existing_job and existing_job.started_at else
-            datetime.fromtimestamp(session.started_at, UTC)
-        ) if name.startswith("Watch & Analyze") else utcnow()
+            (
+                existing_job.started_at
+                if existing_job and existing_job.started_at
+                else datetime.fromtimestamp(session.started_at, UTC)
+            )
+            if name.startswith("Watch & Analyze")
+            else utcnow()
+        )
         job = Job(
             id=job_id, video_id=entry.video_id, status="running", current_stage="render",
             started_at=watch_started, progress=0.9, mode="live", referee=True, start_score=start,

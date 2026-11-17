@@ -71,8 +71,7 @@ def test_watch_profile_is_opt_in_and_frame_correlated(tmp_path, tiny_video):
         with tiny_video.open("rb") as source:
             video = client.post("/videos", files={"file": ("tiny.mp4", source)}).json()
         with client.websocket_connect("/watch") as ws:
-            ws.send_json({"type": "start", "video_id": video["id"],
-                          "profile_diagnostics": True})
+            ws.send_json({"type": "start", "video_id": video["id"], "profile_diagnostics": True})
             assert ws.receive_json()["type"] == "started"
             for index in range(3):
                 ws.send_json({"type": "next"})
@@ -164,7 +163,7 @@ def test_complete_watch_parallelizes_and_cleans_up(tmp_path, tiny_video, monkeyp
             response = client.get(f"/jobs/{started['job_id']}/record")
             if response.status_code == 200:
                 break
-            time.sleep(.01)
+            time.sleep(0.01)
         assert closed == [True]
         record = response.json()
         assert [frame["frame"] for frame in record["frames"]] == [0, 1, 2]
@@ -250,16 +249,19 @@ def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, m
     monkeypatch.setattr(shuttlesense.io, "FrameReader", lambda *a, **kw: [])
 
     def render(*args, progress, **kwargs):
-        progress(.25)
-        progress(.75)
+        progress(0.25)
+        progress(0.75)
         progress(1.0)
 
     monkeypatch.setattr(shuttlesense.render, "render_video", render)
-    manager._render(SimpleNamespace(id="job", video_id="v", overlays=[]),
-                    SimpleNamespace(height=720, fps=30), tmp_path / "source.mp4")
+    manager._render(
+        SimpleNamespace(id="job", video_id="v", overlays=[]),
+        SimpleNamespace(height=720, fps=30),
+        tmp_path / "source.mp4",
+    )
     values = [call.kwargs["progress"] for call in jobs._update.call_args_list]
-    assert values[0] == pytest.approx(.92475)
-    assert values[-1] == pytest.approx(.999)
+    assert values[0] == pytest.approx(0.92475)
+    assert values[-1] == pytest.approx(0.999)
     assert all(a <= b for a, b in zip(values, values[1:], strict=False))
     assert jobs.check_cancelled.call_count == 4
     jobs.finish_outside.assert_called_once_with("job")

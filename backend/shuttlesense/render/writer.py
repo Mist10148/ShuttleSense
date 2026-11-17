@@ -44,8 +44,11 @@ def ffmpeg_command(
     out_path: Path, *, fps: float, size: tuple[int, int], crf: int, codec: str, exe: str
 ) -> list[str]:
     w, h = size
-    quality = (["-preset", "p4", "-rc", "vbr", "-cq", str(crf), "-b:v", "0"]
-               if codec == "h264_nvenc" else ["-crf", str(crf)])
+    quality = (
+        ["-preset", "p4", "-rc", "vbr", "-cq", str(crf), "-b:v", "0"]
+        if codec == "h264_nvenc"
+        else ["-crf", str(crf)]
+    )
     return [
         exe, "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", f"{fps:.6g}", "-i", "-",
@@ -58,14 +61,33 @@ def nvenc_available(exe: str, size: tuple[int, int] = (256, 256)) -> bool:
     """Check the actual encoder and driver, not just FFmpeg's compiled encoder list."""
     try:
         result = subprocess.run(
-            [exe, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-             f"color=size={size[0]}x{size[1]}:rate=1", "-frames:v", "1", "-c:v", "h264_nvenc",
-             "-f", "null", "-"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=15, check=False,
+            [
+                exe,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=size={size[0]}x{size[1]}:rate=1",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "h264_nvenc",
+                "-f",
+                "null",
+                "-",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=15,
+            check=False,
         )
         if result.returncode:
-            log.warning("NVENC unavailable; using libx264: %s",
-                        result.stderr.decode(errors="replace").strip()[:500])
+            log.warning(
+                "NVENC unavailable; using libx264: %s",
+                result.stderr.decode(errors="replace").strip()[:500],
+            )
         return result.returncode == 0
     except (OSError, subprocess.TimeoutExpired) as exc:
         log.warning("NVENC probe failed; using libx264: %s", exc)

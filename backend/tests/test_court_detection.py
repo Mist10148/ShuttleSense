@@ -22,7 +22,8 @@ def test_finds_projected_singles_reference_court(doubles):
     ]
     if doubles:
         segments += [
-            ((-0.089, 0), (-0.089, 1)), ((1.089, 0), (1.089, 1)),
+            ((-0.089, 0), (-0.089, 1)),
+            ((1.089, 0), (1.089, 1)),
             ((-0.089, 0.0567), (1.089, 0.0567)),
             ((-0.089, 0.9433), (1.089, 0.9433)),
         ]
@@ -43,14 +44,16 @@ def test_rejects_background_with_reversed_court_perspective():
     # should not be wider at the far end than the near end.
     image = np.full((720, 1280, 3), (45, 45, 45), np.uint8)
     trapezoid = np.float32([[340, 500], [940, 500], [1100, 80], [180, 80]])
-    transform = cv2.getPerspectiveTransform(
-        np.float32([[0, 0], [1, 0], [1, 1], [0, 1]]), trapezoid
-    )
+    transform = cv2.getPerspectiveTransform(np.float32([[0, 0], [1, 0], [1, 1], [0, 1]]), trapezoid)
     segments = [
-        ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((1, 1), (0, 1)),
-        ((0, 1), (0, 0)), ((0, .3522), (1, .3522)),
-        ((0, .6478), (1, .6478)), ((.5, 0), (.5, .3522)),
-        ((.5, .6478), (.5, 1)),
+        ((0, 0), (1, 0)),
+        ((1, 0), (1, 1)),
+        ((1, 1), (0, 1)),
+        ((0, 1), (0, 0)),
+        ((0, 0.3522), (1, 0.3522)),
+        ((0, 0.6478), (1, 0.6478)),
+        ((0.5, 0), (0.5, 0.3522)),
+        ((0.5, 0.6478), (0.5, 1)),
     ]
     for a, b in segments:
         points = cv2.perspectiveTransform(np.float32([[a, b]]), transform)[0].astype(int)

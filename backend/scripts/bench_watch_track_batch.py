@@ -1,4 +1,5 @@
 """Compare sequential and cross-frame TrackNet inference without changing Watch."""
+
 from __future__ import annotations
 
 import argparse
@@ -44,7 +45,7 @@ def main():
         outputs, durations = [], []
         with torch.inference_mode(), torch.autocast("cuda", enabled=device.startswith("cuda")):
             for start in range(0, len(tensors), batch_size):
-                batch = torch.from_numpy(np.stack(tensors[start:start + batch_size])).to(device)
+                batch = torch.from_numpy(np.stack(tensors[start : start + batch_size])).to(device)
                 if device.startswith("cuda"):
                     torch.cuda.synchronize()
                 before = time.perf_counter()
@@ -61,8 +62,10 @@ def main():
     changed = sum(a != b for a, b in zip(single, batched, strict=True))
     print(f"frames={len(tensors)} batch={args.batch}, changed final detections={changed}")
     print(f"sequential forward {sum(single_time):.3f}s, batched forward {sum(batch_time):.3f}s")
-    print(f"median per call: {statistics.median(single_time)*1000:.2f}ms / "
-          f"{statistics.median(batch_time)*1000:.2f}ms")
+    print(
+        f"median per call: {statistics.median(single_time) * 1000:.2f}ms / "
+        f"{statistics.median(batch_time) * 1000:.2f}ms"
+    )
 
 
 if __name__ == "__main__":

@@ -133,8 +133,14 @@ class StreamAnalyzer:
 
     # Per frame ----------------------------------------------------------------
 
-    def add_frame(self, shuttle: Shuttle, players: Players, *, tick: bool = True,
-                  player_hold_safe: bool = True) -> list[Event]:
+    def add_frame(
+        self,
+        shuttle: Shuttle,
+        players: Players,
+        *,
+        tick: bool = True,
+        player_hold_safe: bool = True,
+    ) -> list[Event]:
         """Add the next frame; with tick=False the windowed stages wait for a later frame."""
         i = len(self.record.frames)
         if not tick:
@@ -177,8 +183,11 @@ class StreamAnalyzer:
         min_score = self.min_keypoint_score
 
         def player(p: Player | None) -> tuple[float, float] | None:
-            return (to_court(player_point(p, min_score), PLAYER_MARGIN_M)
-                    if p and p.court_position_valid else None)
+            return (
+                to_court(player_point(p, min_score), PLAYER_MARGIN_M)
+                if p and p.court_position_valid
+                else None
+            )
 
         near, far = player(frame.players.near), player(frame.players.far)
         partners = {"near_2": player(frame.players.near_2), "far_2": player(frame.players.far_2)}
