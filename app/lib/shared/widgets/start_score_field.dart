@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/tokens.dart';
 
 typedef StartScore = ({int near, int far});
 
@@ -79,7 +80,7 @@ class _StartScoreFieldState extends State<StartScoreField> {
                 _score.near,
                 (v) => _update(score: (near: v, far: _score.far)),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Spacing.md),
               points(
                 widget.doubles ? 'Far pair' : 'Far player',
                 _score.far,
@@ -89,7 +90,7 @@ class _StartScoreFieldState extends State<StartScoreField> {
           ),
           if (problem != null)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: Spacing.sm),
               child: Text(problem, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
         ],
@@ -134,7 +135,7 @@ class StartGamesField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          padding: const EdgeInsets.only(top: Spacing.sm, bottom: Spacing.xs),
           child: Text(
             'Games already won (starts in game $game of 3)',
             style: Theme.of(context).textTheme.labelLarge,
@@ -147,7 +148,7 @@ class StartGamesField extends StatelessWidget {
               games.near,
               (v) => update((near: v, far: games.far)),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: Spacing.md),
             side(
               doubles ? 'Far pair' : 'Far player',
               games.far,

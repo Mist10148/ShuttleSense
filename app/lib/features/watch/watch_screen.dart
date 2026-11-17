@@ -22,6 +22,7 @@ import '../../shared/widgets/page_scaffold.dart';
 import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
 import 'court_geometry.dart';
+import '../../core/theme/tokens.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -801,7 +802,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           )
         else if (socket == null && !backgroundStarted) ...[
           Text(info.filename),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           const Text('Playback and analysis'),
           SegmentedButton<bool>(
             segments: const [
@@ -1152,7 +1153,7 @@ class _WatchOverlay extends CustomPainter {
     final players = frame?['display_players'] ?? frame?['players'];
     if (players is Map) {
       final paint = Paint()
-        ..color = Colors.cyanAccent
+        ..color = OverlayColors.playerBox
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2;
       for (final player in players.values) {
@@ -1160,8 +1161,8 @@ class _WatchOverlay extends CustomPainter {
         final b = player['bbox'] as List;
         if (b.length < 4 || b.any((v) => v is! num)) continue;
         paint.color = (player['held'] == true)
-            ? Colors.cyanAccent.withValues(alpha: 0.4)
-            : Colors.cyanAccent;
+            ? OverlayColors.playerBox.withValues(alpha: 0.4)
+            : OverlayColors.playerBox;
         canvas.drawRect(
           Rect.fromLTWH(
             (b[0] as num) * sx,
@@ -1181,7 +1182,7 @@ class _WatchOverlay extends CustomPainter {
           width: 10,
           height: 10,
         ),
-        Paint()..color = Colors.yellowAccent,
+        Paint()..color = OverlayColors.shuttle,
       );
     }
   }

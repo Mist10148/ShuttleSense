@@ -68,14 +68,14 @@ class _DecisionHistoryState extends State<DecisionHistory> {
       children: [
         if (entries.isEmpty)
           const Padding(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.all(Spacing.lg),
             child: Text(
               'New referee decisions appear here. Older records may have no audit history.',
             ),
           )
         else ...[
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
             child: Wrap(
               spacing: 12,
               runSpacing: 4,
@@ -99,7 +99,7 @@ class _DecisionHistoryState extends State<DecisionHistory> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(Spacing.sm),
             child: Text(
               visible.isEmpty
                   ? 'No matching decisions'
@@ -194,7 +194,7 @@ class _IntervalPanelState extends State<IntervalPanel> {
     };
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -268,7 +268,7 @@ class PracticeGoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Spacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models/clip_record.dart';
+import '../../core/theme/tokens.dart';
 
 /// Doubles (D23): once a game is won, the winners choose who serves first in the next game,
 /// so the app asks. The game winner's side serves; with both chosen the service order is
@@ -62,14 +63,14 @@ class _GameServicePromptState extends State<GameServicePrompt> {
       ],
     );
     return Card(
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: Spacing.sm),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(Spacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Who serves first in game ${widget.game}?', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
+            const SizedBox(height: Spacing.xs),
             Text(
               '${playerLabel(widget.servingSide)} won the game and serves first. Pick the '
               'server and receiver so the app can follow the service order.',

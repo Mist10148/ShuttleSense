@@ -44,7 +44,7 @@ class SummaryChart extends StatelessWidget {
         children: [
           if (classes.isNotEmpty && kStrokeModels.containsKey(strokeModel))
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: Spacing.sm),
               child: Text(
                 'Strokes named by the ${kStrokeModels[strokeModel]} model',
                 style: theme.textTheme.bodySmall,
@@ -102,7 +102,7 @@ class SummaryChart extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Wrap(
             spacing: 16,
             children: [
@@ -113,7 +113,7 @@ class SummaryChart extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.square, size: 12, color: color),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: Spacing.xs),
                     // Flexible: a narrow side panel wraps the label instead of overflowing.
                     Flexible(
                       child: Text(

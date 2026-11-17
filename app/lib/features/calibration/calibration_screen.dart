@@ -9,6 +9,7 @@ import '../../data/models/video_info.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../upload/upload_controller.dart';
+import '../../core/theme/tokens.dart';
 
 typedef Corner = ({double x, double y});
 
@@ -106,11 +107,11 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
         data: (info) => Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(Spacing.md),
               child: Row(
                 children: [
                   CornerDiagram(next: next),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: Spacing.md),
                   Expanded(
                     child: Text(
                       next == null
@@ -143,7 +144,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
             ),
             if (info.numFrames > 1)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
                 child: Row(
                   children: [
                     const Text('Frame'),
@@ -167,13 +168,13 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
               ),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(Spacing.sm),
                 child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
               ),
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(Spacing.md),
                 child: FilledButton.icon(
                   onPressed: convex && !_submitting ? () => _start(withCorners: true) : null,
                   icon: const Icon(Icons.play_arrow),
@@ -412,7 +413,7 @@ class CornersPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final points = [for (final c in corners) Offset(c.x * scale, c.y * scale)];
     final line = Paint()
-      ..color = Colors.yellowAccent
+      ..color = OverlayColors.corners
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
     for (var i = 0; i + 1 < points.length; i++) {
@@ -420,11 +421,15 @@ class CornersPainter extends CustomPainter {
     }
     if (points.length == 4) canvas.drawLine(points[3], points[0], line);
     for (var i = 0; i < points.length; i++) {
-      canvas.drawCircle(points[i], 7, Paint()..color = Colors.yellowAccent);
+      canvas.drawCircle(points[i], 7, Paint()..color = OverlayColors.corners);
       final label = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
-          style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: OverlayColors.cornerLabel,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

@@ -74,7 +74,7 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: Spacing.xs),
           child: Row(
             children: [
               for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
@@ -86,7 +86,7 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
                     onSelected: (_) => setState(() => _player = value),
                   ),
                 ),
-              const SizedBox(width: 8),
+              const SizedBox(width: Spacing.sm),
               PopupMenuButton<String?>(
                 tooltip: 'Filter by stroke',
                 initialValue: _stroke,
@@ -212,7 +212,7 @@ class _HitDetails extends StatelessWidget {
     return SafeArea(
       child: ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        padding: const EdgeInsets.fromLTRB(Spacing.xl, 0, Spacing.xl, Spacing.xl),
         children: [
           Text(
             '${kStrokeLabels[hit.stroke] ?? 'Unclassified'} · '
@@ -225,7 +225,7 @@ class _HitDetails extends StatelessWidget {
               style: theme.textTheme.bodySmall,
             ),
           if (probs.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: Spacing.md),
             for (final p in probs.take(3))
               Row(
                 children: [
@@ -238,7 +238,7 @@ class _HitDetails extends StatelessWidget {
                 ],
               ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: Spacing.lg),
           Text('Form feedback', style: theme.textTheme.titleSmall),
           if (hit.feedback.isEmpty)
             Text('No rules could be checked for this hit.', style: theme.textTheme.bodySmall),
@@ -254,7 +254,7 @@ class _HitDetails extends StatelessWidget {
               title: Text(fb.label),
               subtitle: fb.tip == null ? null : Text(fb.tip!),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Text(
             'Heuristic guidance, not professional coaching.',
             style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),

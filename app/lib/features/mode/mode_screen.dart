@@ -36,7 +36,7 @@ class ModeScreen extends ConsumerWidget {
           selected: current == AppMode.upload,
           onTap: () => pick(AppMode.upload),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         ModeCard(
           icon: Icons.videocam_outlined,
           title: 'Go live',
@@ -48,7 +48,7 @@ class ModeScreen extends ConsumerWidget {
           selected: current == AppMode.live && !liveOff,
           onTap: liveOff ? null : () => pick(AppMode.live),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         ModeCard(
           icon: Icons.play_circle_outline,
           title: 'Watch & Analyze',
@@ -118,16 +118,16 @@ class ModeCard extends StatelessWidget {
                     color: onTap == null ? scheme.outline : scheme.onPrimaryContainer,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: Spacing.lg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(title, style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: Spacing.xs),
                       Text(description),
                       if (selected) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: Spacing.sm,

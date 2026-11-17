@@ -54,9 +54,9 @@ class LineCallBanner extends StatelessWidget {
       label: 'Line call $word. $detail',
       child: Card(
         color: color,
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: Spacing.xs),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),
           child: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 12,

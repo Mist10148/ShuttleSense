@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/health.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../core/theme/tokens.dart';
 
 /// Checks a server before it is saved; replaced in widget tests.
 typedef HealthCheck = Future<Health> Function(ServerConfig config);
@@ -124,25 +125,25 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     showDragHandle: true,
     builder: (context) => const SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
+        padding: EdgeInsets.fromLTRB(Spacing.xl, 0, Spacing.xl, Spacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Finding the server address', style: TextStyle(fontWeight: FontWeight.w600)),
-            SizedBox(height: 8),
+            SizedBox(height: Spacing.sm),
             Text(
               'Laptop on the same Wi-Fi: start the backend with '
               '"uvicorn shuttlesense.api.main:app --host 0.0.0.0 --port 8000", then use the '
               "laptop's IP address (Windows: ipconfig, IPv4 Address), e.g. "
               'http://192.168.1.20:8000.',
             ),
-            SizedBox(height: 8),
+            SizedBox(height: Spacing.sm),
             Text(
               'Google Colab: run the notebook; its last cell prints an https://….trycloudflare.com '
               'address and the access token you set.',
             ),
-            SizedBox(height: 8),
+            SizedBox(height: Spacing.sm),
             Text('More in docs/SETUP.md, section 8.'),
           ],
         ),
@@ -165,16 +166,16 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       ],
       children: [
         Icon(Icons.sports_tennis, size: 56, color: theme.colorScheme.primary),
-        const SizedBox(height: 12),
+        const SizedBox(height: Spacing.md),
         Text('ShuttleSense', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
-        const SizedBox(height: 8),
+        const SizedBox(height: Spacing.sm),
         Text(
           'Enter the address of the ShuttleSense backend: the laptop on your Wi-Fi '
           '(for example http://192.168.1.20:8000) or the Colab tunnel URL.',
           style: theme.textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: Spacing.xl),
         TextField(
           controller: _url,
           keyboardType: TextInputType.url,
@@ -188,7 +189,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           onSubmitted: (_) => _connect(),
         ),
         if (recent.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Wrap(
             spacing: 8,
             runSpacing: 4,
@@ -203,14 +204,14 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           ),
         ],
         if (mixed) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Text(
             'This page is served over https, so the browser blocks plain http servers. '
             'Use the https tunnel address instead.',
             style: TextStyle(color: theme.colorScheme.error),
           ),
         ],
-        const SizedBox(height: 12),
+        const SizedBox(height: Spacing.md),
         TextField(
           controller: _token,
           obscureText: true,
@@ -222,7 +223,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           onSubmitted: (_) => _connect(),
         ),
         if (_error != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           Text(
             _error!,
             style: TextStyle(color: theme.colorScheme.error),

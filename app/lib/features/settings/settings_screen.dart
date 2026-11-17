@@ -13,6 +13,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../core/theme/tokens.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -22,6 +23,9 @@ class SettingsScreen extends ConsumerWidget {
     final config = ref.watch(serverConfigProvider);
     final health = ref.watch(healthProvider);
     final liveAvailable = ref.watch(liveAvailableProvider);
+    final watchAvailable =
+        health.valueOrNull?.watchVideo == true &&
+        (kIsWeb || defaultTargetPlatform == TargetPlatform.windows);
     return PageScaffold(
       title: 'Settings',
       children: [
@@ -58,7 +62,7 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Appearance',
           child: SegmentedButton<ThemeMode>(
@@ -83,7 +87,7 @@ class SettingsScreen extends ConsumerWidget {
             onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Analysis mode',
           child: SegmentedButton<AppMode>(
@@ -104,16 +108,22 @@ class SettingsScreen extends ConsumerWidget {
                 value: AppMode.watch,
                 label: const Text('Watch video'),
                 icon: const Icon(Icons.play_circle_outline),
-                enabled:
-                    health.valueOrNull?.watchVideo == true &&
-                    (kIsWeb || defaultTargetPlatform == TargetPlatform.windows),
+                enabled: watchAvailable,
+                tooltip: watchAvailable
+                    ? null
+                    : 'Watch needs the Windows or web app and a server that supports it',
               ),
             ],
+            // Default disabled text (onSurface at 38%) is 2.3:1 on the card; keep 4.5:1 (T4.11).
+            style: SegmentedButton.styleFrom(
+              disabledForegroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+              disabledIconColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             selected: {ref.watch(appModeProvider)},
             onSelectionChanged: (s) => ref.read(appModeProvider.notifier).set(s.first),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Notifications',
           child: SwitchListTile(
@@ -124,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (on) => ref.read(notifyWhenDoneProvider.notifier).set(on),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Privacy',
           child: Text(
@@ -133,7 +143,7 @@ class SettingsScreen extends ConsumerWidget {
             '${health.valueOrNull?.chatAvailable == true ? 'on' : 'off'}.',
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Spacing.lg),
         const SectionCard(
           title: 'About',
           child: Text(

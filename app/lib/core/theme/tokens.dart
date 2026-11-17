@@ -20,6 +20,16 @@ abstract final class Radii {
 /// Smallest comfortable touch target for courtside controls.
 const double kMinTouchTarget = 48;
 
+/// Marks drawn on top of video frames. Video looks the same in light and dark mode, so these
+/// stay fixed bright colours instead of following the theme.
+abstract final class OverlayColors {
+  static const Color corners = Colors.yellowAccent;
+  static const Color cornerLabel = Colors.black;
+  static const Color courtLines = Colors.lightBlueAccent;
+  static const Color playerBox = Colors.cyanAccent;
+  static const Color shuttle = Colors.yellowAccent;
+}
+
 double _contrast(Color a, Color b) {
   final la = a.computeLuminance(), lb = b.computeLuminance();
   return (la > lb ? la + 0.05 : lb + 0.05) / (la > lb ? lb + 0.05 : la + 0.05);

@@ -10,6 +10,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
 import '../results/widgets/session_summary.dart';
+import '../../core/theme/tokens.dart';
 
 class ChatState {
   const ChatState({this.messages = const [], this.streaming, this.busy = false, this.error});
@@ -173,7 +174,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Column(
                   children: [
                     Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 0),
+                      padding: EdgeInsets.fromLTRB(gutter, Spacing.sm, gutter, 0),
                       child: Text(kChatPrivacy, style: theme.textTheme.bodySmall),
                     ),
                     Expanded(
@@ -187,7 +188,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               'Answers come only from this session\'s data.',
                               style: theme.textTheme.bodyMedium,
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: Spacing.md),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -208,7 +209,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ),
                           if (state.error != null)
                             Padding(
-                              padding: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.only(top: Spacing.sm),
                               child: Text(
                                 state.error!,
                                 style: TextStyle(color: theme.colorScheme.error),
@@ -218,7 +219,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, Spacing.sm),
                       child: Row(
                         children: [
                           Expanded(
@@ -238,7 +239,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: Spacing.sm),
                           IconButton.filled(
                             tooltip: 'Send',
                             onPressed: state.busy || atLimit ? null : _send,
@@ -253,7 +254,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, Spacing.sm),
                       child: Text(
                         kCoachingDisclaimer,
                         style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
@@ -283,9 +284,9 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 560),
         child: Card(
           color: user ? scheme.primaryContainer : scheme.surfaceContainerHigh,
-          margin: const EdgeInsets.symmetric(vertical: 4),
+          margin: const EdgeInsets.symmetric(vertical: Spacing.xs),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(Spacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -294,7 +295,7 @@ class _Bubble extends StatelessWidget {
                   child: SelectableText(message.text),
                 ),
                 if (message.citations.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.sm),
                   MomentChips(moments: message.citations, onSeek: onSeek),
                 ],
               ],

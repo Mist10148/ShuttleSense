@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/tokens.dart';
 import '../calibration/calibration_screen.dart';
 
 const double _alley = 0.46;
@@ -74,7 +75,7 @@ class FullCourtPreview extends CustomPainter {
     final p = CourtProjection.fromCorners(corners);
     if (p == null) return;
     final paint = Paint()
-      ..color = Colors.lightBlueAccent
+      ..color = OverlayColors.courtLines
       ..strokeWidth = 2;
     void line(double x1, double y1, double x2, double y2) {
       final a = p.point(x1 / _fullWidth, y1 / _length);

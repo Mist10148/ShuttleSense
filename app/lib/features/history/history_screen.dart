@@ -8,6 +8,7 @@ import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../results/results_screen.dart';
+import '../../core/theme/tokens.dart';
 
 /// Jobs deleted in this session. They are hidden at once, before the refreshed list
 /// arrives, so a swiped-away tile is never built again (Dismissible requires that).
@@ -124,7 +125,7 @@ class _JobTile extends ConsumerWidget {
       background: Container(
         color: Theme.of(context).colorScheme.errorContainer,
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.xl),
         child: const Icon(Icons.delete_outline),
       ),
       confirmDismiss: (_) async {

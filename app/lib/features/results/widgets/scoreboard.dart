@@ -210,13 +210,13 @@ class Scoreboard extends StatelessWidget {
                 onSet: onSetService!,
               ),
             if (onAward != null || onUndo != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.sm),
               // One large button per side, in the side's colour, under its score.
               if (onAward != null)
                 Row(
                   children: [
                     for (final side in ['near', 'far']) ...[
-                      if (side == 'far') const SizedBox(width: 8),
+                      if (side == 'far') const SizedBox(width: Spacing.sm),
                       Expanded(
                         child: FilledButton.tonalIcon(
                           style: FilledButton.styleFrom(
@@ -271,7 +271,7 @@ class Scoreboard extends StatelessWidget {
             ],
             if (busy) const LinearProgressIndicator(),
             if (showHistory) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.sm),
               RallyHistory(
                 record: record,
                 frameIndex: frameIndex,
@@ -412,7 +412,7 @@ class _MatchState extends StatelessWidget {
       children: [
         if (chips.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: Spacing.sm),
             child: Wrap(
               alignment: WrapAlignment.center,
               spacing: 8,
@@ -424,8 +424,8 @@ class _MatchState extends StatelessWidget {
           Semantics(
             liveRegion: true,
             child: Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(top: Spacing.sm),
+              padding: const EdgeInsets.all(Spacing.sm),
               decoration: BoxDecoration(
                 color: scheme.primaryContainer,
                 borderRadius: BorderRadius.circular(8),
@@ -472,7 +472,7 @@ class _RallyRow extends StatelessWidget {
         : '${landing.inCourt ? 'in' : 'out'}${landing.uncertain ? ' ?' : ''}';
     final needsConfirm = rally.winner == null && !isLet;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
       child: Row(
         children: [
           Expanded(
@@ -494,7 +494,7 @@ class _RallyRow extends StatelessWidget {
             ),
           for (final side in ['near', 'far'])
             Padding(
-              padding: const EdgeInsets.only(left: 4),
+              padding: const EdgeInsets.only(left: Spacing.xs),
               child: ChoiceChip(
                 label: Text(playerLabel(side)),
                 selected: rally.winner == side,
@@ -543,7 +543,7 @@ class _Side extends StatelessWidget {
             children: [
               if (serving) ...[
                 Icon(Icons.sports_tennis, size: 16, color: color),
-                const SizedBox(width: 4),
+                const SizedBox(width: Spacing.xs),
               ],
               Text(
                 label,
@@ -649,10 +649,14 @@ class DecisionMenu extends StatelessWidget {
             PopupMenuItem(value: 'retire:$side', child: Text('${playerLabel(side)} retires')),
       ],
       child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [Icon(Icons.more_horiz, size: 18), SizedBox(width: 4), Text('More')],
+          children: [
+            Icon(Icons.more_horiz, size: 18),
+            SizedBox(width: Spacing.xs),
+            Text('More'),
+          ],
         ),
       ),
     );

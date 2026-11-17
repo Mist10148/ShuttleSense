@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/clip_record.dart';
 import '../../data/models/match_setup.dart';
+import '../../core/theme/tokens.dart';
 
 export '../../data/models/match_setup.dart';
 
@@ -27,7 +28,7 @@ class MatchSetupField extends StatelessWidget {
     final theme = Theme.of(context);
     final label = theme.textTheme.labelLarge;
     Widget row(String title, Widget control) => Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: Spacing.sm),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 12,
@@ -135,7 +136,7 @@ class MatchSetupField extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: Spacing.xs),
             child: Text(
               'Player 1 is the one on the left when play starts. With both set, the app '
               'follows who serves and receives each rally.',

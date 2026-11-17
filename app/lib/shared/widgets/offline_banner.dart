@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../core/theme/tokens.dart';
 
 /// Shows a strip above [child] while the saved server does not answer GET /health (T4.9).
 class OfflineBanner extends ConsumerWidget {
@@ -24,11 +25,11 @@ class OfflineBanner extends ConsumerWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.xs),
                 child: Row(
                   children: [
                     Icon(Icons.cloud_off, color: scheme.onErrorContainer, size: 20),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: Spacing.md),
                     Expanded(
                       child: Text(
                         'Server unreachable. Check the Wi-Fi or the tunnel.',
