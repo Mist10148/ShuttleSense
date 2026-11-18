@@ -204,9 +204,7 @@ abstract final class AppTheme {
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: button.copyWith(
-          foregroundColor: WidgetStatePropertyAll(p.ink),
-        ),
+        style: button.copyWith(foregroundColor: WidgetStatePropertyAll(p.ink)),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
