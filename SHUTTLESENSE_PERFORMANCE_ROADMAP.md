@@ -31,6 +31,7 @@
 
 - [Phase 1 audit and baseline](docs/results/watch_phase1_baseline.md)
 - [Phase 2 delivery audit and recovered trials](docs/results/watch_phase2_delivery.md)
+- [Phase 3 detector and pose profiling](docs/results/watch_phase3_pose_profile.md)
 - [Frame-by-frame concurrency measurements](docs/results/watch_complete_parallel_nov16.md)
 - [Earlier Watch, candidate-filter and export experiments](docs/results/watch_performance_nov16.md)
 - [Setup and profiling commands](docs/SETUP.md) and [Watch API](docs/API.md)
@@ -82,7 +83,7 @@
 
 **Objective:** Reduce detection and pose cost while protecting player identities and downstream analysis.
 
-- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. Existing host-wall instrumentation is not a CUDA trace.
+- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. [Profiling](docs/results/watch_phase3_pose_profile.md) covers three short singles/doubles broadcast sections and an approximate CUDA trace; representative consented footage and full transfer attribution remain outstanding.
 - [ ] Compare batch sizes 4, 8, and 16 with the same TensorRT RTX profile and CUDA fallback. Record cold compilation, warm runtime, frame latency, candidate counts, VRAM, and actual Flutter end-to-end time.
 - [ ] Evaluate court- and track-aware filtering in shadow mode against the current filter. Include players near boundaries, jumping, overlapping partners, occlusion, bystanders, tracking loss, and reacquisition.
 - [ ] Keep focused-candidate selection disabled by default. Do not cap people or tighten boundaries solely because they improve an isolated benchmark.
@@ -163,3 +164,4 @@
 | 2026-11-18 | Phase 2 | Audited frame transformations and copies, and measured pixel differences from the existing JPEG round trip. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); no new optimization enabled, and decoded-frame accuracy remains unvalidated. |
 | 2026-11-18 | Phase 2 | Tested normalized-frame sequencing, preview, timestamps and saved/export alignment with prefetch off/on, plus Flutter pause/resume and stop behavior. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); actual-device and representative-footage checks remain open. |
 | 2026-11-18 | Phase 2 | Ran three alternating Windows Flutter profile-mode trials per queue setting with current pipeline configuration. Prefetch was 2.0% slower at the median and remains off. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); profile/automation overhead and Phase 1 baseline remain unvalidated. |
+| 2026-11-18 | Phase 3 | Profiled detector, candidate, crop, batch and tracker work on short singles/doubles broadcasts; captured a separate CUDA activity trace. | [Phase 3 profile](docs/results/watch_phase3_pose_profile.md); representative consented footage, labeled accuracy and complete transfer attribution remain open. |

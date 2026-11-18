@@ -167,6 +167,7 @@ def main():
     measure(model, "_shuttle", "shuttle")
     measure(model, "_players", "players")
     measure(model.far_refiner, "refine", "far_refinement")
+    measure(model.tracker, "update", "tracker_update")
     if args.pose_breakdown or args.detector_breakdown:
         import inspect
 
@@ -178,7 +179,17 @@ def main():
         if args.pose_breakdown:
             for method, label in (("preprocess", "pose_crop"), ("postprocess", "pose_post")):
                 measure(body.pose_model, method, label)
-            measure(body.pose_model.session, "run", "pose_run")
+            pose_session = body.pose_model.session
+            original_run = pose_session.run
+
+            def record_batch(*a, **kw):
+                feed = a[1] if len(a) > 1 else kw.get("input_feed", {})
+                if feed:
+                    timings["pose_batch_size"].append(next(iter(feed.values())).shape[0])
+                return original_run(*a, **kw)
+
+            pose_session.run = record_batch
+            measure(pose_session, "run", "pose_run")
             lookup = closure.get("lookup")
             if lookup is not None:
                 measure(lookup, "prepare", "pose_lookup")
@@ -275,12 +286,17 @@ def main():
     )
     print("Frame timings include inference warmup; shuttle and player work may overlap.")
     for name, values in timings.items():
-        if values:
+        if values and name != "pose_batch_size":
+            p95 = sorted(values)[math.ceil(len(values) * 0.95) - 1]
             print(
                 f"{name:14s} count={len(values):4d} total={sum(values) / 1000:8.2f}s "
                 f"mean={statistics.mean(values):7.1f}ms "
-                f"median={statistics.median(values):7.1f}ms"
+                f"median={statistics.median(values):7.1f}ms p95={p95:7.1f}ms"
             )
+    if timings["pose_batch_size"]:
+        from collections import Counter
+
+        print(f"pose batch sizes: {dict(sorted(Counter(timings['pose_batch_size']).items()))}")
     candidates = getattr(model, "watch_candidates", None)
     if candidates is not None:
         print(f"candidate diagnostics: {candidates.stats}")
