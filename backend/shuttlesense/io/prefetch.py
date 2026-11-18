@@ -75,3 +75,9 @@ class PrefetchFrames:
         self._stop.set()
         self._thread.join()
         self._finished = True
+        # Release decoded frames even if the caller retains the closed iterator.
+        while True:
+            try:
+                self._items.get_nowait()
+            except queue.Empty:
+                break

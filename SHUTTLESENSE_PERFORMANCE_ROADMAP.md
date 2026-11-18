@@ -30,6 +30,7 @@
 **Evidence and instructions:**
 
 - [Phase 1 audit and baseline](docs/results/watch_phase1_baseline.md)
+- [Phase 2 delivery audit and recovered trials](docs/results/watch_phase2_delivery.md)
 - [Frame-by-frame concurrency measurements](docs/results/watch_complete_parallel_nov16.md)
 - [Earlier Watch, candidate-filter and export experiments](docs/results/watch_performance_nov16.md)
 - [Setup and profiling commands](docs/SETUP.md) and [Watch API](docs/API.md)
@@ -68,10 +69,10 @@
 **Objective:** Reduce demonstrated delays between decoding, inference, WebSocket communication, and Flutter preview.
 
 - [ ] Use Phase 1 evidence to determine whether frame reading, client request/response, display, or FPS pacing materially limits end-to-end throughput.
-- [ ] If justified, prototype an opt-in bounded queue starting at two decoded frames. Prefetch decoding only; do not analyze or commit unrequested frames. Keep normalized indices and timestamps ordered and bound memory use.
-- [ ] Ensure pause/resume does not advance committed analysis. On stop, disconnect, or error, discard prefetched unprocessed frames and save only processed frames; preserve output alignment and older `/watch` clients.
-- [ ] Measure Flutter image handling, widget rebuilds, and request scheduling before changing preview or pacing. Retain the existing user experience unless a separately validated improvement is needed.
-- [ ] Investigate repeated resizing, color conversion, copies, and JPEG encode/decode. Keep model pixels unchanged for transparent optimizations; treat decoded-frame input as an opt-in accuracy-sensitive experiment.
+- [x] Prototype an opt-in bounded queue of two decoded frames. Prefetch decoding only; do not analyze or commit unrequested frames. Keep normalized indices and timestamps ordered and bound memory use. The experimental setting remains off; see the [Phase 2 audit](docs/results/watch_phase2_delivery.md).
+- [x] Ensure pause/resume does not advance committed analysis. On stop, disconnect, or error, discard prefetched unprocessed frames and save only processed frames; preserve output alignment and older `/watch` clients. A request already in flight when paused may finish; no further requests are sent until resume. See the [Phase 2 audit](docs/results/watch_phase2_delivery.md) for test coverage and limits.
+- [x] Measure Flutter image handling, widget rebuilds, and request scheduling before changing preview or pacing. Diagnostic measurements are recorded in the [Phase 1 report](docs/results/watch_phase1_baseline.md) and [Phase 2 audit](docs/results/watch_phase2_delivery.md); preview and pacing remain unchanged.
+- [ ] Investigate repeated resizing, color conversion, copies, and JPEG encode/decode. Reader and JPEG costs and the existing conversion path are documented; a full copy audit remains. Keep model pixels unchanged for transparent optimizations; treat decoded-frame input as an opt-in accuracy-sensitive experiment.
 - [ ] Test no missing, duplicate, or reordered frames; pause, resume, stop, disconnect, partial saves, timestamps, preview, and annotated video alignment.
 - [ ] Compare at least three alternating actual Flutter runs on identical input. Retain a change only if median fixed-section time improves by at least 5% without worse p95 latency or functional regressions; otherwise revert it or keep it disabled.
 
@@ -158,3 +159,4 @@
 | 2026-11-16 | Phase 1 | Collected one preliminary instrumented Flutter run and fixed UTF-16 PowerShell log reading. | [Phase 1 baseline](docs/results/watch_phase1_baseline.md); repeated controlled trials and overhead checks remain open. |
 | 2026-11-16 | Phase 1 | Captured a short offline CUDA activity trace and measured the reader's read/grab/resize split. | [Phase 1 baseline](docs/results/watch_phase1_baseline.md); GPU attribution, client decode/display and response transmission remain open. |
 | 2026-11-16 | Phase 1 | Attributed a dedicated CUDA trace by model and recorded provider assignments; measured actual Flutter image-stream decode, frame timing and same-host response delivery. | [Phase 1 baseline](docs/results/watch_phase1_baseline.md); physical presentation, repeated baseline runs and overhead remain open. |
+| 2026-11-18 | Phase 2 | Recovered prior prefetch trials and one completed Flutter diagnostic; fixed release of queued frames on close and reran backend and Flutter Watch tests. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); Phase 1 gate, repeated Flutter comparisons and annotated-video alignment remain open. |

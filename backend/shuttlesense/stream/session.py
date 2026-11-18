@@ -277,12 +277,17 @@ class LiveSession:
         index = len(self.analyzer.record.frames)
         scale = float(self.live["scales"][self.level])
         shuttle, players = self._perceive(frame, index, scale)
-        self._append_frame(frame)
         self._last_players = players
         perception = getattr(self.perception, "perception", self.perception)
         tracker = getattr(perception, "tracker", None)
         hold_safe = getattr(tracker, "view_valid", True)
-        events = self.analyzer.add_frame(shuttle, players, player_hold_safe=hold_safe)
+        # The analyzer may fail either before or after it adds the frame (for
+        # example during a downstream tick). Record exactly the frames it committed.
+        try:
+            events = self.analyzer.add_frame(shuttle, players, player_hold_safe=hold_safe)
+        finally:
+            if len(self.analyzer.record.frames) > index:
+                self._append_frame(frame)
         latency = (time.monotonic() - received) * 1000
         self.stats.processed += 1
         self.stats.latencies_ms.append(latency)

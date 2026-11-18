@@ -35,6 +35,9 @@ def test_prefetch_bounds_decoding_and_closes_source():
         frames.close()
     assert closed.is_set()
     assert not frames._thread.is_alive()
+    assert frames._items.empty()
+    with pytest.raises(StopIteration):
+        next(frames)
 
 
 def test_prefetch_propagates_source_error_and_closes():
@@ -76,14 +79,30 @@ def test_prefetch_preserves_real_reader_indices_and_pixels(tiny_video):
     assert all(np.array_equal(a, b) for (_, a), (_, b) in zip(actual, expected, strict=True))
 
 
-@pytest.mark.parametrize("finish", ["stop", "disconnect", "failure"])
+@pytest.mark.parametrize(
+    "finish", ["stop", "disconnect", "failure", "project_failure", "event_failure"]
+)
 def test_opt_in_queue_does_not_commit_unrequested_frames(tmp_path, tiny_video, monkeypatch, finish):
+    import cv2
     from fastapi.testclient import TestClient
 
     import shuttlesense.api.live as live_module
     import shuttlesense.io.prefetch as prefetch_module
     from shuttlesense.api.main import create_app
     from shuttlesense.api.settings import Settings
+    from shuttlesense.stream.analyzer import StreamAnalyzer
+
+    if finish in {"project_failure", "event_failure"}:
+        method = "_project" if finish == "project_failure" else "_frame_event"
+        original = getattr(StreamAnalyzer, method)
+        fail_at = 2 if finish == "project_failure" else 3
+
+        def fail_during_analysis(self, *args, **kwargs):
+            if len(self.record.frames) == fail_at:
+                raise RuntimeError("injected analysis failure")
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(StreamAnalyzer, method, fail_during_analysis)
 
     readers = []
 
@@ -129,7 +148,7 @@ def test_opt_in_queue_does_not_commit_unrequested_frames(tmp_path, tiny_video, m
             if finish == "stop":
                 ws.send_json({"type": "stop"})
                 assert ws.receive_json()["type"] == "saved"
-            elif finish == "failure":
+            elif finish in {"failure", "project_failure", "event_failure"}:
                 ws.send_json({"type": "next"})
                 assert ws.receive_json()["type"] == "error"
         for _ in range(200):
@@ -138,8 +157,36 @@ def test_opt_in_queue_does_not_commit_unrequested_frames(tmp_path, tiny_video, m
                 break
             time.sleep(0.01)
         assert response.status_code == 200
-        assert [frame["frame"] for frame in response.json()["frames"]] == [0, 1]
+        expected_count = 3 if finish == "event_failure" else 2
+        assert [frame["frame"] for frame in response.json()["frames"]] == list(
+            range(expected_count)
+        )
         assert readers and all(not reader._thread.is_alive() for reader in readers)
+        assert all(reader._items.empty() for reader in readers)
+        job_id = started["job_id"]
+        for _ in range(500):
+            job = client.get(f"/jobs/{job_id}").json()
+            if job["status"] in {"done", "failed"}:
+                break
+            time.sleep(0.02)
+        assert job["status"] == "done", job
+        recording = app.state.storage.video_source(job["video_id"])
+        annotated = app.state.storage.job_dir(job_id) / "annotated.mp4"
+        for path in (recording, annotated):
+            capture = cv2.VideoCapture(str(path))
+            decoded = []
+            while True:
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                decoded.append(frame)
+            capture.release()
+            assert len(decoded) == expected_count, str(path)
+            # The moving white circle makes missing or shifted frames observable,
+            # including in the annotated export despite lossy compression.
+            for index, frame in enumerate(decoded):
+                region = frame[41:50, 6 + index * 14 : 15 + index * 14]
+                assert float(region.mean()) > 80, (str(path), index)
 
 
 def test_opt_in_queue_preserves_complete_watch_preview_and_timestamps(tmp_path, tiny_video):

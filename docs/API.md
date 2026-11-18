@@ -11,7 +11,9 @@ reports normalized dimensions, FPS, frame count and job ID. Send one
 JPEG, and analysis events. The request after the last frame finishes the session.
 `{"type":"stop"}` finishes early. Both return `saved` with a job ID if frames
 were processed. A disconnect also saves the analyzed portion. Pause by withholding
-the next request; timestamps follow video time rather than wall-clock time.
+the next request; a request already in flight can still finish. Timestamps follow video
+time rather than wall-clock time. With optional prefetch, only requested frames are
+analyzed; unprocessed queued frames are discarded when the session ends.
 The optional `provider_diagnostics` in `started` and `video_frame` identifies the
 configured detector and pose providers, including fallback; `timing_ms` on a frame
 reports server-side read, JPEG preparation and frame-processing durations. Older
