@@ -225,3 +225,113 @@ def test_opt_in_queue_preserves_complete_watch_preview_and_timestamps(tmp_path, 
             record = client.get(f"/jobs/{saved['job_id']}/record").json()
             observations.append((frames, [frame["frame"] for frame in record["frames"]]))
     assert observations[0] == observations[1]
+
+
+@pytest.mark.parametrize("depth", [0, 2])
+def test_complete_watch_normalized_sequence_matches_preview_and_exports(
+    tmp_path, monkeypatch, depth
+):
+    import base64
+
+    import cv2
+    from fastapi.testclient import TestClient
+
+    import shuttlesense.api.live as live_module
+    from shuttlesense.api.main import create_app
+    from shuttlesense.api.settings import Settings
+    from shuttlesense.render import style
+    from shuttlesense.render.overlays import RenderState, draw_frame
+    from shuttlesense.schema import ClipRecord
+
+    source = tmp_path / "50fps.mp4"
+    writer = cv2.VideoWriter(str(source), cv2.VideoWriter_fourcc(*"mp4v"), 50, (160, 90))
+    assert writer.isOpened()
+    for index in range(20):
+        image = np.full((90, 160, 3), 40, dtype=np.uint8)
+        cv2.circle(image, (10 + 7 * index, 45), 4, (255, 255, 255), -1)
+        writer.write(image)
+    writer.release()
+
+    def assert_marker(image, index):
+        x = 10 + 14 * index  # Every second source frame survives normalization.
+        assert float(image[41:50, x - 4 : x + 5].mean()) > 80, index
+
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
+    committed = []
+    original = live_module._frames
+
+    def track_processed(*args, **kwargs):
+        result = original(*args, **kwargs)
+        committed.append(1)
+        return result
+
+    monkeypatch.setattr(live_module, "_frames", track_processed)
+    with TestClient(app) as client:
+        app.state.jobs.config.setdefault("watch", {})["frame_prefetch_depth"] = depth
+        with source.open("rb") as file:
+            video = client.post("/videos", files={"file": (source.name, file)}).json()
+        with client.websocket_connect("/watch") as ws:
+            # The original client does not send a playback option.
+            ws.send_json({"type": "start", "video_id": video["id"]})
+            started = ws.receive_json()
+            assert started["fps"] == 25
+            assert started["frames"] == 10
+            for index in range(started["frames"]):
+                if index == 3:
+                    time.sleep(0.15)  # Pause without another request, then resume.
+                    assert len(committed) == index
+                ws.send_json({"type": "next"})
+                response = ws.receive_json()
+                event = next(e for e in response["events"] if e["type"] == "frame")
+                assert response["index"] == event["frame"] == event["client_frame"] == index
+                assert event["ts"] == pytest.approx(index * 40.0)
+                preview = cv2.imdecode(
+                    np.frombuffer(base64.b64decode(response["jpeg"]), dtype=np.uint8),
+                    cv2.IMREAD_COLOR,
+                )
+                assert preview is not None
+                assert_marker(preview, index)
+            ws.send_json({"type": "next"})
+            saved = ws.receive_json()
+            assert saved["type"] == "saved"
+        record = client.get(f"/jobs/{saved['job_id']}/record").json()
+        assert [frame["frame"] for frame in record["frames"]] == list(range(10))
+        assert record["fps"] == 25
+        for _ in range(500):
+            job = client.get(f"/jobs/{saved['job_id']}").json()
+            if job["status"] in {"done", "failed"}:
+                break
+            time.sleep(0.02)
+        assert job["status"] == "done", job
+        paths = (
+            app.state.storage.video_source(job["video_id"]),
+            app.state.storage.job_dir(saved["job_id"]) / "annotated.mp4",
+        )
+        decoded_videos = []
+        for path in paths:
+            capture = cv2.VideoCapture(str(path))
+            assert capture.isOpened(), str(path)
+            assert capture.get(cv2.CAP_PROP_FPS) == pytest.approx(25)
+            frames = []
+            while True:
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                frames.append(frame)
+            capture.release()
+            assert len(frames) == 10, str(path)
+            for index, frame in enumerate(frames):
+                assert_marker(frame, index)
+            decoded_videos.append(frames)
+
+        # Compare the actual export with the production overlays applied to the
+        # matching recorded image and record frame. Allow encoder loss.
+        clip = ClipRecord.model_validate(record)
+        state = RenderState(config=app.state.jobs.config, scale=style.scale_for(clip.height))
+        changed = False
+        for index, (recorded, exported) in enumerate(zip(*decoded_videos, strict=True)):
+            expected = draw_frame(recorded.copy(), clip, index, job["overlays"], state)
+            changed |= not np.array_equal(expected, recorded)
+            mean_error = np.abs(expected.astype(np.int16) - exported.astype(np.int16)).mean()
+            assert mean_error < 12, (index, mean_error)
+        assert changed, "the alignment check must exercise real overlays"

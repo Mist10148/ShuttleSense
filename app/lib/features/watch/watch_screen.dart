@@ -95,7 +95,10 @@ String? formatWatchAcceleration(Object? value) {
 }
 
 class WatchScreen extends ConsumerStatefulWidget {
-  const WatchScreen({super.key});
+  const WatchScreen({super.key, this.channelFactory});
+
+  @visibleForTesting
+  final WebSocketChannel Function(Uri)? channelFactory;
   @override
   ConsumerState<WatchScreen> createState() => _WatchScreenState();
 }
@@ -330,9 +333,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       return;
     }
     final base = ref.read(apiClientProvider).liveUri();
-    final channel = WebSocketChannel.connect(
-      base.replace(path: base.path.replaceFirst(RegExp(r'/live$'), '/watch')),
-    );
+    final uri = base.replace(path: base.path.replaceFirst(RegExp(r'/live$'), '/watch'));
+    final channel = widget.channelFactory?.call(uri) ?? WebSocketChannel.connect(uri);
     socket = channel;
     setState(() {
       status = 'Connecting…';

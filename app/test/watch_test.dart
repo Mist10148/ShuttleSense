@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +11,7 @@ import 'package:shuttlesense_app/features/mode/mode_screen.dart';
 import 'package:shuttlesense_app/features/calibration/calibration_screen.dart';
 import 'package:shuttlesense_app/features/watch/watch_screen.dart';
 import 'package:shuttlesense_app/features/watch/court_geometry.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
 import 'helpers.dart';
@@ -24,7 +28,104 @@ class _SuggestionApi extends FakeApiClient {
   }
 }
 
+class _WatchSink extends Fake implements WebSocketSink {
+  final messages = <Map<String, dynamic>>[];
+
+  @override
+  void add(dynamic data) => messages.add(jsonDecode(data as String) as Map<String, dynamic>);
+
+  @override
+  Future<void> close([int? closeCode, String? closeReason]) async {}
+}
+
+class _WatchSocket extends Fake implements WebSocketChannel {
+  final incoming = StreamController<dynamic>.broadcast(sync: true);
+  final _WatchSink outgoing = _WatchSink();
+
+  @override
+  Stream<dynamic> get stream => incoming.stream;
+  @override
+  WebSocketSink get sink => outgoing;
+  @override
+  Future<void> get ready async {}
+
+  void send(Map<String, dynamic> message) => incoming.add(jsonEncode(message));
+}
+
 void main() {
+  testWidgets('pause holds an in-flight frame until resume and stop sends no next', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    final socket = _WatchSocket();
+    addTearDown(socket.incoming.close);
+    await pumpScreen(
+      tester,
+      WatchScreen(channelFactory: (_) => socket),
+      size: laptop,
+      api: FakeApiClient(),
+      overrides: [
+        healthProvider.overrideWith(
+          (ref) async => const Health(
+            version: '1',
+            schemaVersion: '1',
+            device: 'cpu',
+            authRequired: false,
+            stages: [],
+            watchVideo: true,
+            watchRealtime: true,
+          ),
+        ),
+      ],
+    );
+    await tester.tap(find.text('Choose video'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Analyze every frame'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Singles'));
+    await tester.tap(find.text('Singles'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Start analysis'));
+    await tester.tap(find.text('Start analysis'));
+    await tester.pump();
+    expect(socket.outgoing.messages.first['type'], 'start');
+    socket.send({
+      'type': 'started',
+      'fps': 25,
+      'frames': 10,
+      'width': 1,
+      'height': 1,
+      'stages': {'synthetic': true},
+    });
+    await tester.pumpAndSettle();
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
+    await tester.ensureVisible(find.text('Pause'));
+    await tester.tap(find.text('Pause'));
+    await tester.pump();
+    socket.send({
+      'type': 'video_frame',
+      'index': 0,
+      'jpeg':
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmXQAAAAASUVORK5CYII=',
+      'events': [
+        {'type': 'frame', 'frame': 0},
+      ],
+    });
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
+    expect(find.byType(Image), findsNothing);
+    await tester.tap(find.text('Play'));
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(2));
+    await tester.ensureVisible(find.text('Stop and save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stop and save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(socket.outgoing.messages.last['type'], 'stop');
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(2));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('watch elapsed time is a wall-clock duration with hours', () {
     expect(formatWatchElapsed(Duration.zero), '00:00:00');
     expect(formatWatchElapsed(const Duration(minutes: 2, seconds: 9)), '00:02:09');

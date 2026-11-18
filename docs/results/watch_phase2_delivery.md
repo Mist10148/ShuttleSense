@@ -80,6 +80,18 @@ video and fake perception; they do not replace real-model accuracy or performanc
 The Flutter pause control can have one previously requested frame in flight; it holds
 that response and does not request another until playback resumes.
 
+A further automated sequence test generates a 20-frame 50 fps clip with a moving marker
+at a distinct position in each source frame. For queue depths 0 and 2 it checks all ten
+normalized frames, 25 fps and 40 ms timestamps, frame indices and marker positions in
+the preview JPEGs, recording and completed annotated MP4. It also compares the export
+against the production overlays drawn from the corresponding saved record and recording
+frame, allowing for lossy encoding. The existing partial-session tests cover pause,
+resume, stop, disconnect and injected failures, including partial recording and export.
+A Flutter widget test uses a fake WebSocket to check that an in-flight preview stays
+pending while paused, appears on resume, and no new frame is requested after Stop.
+These are deterministic synthetic/fake-perception and widget tests; they are not a
+real-device or representative-footage acceptance test and do not validate model accuracy.
+
 ## Frame transformation and copy audit — November 18, 2026
 
 This audit covers frame-by-frame **Analyze every frame**, with default JPEG input,
