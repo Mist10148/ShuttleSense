@@ -101,7 +101,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final uploading = upload.uploading;
     final theme = Theme.of(context);
     final badFormat =
-        file != null && !_kVideoExtensions.contains(file.extension?.toLowerCase() ?? '');
+        file != null && !_kVideoExtensions.contains(file.name.split('.').last.toLowerCase());
     final details = [
       if (upload.durationS != null) _minutes(upload.durationS!),
       formatBytes(upload.size),

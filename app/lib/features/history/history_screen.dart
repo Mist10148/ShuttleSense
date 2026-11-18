@@ -286,7 +286,8 @@ class _JobTile extends ConsumerWidget {
               Text(
                 '${job.isLive ? 'Live' : 'Upload'} · '
                 '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
-                '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}',
+                '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}'
+                ' · ${job.id}',
               ),
             ],
           ),

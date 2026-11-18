@@ -92,7 +92,8 @@ class PageHeader extends StatelessWidget {
             ],
           ),
         ),
-        ...?actions,
+        // Flexible, so a long action label wraps instead of overflowing on a narrow phone.
+        for (final action in actions ?? const <Widget>[]) Flexible(child: action),
       ],
     );
   }
