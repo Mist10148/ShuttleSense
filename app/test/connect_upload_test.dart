@@ -215,6 +215,7 @@ void main() {
 
     Future<void> startUpload(WidgetTester tester) async {
       await tester.ensureVisible(find.text('Upload and analyze'));
+      await tester.pump(); // lay out the scrolled page before tapping
       await tester.tap(find.text('Upload and analyze'));
       await tester.pump();
     }
