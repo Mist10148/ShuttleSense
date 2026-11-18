@@ -12,7 +12,7 @@ class StepIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final p = AppPalette.of(context);
     return Semantics(
       label: 'Step ${current + 1} of ${steps.length}: ${steps[current]}',
       excludeSemantics: true,
@@ -26,18 +26,19 @@ class StepIndicator extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    height: Spacing.xs,
+                    height: Spacing.sm - 2,
                     decoration: BoxDecoration(
-                      color: i <= current ? scheme.primary : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(Spacing.xs),
+                      color: i <= current ? null : p.surface2,
+                      gradient: i <= current ? LinearGradient(colors: p.progress) : null,
+                      borderRadius: BorderRadius.circular(Radii.pill),
                     ),
                   ),
                   const SizedBox(height: Spacing.xs),
                   Text(
                     '${i + 1} $step',
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: i == current ? scheme.onSurface : scheme.onSurfaceVariant,
-                      fontWeight: i == current ? FontWeight.w700 : null,
+                      color: i == current ? p.ink : p.text2,
+                      fontWeight: i == current ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
                 ],

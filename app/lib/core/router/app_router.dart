@@ -12,6 +12,7 @@ import '../../features/mode/mode_screen.dart';
 import '../../features/processing/processing_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/styleguide/styleguide_screen.dart';
 import '../../features/upload/upload_screen.dart';
 import '../../features/watch/watch_screen.dart';
 import '../config/app_mode.dart';
@@ -25,6 +26,7 @@ abstract final class Routes {
   static const home = '/';
   static const history = '/history';
   static const settings = '/settings';
+  static const styleguide = '/styleguide';
 
   static String calibrate(String videoId) => '/videos/$videoId/calibrate';
   static String job(String jobId) => '/jobs/$jobId';
@@ -43,12 +45,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final connected = ref.read(serverConfigProvider) != null;
-      final atConnect = state.matchedLocation == Routes.connect;
-      if (!connected && !atConnect) return Routes.connect;
+      // The styleguide needs no server, so the design can be reviewed on any machine.
+      final open = {Routes.connect, Routes.styleguide}.contains(state.matchedLocation);
+      if (!connected && !open) return Routes.connect;
       return null;
     },
     routes: [
       GoRoute(path: Routes.connect, builder: (context, state) => const ConnectScreen()),
+      GoRoute(path: Routes.styleguide, builder: (context, state) => const StyleguideScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [
