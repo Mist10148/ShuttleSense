@@ -80,6 +80,51 @@ video and fake perception; they do not replace real-model accuracy or performanc
 The Flutter pause control can have one previously requested frame in flight; it holds
 that response and does not request another until playback resumes.
 
+## Frame transformation and copy audit — November 18, 2026
+
+This audit covers frame-by-frame **Analyze every frame**, with default JPEG input,
+TrackNet's Watch preprocessing cache, RTMLib/ONNX Runtime pose and the normal export.
+It distinguishes Python-visible operations from copies internal to OpenCV, codecs,
+ONNX Runtime, PyTorch, GPU drivers and Flutter, which are not fully observable here.
+
+| Stage | Transformations and allocations | Assessment |
+| --- | --- | --- |
+| Video input | OpenCV decodes a source frame to BGR; `FrameReader` skips excess source frames and conditionally resizes to normalized dimensions. The optional queue retains up to two decoded/decoding frames. | The default 50 fps sample becomes 25 fps at 1280x720. Normalization resizes only when dimensions differ; this is not a second per-model resize. |
+| Watch transport to analysis | `imencode` makes a JPEG buffer; `tobytes()` copies it; concatenating the header and JPEG creates a packet; packet slicing makes another JPEG bytes object. `np.frombuffer` is a view over those bytes; `imdecode` creates a BGR image. Session resize occurs only if decoded dimensions differ. | Avoiding a packet copy could be explored, but needs parity and end-to-end measurements. Bypassing JPEG decode changes the model's pixels. |
+| Preview and client | The encoded JPEG is base64-encoded to bytes then ASCII text and included in JSON. Flutter parses JSON, base64-decodes to bytes, and `MemoryImage`/the image codec decodes it for display. | The server inference decode and client preview decode are separate consumers. Profiling wrappers add work only when requested. |
+| Shuttle model | Watch resizes each new BGR frame to 512x288 RGB once and retains the overlapping temporal window. It recomputes its initial rolling background median; input construction can resize that median and concatenates/casts/normalizes channels, stacks the batch and transfers it to the device. Heatmaps return to CPU for decoding. | Cache avoids repeatedly resizing each window frame. Channel reversal is a NumPy view, but OpenCV and later operations may allocate. Removing or sharing preprocessing requires exact tensor and temporal parity and measurement. |
+| Player and pose models | RTMLib YOLOX conditionally resizes and pads for the detector, then transposes and makes a contiguous float32 input. RTMPose applies a per-person affine crop and normalization; Watch batching makes contiguous float32 crops and stacks them for ONNX Runtime. Recovery can run another detector on a frame slice; tracker shirt-color work copies a contiguous crop and converts BGR to HSV. | Detector and pose require different model inputs; a crop slice may be a view but the model preprocessing allocates. Provider-internal transfers and workspace allocations are not measured by this code audit. |
+| Recording and export | The decoded inference image is written to the session's OpenCV MP4 recording. After saving, the recording is decoded again, overlays are drawn, and FFmpeg receives a contiguous BGR byte copy (`tobytes`); the writer resizes only on a dimension mismatch. Some overlay regions explicitly copy pixels. | Export is a separate phase; changing its encoding or drawing needs its own quality and playback checks. |
+
+The background-Watch-only `watch.decoded_frames` option already passes the normalized
+BGR array directly into analysis, but defaults to false and does **not** activate for
+frame-by-frame `/watch`. It changes input relative to the JPEG-decoded baseline. No
+decoded-frame shortcut was enabled, and no transport or model-input optimization was
+introduced by this audit.
+
+On the first 100 normalized frames of the locally stored 50 fps doubles broadcast,
+`scripts/audit_watch_jpeg.py` found that 63.050% of BGR channel values changed after the
+default JPEG encode/decode, with mean absolute error 1.026 and maximum 51 on a 0–255
+scale. Median encoded size was 256,568 bytes; isolated median encode/decode wall times
+were 2.681/3.480 ms on this machine. This is one contiguous sample, not a measure of
+model accuracy or a controlled application benchmark. The script uses OpenCV defaults
+and the same default normalization dimensions/FPS; set `--height` and `--max-fps` to
+match non-default Watch settings. Reproduce from `backend/` with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/audit_watch_jpeg.py --video PATH --frames 100
+```
+
+The earlier warm, in-process 525-frame profile recorded median JPEG encode 2.85 ms,
+JPEG decode 3.78 ms and recording 2.84 ms; these nested/overlapping wall timings are
+not additive and exclude Flutter. In the separate instrumented Flutter run above,
+the client image-stream decode median was 7.92 ms and response handling 0.99 ms.
+Different clips, logging, process scheduling and startup conditions prevent a direct
+comparison of those two runs. Native allocations and transfer durations need a separate
+memory/accelerator trace. A pixel-preserving copy reduction should only be retained
+after exact input/output checks and the roadmap's repeated Flutter performance gate;
+decoded-frame input additionally requires held-out labeled accuracy evaluation.
+
 ## Remaining work
 
 Complete and review the Phase 1 baseline and overhead checks. Then run at least three
