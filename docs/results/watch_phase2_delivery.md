@@ -2,10 +2,10 @@
 
 ## Status
 
-Phase 2 remains open. The two-frame decoded-frame prefetch prototype exists and is
-disabled by default (`watch.frame_prefetch_depth: 0`). Neither the Phase 1 controlled
-baseline gate nor the Phase 2 repeated Flutter comparison has been completed. Do not
-enable the prototype by default on the evidence below.
+The two-frame decoded-frame prefetch prototype exists and remains disabled by default
+(`watch.frame_prefetch_depth: 0`): the current-configuration Flutter comparison below
+did not meet the 5% improvement gate. The Phase 1 controlled baseline, instrumentation
+overhead and representative-footage validation remain open.
 
 ## Recovered measurements
 
@@ -137,13 +137,76 @@ memory/accelerator trace. A pixel-preserving copy reduction should only be retai
 after exact input/output checks and the roadmap's repeated Flutter performance gate;
 decoded-frame input additionally requires held-out labeled accuracy evaluation.
 
+## Alternating Flutter Windows comparison — November 18, 2026
+
+An instrumented Flutter Windows **profile** build ran the actual Watch screen against
+an isolated same-host CUDA backend. An integration-test harness selected the same
+21-second fixed source section, doubles mode, court points and **Analyze every frame**
+for each run. The section was verified pixel-identical after normalization to the
+first 525 frames of the original broadcast; the output is 1280x720 at 25 fps. The
+backend used the current `configs/pipeline.yaml` with only
+`watch.frame_prefetch_depth` switched at session start. A 25-frame warm-up preceded
+the six measurements in the same backend process. The local-only benchmark wrapper
+logged the depth on each connection and did not change the production endpoint.
+Each trial waited for its annotated export before starting the next.
+
+Analysis time below is from the Flutter analysis clock to the `saved` acknowledgement:
+it includes session setup and analysis/save work, but not completed annotated export.
+Round-trip p95 is computed from the 525 per-frame client measurements in each run.
+The 45-second checkpoint includes session setup. Times include enabled profiling,
+console logging and the integration-test harness; their overhead has not been measured.
+
+| Trial | Queue depth | Analysis to saved (s) | Frame round-trip p95 (ms) | Video at 45 s (s) |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0 | 83.143 | 209.16 | 11.72 |
+| 2 | 2 | 82.020 | 204.64 | 11.60 |
+| 3 | 0 | 96.622 | 242.97 | 10.68 |
+| 4 | 2 | 91.719 | 219.85 | 10.20 |
+| 5 | 0 | 89.911 | 220.27 | 10.20 |
+| 6 | 2 | 93.428 | 237.16 | 11.16 |
+
+The median analysis time was **89.911 s without prefetch and 91.719 s with it**:
+prefetch was approximately **2.0% slower**, rather than at least 5% faster. The
+median of per-run round-trip p95 values was 220.27 ms versus 219.85 ms, but the
+third pair's prefetch p95 was higher (237.16 versus 220.27 ms), illustrating run
+variation. Keep `frame_prefetch_depth: 0`; do not promote the prototype.
+
+All six logs contain exactly the ordered indices 0–524. The six saved records had
+identical frame, hit and rally arrays, including 19 hits, and identical calibration.
+All six annotated MP4 files contained 525 frames and had identical SHA-256 hashes.
+This is one broadcast section, not labeled accuracy evidence or verification on other
+clips, devices or fallbacks. Provider configuration requested CUDA and TensorRT RTX;
+the actual graph placement for these runs was not independently traced.
+
+The runner logged `BENCH_TRIAL_SAVED` for all six and `All tests passed`, but
+`flutter drive` also warned that the integration-test plugin was not detected and
+the PowerShell wrapper returned exit code 1. The complete saved jobs and raw frame
+logs provide the measurements above, but the runner warning, the harness and profiling
+overhead limit their use as a general uninstrumented app baseline. Raw local logs and
+outputs are under `backend/.cache/watch_ab_current.log` and
+`backend/.cache/phase2_current_config_storage/`; review logs before sharing.
+
+A prior six-run comparison used a recovered November 16 config that omitted newer
+pipeline settings. It measured median analysis times of 98.234 s (depth 0) and
+93.910 s (depth 2), a 4.4% improvement; it is not the current-config decision.
+The separately initiated cold, manually stopped original-video diagnostic processed
+587 frames and likewise is not part of the paired comparison.
+
+The benchmark harness is `app/integration_test/watch_prefetch_benchmark_test.dart`,
+with driver `app/test_driver/watch_prefetch_benchmark.dart` and local-only server
+`backend/scripts/serve_watch_ab.py`. Set `SHUTTLESENSE_CONFIG` to the intended config,
+`SHUTTLESENSE_STORAGE_DIR` to isolated storage, and `BENCH_DEPTH_FILE` to a writable
+local file containing `0` or `2`; start the server, then run `flutter drive --no-pub
+-d windows --profile` with the driver/target and Dart defines `WATCH_PROFILE=true`,
+`BENCH_SERVER=http://127.0.0.1:8002`, `BENCH_VIDEO` and `BENCH_DEPTH_FILE`. The
+harness writes the depth file between sessions; do not use the wrapper on a shared
+backend or with concurrent clients. The script
+`backend/scripts/summarize_watch_flutter.py` summarizes each profile session.
+
 ## Remaining work
 
-Complete and review the Phase 1 baseline and overhead checks. Then run at least three
-alternating actual Flutter baseline and queue trials on the same fixed section and
-calibration, capture fixed-section time and median/p95 latency, and verify partial and
-complete annotated-video alignment on representative footage. Record actual provider and
-fallback diagnostics and
-measurement conditions. Keep prefetch disabled unless the roadmap's 5% median and p95
-gates and functional checks pass. Labeled footage is still required before promoting
-any change to model inputs or other accuracy-sensitive behavior.
+Complete and review the Phase 1 baseline and profiling-overhead checks, and verify
+partial and complete annotated-video alignment on representative footage. Record actual
+provider and fallback diagnostics. Keep prefetch disabled unless a future comparison
+passes the roadmap's 5% median, p95 and functional gates. Labeled footage is still
+required before promoting any change to model inputs or other accuracy-sensitive behavior.
