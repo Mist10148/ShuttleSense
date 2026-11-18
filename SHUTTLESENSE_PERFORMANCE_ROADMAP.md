@@ -22,6 +22,7 @@
 - [x] Optional FFmpeg/NVENC export support and CPU fallback are present. The CPU `libx264` encoder remains the default because short comparisons did not establish a compelling overall benefit at comparable quality.
 - [x] An experimental focused-candidate shortcut exists for background Watch and is off by default. It produced different hit output in one comparison and is not the baseline for frame-by-frame work.
 - [x] Phase 1 opt-in server and Flutter diagnostics, benchmark extensions, an offline detector breakdown, and a Flutter log summarizer have been added. Relevant backend and Flutter Watch tests passed during their implementation.
+- [ ] The existing Watch defaults use experimental candidate filtering and pose batch size 8 without held-out accuracy validation. A brief shadow/serial trial was reverted at the user's request because it felt slower; the formal promotion gate remains unmet.
 - [x] A warm in-process run completed a previously saved, re-encoded 21-second section in 61.45 s, with 3.52 s export after the save acknowledgement. This is not a full-match or real Flutter result.
 - [ ] **Phase 1 is incomplete:** obtain a controlled real Flutter baseline, including repeated sequential and concurrent runs and an overhead comparison. With app access approved, one preliminary instrumented warm-backend Flutter run reached 12.04 s of normalized video at 45.08 s elapsed; it was manually stopped and is not a controlled comparison. See the Phase 1 report.
 - [ ] Confirm the user's informal “about 12 seconds” observation: identify the video position and elapsed time, mode, source clip, whether model startup was included, and whether both app and backend were restarted. Do not compare it numerically until confirmed.
@@ -32,6 +33,7 @@
 - [Phase 1 audit and baseline](docs/results/watch_phase1_baseline.md)
 - [Phase 2 delivery audit and recovered trials](docs/results/watch_phase2_delivery.md)
 - [Phase 3 detector and pose profiling](docs/results/watch_phase3_pose_profile.md)
+- [Phase 3 promotion-gate assessment](docs/results/watch_phase3_promotion_gate.md)
 - [Frame-by-frame concurrency measurements](docs/results/watch_complete_parallel_nov16.md)
 - [Earlier Watch, candidate-filter and export experiments](docs/results/watch_performance_nov16.md)
 - [Setup and profiling commands](docs/SETUP.md) and [Watch API](docs/API.md)
@@ -89,7 +91,7 @@
 - [ ] Keep focused-candidate selection disabled by default. Do not cap people or tighten boundaries solely because they improve an isolated benchmark.
 - [ ] Investigate ONNX Runtime I/O binding only if profiling shows significant transfer overhead. Verify provider activation, supported model shapes, errors, diagnostics, and CUDA/CPU fallback.
 - [ ] Evaluate held-out labeled player recall, identity switches, pose keypoint error, missing observations, reacquisition failures, hit recall, stroke differences, and court mapping.
-- [ ] Promote an experimental change only if repeated end-to-end median time improves by at least 5%, player and hit recall do not decrease, identity-switch and reacquisition-failure counts do not increase, and pose error does not worsen on the held-out set. Report denominators and uncertainty; insufficient labeled data keeps it disabled.
+- [ ] Promote an experimental change only if repeated end-to-end median time improves by at least 5%, player and hit recall do not decrease, identity-switch and reacquisition-failure counts do not increase, and pose error does not worsen on the held-out set. Report denominators and uncertainty; insufficient labeled data keeps it disabled. The [gate assessment](docs/results/watch_phase3_promotion_gate.md) identifies missing labels and evaluation coverage; no new change is promoted.
 
 **Dependencies:** Phase 1 and labeled footage for promotion. **Likely areas:** `backend/shuttlesense/pose/`, `backend/shuttlesense/stream/perception.py`, provider and profiler scripts, pose/Watch tests.
 
@@ -165,3 +167,5 @@
 | 2026-11-18 | Phase 2 | Tested normalized-frame sequencing, preview, timestamps and saved/export alignment with prefetch off/on, plus Flutter pause/resume and stop behavior. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); actual-device and representative-footage checks remain open. |
 | 2026-11-18 | Phase 2 | Ran three alternating Windows Flutter profile-mode trials per queue setting with current pipeline configuration. Prefetch was 2.0% slower at the median and remains off. | [Phase 2 audit](docs/results/watch_phase2_delivery.md); profile/automation overhead and Phase 1 baseline remain unvalidated. |
 | 2026-11-18 | Phase 3 | Profiled detector, candidate, crop, batch and tracker work on short singles/doubles broadcasts; captured a separate CUDA activity trace. | [Phase 3 profile](docs/results/watch_phase3_pose_profile.md); representative consented footage, labeled accuracy and complete transfer attribution remain open. |
+| 2026-11-18 | Phase 3 | Assessed the promotion gate; no experimental candidate has sufficient held-out accuracy evidence for promotion. | [Gate assessment](docs/results/watch_phase3_promotion_gate.md); labels and several paired accuracy metrics remain missing. |
+| 2026-11-18 | Phase 3 | At the user's direction, reverted the shadow/serial defaults after they felt slower, restoring filtering and batch size 8. | [Gate assessment](docs/results/watch_phase3_promotion_gate.md); held-out accuracy and formal promotion gate remain open. |

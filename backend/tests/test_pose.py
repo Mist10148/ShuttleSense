@@ -480,6 +480,7 @@ def test_watch_candidate_shadow_and_filter_keep_original_order(monkeypatch):
     class Body:
         def __init__(self, **kwargs):
             self.det_model = lambda frame: [[0, 0, 3, 3], [5, 5, 9, 9]]
+            self.pose_model = lambda frame, boxes: batch(self, frame, 1, boxes)
 
         def __call__(self, frame):
             raise AssertionError("unexpected unfiltered fallback")
@@ -506,6 +507,9 @@ def test_watch_candidate_shadow_and_filter_keep_original_order(monkeypatch):
     all_players = detector.with_watch(8, shadow)(image)
     assert len(all_players) == 2 and len(shadow.excluded_players) == 1
     assert shadow.excluded_players[0] == all_players[0]
+    sequential_shadow = Candidates("shadow")
+    assert detector.with_watch(1, sequential_shadow)(image) == all_players
+    assert sequential_shadow.records[0][:2] == (2, [False, True])
     filtered = Candidates("filter")
     players = detector.with_watch(8, filtered)(image)
     assert players == all_players[1:]

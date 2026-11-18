@@ -144,11 +144,14 @@ an isolated same-host CUDA backend. An integration-test harness selected the sam
 21-second fixed source section, doubles mode, court points and **Analyze every frame**
 for each run. The section was verified pixel-identical after normalization to the
 first 525 frames of the original broadcast; the output is 1280x720 at 25 fps. The
-backend used the current `configs/pipeline.yaml` with only
+backend used `configs/pipeline.yaml` as it stood at the time, with only
 `watch.frame_prefetch_depth` switched at session start. A 25-frame warm-up preceded
 the six measurements in the same backend process. The local-only benchmark wrapper
 logged the depth on each connection and did not change the production endpoint.
 Each trial waited for its annotated export before starting the next.
+
+The filter and batch-size settings used in this comparison were restored after a brief
+shadow/serial trial. The comparison does not measure that shadow/serial configuration.
 
 Analysis time below is from the Flutter analysis clock to the `saved` acknowledgement:
 it includes session setup and analysis/save work, but not completed annotated export.
