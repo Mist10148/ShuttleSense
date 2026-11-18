@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shuttlesense_app/core/config/app_mode.dart';
 import 'package:shuttlesense_app/core/device/screen_awake.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
@@ -1265,19 +1264,11 @@ void main() {
     expect(health('2.0').supportsLive, isTrue);
   });
 
-  testWidgets('the Analyze tab follows the remembered mode', (tester) async {
-    await pumpScreen(
-      tester,
-      Consumer(
-        builder: (context, ref, _) => ref.watch(appModeProvider) == AppMode.live
-            ? const Text('live screen')
-            : const Scaffold(body: SwitchModeButton()),
-      ),
-      prefs: {'ui.mode': 'upload'},
-    );
-    await tester.tap(find.text('Go live'));
+  testWidgets('Change mode returns to the mode chooser', (tester) async {
+    final visited = await pumpScreen(tester, const Scaffold(body: ChangeModeButton()));
+    await tester.tap(find.text('Change mode'));
     await tester.pumpAndSettle();
-    expect(find.text('live screen'), findsOneWidget);
+    expect(visited, ['/mode']);
   });
 
   testWidgets('a game under way starts the live scoreboard from its score', (tester) async {
@@ -1302,25 +1293,6 @@ void main() {
     await tapStop(tester);
     await events(tester);
     await tester.pump(const Duration(seconds: 1));
-  });
-
-  testWidgets('a 1.0 server cannot be switched to live', (tester) async {
-    await pumpScreen(
-      tester,
-      const Scaffold(body: SwitchModeButton()),
-      api: FakeApiClient(
-        health: const Health(
-          version: '0.1.0',
-          schemaVersion: '1.0',
-          device: 'cpu',
-          authRequired: false,
-          stages: [],
-        ),
-      ),
-      prefs: {'ui.mode': 'upload'},
-    );
-    final button = tester.widget<TextButton>(find.byType(TextButton));
-    expect(button.onPressed, isNull);
   });
 
   testWidgets('every speed in the status strip says it is estimated', (tester) async {

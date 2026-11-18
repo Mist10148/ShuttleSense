@@ -26,6 +26,7 @@ class ModeScreen extends ConsumerWidget {
 
     return PageScaffold(
       title: 'How do you want to analyze?',
+      showBack: false,
       children: [
         ModeCard(
           icon: Icons.upload_file,
@@ -33,6 +34,7 @@ class ModeScreen extends ConsumerWidget {
           description:
               'Pick a recorded rally. The server processes it and shows full results, '
               'line calls and coaching notes.',
+          requirement: 'You need: a recorded video file (MP4, MOV or AVI)',
           selected: current == AppMode.upload,
           onTap: () => pick(AppMode.upload),
         ),
@@ -45,6 +47,7 @@ class ModeScreen extends ConsumerWidget {
                     'Update the backend to use it.'
               : 'Point a camera at the court and see the shuttle, score and line calls while '
                     'you play. The session is saved to History when you stop.',
+          requirement: 'You need: a camera pointed at the court',
           selected: current == AppMode.live && !liveOff,
           onTap: liveOff ? null : () => pick(AppMode.live),
         ),
@@ -57,6 +60,7 @@ class ModeScreen extends ConsumerWidget {
               : health?.watchVideo == true
               ? 'Watch a recorded rally while the server analyzes it frame by frame.'
               : 'Update the backend to use video-driven live analysis.',
+          requirement: 'You need: a recorded video file, in Chrome or the Windows app',
           selected: current == AppMode.watch && health?.watchVideo == true && watchSupported,
           onTap: health?.watchVideo == true && watchSupported ? () => pick(AppMode.watch) : null,
         ),
@@ -71,6 +75,7 @@ class ModeCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.description,
+    this.requirement,
     required this.selected,
     required this.onTap,
   });
@@ -78,6 +83,9 @@ class ModeCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String description;
+
+  /// What the mode needs from the user, shown as a muted second line.
+  final String? requirement;
   final bool selected;
 
   /// Null when the choice is not available; the card is shown greyed out.
@@ -126,6 +134,15 @@ class ModeCard extends StatelessWidget {
                       Text(title, style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: Spacing.xs),
                       Text(description),
+                      if (requirement != null) ...[
+                        const SizedBox(height: Spacing.xs),
+                        Text(
+                          requirement!,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
                       if (selected) ...[
                         const SizedBox(height: Spacing.sm),
                         Container(
@@ -158,21 +175,14 @@ class ModeCard extends StatelessWidget {
   }
 }
 
-/// App bar action that switches between the upload and live screens.
-class SwitchModeButton extends ConsumerWidget {
-  const SwitchModeButton({super.key});
+/// Page action that returns to the mode chooser, the one place the mode is picked.
+class ChangeModeButton extends StatelessWidget {
+  const ChangeModeButton({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final live = ref.watch(appModeProvider) == AppMode.live;
-    final available = ref.watch(liveAvailableProvider);
-    return TextButton.icon(
-      // A server without live mode keeps the user on upload.
-      onPressed: live || available
-          ? () => ref.read(appModeProvider.notifier).set(live ? AppMode.upload : AppMode.live)
-          : null,
-      icon: Icon(live ? Icons.upload_file : Icons.videocam_outlined),
-      label: Text(live ? 'Upload clip' : 'Go live'),
-    );
-  }
+  Widget build(BuildContext context) => TextButton.icon(
+    onPressed: () => context.go(Routes.mode),
+    icon: const Icon(Icons.swap_horiz),
+    label: const Text('Change mode'),
+  );
 }

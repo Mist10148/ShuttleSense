@@ -49,7 +49,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: Routes.connect, builder: (context, state) => const ConnectScreen()),
-      GoRoute(path: Routes.mode, builder: (context, state) => const ModeScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [
@@ -66,6 +65,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   },
                 ),
                 routes: [
+                  // The mode chooser is the Analyze tab's landing view, inside the rail.
+                  GoRoute(path: 'mode', builder: (context, state) => const ModeScreen()),
                   GoRoute(
                     path: 'videos/:videoId/calibrate',
                     builder: (context, state) =>

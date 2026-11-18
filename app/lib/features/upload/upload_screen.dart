@@ -9,6 +9,10 @@ import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../mode/mode_screen.dart';
+import '../../data/models/health.dart';
+import '../../shared/widgets/dependent_switch.dart';
+import '../../shared/widgets/helper_text.dart';
+import '../../shared/widgets/step_indicator.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/start_score_field.dart';
@@ -96,17 +100,32 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final file = upload.file;
     final uploading = upload.uploading;
     final theme = Theme.of(context);
-    final warnings = [
+    final badFormat =
+        file != null && !_kVideoExtensions.contains(file.extension?.toLowerCase() ?? '');
+    final details = [
       if (upload.durationS != null) _minutes(upload.durationS!),
       formatBytes(upload.size),
       if (upload.tooLong) 'longer than the ${kMaxDurationS ~/ 60}-minute server limit',
       if (upload.large) 'larger than the 1 GB server limit',
     ];
+    final blocked = switch (file) {
+      null => 'Choose a video to continue',
+      _ when badFormat => 'Choose an MP4, MOV or AVI file to continue',
+      _ => null,
+    };
+    final step = file == null || badFormat ? 0 : (uploading ? 2 : 1);
+    final showStrokeModel = health == null || health.strokeModels != null;
+    final model = kStrokeModels[resolveStrokeModel(options.strokeModel, health)];
 
     return PageScaffold(
       title: 'New analysis',
-      actions: const [SwitchModeButton()],
+      actions: const [ChangeModeButton()],
       children: [
+        StepIndicator(
+          steps: ['Video', 'Options', options.calibrate ? 'Upload & calibrate' : 'Upload'],
+          current: step,
+        ),
+        const SizedBox(height: Spacing.xl),
         SectionCard(
           title: '1. Rally video',
           child: Column(
@@ -115,24 +134,33 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               Text(
                 'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
                 'Best results from a phone on a tripod, elevated and behind the baseline.',
-                style: theme.textTheme.bodySmall,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: Spacing.md),
-              if (file != null)
+              if (file != null) ...[
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.movie_outlined),
                   title: Text(file.name, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                    warnings.join(' · '),
+                    details.join(' · '),
                     style: upload.large || upload.tooLong
                         ? TextStyle(color: theme.colorScheme.error)
                         : null,
                   ),
                 ),
+                if (badFormat)
+                  const HelperText(
+                    'This file type is not supported. Use MP4, MOV or AVI.',
+                    error: true,
+                  ),
+                const SizedBox(height: Spacing.sm),
+              ],
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: Spacing.sm,
+                runSpacing: Spacing.sm,
                 children: [
                   if (_isPhone)
                     OutlinedButton.icon(
@@ -142,8 +170,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     ),
                   OutlinedButton.icon(
                     onPressed: uploading ? null : _pick,
-                    icon: const Icon(Icons.video_library_outlined),
-                    label: Text(file == null ? 'Choose video' : 'Choose another'),
+                    icon: Icon(file == null ? Icons.video_library_outlined : Icons.swap_horiz),
+                    label: Text(file == null ? 'Choose video' : 'Replace'),
                   ),
                 ],
               ),
@@ -160,19 +188,30 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Calibrate court'),
                 subtitle: const Text(
-                  'Tap 4 court corners for player detection and court features. Without calibration, players are not detected.',
+                  'Tap 4 court corners for player detection and court features. Recommended.',
                 ),
                 value: options.calibrate,
                 onChanged: (v) => notifier.set(options.copyWith(calibrate: v)),
               ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Referee layer (beta)'),
-                subtitle: const Text('Rally state and assisted scoreboard; needs calibration'),
+              if (!options.calibrate)
+                const HelperText(
+                  'Without calibration players are not detected: Skeletons and Player boxes '
+                  'stay empty, and Court outline, Minimap, Speed, Scoreboard and the Referee '
+                  'layer are off.',
+                  warning: true,
+                ),
+              DependentSwitch(
+                title: 'Referee layer (beta)',
+                subtitle: 'Rally state and assisted scoreboard',
                 value: options.referee,
-                onChanged: options.calibrate
-                    ? (v) => notifier.set(options.copyWith(referee: v))
-                    : null,
+                blockedBy: options.calibrate ? null : 'Calibrate court',
+                // The scoreboard overlay is what the referee layer draws: switch it on too.
+                onChanged: (v) => notifier.set(
+                  options.copyWith(
+                    referee: v,
+                    overlays: v ? {...options.overlays, 'score'} : options.overlays,
+                  ),
+                ),
               ),
               if (options.calibrate && options.referee)
                 StartScoreField(
@@ -188,32 +227,30 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   showCourt: true,
                   showChangeEnds: health?.supportsChangeEnds ?? false,
                 ),
-              StrokeModelField(
-                value: options.strokeModel,
-                health: health,
-                onChanged: notifier.setStrokeModel,
-              ),
-              const SizedBox(height: Spacing.sm),
-              Text('Overlays', style: theme.textTheme.labelLarge),
-              const SizedBox(height: Spacing.sm),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final MapEntry(key: name, value: label) in kOverlays.entries)
-                    _OverlayChip(
-                      name: name,
-                      label: label,
-                      selected: options.overlays.contains(name),
-                      reason: overlayDisabledReason(name, options, health),
-                      onSelected: (on) => notifier.toggleOverlay(name, on),
-                    ),
-                ],
-              ),
+              const SizedBox(height: Spacing.md),
+              _OverlayPicker(options: options, health: health, notifier: notifier),
+              if (showStrokeModel)
+                Theme(
+                  // No divider lines: the card already frames the section.
+                  data: theme.copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: Spacing.sm),
+                    title: const Text('Advanced'),
+                    subtitle: Text('Stroke model: ${model ?? 'server default'}'),
+                    children: [
+                      StrokeModelField(
+                        value: options.strokeModel,
+                        health: health,
+                        onChanged: notifier.setStrokeModel,
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: Spacing.lg),
+        const SizedBox(height: Spacing.xl),
         if (uploading) ...[
           Semantics(
             label: 'Upload progress',
@@ -227,25 +264,100 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             textAlign: TextAlign.center,
           ),
           TextButton(onPressed: _upload.cancel, child: const Text('Cancel')),
-        ] else
+        ] else ...[
           FilledButton.icon(
-            onPressed: file == null ? null : _start,
+            onPressed: blocked == null ? _start : null,
             icon: const Icon(Icons.cloud_upload_outlined),
             label: Text(options.calibrate ? 'Upload and calibrate' : 'Upload and analyze'),
           ),
+          if (blocked != null) HelperText(blocked),
+        ],
         if (upload.error != null) ...[
           const SizedBox(height: Spacing.md),
-          Text(upload.error!, style: TextStyle(color: theme.colorScheme.error)),
+          HelperText(upload.error!, error: true),
         ],
       ],
     );
   }
 }
 
+/// What the file picker offers outside the phone gallery; a gallery pick can be anything.
+const _kVideoExtensions = {'mp4', 'mov', 'avi'};
+
 /// "4:05" for 245 seconds.
 String _minutes(double seconds) {
   final s = seconds.round();
   return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+}
+
+/// Overlay chips in groups, with All / None. A chip that cannot be chosen says why, both in
+/// its tooltip and in a line under the groups.
+class _OverlayPicker extends StatelessWidget {
+  const _OverlayPicker({required this.options, required this.health, required this.notifier});
+
+  final JobOptions options;
+  final Health? health;
+  final JobOptionsNotifier notifier;
+
+  static const _groups = <String, List<String>>{
+    'Tracking': ['trail', 'speed', 'hits'],
+    'Players': ['pose', 'boxes'],
+    'Court': ['court', 'minimap'],
+    'Match': ['strokes', 'score'],
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reasons = {
+      for (final name in kOverlays.keys) name: overlayDisabledReason(name, options, health),
+    };
+    final blocked = [
+      for (final MapEntry(key: name, value: reason) in reasons.entries)
+        if (reason != null) '${kOverlays[name]} (${reason.toLowerCase()})',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('Overlays', style: theme.textTheme.labelLarge)),
+            TextButton(
+              onPressed: () => notifier.set(options.copyWith(overlays: kOverlays.keys.toSet())),
+              child: const Text('All'),
+            ),
+            TextButton(
+              onPressed: () => notifier.set(options.copyWith(overlays: {})),
+              child: const Text('None'),
+            ),
+          ],
+        ),
+        for (final MapEntry(key: group, value: names) in _groups.entries) ...[
+          const SizedBox(height: Spacing.sm),
+          Text(
+            group,
+            style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: Spacing.xs),
+          Wrap(
+            spacing: Spacing.sm,
+            runSpacing: Spacing.sm,
+            children: [
+              for (final name in names)
+                _OverlayChip(
+                  name: name,
+                  label: kOverlays[name]!,
+                  selected: options.overlays.contains(name),
+                  reason: reasons[name],
+                  onSelected: (on) => notifier.toggleOverlay(name, on),
+                ),
+            ],
+          ),
+        ],
+        if (blocked.isNotEmpty) HelperText('Unavailable: ${blocked.join('; ')}.'),
+      ],
+    );
+  }
 }
 
 class _OverlayChip extends StatelessWidget {

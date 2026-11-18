@@ -89,7 +89,7 @@ class LiveScreen extends ConsumerWidget {
               ),
             )
           else
-            const SwitchModeButton(),
+            const ChangeModeButton(),
         ],
       ),
       body: SafeArea(

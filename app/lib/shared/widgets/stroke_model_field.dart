@@ -4,6 +4,15 @@ import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../core/theme/tokens.dart';
 
+/// One line on what each model is (D28, D37). The CNN is the default, so it is the one marked
+/// recommended.
+const _kModelNotes = <String, String>{
+  'cnn': 'Recommended. The default: a 1D convolutional network over the pose and shuttle window.',
+  'lstm': 'A recurrent network that reads the same window as a sequence.',
+  'rf': 'A classical Random Forest on summary values of the window.',
+  'ensemble': 'Averages the CNN, LSTM and Random Forest. Runs all three, so it is slower.',
+};
+
 /// The stroke classifier choice: CNN, LSTM, Random Forest, or the three together (Phase 11).
 ///
 /// A model the server has not installed is greyed out. On a server that does not offer the
@@ -69,9 +78,17 @@ class StrokeModelField extends StatelessWidget {
               ),
             ],
           ),
+          if (_kModelNotes[shown] case final note? when available(shown))
+            Padding(
+              padding: const EdgeInsets.only(top: Spacing.sm),
+              child: Text('${kStrokeModels[shown]}: $note', style: theme.textTheme.bodyMedium),
+            ),
           Padding(
             padding: const EdgeInsets.only(top: Spacing.xs),
-            child: Text(help, style: theme.textTheme.bodySmall),
+            child: Text(
+              help,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
           ),
         ],
       ),

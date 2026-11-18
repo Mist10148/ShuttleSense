@@ -7,6 +7,8 @@ import '../../core/router/app_router.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/status_pill.dart';
 import '../results/results_screen.dart';
 import '../../core/theme/tokens.dart';
 
@@ -14,64 +16,186 @@ import '../../core/theme/tokens.dart';
 /// arrives, so a swiped-away tile is never built again (Dismissible requires that).
 final _deletedJobsProvider = StateProvider.autoDispose<Set<String>>((ref) => {});
 
-/// Past jobs on the connected server; open or delete them (privacy).
-class HistoryScreen extends ConsumerWidget {
+/// Which jobs the list shows.
+enum _ModeFilter { all, upload, live }
+
+/// Past jobs on the connected server: search, filter and sort them, open or delete them
+/// (privacy).
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  String _query = '';
+  _ModeFilter _mode = _ModeFilter.all;
+  bool _newestFirst = true;
+  DateTime? _updated;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(jobsListProvider, (_, next) {
+      if (next.hasValue && !next.isLoading) setState(() => _updated = DateTime.now());
+    }, fireImmediately: true);
+  }
+
+  List<Job> _visible(List<Job> all, Set<String> deleted) {
+    final query = _query.trim().toLowerCase();
+    final list = [
+      for (final j in all)
+        if (!deleted.contains(j.id) &&
+            switch (_mode) {
+              _ModeFilter.all => true,
+              _ModeFilter.upload => !j.isLive,
+              _ModeFilter.live => j.isLive,
+            } &&
+            (query.isEmpty ||
+                j.id.toLowerCase().contains(query) ||
+                (ref.watch(videoProvider(j.videoId)).valueOrNull?.filename ?? '')
+                    .toLowerCase()
+                    .contains(query)))
+          j,
+    ];
+    list.sort(
+      (a, b) =>
+          _newestFirst ? b.createdAt.compareTo(a.createdAt) : a.createdAt.compareTo(b.createdAt),
+    );
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final jobs = ref.watch(jobsListProvider);
     final deleted = ref.watch(_deletedJobsProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('History'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(jobsListProvider),
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: jobs.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => MessageView(
-          icon: Icons.wifi_off,
-          message: 'Could not load jobs',
-          detail: '$e',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(jobsListProvider),
-            child: const Text('Retry'),
-          ),
+    final gutter = Breakpoints.gutter(Breakpoints.of(context));
+    final updated = _updated;
+    final header = PageHeader(
+      title: 'History',
+      below: updated == null ? null : 'Updated ${_clock(updated)}',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: () => ref.invalidate(jobsListProvider),
+          icon: const Icon(Icons.refresh),
         ),
-        data: (all) => switch ([
-          for (final j in all)
-            if (!deleted.contains(j.id)) j,
-        ]) {
-          final list =>
-            list.isEmpty
-                ? const MessageView(icon: Icons.history, message: 'No analyses on this server yet')
-                : RefreshIndicator(
-                    onRefresh: () => ref.refresh(jobsListProvider.future),
-                    child: ListView.builder(
-                      itemCount: list.length,
-                      itemBuilder: (context, i) => MaxWidth(
-                        maxWidth: 900,
-                        child: _JobTile(job: list[i], all: all),
-                      ),
-                    ),
+      ],
+    );
+    Widget padded(Widget child) => Padding(
+      padding: EdgeInsets.symmetric(horizontal: gutter),
+      child: MaxWidth(
+        maxWidth: 720,
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: Spacing.xl),
+            padded(header),
+            Expanded(
+              child: jobs.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => MessageView(
+                  icon: Icons.wifi_off,
+                  message: 'Could not load jobs',
+                  detail: '$e',
+                  action: FilledButton(
+                    onPressed: () => ref.invalidate(jobsListProvider),
+                    child: const Text('Retry'),
                   ),
-        },
+                ),
+                data: (all) {
+                  if (all.every((j) => deleted.contains(j.id))) {
+                    return MessageView(
+                      icon: Icons.history,
+                      message: 'No analyses on this server yet',
+                      detail:
+                          'Upload a clip or run a live session. Finished analyses and saved '
+                          'live sessions appear here.',
+                      action: FilledButton.icon(
+                        onPressed: () => context.go(Routes.home),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Start an analysis'),
+                      ),
+                    );
+                  }
+                  final list = _visible(all, deleted);
+                  return RefreshIndicator(
+                    onRefresh: () => ref.refresh(jobsListProvider.future),
+                    child: ListView(
+                      padding: const EdgeInsets.only(top: Spacing.lg, bottom: Spacing.xxl),
+                      children: [
+                        padded(_controls()),
+                        const SizedBox(height: Spacing.sm),
+                        if (list.isEmpty)
+                          padded(
+                            const Padding(
+                              padding: EdgeInsets.all(Spacing.xl),
+                              child: Text('No analyses match.', textAlign: TextAlign.center),
+                            ),
+                          ),
+                        for (final job in list)
+                          padded(_JobTile(key: ValueKey(job.id), job: job, all: all)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _controls() => Wrap(
+    spacing: Spacing.sm,
+    runSpacing: Spacing.sm,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      SizedBox(
+        width: 280,
+        child: TextField(
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: 'Search by file name',
+          ),
+          onChanged: (v) => setState(() => _query = v),
+        ),
+      ),
+      SegmentedButton<_ModeFilter>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: _ModeFilter.all, label: Text('All')),
+          ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
+          ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
+        ],
+        selected: {_mode},
+        onSelectionChanged: (s) => setState(() => _mode = s.first),
+      ),
+      TextButton.icon(
+        onPressed: () => setState(() => _newestFirst = !_newestFirst),
+        icon: Icon(_newestFirst ? Icons.arrow_downward : Icons.arrow_upward),
+        label: Text(_newestFirst ? 'Newest first' : 'Oldest first'),
+      ),
+    ],
+  );
 }
+
+/// "14:02".
+String _clock(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 /// What the user chose in the delete dialog.
 enum _DeleteChoice { results, resultsAndVideo }
 
 class _JobTile extends ConsumerWidget {
-  const _JobTile({required this.job, required this.all});
+  const _JobTile({super.key, required this.job, required this.all});
 
   final Job job;
 
@@ -134,6 +258,7 @@ class _JobTile extends ConsumerWidget {
         return _delete(context, ref, choice);
       },
       child: ListTile(
+        contentPadding: EdgeInsets.zero,
         leading: Icon(
           switch (job.status) {
             JobStatus.done => Icons.check_circle_outline,
@@ -150,9 +275,21 @@ class _JobTile extends ConsumerWidget {
           },
         ),
         title: Text(title, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          '${job.isLive ? 'Live · ' : ''}$when · ${job.status.name}'
-          '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''} · ${job.id}',
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: Spacing.xs),
+          child: Wrap(
+            spacing: Spacing.sm,
+            runSpacing: Spacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _statusPill(job),
+              Text(
+                '${job.isLive ? 'Live' : 'Upload'} · '
+                '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
+                '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}',
+              ),
+            ],
+          ),
         ),
         onTap: () {
           if (job.status == JobStatus.done && !hasResults(job)) {
@@ -176,6 +313,14 @@ class _JobTile extends ConsumerWidget {
     );
   }
 }
+
+StatusPill _statusPill(Job job) => switch (job.status) {
+  JobStatus.done => const StatusPill(label: 'Done', tone: PillTone.good),
+  JobStatus.failed => const StatusPill(label: 'Failed', tone: PillTone.bad),
+  JobStatus.cancelled => const StatusPill(label: 'Cancelled'),
+  JobStatus.queued => const StatusPill(label: 'Queued', tone: PillTone.warning),
+  JobStatus.running => const StatusPill(label: 'Processing', tone: PillTone.warning),
+};
 
 class _DeleteDialog extends StatefulWidget {
   const _DeleteDialog();
