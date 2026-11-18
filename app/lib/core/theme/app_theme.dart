@@ -154,9 +154,9 @@ abstract final class AppTheme {
     final control = RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md));
     final cardEdge = p.hairline == null ? BorderSide.none : BorderSide(color: p.hairline!);
     // Buttons are pills: black primary, grey tonal secondary, outlined and text as ghosts.
+    // Padding stays Material's, which shrinks at large text sizes so buttons still fit.
     const button = ButtonStyle(
       minimumSize: WidgetStatePropertyAll(Size(64, kMinTouchTarget)),
-      padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: Spacing.xl)),
       shape: WidgetStatePropertyAll(pill),
       textStyle: WidgetStatePropertyAll(
         TextStyle(fontFamily: fontFamily, fontSize: 14, fontWeight: FontWeight.w500),
@@ -205,7 +205,6 @@ abstract final class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: button.copyWith(
-          padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: Spacing.lg)),
           foregroundColor: WidgetStatePropertyAll(p.ink),
         ),
       ),
