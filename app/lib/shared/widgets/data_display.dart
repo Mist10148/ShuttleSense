@@ -125,13 +125,21 @@ class GradientProgress extends StatelessWidget {
   }
 }
 
-/// A grey placeholder block that gently pulses while data loads (still under reduced motion).
+/// A grey placeholder block that gently pulses while data loads (still under reduced motion,
+/// or with [pulse] off for a preview that stays on screen for minutes).
 class Skeleton extends StatefulWidget {
-  const Skeleton({super.key, this.width, this.height = 16, this.radius = Radii.sm});
+  const Skeleton({
+    super.key,
+    this.width,
+    this.height = 16,
+    this.radius = Radii.sm,
+    this.pulse = true,
+  });
 
   final double? width;
   final double height;
   final double radius;
+  final bool pulse;
 
   @override
   State<Skeleton> createState() => _SkeletonState();
@@ -147,7 +155,7 @@ class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
+    if (!widget.pulse || MediaQuery.disableAnimationsOf(context)) {
       _pulse
         ..stop()
         ..value = 1;

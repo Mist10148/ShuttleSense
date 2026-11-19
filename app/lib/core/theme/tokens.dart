@@ -179,6 +179,14 @@ class AppPalette extends ThemeExtension<AppPalette> {
 /// stay fixed bright colours instead of following the theme.
 abstract final class OverlayColors {
   static const Color corners = Colors.yellowAccent;
+
+  /// Fills of the numbered corner markers 1-4 (lavender, sky, mint, peach), ringed in white.
+  static const List<Color> cornerMarkers = [
+    Color(0xFFDCD8FC),
+    Color(0xFFCFE5FB),
+    Color(0xFFDDF5D3),
+    Color(0xFFFDE6CF),
+  ];
   static const Color cornerLabel = Colors.black;
   static const Color courtLines = Colors.lightBlueAccent;
   static const Color playerBox = Colors.cyanAccent;

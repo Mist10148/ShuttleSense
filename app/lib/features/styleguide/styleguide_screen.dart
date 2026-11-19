@@ -80,7 +80,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
         const SizedBox(height: Spacing.xl),
         _actionCards(p),
         const SizedBox(height: Spacing.lg),
-        _Grid(
+        CardGrid(
           children: [
             AppCard(
               title: 'Colour',
@@ -233,7 +233,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
     ],
   );
 
-  Widget _actionCards(AppPalette p) => _Grid(
+  Widget _actionCards(AppPalette p) => CardGrid(
     minWidth: 200,
     children: [
       PastelActionCard(
@@ -314,27 +314,6 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
         blockedBy: 'Calibrate court',
       ),
     ],
-  );
-}
-
-/// Lays [children] out in as many equal columns as fit at [minWidth] each (at most three).
-class _Grid extends StatelessWidget {
-  const _Grid({required this.children, this.minWidth = 340});
-
-  final List<Widget> children;
-  final double minWidth;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      final columns = (box.maxWidth / minWidth).floor().clamp(1, 3);
-      final width = (box.maxWidth - Spacing.lg * (columns - 1)) / columns;
-      return Wrap(
-        spacing: Spacing.lg,
-        runSpacing: Spacing.lg,
-        children: [for (final c in children) SizedBox(width: width, child: c)],
-      );
-    },
   );
 }
 

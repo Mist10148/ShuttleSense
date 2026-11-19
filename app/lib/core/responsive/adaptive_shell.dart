@@ -17,7 +17,9 @@ class ShellDestination {
   final IconData selectedIcon;
 }
 
+/// In the order of the router's shell branches.
 const shellDestinations = [
+  ShellDestination('Home', Icons.home_outlined, Icons.home),
   ShellDestination('Analyze', Icons.insights_outlined, Icons.insights),
   ShellDestination('History', Icons.history_outlined, Icons.history),
   ShellDestination('Settings', Icons.settings_outlined, Icons.settings),

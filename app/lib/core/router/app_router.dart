@@ -7,6 +7,7 @@ import '../../features/calibration/calibration_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/connect/connect_screen.dart';
 import '../../features/history/history_screen.dart';
+import '../../features/home/home_screen.dart';
 import '../../features/live/live_screen.dart';
 import '../../features/mode/mode_screen.dart';
 import '../../features/processing/processing_screen.dart';
@@ -22,6 +23,9 @@ import '../responsive/adaptive_shell.dart';
 /// Routes from docs/ARCHITECTURE.md §4 (Navigation).
 abstract final class Routes {
   static const connect = '/connect';
+
+  /// Home, the landing page: start an analysis, recent analyses, stroke mix.
+  static const dashboard = '/dashboard';
   static const mode = '/mode';
   static const home = '/';
   static const history = '/history';
@@ -41,7 +45,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
-    initialLocation: Routes.home,
+    initialLocation: Routes.dashboard,
     refreshListenable: refresh,
     redirect: (context, state) {
       final connected = ref.read(serverConfigProvider) != null;
@@ -56,6 +60,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: Routes.dashboard, builder: (context, state) => const HomeScreen()),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(

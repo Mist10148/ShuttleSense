@@ -252,11 +252,7 @@ class _JobTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final video = ref.watch(videoProvider(job.videoId)).valueOrNull;
-    final created = job.createdAt.toLocal();
-    final when =
-        '${created.year}-${created.month.toString().padLeft(2, '0')}-'
-        '${created.day.toString().padLeft(2, '0')} '
-        '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+    final when = formatJobDate(job.createdAt);
     final title = video?.filename ?? 'Analysis ${job.id}';
     return Dismissible(
       key: ValueKey(job.id),
@@ -297,7 +293,7 @@ class _JobTile extends ConsumerWidget {
             runSpacing: Spacing.xs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _statusPill(job),
+              jobStatusPill(job),
               Text(
                 '${job.isLive ? 'Live' : 'Upload'} · '
                 '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
@@ -330,12 +326,20 @@ class _JobTile extends ConsumerWidget {
   }
 }
 
-StatusPill _statusPill(Job job) => switch (job.status) {
+/// "2026-11-18 23:01", local time.
+String formatJobDate(DateTime at) {
+  final t = at.toLocal();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+}
+
+/// A job's status as a pill: Done, Failed, Cancelled, Queued, Processing.
+StatusPill jobStatusPill(Job job) => switch (job.status) {
   JobStatus.done => const StatusPill(label: 'Done', tone: PillTone.good),
   JobStatus.failed => const StatusPill(label: 'Failed', tone: PillTone.bad),
   JobStatus.cancelled => const StatusPill(label: 'Cancelled'),
   JobStatus.queued => const StatusPill(label: 'Queued', tone: PillTone.warning),
-  JobStatus.running => const StatusPill(label: 'Processing', tone: PillTone.warning),
+  JobStatus.running => const StatusPill(label: 'Processing', tone: PillTone.info),
 };
 
 class _DeleteDialog extends StatefulWidget {

@@ -225,7 +225,8 @@ class IconChip extends StatelessWidget {
 }
 
 /// A pastel card that starts something: icon chip, title, one-line description and an
-/// optional badge ("Last used").
+/// optional badge ("Last used"). Without [onTap] it is unavailable: a neutral fill, no button,
+/// text still at full contrast so the reason in [description] stays readable.
 class PastelActionCard extends StatelessWidget {
   const PastelActionCard({
     super.key,
@@ -242,18 +243,20 @@ class PastelActionCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String description;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final String? badge;
 
   /// A muted last line ("You need: a recorded video file").
   final String? footnote;
 
+  bool get enabled => onTap != null;
+
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final text = Theme.of(context).textTheme;
-    return AppCard(
-      color: color,
+    final card = AppCard(
+      color: enabled ? color : p.surface2,
       onTap: onTap,
       semanticLabel: [title, description, ?badge].join('. '),
       child: Column(
@@ -261,7 +264,7 @@ class PastelActionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              IconChip(icon: icon),
+              IconChip(icon: icon, background: enabled ? null : p.surface),
               const Spacer(),
               if (badge != null)
                 Container(
@@ -285,5 +288,29 @@ class PastelActionCard extends StatelessWidget {
         ],
       ),
     );
+    return enabled ? card : Semantics(enabled: false, child: card);
   }
+}
+
+/// Lays [children] out in as many equal columns as fit at [minWidth] each, up to
+/// [maxColumns]: three on a laptop, two on a tablet, one on a phone.
+class CardGrid extends StatelessWidget {
+  const CardGrid({super.key, required this.children, this.minWidth = 340, this.maxColumns = 3});
+
+  final List<Widget> children;
+  final double minWidth;
+  final int maxColumns;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final columns = (box.maxWidth / minWidth).floor().clamp(1, maxColumns);
+      final width = (box.maxWidth - Spacing.lg * (columns - 1)) / columns;
+      return Wrap(
+        spacing: Spacing.lg,
+        runSpacing: Spacing.lg,
+        children: [for (final c in children) SizedBox(width: width, child: c)],
+      );
+    },
+  );
 }
