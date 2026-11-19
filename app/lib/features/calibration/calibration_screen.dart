@@ -109,14 +109,13 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                       onPressed: _corners.isEmpty ? null : () => setState(_corners.removeLast),
                       icon: const Icon(Icons.undo),
                     ),
-                    TextButton(
+                    IconButton(
+                      tooltip: 'Reset',
                       onPressed: _corners.isEmpty ? null : () => setState(_corners.clear),
-                      child: const Text('Reset'),
+                      icon: const Icon(Icons.restart_alt),
                     ),
-                    TextButton(
-                      onPressed: _submitting ? null : () => _start(withCorners: false),
-                      child: const Text('Skip'),
-                    ),
+                    // On a phone Skip sits under Start processing, leaving the title room.
+                    if (window == WindowClass.expanded) _skip(),
                   ],
                 ),
                 const SizedBox(height: Spacing.lg),
@@ -186,7 +185,13 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
       const SizedBox(height: Spacing.sm),
       _help(),
       ..._footer(),
+      Center(child: _skip()),
     ],
+  );
+
+  Widget _skip() => TextButton(
+    onPressed: _submitting ? null : () => _start(withCorners: false),
+    child: const Text('Skip'),
   );
 
   Widget _frameCard(VideoInfo info) => AppCard(

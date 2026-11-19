@@ -74,7 +74,7 @@ void main() {
     await tapCorner(tester, const Offset(0.2, 0.9));
     await tapCorner(tester, const Offset(0.8, 0.9));
     expect(find.byKey(const ValueKey('corner-1')), findsOneWidget);
-    await tester.tap(find.text('Reset'));
+    await tester.tap(find.byTooltip('Reset'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('corner-0')), findsNothing);
   });
