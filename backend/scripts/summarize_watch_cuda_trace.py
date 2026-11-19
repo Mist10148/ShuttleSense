@@ -29,9 +29,7 @@ def main() -> None:
     for event in events:
         if event.get("cat") != "cuda_runtime":
             continue
-        matching = [
-            r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]
-        ]
+        matching = [r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]]
         if matching:
             owner = min(matching, key=lambda r: r[1] - r[0])[2]
             correlation = event.get("args", {}).get("correlation")
@@ -50,9 +48,11 @@ def main() -> None:
         values = activities[owner][key]
         values[0] += 1
         values[1] += event.get("dur", 0)
-    print(json.dumps(
-        {"activities_count_total_us": activities, "sync_count_total_us": syncs}, indent=2
-    ))
+    print(
+        json.dumps(
+            {"activities_count_total_us": activities, "sync_count_total_us": syncs}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":

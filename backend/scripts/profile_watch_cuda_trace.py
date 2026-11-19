@@ -36,10 +36,14 @@ def main() -> None:
             try:
                 return original(*a, **kw)
             finally:
-                ranges.append({
-                    "name": label, "tid": threading.get_native_id(),
-                    "start_ns": start, "end_ns": time.perf_counter_ns(),
-                })
+                ranges.append(
+                    {
+                        "name": label,
+                        "tid": threading.get_native_id(),
+                        "start_ns": start,
+                        "end_ns": time.perf_counter_ns(),
+                    }
+                )
 
         setattr(obj, name, measured)
 
