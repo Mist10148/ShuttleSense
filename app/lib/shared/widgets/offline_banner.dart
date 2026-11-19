@@ -28,23 +28,27 @@ class OfflineBanner extends ConsumerWidget {
               radius: Radii.md,
               tint: p.pink.withValues(alpha: 0.85),
               padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.xs, Spacing.xs, Spacing.xs),
-              child: Semantics(
-                liveRegion: true,
-                child: Row(
-                  children: [
-                    Icon(Icons.cloud_off, color: p.ink, size: 20),
-                    const SizedBox(width: Spacing.md),
-                    Expanded(
-                      child: Text(
-                        'Server unreachable. Check the Wi-Fi or the tunnel.',
-                        style: TextStyle(color: p.ink),
+              // Material gives Retry its ink and the text its theme style outside a Scaffold.
+              child: Material(
+                type: MaterialType.transparency,
+                child: Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_off, color: p.ink, size: 20),
+                      const SizedBox(width: Spacing.md),
+                      Expanded(
+                        child: Text(
+                          'Server unreachable. Check the Wi-Fi or the tunnel.',
+                          style: TextStyle(color: p.ink),
+                        ),
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () => ref.invalidate(healthProvider),
-                      child: const Text('Retry'),
-                    ),
-                  ],
+                      TextButton(
+                        onPressed: () => ref.invalidate(healthProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

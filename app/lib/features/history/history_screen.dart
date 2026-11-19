@@ -32,7 +32,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
-  late final _search = TextEditingController(text: ref.read(historyQueryProvider));
+  late final TextEditingController _search;
   _ModeFilter _mode = _ModeFilter.all;
   bool _newestFirst = true;
   DateTime? _updated;
@@ -40,6 +40,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _search = TextEditingController(text: ref.read(historyQueryProvider));
     ref.listenManual(jobsListProvider, (_, next) {
       if (next.hasValue && !next.isLoading) setState(() => _updated = DateTime.now());
     }, fireImmediately: true);

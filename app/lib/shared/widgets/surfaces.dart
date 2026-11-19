@@ -170,8 +170,9 @@ class _AppCardState extends State<AppCard> {
     );
 
     if (widget.onTap != null) {
-      body = Material(
-        type: MaterialType.transparency,
+      body = Semantics(
+        button: true,
+        label: widget.semanticLabel,
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: shape,
@@ -180,8 +181,9 @@ class _AppCardState extends State<AppCard> {
           child: body,
         ),
       );
-      body = Semantics(button: true, label: widget.semanticLabel, child: body);
     }
+    // Ripples of the card and of list tiles inside it paint on this layer, above the fill.
+    body = Material(type: MaterialType.transparency, child: body);
 
     return AnimatedContainer(
       duration: still ? Duration.zero : Motion.fast,
