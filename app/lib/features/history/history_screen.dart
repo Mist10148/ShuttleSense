@@ -8,7 +8,9 @@ import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/data_display.dart';
 import '../../shared/widgets/status_pill.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../results/results_screen.dart';
 import '../../core/theme/tokens.dart';
 
@@ -113,7 +115,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             padded(header),
             Expanded(
               child: jobs.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
+                // Grey rows in the shape of the list while it loads.
+                loading: () => ListView(
+                  padding: const EdgeInsets.only(top: Spacing.lg),
+                  children: [
+                    for (var i = 0; i < 5; i++)
+                      padded(
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: Spacing.sm),
+                          child: Skeleton(height: 72, radius: Radii.lg),
+                        ),
+                      ),
+                  ],
+                ),
                 error: (e, _) => MessageView(
                   icon: Icons.wifi_off,
                   message: 'Could not load jobs',
@@ -268,58 +282,66 @@ class _JobTile extends ConsumerWidget {
         if (choice == null || !context.mounted) return false;
         return _delete(context, ref, choice);
       },
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(
-          switch (job.status) {
-            JobStatus.done => Icons.check_circle_outline,
-            JobStatus.failed => Icons.error_outline,
-            JobStatus.cancelled => Icons.cancel_outlined,
-            _ => Icons.hourglass_top,
-          },
-          semanticLabel: job.status.name,
-          // Colour backs up the icon shape: finished, failed, or still neutral.
-          color: switch (job.status) {
-            JobStatus.done => Theme.of(context).colorScheme.primary,
-            JobStatus.failed => Theme.of(context).colorScheme.error,
-            _ => Theme.of(context).colorScheme.onSurfaceVariant,
-          },
-        ),
-        title: Text(title, overflow: TextOverflow.ellipsis),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: Spacing.xs),
-          child: Wrap(
-            spacing: Spacing.sm,
-            runSpacing: Spacing.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              jobStatusPill(job),
-              Text(
-                '${job.isLive ? 'Live' : 'Upload'} · '
-                '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
-                '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}'
-                ' · ${job.id}',
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: Spacing.sm),
+        child: AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: Spacing.xs),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: Spacing.sm),
+            // The pastel backs up the icon shape: finished, failed, or still neutral.
+            leading: Semantics(
+              label: job.status.name,
+              child: IconChip(
+                icon: switch (job.status) {
+                  JobStatus.done => Icons.check_circle_outline,
+                  JobStatus.failed => Icons.error_outline,
+                  JobStatus.cancelled => Icons.cancel_outlined,
+                  _ => Icons.hourglass_top,
+                },
+                background: switch (job.status) {
+                  JobStatus.done => AppPalette.of(context).mint,
+                  JobStatus.failed => AppPalette.of(context).pink,
+                  _ => AppPalette.of(context).surface2,
+                },
               ),
-            ],
+            ),
+            title: Text(title, overflow: TextOverflow.ellipsis),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: Spacing.xs),
+              child: Wrap(
+                spacing: Spacing.sm,
+                runSpacing: Spacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  jobStatusPill(job),
+                  Text(
+                    '${job.isLive ? 'Live' : 'Upload'} · '
+                    '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
+                    '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}'
+                    ' · ${job.id}',
+                  ),
+                ],
+              ),
+            ),
+            onTap: () {
+              if (job.status == JobStatus.done && !hasResults(job)) {
+                // Finished, but its record is gone (e.g. the server's storage was wiped).
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('This job has no results on the server any more.')),
+                );
+                return;
+              }
+              context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id));
+            },
+            trailing: IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                final choice = await _confirm(context);
+                if (choice != null && context.mounted) await _delete(context, ref, choice);
+              },
+            ),
           ),
-        ),
-        onTap: () {
-          if (job.status == JobStatus.done && !hasResults(job)) {
-            // Finished, but its record is gone (e.g. the server's storage was wiped).
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('This job has no results on the server any more.')),
-            );
-            return;
-          }
-          context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id));
-        },
-        trailing: IconButton(
-          tooltip: 'Delete',
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () async {
-            final choice = await _confirm(context);
-            if (choice != null && context.mounted) await _delete(context, ref, choice);
-          },
         ),
       ),
     );

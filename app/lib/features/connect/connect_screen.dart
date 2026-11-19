@@ -165,17 +165,28 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         IconButton(tooltip: 'Help', icon: const Icon(Icons.help_outline), onPressed: _showHelp),
       ],
       children: [
-        Icon(Icons.sports_tennis, size: 56, color: theme.colorScheme.primary),
+        // The app badge, as in the top bar.
+        Center(
+          child: IconChip(
+            icon: Icons.sports_tennis,
+            size: 64,
+            background: AppPalette.of(context).lavender,
+          ),
+        ),
         const SizedBox(height: Spacing.md),
         Text('ShuttleSense', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
         const SizedBox(height: Spacing.sm),
         Text(
           'Enter the address of the ShuttleSense backend: the laptop on your Wi-Fi '
           '(for example http://192.168.1.20:8000) or the Colab tunnel URL.',
-          style: theme.textTheme.bodyMedium,
+          style: theme.textTheme.bodyMedium?.copyWith(color: AppPalette.of(context).text2),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Spacing.xl),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
         TextField(
           controller: _url,
           keyboardType: TextInputType.url,
@@ -240,6 +251,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                 )
               : const Icon(Icons.link),
           label: const Text('Connect'),
+        ),
+            ],
+          ),
         ),
       ],
     );
