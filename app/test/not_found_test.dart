@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/core/device/screen_awake.dart';
@@ -17,20 +18,21 @@ void main() {
     setSize(tester, laptop);
     SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000'});
     final prefs = await SharedPreferences.getInstance();
-    final container = ProviderContainer(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        apiClientProvider.overrideWithValue(FakeApiClient()),
-        jobNotifierProvider.overrideWithValue(const NoopJobNotifier()),
-        screenAwakeProvider.overrideWithValue(FakeScreenAwake()),
-      ],
-    );
-    addTearDown(container.dispose);
-    final router = container.read(routerProvider);
+    late GoRouter router;
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          apiClientProvider.overrideWithValue(FakeApiClient()),
+          jobNotifierProvider.overrideWithValue(const NoopJobNotifier()),
+          screenAwakeProvider.overrideWithValue(FakeScreenAwake()),
+        ],
+        child: Consumer(
+          builder: (context, ref, _) {
+            router = ref.watch(routerProvider);
+            return MaterialApp.router(theme: AppTheme.light(), routerConfig: router);
+          },
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -44,5 +46,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Page not found'), findsNothing);
     expect(tester.takeException(), isNull);
+    // Unmount the scope so its polling timers are cancelled before the test ends.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 1));
   });
 }
