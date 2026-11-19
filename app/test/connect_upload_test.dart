@@ -157,6 +157,8 @@ void main() {
       expect(chip('Player boxes').onSelected, isNotNull);
       expect(chip('Minimap').onSelected, isNotNull);
 
+      await tester.ensureVisible(find.text('Calibrate court'));
+      await tester.pump(); // lay out the scrolled page before tapping
       await tester.tap(find.text('Calibrate court'));
       await tester.pumpAndSettle();
       expect(chip('Minimap').onSelected, isNull);

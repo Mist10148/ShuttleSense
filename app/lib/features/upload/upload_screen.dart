@@ -300,6 +300,8 @@ class _DropZone extends StatelessWidget {
           children: [
             IconChip(icon: Icons.movie_outlined, background: p.lavender),
             const SizedBox(height: Spacing.sm),
+            Text('Choose a rally video', style: text.titleMedium, textAlign: TextAlign.center),
+            const SizedBox(height: Spacing.xs),
             Text(
               'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
               'Best results from a phone on a tripod, elevated and behind the baseline.',

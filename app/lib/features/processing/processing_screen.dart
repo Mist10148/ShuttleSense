@@ -353,7 +353,10 @@ class _StageRow extends StatelessWidget {
       leading: Icon(icon, color: color),
       title: Text(kStageLabels[stage.name] ?? stage.name),
       subtitle: stage.status == 'running'
-          ? LinearProgressIndicator(value: stage.progress == 0 ? null : stage.progress)
+          ? Padding(
+              padding: const EdgeInsets.only(top: Spacing.xs),
+              child: GradientProgress(value: stage.progress, height: 4),
+            )
           : null,
       trailing: Text(stage.status, style: Theme.of(context).textTheme.labelSmall),
     );
