@@ -153,7 +153,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (file == null)
-                _DropZone(actions: pickButtons)
+                VideoDropZone(actions: pickButtons)
               else ...[
                 _FileRow(
                   name: file.name,
@@ -283,8 +283,8 @@ String _minutes(double seconds) {
 }
 
 /// The empty video slot: a dashed outline with what the server accepts and the pick buttons.
-class _DropZone extends StatelessWidget {
-  const _DropZone({required this.actions});
+class VideoDropZone extends StatelessWidget {
+  const VideoDropZone({super.key, required this.actions});
 
   final List<Widget> actions;
 

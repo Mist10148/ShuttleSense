@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/match_setup_field.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../../shared/widgets/start_score_field.dart';
 import '../../shared/widgets/stroke_model_field.dart';
 import '../calibration/calibration_screen.dart';
@@ -60,53 +63,62 @@ class LiveScreen extends ConsumerWidget {
     required bool waiting,
     required bool streaming,
   }) {
+    final gutter = Breakpoints.gutter(Breakpoints.of(context));
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Live'),
-        actions: [
-          if (waiting)
-            Padding(
-              padding: const EdgeInsets.only(right: Spacing.sm),
-              child: OutlinedButton.icon(
-                onPressed: controller.cancel,
-                icon: const Icon(Icons.close),
-                label: const Text('Cancel'),
-              ),
-            )
-          else if (streaming)
-            Padding(
-              padding: const EdgeInsets.only(right: Spacing.sm),
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  foregroundColor: Theme.of(context).colorScheme.onError,
-                ),
-                onPressed: controller.canDecide
-                    ? () => confirmStop(context, state, controller.stop)
-                    : null,
-                icon: const Icon(Icons.stop),
-                label: const Text('Stop'),
-              ),
-            )
-          else
-            const ChangeModeButton(),
-        ],
-      ),
       body: SafeArea(
-        child: switch (state.phase) {
-          LivePhase.starting => const MessageView(
-            icon: Icons.videocam_outlined,
-            message: 'Starting the camera…',
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(gutter, Spacing.lg, gutter, 0),
+          child: MaxWidth(
+            maxWidth: 1400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PageHeader(
+                  title: 'Live',
+                  actions: [
+                    if (waiting)
+                      OutlinedButton.icon(
+                        onPressed: controller.cancel,
+                        icon: const Icon(Icons.close),
+                        label: const Text('Cancel'),
+                      )
+                    else if (streaming)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.error,
+                          foregroundColor: Theme.of(context).colorScheme.onError,
+                        ),
+                        onPressed: controller.canDecide
+                            ? () => confirmStop(context, state, controller.stop)
+                            : null,
+                        icon: const Icon(Icons.stop),
+                        label: const Text('Stop'),
+                      )
+                    else
+                      const ChangeModeButton(),
+                  ],
+                ),
+                const SizedBox(height: Spacing.md),
+                Expanded(
+                  child: switch (state.phase) {
+                    LivePhase.starting => const MessageView(
+                      icon: Icons.videocam_outlined,
+                      message: 'Starting the camera…',
+                    ),
+                    LivePhase.error => _ErrorView(state: state, onRetry: controller.openCamera),
+                    LivePhase.ready => _ReadyView(state: state),
+                    LivePhase.calibrating => _CalibrateView(state: state),
+                    LivePhase.saved => _SavedView(
+                      jobId: state.savedJobId,
+                      onNewSession: controller.openCamera,
+                    ),
+                    _ => LiveView(state: state),
+                  },
+                ),
+              ],
+            ),
           ),
-          LivePhase.error => _ErrorView(state: state, onRetry: controller.openCamera),
-          LivePhase.ready => _ReadyView(state: state),
-          LivePhase.calibrating => _CalibrateView(state: state),
-          LivePhase.saved => _SavedView(
-            jobId: state.savedJobId,
-            onNewSession: controller.openCamera,
-          ),
-          _ => LiveView(state: state),
-        },
+        ),
       ),
     );
   }
@@ -153,36 +165,28 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              state.permissionDenied ? Icons.no_photography_outlined : Icons.error_outline,
-              size: 48,
+    return MessageView(
+      icon: state.permissionDenied ? Icons.no_photography_outlined : Icons.error_outline,
+      message: state.error ?? 'Something went wrong',
+      action: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try again'),
+          ),
+          if (state.savedJobId case final String id)
+            TextButton(
+              onPressed: () => context.go(Routes.job(id)),
+              child: const Text('Open results'),
+            )
+          else if (state.sessionId != null)
+            TextButton(
+              onPressed: () => context.go(Routes.history),
+              child: const Text('Open History'),
             ),
-            const SizedBox(height: Spacing.md),
-            Text(state.error ?? 'Something went wrong', textAlign: TextAlign.center),
-            const SizedBox(height: Spacing.lg),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try again'),
-            ),
-            if (state.savedJobId case final String id)
-              TextButton(
-                onPressed: () => context.go(Routes.job(id)),
-                child: const Text('Open results'),
-              )
-            else if (state.sessionId != null)
-              TextButton(
-                onPressed: () => context.go(Routes.history),
-                child: const Text('Open History'),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -196,75 +200,120 @@ class _ReadyView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(liveControllerProvider.notifier);
-    return ListView(
-      padding: const EdgeInsets.all(Spacing.lg),
-      children: [
-        MaxWidthPreview(child: controller.source?.preview()),
-        const SizedBox(height: Spacing.md),
-        Text(
-          'Put the ${state.cameraLabel.toLowerCase()} on a tripod, high and behind a baseline, '
-          'with the whole court in view. Calibrate the court for the minimap, speed and line '
-          'calls.',
-        ),
-        const Text('Without court calibration, player detection is disabled.'),
-        const Text('For best accuracy, keep the camera fixed and do not pan or zoom.'),
-        const SizedBox(height: Spacing.sm),
-        Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
-        if (state.error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: Spacing.sm),
-            child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+    // The way to start comes first, right under the preview.
+    final start = <Widget>[
+      AppCard(
+        padding: const EdgeInsets.all(Spacing.md),
+        child: MaxWidthPreview(child: controller.source?.preview()),
+      ),
+      const SizedBox(height: Spacing.lg),
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          FilledButton.icon(
+            onPressed: controller.calibrate,
+            icon: const Icon(Icons.crop_free),
+            label: const Text('Calibrate court'),
           ),
-        const SizedBox(height: Spacing.lg),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton.icon(
-              onPressed: controller.calibrate,
-              icon: const Icon(Icons.crop_free),
-              label: const Text('Calibrate court'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () {
-                // Without a court there are no line calls, but awards and corrections still
-                // keep score from the start score.
-                // Cleared by the controller once the session has started.
-                controller.start(startScore: ref.read(liveStartScoreProvider));
-              },
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start without court'),
-            ),
-          ],
+          OutlinedButton.icon(
+            onPressed: () {
+              // Without a court there are no line calls, but awards and corrections still
+              // keep score from the start score.
+              // Cleared by the controller once the session has started.
+              controller.start(startScore: ref.read(liveStartScoreProvider));
+            },
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start without court'),
+          ),
+        ],
+      ),
+      if (state.error != null)
+        Padding(
+          padding: const EdgeInsets.only(top: Spacing.sm),
+          child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ),
-        const SizedBox(height: Spacing.sm),
-        StartScoreField(
-          value: ref.watch(liveStartScoreProvider),
-          doubles: ref.watch(liveMatchSetupProvider).doubles,
-          onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
-        ),
-        MatchSetupField(
-          value: ref.watch(liveMatchSetupProvider),
-          onChanged: ref.read(liveMatchSetupProvider.notifier).set,
-          showCourt: true,
-          showChangeEnds: ref.watch(healthProvider).valueOrNull?.supportsChangeEnds ?? false,
-        ),
-        if (ref.watch(liveMatchSetupProvider).bestOf == 3 &&
-            (ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false))
-          StartGamesField(
-            value: ref.watch(liveStartGamesProvider),
+    ];
+    final tips = AppCard(
+      title: 'Before you start',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Put the ${state.cameraLabel.toLowerCase()} on a tripod, high and behind a '
+            'baseline, with the whole court in view. Calibrate the court for the minimap, '
+            'speed and line calls.',
+          ),
+          const Text('Without court calibration, player detection is disabled.'),
+          const Text('For best accuracy, keep the camera fixed and do not pan or zoom.'),
+          const SizedBox(height: Spacing.sm),
+          Text(kLineCallNote, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+    final setup = AppCard(
+      title: 'Match setup',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StartScoreField(
+            value: ref.watch(liveStartScoreProvider),
             doubles: ref.watch(liveMatchSetupProvider).doubles,
-            onChanged: (g) => ref.read(liveStartGamesProvider.notifier).state = g,
+            onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
           ),
-        StrokeModelField(
-          value: ref.watch(pendingJobOptionsProvider).strokeModel,
-          health: ref.watch(healthProvider).valueOrNull,
-          onChanged: ref.read(pendingJobOptionsProvider.notifier).setStrokeModel,
-        ),
-      ],
+          MatchSetupField(
+            value: ref.watch(liveMatchSetupProvider),
+            onChanged: ref.read(liveMatchSetupProvider.notifier).set,
+            showCourt: true,
+            showChangeEnds: ref.watch(healthProvider).valueOrNull?.supportsChangeEnds ?? false,
+          ),
+          if (ref.watch(liveMatchSetupProvider).bestOf == 3 &&
+              (ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false))
+            StartGamesField(
+              value: ref.watch(liveStartGamesProvider),
+              doubles: ref.watch(liveMatchSetupProvider).doubles,
+              onChanged: (g) => ref.read(liveStartGamesProvider.notifier).state = g,
+            ),
+          StrokeModelField(
+            value: ref.watch(pendingJobOptionsProvider).strokeModel,
+            health: ref.watch(healthProvider).valueOrNull,
+            onChanged: ref.read(pendingJobOptionsProvider.notifier).setStrokeModel,
+          ),
+        ],
+      ),
+    );
+    // Plain scroll views, so every field below the fold stays built.
+    Widget scroll(List<Widget> children) => SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: Spacing.xl),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+    const gap = SizedBox(height: Spacing.lg);
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth < _kSidePanelMinWidth) {
+          return scroll([...start, gap, tips, gap, setup]);
+        }
+        // Wide: the preview and start buttons on the left, setup beside them, in one scroll.
+        Widget column(List<Widget> children) =>
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+        return scroll([
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: column(start)),
+              const SizedBox(width: Spacing.xl),
+              SizedBox(width: _kSidePanelWidth, child: column([setup, gap, tips])),
+            ],
+          ),
+        ]);
+      },
     );
   }
 }
+
+/// From this width the ready view puts match setup in a side panel next to the preview.
+const _kSidePanelMinWidth = 840.0;
+const _kSidePanelWidth = 380.0;
 
 /// Keeps the preview a sensible size on wide screens.
 class MaxWidthPreview extends StatelessWidget {
@@ -379,41 +428,28 @@ class _SavedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle_outline, size: 48),
-            const SizedBox(height: Spacing.md),
-            Text(
-              jobId == null
-                  ? 'No frames reached the server, so nothing was saved.'
-                  : 'Session saved to History. The annotated video is rendering.',
-              textAlign: TextAlign.center,
+    return MessageView(
+      icon: jobId == null ? Icons.videocam_off_outlined : Icons.check_circle_outline,
+      message: jobId == null
+          ? 'No frames reached the server, so nothing was saved.'
+          : 'Session saved to History. The annotated video is rendering.',
+      action: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.center,
+        children: [
+          if (jobId != null)
+            FilledButton.icon(
+              onPressed: () => context.go(Routes.job(jobId!)),
+              icon: const Icon(Icons.insights),
+              label: const Text('Open results'),
             ),
-            const SizedBox(height: Spacing.lg),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                if (jobId != null)
-                  FilledButton.icon(
-                    onPressed: () => context.go(Routes.job(jobId!)),
-                    icon: const Icon(Icons.insights),
-                    label: const Text('Open results'),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: onNewSession,
-                  icon: const Icon(Icons.videocam_outlined),
-                  label: const Text('New session'),
-                ),
-              ],
-            ),
-          ],
-        ),
+          OutlinedButton.icon(
+            onPressed: onNewSession,
+            icon: const Icon(Icons.videocam_outlined),
+            label: const Text('New session'),
+          ),
+        ],
       ),
     );
   }

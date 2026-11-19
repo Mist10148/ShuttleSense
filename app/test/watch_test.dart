@@ -82,9 +82,11 @@ void main() {
     await tester.tap(find.text('Analyze every frame'));
     await tester.pump();
     await tester.ensureVisible(find.text('Singles'));
+    await tester.pump();
     await tester.tap(find.text('Singles'));
     await tester.pump();
     await tester.ensureVisible(find.text('Start analysis'));
+    await tester.pump();
     await tester.tap(find.text('Start analysis'));
     await tester.pump();
     expect(socket.outgoing.messages.first['type'], 'start');

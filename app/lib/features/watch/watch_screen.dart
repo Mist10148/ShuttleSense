@@ -19,8 +19,10 @@ import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/hit_burst.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../calibration/calibration_screen.dart';
 import '../upload/upload_controller.dart';
+import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
 
@@ -788,8 +790,14 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   Widget build(BuildContext context) {
     final info = video;
     final health = ref.watch(healthProvider).valueOrNull;
+    const cardPadding = EdgeInsets.all(Spacing.lg);
+    Widget framed(Widget video) => AppCard(
+      padding: const EdgeInsets.all(Spacing.md),
+      child: ClipRRect(borderRadius: BorderRadius.circular(Radii.md), child: video),
+    );
     return PageScaffold(
       title: 'Watch & Analyze',
+      maxWidth: 900,
       actions: [
         TextButton(onPressed: () => context.go(Routes.mode), child: const Text('Change mode')),
       ],
@@ -797,175 +805,222 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         if (health?.watchVideo != true)
           const Text('This backend does not support Watch & Analyze.')
         else if (info == null)
-          FilledButton.icon(
-            onPressed: uploading || detectingCourt ? null : pick,
-            icon: const Icon(Icons.upload_file),
-            label: Text(uploading ? 'Uploading…' : 'Choose video'),
+          VideoDropZone(
+            actions: [
+              FilledButton.icon(
+                onPressed: uploading || detectingCourt ? null : pick,
+                icon: const Icon(Icons.upload_file),
+                label: Text(uploading ? 'Uploading…' : 'Choose video'),
+              ),
+            ],
           )
         else if (socket == null && !backgroundStarted) ...[
-          Text(info.filename),
+          Text(info.filename, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: Spacing.md),
-          const Text('Playback and analysis'),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: true, label: Text('Real time')),
-              ButtonSegment(value: false, label: Text('Analyze every frame')),
-            ],
-            selected: {realTime},
-            onSelectionChanged: scanning || detectingCourt
-                ? null
-                : (v) => setState(() => realTime = v.first),
-          ),
-          Text(
-            realTime
-                ? 'Video plays at normal speed while normalized frames are analyzed in the background.'
-                : 'Playback waits for every normalized frame. High-frame-rate videos may '
-                      'be sampled to a lower frame rate.',
-          ),
-          if (realTime && health?.watchBackground == true)
-            SwitchListTile(
-              title: const Text('Faster player analysis (experimental)'),
-              subtitle: const Text(
-                'May miss players or change hits and results; not always faster. '
-                'Requires calibrated court corners.',
-              ),
-              value: focusedAnalysis,
-              onChanged: scanning || detectingCourt
-                  ? null
-                  : (value) => setState(() => focusedAnalysis = value),
-            ),
-          if (realTime && health?.watchBackground != true)
-            const Text(
-              'Update the backend to use background analysis, or choose Analyze every frame.',
-            ),
-          const Text('Match format'),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Choose manually')),
-              ButtonSegment(value: true, label: Text('Suggest automatically')),
-            ],
-            selected: {autoMode},
-            onSelectionChanged: scanning || detectingCourt
-                ? null
-                : (v) => setState(() {
-                    autoMode = v.first;
-                    matchType = null;
-                    suggestion = null;
-                    suggestionDetail = null;
-                  }),
-          ),
-          const Text('Confirm the match format:'),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final format in ['singles', 'doubles'])
-                ChoiceChip(
-                  label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
-                  selected: matchType == format,
-                  onSelected: scanning || detectingCourt
+          AppCard(
+            title: 'Playback and analysis',
+            padding: cardPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Spacing.sm,
+              children: [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('Real time')),
+                    ButtonSegment(value: false, label: Text('Analyze every frame')),
+                  ],
+                  selected: {realTime},
+                  onSelectionChanged: scanning || detectingCourt
                       ? null
-                      : (_) => setState(() => matchType = format),
+                      : (v) => setState(() => realTime = v.first),
                 ),
-            ],
-          ),
-          const Text('Court calibration'),
-          const Text(
-            'Select the match format above, then find corners automatically or tap them manually.',
-          ),
-          OutlinedButton.icon(
-            onPressed: matchType == null || scanning || detectingCourt ? null : detectCourt,
-            icon: detectingCourt
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.auto_fix_high),
-            label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
-          ),
-          if (courtDetectionMessage != null) Text(courtDetectionMessage!),
-          const Text(
-            'Tap the four outer corners of the full court, where the outer sidelines meet the back baselines: near left, near right, far right, far left. Use the same corners for singles and doubles.',
-          ),
-          const Text(
-            'Blue lines preview the court markings. Adjust the corners until they match the video.',
-          ),
-          const Text('Without court calibration, player detection is disabled.'),
-          const Text(
-            'For best accuracy, use a tripod and keep the whole court in a fixed view; do not pan or zoom.',
-          ),
-          SizedBox(
-            height: 320,
-            child: CornerCanvas(
-              image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
-              width: info.width,
-              height: info.height,
-              corners: corners,
-              overlayPainter: fullToSingles(corners) == null
-                  ? null
-                  : (scale) => FullCourtPreview(corners, scale),
-              onTap: (c) {
-                if (!scanning && !detectingCourt && corners.length < 4) {
-                  setState(() {
-                    corners.add(c);
-                    if (autoMode) {
-                      matchType = null;
-                      suggestion = null;
-                      suggestionDetail = null;
-                    }
-                  });
-                }
-              },
-              onMove: (i, c) {
-                if (!scanning && !detectingCourt) {
-                  setState(() {
-                    corners[i] = c;
-                    if (autoMode) {
-                      matchType = null;
-                      suggestion = null;
-                      suggestionDetail = null;
-                    }
-                  });
-                }
-              },
+                Text(
+                  realTime
+                      ? 'Video plays at normal speed while normalized frames are analyzed in the background.'
+                      : 'Playback waits for every normalized frame. High-frame-rate videos may '
+                            'be sampled to a lower frame rate.',
+                ),
+                if (realTime && health?.watchBackground == true)
+                  SwitchListTile(
+                    title: const Text('Faster player analysis (experimental)'),
+                    subtitle: const Text(
+                      'May miss players or change hits and results; not always faster. '
+                      'Requires calibrated court corners.',
+                    ),
+                    value: focusedAnalysis,
+                    onChanged: scanning || detectingCourt
+                        ? null
+                        : (value) => setState(() => focusedAnalysis = value),
+                  ),
+                if (realTime && health?.watchBackground != true)
+                  const Text(
+                    'Update the backend to use background analysis, or choose Analyze every frame.',
+                  ),
+              ],
             ),
           ),
-          TextButton(
-            onPressed: corners.isEmpty || scanning || detectingCourt
-                ? null
-                : () => setState(() {
-                    corners.clear();
-                    courtDetectionMessage = null;
-                    if (autoMode) {
-                      matchType = null;
-                      suggestion = null;
-                      suggestionDetail = null;
-                    }
-                  }),
-            child: const Text('Clear corners'),
+          const SizedBox(height: Spacing.lg),
+          AppCard(
+            title: 'Match format',
+            padding: cardPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Spacing.sm,
+              children: [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Choose manually')),
+                    ButtonSegment(value: true, label: Text('Suggest automatically')),
+                  ],
+                  selected: {autoMode},
+                  onSelectionChanged: scanning || detectingCourt
+                      ? null
+                      : (v) => setState(() {
+                          autoMode = v.first;
+                          matchType = null;
+                          suggestion = null;
+                          suggestionDetail = null;
+                        }),
+                ),
+                const Text('Confirm the match format:'),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final format in ['singles', 'doubles'])
+                      ChoiceChip(
+                        label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
+                        selected: matchType == format,
+                        onSelected: scanning || detectingCourt
+                            ? null
+                            : (_) => setState(() => matchType = format),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: Spacing.lg),
+          AppCard(
+            title: 'Court calibration',
+            padding: cardPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Spacing.sm,
+              children: [
+                const Text(
+                  'Select the match format above, then find corners automatically or tap them manually.',
+                ),
+                OutlinedButton.icon(
+                  onPressed: matchType == null || scanning || detectingCourt ? null : detectCourt,
+                  icon: detectingCourt
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_fix_high),
+                  label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
+                ),
+                if (courtDetectionMessage != null) Text(courtDetectionMessage!),
+                const Text(
+                  'Tap the four outer corners of the full court, where the outer sidelines meet the back baselines: near left, near right, far right, far left. Use the same corners for singles and doubles.',
+                ),
+                const Text(
+                  'Blue lines preview the court markings. Adjust the corners until they match the video.',
+                ),
+                const Text('Without court calibration, player detection is disabled.'),
+                const Text(
+                  'For best accuracy, use a tripod and keep the whole court in a fixed view; do not pan or zoom.',
+                ),
+                SizedBox(
+                  height: 320,
+                  child: CornerCanvas(
+                    image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
+                    width: info.width,
+                    height: info.height,
+                    corners: corners,
+                    overlayPainter: fullToSingles(corners) == null
+                        ? null
+                        : (scale) => FullCourtPreview(corners, scale),
+                    onTap: (c) {
+                      if (!scanning && !detectingCourt && corners.length < 4) {
+                        setState(() {
+                          corners.add(c);
+                          if (autoMode) {
+                            matchType = null;
+                            suggestion = null;
+                            suggestionDetail = null;
+                          }
+                        });
+                      }
+                    },
+                    onMove: (i, c) {
+                      if (!scanning && !detectingCourt) {
+                        setState(() {
+                          corners[i] = c;
+                          if (autoMode) {
+                            matchType = null;
+                            suggestion = null;
+                            suggestionDetail = null;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ),
+                TextButton(
+                  onPressed: corners.isEmpty || scanning || detectingCourt
+                      ? null
+                      : () => setState(() {
+                          corners.clear();
+                          courtDetectionMessage = null;
+                          if (autoMode) {
+                            matchType = null;
+                            suggestion = null;
+                            suggestionDetail = null;
+                          }
+                        }),
+                  child: const Text('Clear corners'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
           if (autoMode) ...[
-            const Text(
-              'Automatic detection requires four court corners and may be affected by spectators or hidden players.',
-            ),
-            OutlinedButton(
-              onPressed:
-                  fullToSingles(corners) != null &&
-                      !scanning &&
-                      !detectingCourt &&
-                      health?.watchMatchType == true
-                  ? suggest
-                  : null,
-              child: Text(scanning ? 'Checking video…' : 'Suggest match format'),
-            ),
-            if (health?.watchMatchType != true)
-              const Text('Automatic detection is unavailable on this server; choose manually.'),
-            if (suggestionDetail != null)
-              Text(
-                suggestion == null
-                    ? suggestionDetail!
-                    : 'Suggested: $suggestion. $suggestionDetail',
+            AppCard(
+              padding: cardPadding,
+              color: AppPalette.of(context).lavender,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: Spacing.sm,
+                children: [
+                  const Text(
+                    'Automatic detection requires four court corners and may be affected by spectators or hidden players.',
+                  ),
+                  OutlinedButton(
+                    onPressed:
+                        fullToSingles(corners) != null &&
+                            !scanning &&
+                            !detectingCourt &&
+                            health?.watchMatchType == true
+                        ? suggest
+                        : null,
+                    child: Text(scanning ? 'Checking video…' : 'Suggest match format'),
+                  ),
+                  if (health?.watchMatchType != true)
+                    const Text(
+                      'Automatic detection is unavailable on this server; choose manually.',
+                    ),
+                  if (suggestionDetail != null)
+                    Text(
+                      suggestion == null
+                          ? suggestionDetail!
+                          : 'Suggested: $suggestion. $suggestionDetail',
+                    ),
+                ],
               ),
+            ),
+            const SizedBox(height: Spacing.lg),
           ],
           FilledButton(
             onPressed:
@@ -980,95 +1035,117 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           ),
         ] else ...[
           if (realTime && videoController != null)
-            AspectRatio(
-              aspectRatio: frameWidth / frameHeight,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Video(controller: videoController!, controls: NoVideoControls, fit: BoxFit.fill),
-                  if (lastAnalyzedIndex >= 0 &&
-                      (videoPosition.inMilliseconds - lastAnalyzedIndex * 1000 / fps).abs() <= 250)
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: _WatchOverlay(frameData, frameWidth, frameHeight),
-                      ),
+            framed(
+              AspectRatio(
+                aspectRatio: frameWidth / frameHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Video(
+                      controller: videoController!,
+                      controls: NoVideoControls,
+                      fit: BoxFit.fill,
                     ),
-                  HitBurstLayer.watch(
-                    hits: watchHits,
-                    frame: frameData,
-                    frameWidth: frameWidth,
-                    frameHeight: frameHeight,
-                    nowS: videoPosition.inMilliseconds / 1000,
-                  ),
-                ],
+                    if (lastAnalyzedIndex >= 0 &&
+                        (videoPosition.inMilliseconds - lastAnalyzedIndex * 1000 / fps).abs() <=
+                            250)
+                      IgnorePointer(
+                        child: CustomPaint(
+                          painter: _WatchOverlay(frameData, frameWidth, frameHeight),
+                        ),
+                      ),
+                    HitBurstLayer.watch(
+                      hits: watchHits,
+                      frame: frameData,
+                      frameWidth: frameWidth,
+                      frameHeight: frameHeight,
+                      nowS: videoPosition.inMilliseconds / 1000,
+                    ),
+                  ],
+                ),
               ),
             )
           else if (!realTime && image != null)
-            AspectRatio(
-              aspectRatio: frameWidth / frameHeight,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image(
-                    image: _watchProfile
-                        ? _ProfiledMemoryImage(image!, lastAnalyzedIndex)
-                        : MemoryImage(image!),
-                    gaplessPlayback: true,
-                    fit: BoxFit.fill,
-                    frameBuilder: !_watchProfile
-                        ? null
-                        : (context, child, imageFrame, synchronouslyLoaded) {
-                            if (imageFrame != null &&
-                                lastAnalyzedIndex != profileLastDecodedIndex &&
-                                profileLastResponseUs != null) {
-                              profileLastDecodedIndex = lastAnalyzedIndex;
-                              debugPrint(
-                                'WATCH_PROFILE ${jsonEncode({'event': 'image_ready', 'frame': lastAnalyzedIndex, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000, 'synchronous': synchronouslyLoaded})}',
-                              );
-                            }
-                            return child;
-                          },
-                  ),
-                  CustomPaint(painter: _WatchOverlay(frameData, frameWidth, frameHeight)),
-                  HitBurstLayer.watch(
-                    hits: watchHits,
-                    frame: frameData,
-                    frameWidth: frameWidth,
-                    frameHeight: frameHeight,
-                  ),
-                ],
+            framed(
+              AspectRatio(
+                aspectRatio: frameWidth / frameHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image(
+                      image: _watchProfile
+                          ? _ProfiledMemoryImage(image!, lastAnalyzedIndex)
+                          : MemoryImage(image!),
+                      gaplessPlayback: true,
+                      fit: BoxFit.fill,
+                      frameBuilder: !_watchProfile
+                          ? null
+                          : (context, child, imageFrame, synchronouslyLoaded) {
+                              if (imageFrame != null &&
+                                  lastAnalyzedIndex != profileLastDecodedIndex &&
+                                  profileLastResponseUs != null) {
+                                profileLastDecodedIndex = lastAnalyzedIndex;
+                                debugPrint(
+                                  'WATCH_PROFILE ${jsonEncode({'event': 'image_ready', 'frame': lastAnalyzedIndex, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000, 'synchronous': synchronouslyLoaded})}',
+                                );
+                              }
+                              return child;
+                            },
+                    ),
+                    CustomPaint(painter: _WatchOverlay(frameData, frameWidth, frameHeight)),
+                    HitBurstLayer.watch(
+                      hits: watchHits,
+                      frame: frameData,
+                      frameWidth: frameWidth,
+                      frameHeight: frameHeight,
+                    ),
+                  ],
+                ),
               ),
             ),
-          Text(
-            '$status · ${realTime ? (videoPosition.inMilliseconds / 1000).toStringAsFixed(1) : (index / fps).toStringAsFixed(1)} s${total > 0 ? ' / ${(total / fps).toStringAsFixed(1)} s' : ''}',
+          const SizedBox(height: Spacing.lg),
+          AppCard(
+            padding: cardPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Spacing.xs,
+              children: [
+                Text(
+                  '$status ·${realTime ? (videoPosition.inMilliseconds / 1000).toStringAsFixed(1) : (index / fps).toStringAsFixed(1)} s${total > 0 ? ' / ${(total / fps).toStringAsFixed(1)} s' : ''}',
+                ),
+                Text('Elapsed: ${formatWatchElapsed(analysisClock.elapsed)} (includes pauses)'),
+                Text('Rally: $rally'),
+                if (synthetic)
+                  const Text('Demo server: results are synthetic and do not describe this video.'),
+                if (!synthetic && modelsMissing)
+                  const Text('Tracking or pose models are unavailable on this server.'),
+                if (latestHit.isNotEmpty) Text(latestHit),
+                if (score.isNotEmpty) Text(score),
+                if (lineCall.isNotEmpty) Text(lineCall),
+                if (coaching.isNotEmpty) Text(coaching),
+                const Text(
+                  'Feedback may be delayed while the rally is confirmed. Playback is silent.',
+                ),
+                if (backgroundStarted)
+                  Text(
+                    'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
+                    'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
+                    'Overlays are hidden when analysis is behind.',
+                  ),
+                if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
+                if (backgroundStarted && focusedAnalysisActive)
+                  const Text('Experimental faster player analysis is active.'),
+                if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
+                  const Text('Faster analysis is unavailable; normal analysis is being used.'),
+                if (started && accelerationDiagnostics != null)
+                  ExpansionTile(
+                    title: const Text('Configured analysis providers'),
+                    children: [Text(accelerationDiagnostics!)],
+                  ),
+              ],
+            ),
           ),
-          Text('Elapsed: ${formatWatchElapsed(analysisClock.elapsed)} (includes pauses)'),
-          Text('Rally: $rally'),
-          if (synthetic)
-            const Text('Demo server: results are synthetic and do not describe this video.'),
-          if (!synthetic && modelsMissing)
-            const Text('Tracking or pose models are unavailable on this server.'),
-          if (latestHit.isNotEmpty) Text(latestHit),
-          if (score.isNotEmpty) Text(score),
-          if (lineCall.isNotEmpty) Text(lineCall),
-          if (coaching.isNotEmpty) Text(coaching),
-          const Text('Feedback may be delayed while the rally is confirmed. Playback is silent.'),
-          if (backgroundStarted)
-            Text(
-              'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
-              'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
-              'Overlays are hidden when analysis is behind.',
-            ),
-          if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
-          if (backgroundStarted && focusedAnalysisActive)
-            const Text('Experimental faster player analysis is active.'),
-          if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
-            const Text('Faster analysis is unavailable; normal analysis is being used.'),
-          if (started && accelerationDiagnostics != null)
-            ExpansionTile(
-              title: const Text('Configured analysis providers'),
-              children: [Text(accelerationDiagnostics!)],
-            ),
+          const SizedBox(height: Spacing.lg),
           if (!stopping && started && error == null)
             Wrap(
               spacing: 8,

@@ -9,6 +9,7 @@ import '../../../data/repositories/analysis_repository.dart';
 import '../../../shared/widgets/courtside_tools.dart';
 import '../../../shared/widgets/hit_burst.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../shared/widgets/surfaces.dart';
 import '../../results/widgets/court_minimap.dart';
 import '../../results/widgets/line_call_banner.dart';
 import '../../results/widgets/scoreboard.dart';
@@ -68,69 +69,72 @@ class _LiveViewState extends ConsumerState<LiveView> {
     final image = controller.analyzedImage;
     final capture = controller.captureSize;
     final aspect = capture == null ? 16 / 9 : capture.width / capture.height;
-    final video = AspectRatio(
-      aspectRatio: aspect,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const ColoredBox(color: Colors.black),
-            Center(
-              child: AspectRatio(
-                aspectRatio: aspect,
-                child: image == null || size == null
-                    ? controller.source?.preview()
-                    : Image.memory(
-                        image,
-                        key: ObjectKey(image),
-                        fit: BoxFit.fill,
-                        cacheWidth: size.width,
-                        errorBuilder: (_, _, _) =>
-                            controller.source?.preview() ?? const SizedBox.shrink(),
-                        frameBuilder: (context, child, frame, _) {
-                          if (frame == null) return const SizedBox.expand();
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              child,
-                              CustomPaint(
-                                painter: LiveOverlayPainter(
-                                  size: size,
-                                  trail: state.trail,
-                                  players: state.players,
-                                  colors: PlayerColors.of(context),
+    final video = AppCard(
+      padding: const EdgeInsets.all(Spacing.md),
+      child: AspectRatio(
+        aspectRatio: aspect,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(Radii.md),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const ColoredBox(color: Colors.black),
+              Center(
+                child: AspectRatio(
+                  aspectRatio: aspect,
+                  child: image == null || size == null
+                      ? controller.source?.preview()
+                      : Image.memory(
+                          image,
+                          key: ObjectKey(image),
+                          fit: BoxFit.fill,
+                          cacheWidth: size.width,
+                          errorBuilder: (_, _, _) =>
+                              controller.source?.preview() ?? const SizedBox.shrink(),
+                          frameBuilder: (context, child, frame, _) {
+                            if (frame == null) return const SizedBox.expand();
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                child,
+                                CustomPaint(
+                                  painter: LiveOverlayPainter(
+                                    size: size,
+                                    trail: state.trail,
+                                    players: state.players,
+                                    colors: PlayerColors.of(context),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-              ),
-            ),
-            if (state.phase == LivePhase.live && state.hits.isNotEmpty)
-              HitBurstLayer(
-                events: [
-                  HitBurstEvent(
-                    id: state.hits.last.id,
-                    who: state.hits.last.who,
-                    stroke: state.hits.last.stroke,
-                  ),
-                ],
-              ),
-            if (state.phase != LivePhase.live)
-              ColoredBox(
-                color: Colors.black54,
-                child: Center(
-                  child: Text(switch (state.phase) {
-                    LivePhase.connecting => 'Connecting… the server may be loading its models',
-                    LivePhase.reconnecting => 'Reconnecting…',
-                    LivePhase.stopping => 'Saving the session…',
-                    _ => '',
-                  }, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                              ],
+                            );
+                          },
+                        ),
                 ),
               ),
-          ],
+              if (state.phase == LivePhase.live && state.hits.isNotEmpty)
+                HitBurstLayer(
+                  events: [
+                    HitBurstEvent(
+                      id: state.hits.last.id,
+                      who: state.hits.last.who,
+                      stroke: state.hits.last.stroke,
+                    ),
+                  ],
+                ),
+              if (state.phase != LivePhase.live)
+                ColoredBox(
+                  color: Colors.black54,
+                  child: Center(
+                    child: Text(switch (state.phase) {
+                      LivePhase.connecting => 'Connecting… the server may be loading its models',
+                      LivePhase.reconnecting => 'Reconnecting…',
+                      LivePhase.stopping => 'Saving the session…',
+                      _ => '',
+                    }, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -178,27 +182,24 @@ class _LiveViewState extends ConsumerState<LiveView> {
       ),
       // The match is decided: nothing more to score, so offer to save it (T12.6).
       if (state.phase == LivePhase.live && (record.score?.matchOver ?? false))
-        Card(
+        AppCard(
           key: const Key('match-over'),
-          color: Theme.of(context).colorScheme.tertiaryContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(Spacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Match won by ${playerLabel(record.score!.matchWinner!)}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (!_coach) const Text('Undo to change the result.'),
-                FilledButton(
-                  onPressed: decisionBusy
-                      ? null
-                      : () => confirmStop(context, state, controller.stop),
-                  child: const Text('Stop and save'),
-                ),
-              ],
-            ),
+          color: AppPalette.of(context).mint,
+          padding: const EdgeInsets.all(Spacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Match won by ${playerLabel(record.score!.matchWinner!)}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (!_coach) const Text('Undo to change the result.'),
+              const SizedBox(height: Spacing.sm),
+              FilledButton(
+                onPressed: decisionBusy ? null : () => confirmStop(context, state, controller.stop),
+                child: const Text('Stop and save'),
+              ),
+            ],
           ),
         ),
       if (state.phase == LivePhase.stopping)
@@ -418,8 +419,9 @@ class _LiveViewState extends ConsumerState<LiveView> {
           ],
         );
         final wide = Breakpoints.forWidth(constraints.maxWidth) != WindowClass.compact;
+        // The page around this view gives the side gutter.
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(Spacing.md),
+          padding: const EdgeInsets.only(bottom: Spacing.lg),
           child: wide
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
