@@ -110,6 +110,7 @@ void main() {
     /// The stroke model field sits under the "Advanced" disclosure on the upload screen.
     Future<void> openAdvanced(WidgetTester tester) async {
       await tester.ensureVisible(find.text('Advanced'));
+      await tester.pump(); // lay out the scrolled page before tapping
       await tester.tap(find.text('Advanced'));
       await tester.pumpAndSettle();
     }

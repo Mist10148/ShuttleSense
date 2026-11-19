@@ -200,10 +200,7 @@ class _StrokeMix extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: Spacing.xs),
-                          _Bar(
-                            fraction: counts[type]! / total,
-                            color: p.chart[i % p.chart.length],
-                          ),
+                          _Bar(fraction: counts[type]! / total, color: p.chart[i % p.chart.length]),
                         ],
                       ),
                     ),
@@ -230,7 +227,9 @@ class _Bar extends StatelessWidget {
       child: FractionallySizedBox(
         widthFactor: fraction,
         heightFactor: 1,
-        child: DecoratedBox(decoration: BoxDecoration(color: color, borderRadius: shape)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: color, borderRadius: shape),
+        ),
       ),
     );
   }

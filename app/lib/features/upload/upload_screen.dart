@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../mode/mode_screen.dart';
 import '../../data/models/health.dart';
 import '../../shared/widgets/dependent_switch.dart';
@@ -116,6 +117,26 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final step = file == null || badFormat ? 0 : (uploading ? 2 : 1);
     final showStrokeModel = health == null || health.strokeModels != null;
     final model = kStrokeModels[resolveStrokeModel(options.strokeModel, health)];
+    final pickButtons = [
+      if (_isPhone)
+        OutlinedButton.icon(
+          onPressed: uploading ? null : () => _pick(gallery: true),
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text('From gallery'),
+        ),
+      if (file == null)
+        FilledButton.tonalIcon(
+          onPressed: uploading ? null : _pick,
+          icon: const Icon(Icons.video_library_outlined),
+          label: const Text('Choose video'),
+        )
+      else
+        OutlinedButton.icon(
+          onPressed: uploading ? null : _pick,
+          icon: const Icon(Icons.swap_horiz),
+          label: const Text('Replace'),
+        ),
+    ];
 
     return PageScaffold(
       title: 'New analysis',
@@ -131,50 +152,21 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
-                'Best results from a phone on a tripod, elevated and behind the baseline.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: Spacing.md),
-              if (file != null) ...[
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.movie_outlined),
-                  title: Text(file.name, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                    details.join(' · '),
-                    style: upload.large || upload.tooLong
-                        ? TextStyle(color: theme.colorScheme.error)
-                        : null,
-                  ),
+              if (file == null)
+                _DropZone(actions: pickButtons)
+              else ...[
+                _FileRow(
+                  name: file.name,
+                  details: details.join(' · '),
+                  warn: upload.large || upload.tooLong,
+                  actions: pickButtons,
                 ),
                 if (badFormat)
                   const HelperText(
                     'This file type is not supported. Use MP4, MOV or AVI.',
                     error: true,
                   ),
-                const SizedBox(height: Spacing.sm),
               ],
-              Wrap(
-                spacing: Spacing.sm,
-                runSpacing: Spacing.sm,
-                children: [
-                  if (_isPhone)
-                    OutlinedButton.icon(
-                      onPressed: uploading ? null : () => _pick(gallery: true),
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('From gallery'),
-                    ),
-                  OutlinedButton.icon(
-                    onPressed: uploading ? null : _pick,
-                    icon: Icon(file == null ? Icons.video_library_outlined : Icons.swap_horiz),
-                    label: Text(file == null ? 'Choose video' : 'Replace'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -288,6 +280,116 @@ const _kVideoExtensions = {'mp4', 'mov', 'avi'};
 String _minutes(double seconds) {
   final s = seconds.round();
   return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+}
+
+/// The empty video slot: a dashed outline with what the server accepts and the pick buttons.
+class _DropZone extends StatelessWidget {
+  const _DropZone({required this.actions});
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    return CustomPaint(
+      painter: _DashedBorderPainter(color: p.text3, radius: Radii.lg),
+      child: Padding(
+        padding: const EdgeInsets.all(Spacing.lg),
+        child: Column(
+          children: [
+            IconChip(icon: Icons.movie_outlined, background: p.lavender),
+            const SizedBox(height: Spacing.sm),
+            Text(
+              'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
+              'Best results from a phone on a tripod, elevated and behind the baseline.',
+              style: text.bodySmall?.copyWith(color: p.text2),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Spacing.md),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: Spacing.sm,
+              runSpacing: Spacing.sm,
+              children: actions,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The chosen video: name, length and size (in the error colour past a server limit), and
+/// the Replace button.
+class _FileRow extends StatelessWidget {
+  const _FileRow({
+    required this.name,
+    required this.details,
+    required this.warn,
+    required this.actions,
+  });
+
+  final String name;
+  final String details;
+  final bool warn;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        IconChip(icon: Icons.movie_outlined, background: p.mint),
+        const SizedBox(width: Spacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis),
+              Text(
+                details,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: warn ? theme.colorScheme.error : p.text2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: Spacing.sm),
+        Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions),
+      ],
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  static const _dash = 6.0;
+  static const _gap = 5.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final outline = Path()
+      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    for (final metric in outline.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += _dash + _gap) {
+        canvas.drawPath(metric.extractPath(d, d + _dash), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) => old.color != color || old.radius != radius;
 }
 
 /// Overlay chips in groups, with All / None. A chip that cannot be chosen says why, both in

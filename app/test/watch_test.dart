@@ -11,6 +11,7 @@ import 'package:shuttlesense_app/features/mode/mode_screen.dart';
 import 'package:shuttlesense_app/features/calibration/calibration_screen.dart';
 import 'package:shuttlesense_app/features/watch/watch_screen.dart';
 import 'package:shuttlesense_app/features/watch/court_geometry.dart';
+import 'package:shuttlesense_app/shared/widgets/surfaces.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
@@ -163,11 +164,8 @@ void main() {
       size: laptop,
       overrides: [healthProvider.overrideWith((ref) async => health(false))],
     );
-    final disabled = tester.widget<InkWell>(
-      find.descendant(
-        of: find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(Card)),
-        matching: find.byType(InkWell),
-      ),
+    final disabled = tester.widget<PastelActionCard>(
+      find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(PastelActionCard)),
     );
     expect(disabled.onTap, isNull);
     await tester.pumpWidget(const SizedBox());
@@ -177,11 +175,8 @@ void main() {
       size: laptop,
       overrides: [healthProvider.overrideWith((ref) async => health(true))],
     );
-    final enabled = tester.widget<InkWell>(
-      find.descendant(
-        of: find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(Card)),
-        matching: find.byType(InkWell),
-      ),
+    final enabled = tester.widget<PastelActionCard>(
+      find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(PastelActionCard)),
     );
     expect(enabled.onTap, isNotNull);
     debugDefaultTargetPlatformOverride = null;

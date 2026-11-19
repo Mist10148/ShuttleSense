@@ -89,7 +89,9 @@ class ModeChoices extends ConsumerWidget {
               : detailed
               ? 'Watch a recorded rally while the server analyzes it frame by frame.'
               : 'Play a video while it is analyzed.',
-          footnote: detailed ? 'You need: a recorded video file, in Chrome or the Windows app' : null,
+          footnote: detailed
+              ? 'You need: a recorded video file, in Chrome or the Windows app'
+              : null,
           badge: lastUsed(AppMode.watch, available: watchOn),
           onTap: watchOn ? () => pick(AppMode.watch) : null,
         ),

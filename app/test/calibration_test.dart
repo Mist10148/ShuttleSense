@@ -67,6 +67,18 @@ void main() {
     expect(find.byKey(const ValueKey('corner-1')), findsOneWidget);
   });
 
+  testWidgets('on a phone the frame and button fit, and Reset clears the corners', (tester) async {
+    await pumpScreen(tester, const CalibrationScreen(videoId: 'vid1'));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Start processing'), findsOneWidget);
+    await tapCorner(tester, const Offset(0.2, 0.9));
+    await tapCorner(tester, const Offset(0.8, 0.9));
+    expect(find.byKey(const ValueKey('corner-1')), findsOneWidget);
+    await tester.tap(find.text('Reset'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('corner-0')), findsNothing);
+  });
+
   testWidgets('dragging a handle moves a corner', (tester) async {
     await pumpScreen(tester, const CalibrationScreen(videoId: 'vid1'), size: laptop);
     await tapCorner(tester, const Offset(0.2, 0.9));

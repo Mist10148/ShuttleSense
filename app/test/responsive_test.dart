@@ -57,7 +57,8 @@ void main() {
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(IconRail), findsNothing);
       expect(find.byTooltip('Search analyses'), findsOneWidget);
-      expect(find.text('New analysis'), findsOneWidget);
+      expect(find.text('Home'), findsWidgets);
+      expect(find.text('Start an analysis'), findsOneWidget);
     });
 
     for (final (name, size) in [('tablet', tablet), ('laptop', laptop)]) {
