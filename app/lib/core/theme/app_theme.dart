@@ -172,7 +172,7 @@ abstract final class AppTheme {
       fontFamily: fontFamily,
       extensions: [players, status, p],
       visualDensity: VisualDensity.adaptivePlatformDensity,
-      scaffoldBackgroundColor: p.canvas,
+      scaffoldBackgroundColor: p.page,
       textTheme: _textTheme(p),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -278,6 +278,39 @@ abstract final class AppTheme {
         contentTextStyle: TextStyle(fontFamily: fontFamily, fontSize: 14, color: p.onInk),
         actionTextColor: p.onInk,
         shape: control,
+      ),
+      // Phones: the bottom tab bar, with the active tab as an ink pill.
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: p.surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: p.ink,
+        indicatorShape: const StadiumBorder(),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (s) => IconThemeData(color: s.contains(WidgetState.selected) ? p.onInk : p.text2),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (s) => TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 12,
+            fontWeight: s.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w400,
+            color: s.contains(WidgetState.selected) ? p.ink : p.text2,
+          ),
+        ),
+      ),
+      // Top tabs: pills, the active one filled with ink.
+      tabBarTheme: TabBarThemeData(
+        indicator: BoxDecoration(color: p.ink, borderRadius: BorderRadius.circular(Radii.pill)),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerHeight: 0,
+        labelColor: p.onInk,
+        unselectedLabelColor: p.text2,
+        splashBorderRadius: BorderRadius.circular(Radii.pill),
+        labelStyle: const TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        unselectedLabelStyle: const TextStyle(fontFamily: fontFamily, fontSize: 14),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: p.ink,

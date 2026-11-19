@@ -16,6 +16,9 @@ import '../../core/theme/tokens.dart';
 /// arrives, so a swiped-away tile is never built again (Dismissible requires that).
 final _deletedJobsProvider = StateProvider.autoDispose<Set<String>>((ref) => {});
 
+/// The History search text. The top bar's search writes it too, then opens History.
+final historyQueryProvider = StateProvider<String>((ref) => '');
+
 /// Which jobs the list shows.
 enum _ModeFilter { all, upload, live }
 
@@ -29,7 +32,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
-  String _query = '';
+  late final _search = TextEditingController(text: ref.read(historyQueryProvider));
   _ModeFilter _mode = _ModeFilter.all;
   bool _newestFirst = true;
   DateTime? _updated;
@@ -40,10 +43,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     ref.listenManual(jobsListProvider, (_, next) {
       if (next.hasValue && !next.isLoading) setState(() => _updated = DateTime.now());
     }, fireImmediately: true);
+    // A search typed in the top bar shows up in this field.
+    ref.listenManual(historyQueryProvider, (_, next) {
+      if (_search.text != next) _search.text = next;
+    });
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   List<Job> _visible(List<Job> all, Set<String> deleted) {
-    final query = _query.trim().toLowerCase();
+    final query = ref.watch(historyQueryProvider).trim().toLowerCase();
     final list = [
       for (final j in all)
         if (!deleted.contains(j.id) &&
@@ -161,11 +174,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       SizedBox(
         width: 280,
         child: TextField(
+          controller: _search,
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
             hintText: 'Search by file name',
           ),
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: (v) => ref.read(historyQueryProvider.notifier).state = v,
         ),
       ),
       SegmentedButton<_ModeFilter>(

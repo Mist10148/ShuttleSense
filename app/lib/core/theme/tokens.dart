@@ -54,6 +54,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.progress,
     required this.canvas,
     required this.canvasGlows,
+    required this.page,
     required this.shell,
     required this.cardShadow,
     required this.popoverShadow,
@@ -93,6 +94,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color canvas;
   final List<Color> canvasGlows;
 
+  /// The solid page behind screens inside the shell: the glass tone, made opaque so pages
+  /// do not show through each other while a route transition runs.
+  final Color page;
+
   /// The translucent fill of the floating app shell.
   final Color shell;
   final List<BoxShadow> cardShadow;
@@ -128,6 +133,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     progress: [Color(0xFF7DB3F0), Color(0xFF8FD9B6)],
     canvas: Color(0xFFEDEBF8),
     canvasGlows: [Color(0xFFC9C6F5), Color(0xFFF6D5D0), Color(0xFFD4F1E4)],
+    page: Color(0xFFF8F7FC),
     shell: Color(0xB3FFFFFF),
     cardShadow: [BoxShadow(color: Color(0x0F1E1E3C), blurRadius: 24, offset: Offset(0, 8))],
     popoverShadow: [BoxShadow(color: Color(0x241E1E3C), blurRadius: 40, offset: Offset(0, 16))],
@@ -152,6 +158,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     progress: [Color(0xFF7DB3F0), Color(0xFF8FD9B6)],
     canvas: Color(0xFF0F1211),
     canvasGlows: [Color(0x332F8F5B), Color(0x2E6E5BD9), Color(0x1A2F8F5B)],
+    page: Color(0xFF131615),
     shell: Color(0xB3141716),
     cardShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 24, offset: Offset(0, 8))],
     popoverShadow: [BoxShadow(color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 16))],

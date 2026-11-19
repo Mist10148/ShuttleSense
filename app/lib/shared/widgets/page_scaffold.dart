@@ -71,30 +71,44 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        if (showBack && Navigator.of(context).canPop()) ...[
-          const BackButton(),
-          const SizedBox(width: Spacing.xs),
-        ],
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Semantics(header: true, child: Text(title, style: theme.textTheme.headlineSmall)),
-              if (below != null)
-                Text(
-                  below!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
+    final compact = Breakpoints.of(context).isCompact;
+    // The brief's large light title, smaller on a phone so a word still fits the line.
+    final titleStyle = compact
+        ? theme.textTheme.headlineLarge?.copyWith(fontSize: 32)
+        : theme.textTheme.headlineLarge;
+    return LayoutBuilder(
+      builder: (context, box) => Row(
+        children: [
+          if (showBack && Navigator.of(context).canPop()) ...[
+            const BackButton(),
+            const SizedBox(width: Spacing.xs),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(header: true, child: Text(title, style: titleStyle)),
+                if (below != null) ...[
+                  const SizedBox(height: Spacing.xs),
+                  Text(below!, style: theme.textTheme.bodySmall),
+                ],
+              ],
+            ),
           ),
-        ),
-        // Flexible, so a long action label wraps instead of overflowing on a narrow phone.
-        for (final action in actions ?? const <Widget>[]) Flexible(child: action),
-      ],
+          // Capped at half the row and wrapping, so a long action label never overflows on a
+          // narrow phone, while the title keeps the rest of the row.
+          if (actions case final actions? when actions.isNotEmpty)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: Spacing.xs,
+                children: actions,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
