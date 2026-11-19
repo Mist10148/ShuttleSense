@@ -21,6 +21,7 @@ Results are viewed in one **Flutter app** that runs on a phone, a tablet, a lapt
 
 - [Features](#features)
 - [Demo](#demo)
+- [Screenshots](#screenshots)
 - [How it works](#how-it-works)
 - [Repository structure](#repository-structure)
 - [Quick start](#quick-start)
@@ -91,6 +92,20 @@ The results screen mirrors the reference demo and adapts to the device:
 | Minimap | Top-down court with players and shuttle | Tab | Right panel |
 | Scoreboard | Score per side (player or pair) with correction buttons | Tab | Right panel |
 | Stroke timeline | Time, player, stroke, confidence, speed and form tip for every hit; tap to seek | Tab | Below the video |
+
+---
+
+## Screenshots
+
+The app after the redesign, run against the demo server (light theme). What changed is in the [changelog](CHANGELOG.md).
+
+| Home | Results |
+| --- | --- |
+| ![Home](docs/media/redesign-home-1440.jpg) | ![Results](docs/media/redesign-results-1440.jpg) |
+| **History** | **Settings** |
+| ![History](docs/media/redesign-history-1440.jpg) | ![Settings](docs/media/redesign-settings-1440.jpg) |
+| **Connect (phone)** | **Page not found (phone)** |
+| <img src="docs/media/redesign-connect-390.jpg" alt="Connect" width="260"> | <img src="docs/media/redesign-404-390.jpg" alt="Page not found" width="260"> |
 
 ---
 

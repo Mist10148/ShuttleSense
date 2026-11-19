@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,9 +16,12 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/styleguide/styleguide_screen.dart';
 import '../../features/upload/upload_screen.dart';
 import '../../features/watch/watch_screen.dart';
+import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
 import '../config/app_mode.dart';
 import '../config/server_config.dart';
 import '../responsive/adaptive_shell.dart';
+import '../theme/tokens.dart';
 
 /// Routes from docs/ARCHITECTURE.md §4 (Navigation).
 abstract final class Routes {
@@ -47,6 +50,29 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: Routes.dashboard,
     refreshListenable: refresh,
+    errorBuilder: (context, state) => Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(Spacing.lg),
+              child: PageHeader(title: 'Page not found', showBack: false),
+            ),
+            Expanded(
+              child: MessageView(
+                icon: Icons.search_off,
+                message: 'Page not found',
+                detail: 'Nothing lives at ${state.uri}.',
+                action: FilledButton(
+                  onPressed: () => context.go(Routes.dashboard),
+                  child: const Text('Go to Home'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
     redirect: (context, state) {
       final connected = ref.read(serverConfigProvider) != null;
       // The styleguide needs no server, so the design can be reviewed on any machine.
