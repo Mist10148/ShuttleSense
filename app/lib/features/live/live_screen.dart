@@ -236,6 +236,7 @@ class _ReadyView extends ConsumerWidget {
     ];
     final tips = AppCard(
       title: 'Before you start',
+      padding: const EdgeInsets.all(Spacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -253,6 +254,8 @@ class _ReadyView extends ConsumerWidget {
     );
     final setup = AppCard(
       title: 'Match setup',
+      // The segmented choices inside need the width: a smaller inset than other cards.
+      padding: const EdgeInsets.all(Spacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -312,8 +315,10 @@ class _ReadyView extends ConsumerWidget {
 }
 
 /// From this width the ready view puts match setup in a side panel next to the preview.
-const _kSidePanelMinWidth = 840.0;
-const _kSidePanelWidth = 380.0;
+const _kSidePanelMinWidth = 1000.0;
+
+/// Wide enough for the four stroke models in one row without breaking a word.
+const _kSidePanelWidth = 480.0;
 
 /// Keeps the preview a sensible size on wide screens.
 class MaxWidthPreview extends StatelessWidget {
