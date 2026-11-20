@@ -85,7 +85,7 @@
 
 **Objective:** Reduce detection and pose cost while protecting player identities and downstream analysis.
 
-- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. [Profiling](docs/results/watch_phase3_pose_profile.md) covers three short singles/doubles broadcast sections and an approximate CUDA trace; representative consented footage and full transfer attribution remain outstanding.
+- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. [Profiling](docs/results/watch_phase3_pose_profile.md) covers three short singles/doubles broadcast sections and an approximate CUDA trace with unassigned activity reported. Phone profiling is deferred at the owner's direction; representative coverage and exact transfer attribution remain unverified.
 - [ ] Compare batch sizes 4, 8, and 16 with the same TensorRT RTX profile and CUDA fallback. Record cold compilation, warm runtime, frame latency, candidate counts, VRAM, and actual Flutter end-to-end time.
 - [ ] Evaluate court- and track-aware filtering in shadow mode against the current filter. Include players near boundaries, jumping, overlapping partners, occlusion, bystanders, tracking loss, and reacquisition.
 - [ ] Keep focused-candidate selection disabled by default. Do not cap people or tighten boundaries solely because they improve an isolated benchmark.
@@ -99,9 +99,9 @@
 
 **Objective:** Optimize shuttle inference only if measured as a meaningful end-to-end bottleneck.
 
-- [ ] Audit temporal window construction, resized-input caching, initialization, inference mode, tensor allocation, CPU/GPU copies, heatmap decoding, and coordinate conversion.
-- [ ] Test low-risk buffer/copy improvements against the current PyTorch path, preserving inputs, temporal ordering, and output semantics.
-- [ ] Consider ONNX or TensorRT conversion only after lower-risk work and only if TrackNet remains material. Measure build/warm-up time, temporal shapes, operator support, precision, memory, portability, and fallback. Existing TrackNet RTX and GPU-window paths are experimental and disabled.
+- [x] Audit temporal window construction, resized-input caching, initialization, inference mode, tensor allocation, CPU/GPU copies, heatmap decoding, and coordinate conversion. See the [TrackNetV3 audit](docs/results/watch_phase4_tracknet_audit.md); isolated costs and end-to-end impact still require measurement.
+- [x] Test a low-risk single-window batch-copy improvement against the current PyTorch path. The [experiment](docs/results/watch_phase4_single_batch_experiment.md) preserved input values and sampled decoded outputs, but raw heatmaps differed; the candidate remains experimental and is not enabled.
+- [ ] Consider ONNX or TensorRT conversion only after lower-risk work and only if TrackNet remains material. Measure build/warm-up time, temporal shapes, operator support, precision, memory, portability, and fallback. The [conversion decision](docs/results/watch_phase4_conversion_gate.md) includes backend and Flutter bypass experiments; Flutter results were noisy and did not show a repeatable benefit. TrackNet RTX and GPU-window paths remain experimental and disabled.
 - [ ] Evaluate held-out shuttle recall, coordinate error, visibility, trajectory continuity, occlusion, and effects on hits and strokes.
 - [ ] Enable a replacement only with at least 5% repeatable end-to-end median improvement and no decrease in shuttle/hit recall or worsening of coordinate and trajectory/visibility errors. Keep PyTorch fallback.
 - [ ] If TrackNet is not limiting, document the evidence and defer invasive optimization.
@@ -112,8 +112,8 @@
 
 **Objective:** Address demonstrated scheduling, allocation, transfer, or initialization bottlenecks.
 
-- [ ] Capture an opt-in Nsight Systems or equivalent trace of the actual frame-by-frame path, then compare with unprofiled timings. Examine GPU model overlap, transfers, synchronization, kernel gaps, CPU waits, allocations, initialization, and contention.
-- [ ] Compare sequential and concurrent perception with identical input and providers, including correctness, memory, session lifetime, errors, and cancellation. Do not interpret GPU utilization alone as efficiency.
+- [ ] Capture an opt-in Nsight Systems or equivalent trace of the actual frame-by-frame path, then compare with unprofiled timings. Examine GPU model overlap, transfers, synchronization, kernel gaps, CPU waits, allocations, initialization, and contention. The [coordination trace](docs/results/watch_phase5_coordination_trace.md) covers an offline frame-processing diagnostic with before/after untraced runs; complete client-path, OS wait, memory-peak and contention attribution remain open.
+- [ ] Compare sequential and concurrent perception with identical input and providers, including correctness, memory, session lifetime, errors, and cancellation. The [comparison](docs/results/watch_phase5_concurrency_comparison.md) covers repeated short real-model runs and worker/lifecycle tests; long-session memory, real in-flight cancellation and broader footage remain open. Do not interpret GPU utilization alone as efficiency.
 - [ ] If evidence supports it, test bounded ONNX Runtime, OpenCV, and PyTorch thread settings individually. Avoid global thread changes and oversubscription without measurements.
 - [ ] Evaluate session warm-up, safe reuse, tensor-buffer reuse, and host/device copy reduction only where identified as costly. Check memory ownership, session isolation, and cleanup.
 - [ ] Measure process CPU/RAM and sampled GPU/VRAM behavior; test sequential and CPU fallbacks and record lower-memory device limitations where hardware is available.

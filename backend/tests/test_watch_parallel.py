@@ -57,3 +57,88 @@ def test_parallel_cleanup_waits_for_other_model_after_failure():
     finally:
         parallel.close()
     assert models.finished.is_set()
+
+
+@pytest.mark.parametrize("failing", ["shuttle", "players"])
+def test_parallel_propagates_either_worker_error_and_closes(failing):
+    class Models:
+        available = {"tracking": True, "pose": True}
+
+        def _shuttle(self, _frame):
+            if failing == "shuttle":
+                raise ValueError("shuttle failure")
+            return "ok"
+
+        def _players(self, _frame):
+            if failing == "players":
+                raise ValueError("players failure")
+            return "ok"
+
+    parallel = ParallelWatchPerception(Models())
+    try:
+        with pytest.raises(ValueError, match=f"{failing} failure"):
+            parallel(None, 0)
+    finally:
+        parallel.close()
+    with pytest.raises(RuntimeError, match="shutdown"):
+        parallel(None, 1)
+
+
+def test_close_waits_for_an_inflight_frame():
+    from threading import Event, Thread
+
+    started, release, returned = Event(), Event(), Event()
+
+    class Models:
+        available = {"tracking": True, "pose": True}
+
+        def _shuttle(self, _frame):
+            started.set()
+            assert release.wait(3)
+            return "shuttle"
+
+        def _players(self, _frame):
+            return "players"
+
+    parallel = ParallelWatchPerception(Models())
+    results = []
+    caller = Thread(target=lambda: results.append(parallel(None, 0)))
+    closer = Thread(target=lambda: (parallel.close(), returned.set()))
+    try:
+        caller.start()
+        assert started.wait(3)
+        closer.start()
+        assert not returned.wait(0.05)
+    finally:
+        release.set()
+        caller.join(3)
+        if closer.ident is not None:
+            closer.join(3)
+        else:
+            parallel.close()
+    assert not caller.is_alive() and not closer.is_alive()
+    assert returned.is_set() and results == [("shuttle", "players")]
+
+
+def test_closing_one_session_does_not_close_another():
+    class Models:
+        available = {"tracking": True, "pose": True}
+
+        def __init__(self, name):
+            self.name = name
+
+        def _shuttle(self, frame):
+            return self.name, frame
+
+        def _players(self, frame):
+            return self.name, frame
+
+    first = ParallelWatchPerception(Models("first"))
+    second = ParallelWatchPerception(Models("second"))
+    try:
+        assert first(1, 0) == (("first", 1), ("first", 1))
+        first.close()
+        assert second(2, 0) == (("second", 2), ("second", 2))
+    finally:
+        first.close()
+        second.close()

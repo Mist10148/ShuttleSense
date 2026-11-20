@@ -99,6 +99,13 @@ Flutter throughput. The raw local trace and ranges are
 `backend/.cache/phase3_attributed_trace.json` and `phase3_attributed_ranges.json`;
 they may contain local diagnostic paths and should be reviewed before sharing.
 
+The summary now also reports total and unattributed copies for each transfer type and
+unattributed CUDA synchronization calls. Re-summarizing this same trace found 1,036
+pageable host-to-device copies totaling 110.34 ms, of which 899 / 28.71 ms were
+unattributed, and 855 unattributed synchronization calls totaling 17.82 ms. These
+include setup, and durations can overlap; they are activity sums, not latency or proof
+of where an unattributed operation originated.
+
 ## Reproduction and remaining work
 
 From `backend/`, run the host profiler for the desired source, start index and court:
@@ -114,8 +121,10 @@ captured trace above used the prior local script's anchor name; summarize that t
 with `--anchor phase1_clock_anchor`. The capture and summary scripts were smoke-tested
 with five real-model frames. Traces are large and perturb runtime.
 
-Complete this checklist item only after measuring footage representative of intended
-use, including consented phone singles and doubles, difficult boundaries, occlusions,
-crossings and reacquisition, with documented calibration and sufficient samples. Measure
-transfer/placement in the actual session or explicitly account for unassigned activity.
+The owner elected to skip phone profiling for now. The existing broadcast samples remain
+limited: their coverage of boundaries, occlusions, crossings and reacquisition has not
+been documented, and their calibration is approximate. Do not treat them as representative
+of phone footage. Measure additional relevant footage if representative-coverage evidence
+is required; document calibration and sample coverage. Measure transfer/placement in the
+actual session or explicitly account for unassigned activity.
 Labeled held-out data remains required before enabling accuracy-sensitive changes.
