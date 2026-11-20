@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from shuttlesense import __version__
+from shuttlesense.api.coach_routes import router as coach_router
 from shuttlesense.api.jobs import JobManager, PipelineFn
 from shuttlesense.api.live import LiveManager, ws_router
 from shuttlesense.api.routes import public, router
@@ -84,8 +85,10 @@ def create_app(
     settings: Settings | None = None,
     pipeline: PipelineFn | None = None,
     chat_client: Any | None = None,
+    coach_provider: Any | None = None,
 ) -> FastAPI:
-    """`chat_client` replaces the Claude API client (tests); otherwise one is made from the key."""
+    """`chat_client` replaces the Claude API client and `coach_provider` the coach's LLM
+    provider (tests); otherwise one is made from the settings (D42)."""
     settings = settings or get_settings()
     redact_tokens_in_logs()
     if pipeline is None:
@@ -104,11 +107,20 @@ def create_app(
         app.state.storage = storage
         app.state.jobs = jobs
         app.state.settings = settings
-        app.state.chat_client = chat_client
-        if chat_client is None and settings.chat_key:
-            import anthropic
+        from shuttlesense.api.coach_routes import CoachLimits
+        from shuttlesense.coach.chat import Coach
+        from shuttlesense.coach.index import Retriever
+        from shuttlesense.coach.llm import create_provider
 
-            app.state.chat_client = anthropic.AsyncAnthropic(api_key=settings.chat_key)
+        provider = coach_provider or create_provider(settings, chat_client)
+        app.state.coach_provider = provider
+        # The Claude client when Claude answers (the pre-RAG state some callers read).
+        app.state.chat_client = chat_client or (
+            provider.client if provider is not None and provider.name == "claude" else None
+        )
+        index_path = settings.storage_dir / "coach_index.npz"
+        app.state.coach = Coach(provider, Retriever(provider, index_path))
+        app.state.coach_limits = CoachLimits()
         app.state.chat_answering = {}  # job id -> monotonic start of the answer streaming
         app.state.live = LiveManager(
             app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s
@@ -144,6 +156,7 @@ def create_app(
     app.include_router(public)
     app.include_router(router)
     app.include_router(ws_router)
+    app.include_router(coach_router)
     from shuttlesense.api.watch_background import router as watch_background_router
 
     app.include_router(watch_background_router)
