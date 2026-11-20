@@ -6,12 +6,15 @@ Court coordinates are meters with the origin at the near-left corner.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import numpy as np
 
 from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Court, Point
 from shuttlesense.stage import StageContext, StageSkipped
+
+log = logging.getLogger(__name__)
 
 
 def court_corners_m(size: Point = COURT_SIZE_M) -> np.ndarray:
@@ -104,13 +107,15 @@ def job_corners(ctx: StageContext) -> list[list[float]] | None:
         frame = next((f for _, f in reader), None)
         if frame is not None:
             size = tuple(cfg.get("court_size_m", COURT_SIZE_M))
-            refined, _ = refine_corners(
+            refined, report = refine_corners(
                 frame,
                 corners,
                 size,
                 max_shift_px=float(cfg["refine_max_shift_px"]),
                 min_support=float(cfg["refine_min_support"]),
+                lsq=bool(cfg.get("refine_least_squares", True)),
             )
+            log.info("court corners refined: %s", report)
             try:
                 validate_corners(refined)
                 corners = refined
