@@ -21,6 +21,7 @@ from shuttlesense.timing import scaled
 FRAME_KEYS = ("min_frames_between_hits", "rally_break_frames", "hitter_window_frames")
 
 LEFT_WRIST, RIGHT_WRIST = 9, 10
+MIN_STEP_PX = 1e-3  # shorter steps have no direction for direction_changes
 MIN_KEYPOINT_SCORE = 0.3
 
 
@@ -33,7 +34,9 @@ def direction_changes(xy: np.ndarray, min_angle_deg: float) -> list[int]:
         return []
     v = np.diff(xy, axis=0)
     a, b = v[:-1], v[1:]
-    norms = np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1)
+    na, nb = np.linalg.norm(a, axis=1), np.linalg.norm(b, axis=1)
+    # A step this small has no direction (a shuttle at rest; rounding left by smoothing).
+    norms = np.where((na < MIN_STEP_PX) | (nb < MIN_STEP_PX), np.nan, na * nb)
     with np.errstate(invalid="ignore", divide="ignore"):
         cos = np.einsum("ij,ij->i", a, b) / norms
     angles = np.degrees(np.arccos(np.clip(np.nan_to_num(cos, nan=1.0), -1.0, 1.0)))
@@ -52,6 +55,34 @@ def vertical_flips(xy: np.ndarray, min_px: float = 0.0) -> list[int]:
         return []
     vy = np.diff(xy[:, 1])
     return [i + 1 for i in range(len(vy) - 1) if vy[i] > min_px and vy[i + 1] < -min_px]
+
+
+def smoothed_run(frames: np.ndarray, pts: np.ndarray, cfg: dict[str, Any]) -> np.ndarray:
+    """A run of visible points smoothed within its flight segments (D43): turning angles
+    are then measured on the flight, not on a pixel or two of detector noise, and the
+    smoothing never crosses a sharp turn (tracking/trajectory.py keeps turn points as
+    they are). Turns are split at an angle well below min_angle_deg."""
+    from shuttlesense.tracking.trajectory import smooth_points
+
+    split = min(40.0, float(cfg.get("min_angle_deg", 60)) * 2 / 3)
+    out, _alive, _turn = smooth_points(
+        frames,
+        pts,
+        settings={"split_angle_deg": split, "depth_aware": False},
+        reject=False,
+    )
+    return out
+
+
+def hit_frame(
+    frames: np.ndarray, pts: np.ndarray, c: int, lo: int | None = None, hi: int | None = None
+) -> int:
+    """The frame of the turn at run point `c`, refined to where the flight before it meets
+    the flight after it (tracking.trajectory.turn_time, using points lo..hi: up to the
+    neighbouring candidates), rounded to a whole frame: the record keeps integer frames."""
+    from shuttlesense.tracking.trajectory import turn_time
+
+    return int(np.floor(turn_time(frames, pts, c, lo=lo, hi=hi) + 0.5))
 
 
 def _wrist_distance(point: np.ndarray, wrists: np.ndarray | None) -> float:
@@ -99,6 +130,10 @@ def detect_hits(
     min_frames_between_hits only the closest-wrist candidate survives, and consecutive hits
     by the same player within a rally (impossible in singles) keep only the closer one.
 
+    With cfg smooth_track (default true) angles are measured on each run smoothed within
+    its flight segments (`smoothed_run`); with refine_hit_frame (default true) a hit's frame
+    is where the line fits before and after the turn meet, rounded (`hit_frame`).
+
     `unobserved` (live mode) are frames that got no perception. They are not evidence that
     the shuttle was out of view: a gap made only of them does not split a run, and they do
     not count towards a rally break.
@@ -115,11 +150,15 @@ def detect_hits(
         dtype=int,
     )  # fmt: skip
     min_flip = float(cfg.get("min_flip_px", 0.0)) * cfg.get("scale", 1.0)
+    run_of: dict[int, tuple[int, int]] = {}
     for start, end in zip([0, *breaks], [*breaks, len(idx)], strict=True):
+        if cfg.get("smooth_track", True):
+            pts[start:end] = smoothed_run(idx[start:end], pts[start:end], cfg)
         run = pts[start:end]
         local = set(direction_changes(run, cfg.get("min_angle_deg", 60)))
         local |= set(vertical_flips(run, min_flip))
         cand |= {start + i for i in local}
+        run_of.update({start + i: (start, end) for i in local})
     max_dist = cfg.get("max_wrist_distance_px", 120) * cfg.get("scale", 1.0)
 
     scored: list[tuple[float, int, PlayerSide]] = []
@@ -129,6 +168,11 @@ def detect_hits(
         d_far = _wrist_distance(pts[c], wrists_far[frame])
         d, side = (d_near, "near") if d_near <= d_far else (d_far, "far")
         if d <= max_dist:
+            if cfg.get("refine_hit_frame", True):
+                start, end = run_of[c]
+                lo = max([k for k in cand if start <= k < c], default=start)
+                hi = min([k for k in cand if c < k < end], default=end - 1)
+                frame = hit_frame(idx[start:end], pts[start:end], c - start, lo - start, hi - start)
             scored.append((d, frame, side))
 
     min_gap = cfg.get("min_frames_between_hits", 8)
