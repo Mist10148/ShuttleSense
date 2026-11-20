@@ -21,7 +21,13 @@ const double kDoublesLongServiceM = 0.76;
 const int kTrailLength = 15;
 
 /// Side of a heatmap cell in meters.
-const double kHeatCellM = 0.5;
+const double kHeatCellM = 0.25;
+
+/// Heatmap kernel width in meters at the near and the far baseline (D44, same as
+/// backend/shuttlesense/analytics/heatmap.py): wider far from the camera, where a pixel
+/// covers more court and the foot point is less certain.
+const double kHeatSigmaNearM = 0.30;
+const double kHeatSigmaFarM = 0.45;
 
 /// Frames between heatmap rebuilds while a live session grows.
 const int kHeatRebuildFrames = 30;
@@ -281,8 +287,13 @@ String minimapLabel(ClipRecord record, int frameIndex) {
   return ((x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t), true);
 }
 
-/// How often each player stood in each [kHeatCellM] cell of the court (and up to 2 m
-/// beyond the lines, as far as the backend keeps a position), over the rallies of the clip.
+/// How long each side stood in each [kHeatCellM] cell of the court (and up to 2 m beyond
+/// the lines, as far as the backend keeps a position), over the rallies of the clip.
+///
+/// Same method as the backend's heatmap.json (D44): each frame in play adds 1 / fps
+/// seconds at a player's position, spread by a Gaussian in meters that widens away from
+/// the camera. Positions pinned to the 2 m clamp edge are left out: the player was
+/// somewhere beyond it, not there.
 class HeatGrid {
   HeatGrid._(
     this.near,
@@ -298,13 +309,52 @@ class HeatGrid {
   static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
   static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
 
+  /// Kernel width in meters at court depth [y].
+  static double sigmaAt(double y) =>
+      kHeatSigmaNearM + (kHeatSigmaFarM - kHeatSigmaNearM) * (y / kCourtLengthM).clamp(0.0, 1.0);
+
+  /// Whether [p] sits on the edge the backend clamps positions to (2 m around the court).
+  static bool atClampEdge(CourtPoint p) {
+    const tol = 1e-3;
+    return p.x <= -margin + tol ||
+        p.x >= kCourtWidthM + margin - tol ||
+        p.y <= -margin + tol ||
+        p.y >= kCourtLengthM + margin - tol;
+  }
+
   factory HeatGrid.fromRecord(ClipRecord record) {
-    final near = List.filled(cols * rows, 0), far = List.filled(cols * rows, 0);
-    void add(List<int> grid, CourtPoint? p) {
-      if (p == null) return;
-      final c = ((p.x + margin + kDoublesAlleyM) / kHeatCellM).floor();
-      final r = ((p.y + margin) / kHeatCellM).floor();
-      if (c >= 0 && c < cols && r >= 0 && r < rows) grid[r * cols + c]++;
+    final near = List.filled(cols * rows, 0.0), far = List.filled(cols * rows, 0.0);
+    final seconds = 1 / (record.fps > 0 ? record.fps : 30.0);
+    // Cell centres in court meters.
+    double cx(int c) => (c + 0.5) * kHeatCellM - margin - kDoublesAlleyM;
+    double cy(int r) => (r + 0.5) * kHeatCellM - margin;
+    void add(List<double> grid, CourtPoint? p) {
+      if (p == null || atClampEdge(p)) return;
+      final sigma = sigmaAt(p.y);
+      final reach = (3 * sigma / kHeatCellM).ceil();
+      final c0 = ((p.x + margin + kDoublesAlleyM) / kHeatCellM).floor();
+      final r0 = ((p.y + margin) / kHeatCellM).floor();
+      final wx = <int, double>{}, wy = <int, double>{};
+      for (var c = c0 - reach; c <= c0 + reach; c++) {
+        if (c < 0 || c >= cols) continue;
+        final d = (cx(c) - p.x) / sigma;
+        wx[c] = math.exp(-0.5 * d * d);
+      }
+      for (var r = r0 - reach; r <= r0 + reach; r++) {
+        if (r < 0 || r >= rows) continue;
+        final d = (cy(r) - p.y) / sigma;
+        wy[r] = math.exp(-0.5 * d * d);
+      }
+      final total =
+          wx.values.fold<double>(0, (a, b) => a + b) * wy.values.fold<double>(0, (a, b) => a + b);
+      if (total <= 0) return;
+      // Normalised over the cells it reaches, so every frame adds exactly its time.
+      final k = seconds / total;
+      for (final MapEntry(key: r, value: vy) in wy.entries) {
+        for (final MapEntry(key: c, value: vx) in wx.entries) {
+          grid[r * cols + c] += k * vx * vy;
+        }
+      }
     }
 
     // Only frames in play count: between rallies a player waits or fetches the shuttle,
@@ -326,7 +376,7 @@ class HeatGrid {
       add(far, f.farPos);
       add(far, f.far2Pos);
     }
-    int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
+    double max(List<double> g) => g.fold(0.0, (a, b) => a > b ? a : b);
     return HeatGrid._(
       near,
       far,
@@ -338,9 +388,9 @@ class HeatGrid {
     );
   }
 
-  /// Frame counts per cell, row-major from the near-left corner (court y grows away).
-  final List<int> near, far;
-  final int nearMax, farMax;
+  /// Seconds per cell, row-major from the near-left corner (court y grows away).
+  final List<double> near, far;
+  final double nearMax, farMax;
 
   /// How strongly each cell is shaded, 0 to 1 (see [shade]).
   final List<double> nearShade, farShade;
@@ -348,37 +398,23 @@ class HeatGrid {
   /// Doubles: each grid covers both partners of a side.
   final bool doubles;
 
-  /// Counts spread over the neighbouring cells and scaled to 0..1.
+  /// Seconds per cell scaled to 0..1.
   ///
-  /// A position is good to a few tens of centimetres, less than a cell, so a count is
-  /// shared with the cells around it (weights 4 for the cell, 2 for its sides, 1 for its
-  /// corners): a player standing on a cell border no longer makes a checkerboard. The scale
-  /// tops out at the 95th percentile of the shaded cells, so the single busiest cell does
-  /// not leave the rest of the court too faint to read.
-  static List<double> shade(List<int> counts) {
-    final out = List.filled(cols * rows, 0.0);
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        final n = counts[r * cols + c];
-        if (n == 0) continue;
-        for (var dr = -1; dr <= 1; dr++) {
-          for (var dc = -1; dc <= 1; dc++) {
-            final rr = r + dr, cc = c + dc;
-            if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
-            out[rr * cols + cc] += n * (dr == 0 ? 2 : 1) * (dc == 0 ? 2 : 1) / 16;
-          }
-        }
-      }
-    }
+  /// The scale tops out at the 95th percentile of the cells holding a noticeable share
+  /// (over 1% of the busiest), so the single busiest cell does not leave the rest of the
+  /// court too faint to read, and never below 60% of the busiest cell, so a clip with few
+  /// cells keeps its gradient.
+  static List<double> shade(List<double> seconds) {
+    final out = List.filled(seconds.length, 0.0);
+    final peak = seconds.fold(0.0, (a, b) => a > b ? a : b);
+    if (peak <= 0) return out;
     final seen = [
-      for (final v in out)
-        if (v > 0) v,
+      for (final v in seconds)
+        if (v > peak * 0.01) v,
     ]..sort();
-    if (seen.isEmpty) return out;
-    // Never below 60% of the busiest cell, so a clip with few cells keeps its gradient.
-    final top = math.max(seen[((seen.length - 1) * 0.95).round()], seen.last * 0.6);
+    final top = math.max(seen[((seen.length - 1) * 0.95).round()], peak * 0.6);
     for (var i = 0; i < out.length; i++) {
-      out[i] = (out[i] / top).clamp(0.0, 1.0);
+      out[i] = (seconds[i] / top).clamp(0.0, 1.0);
     }
     return out;
   }
@@ -391,8 +427,8 @@ class HeatGrid {
 
   /// Where each player stood most, for screen readers.
   String describe() {
-    String where(String who, List<int> grid, int max) {
-      if (max == 0) return '$who not seen';
+    String where(String who, List<double> grid, double max) {
+      if (max <= 0) return '$who not seen';
       final o = cellOrigin(grid.indexOf(max));
       final x = (o.x + kHeatCellM / 2).toStringAsFixed(1);
       final y = (o.y + kHeatCellM / 2).toStringAsFixed(1);
