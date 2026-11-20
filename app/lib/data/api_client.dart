@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../core/config/server_config.dart';
 import 'models/clip_record.dart';
+import 'models/coach.dart';
 import 'models/health.dart';
 import 'models/job.dart';
 import 'models/json.dart';
@@ -368,12 +369,28 @@ class ApiClient {
   }
 
   /// F22: ask the coach. Yields the server-sent events of docs/API.md (delta, done, error).
-  Stream<Json> chat(String jobId, String message) async* {
+  Stream<Json> chat(String jobId, String message) =>
+      _events('/jobs/$jobId/chat', {'message': message});
+
+  /// D42: ask the coach a general or progress question, not about one job. [history] holds
+  /// the earlier turns of this conversation ({role, text}); the server does not keep them.
+  Stream<Json> coachChat(String message, {List<Json> history = const []}) =>
+      _events('/coach/chat', {'message': message, 'history': history});
+
+  /// D42: the AI coaching report of a finished job; [refresh] writes it again.
+  Future<CoachReport> coachReport(String jobId, {bool refresh = false}) => _call(() async {
+    final path = '/jobs/$jobId/coach/report';
+    final res = refresh ? await _dio.post<Json>(path) : await _dio.get<Json>(path);
+    return CoachReport.fromJson(res.data!);
+  });
+
+  /// POST [path] and yield its server-sent events (delta, done, error).
+  Stream<Json> _events(String path, Json data) async* {
     final Response<ResponseBody> res;
     try {
       res = await _dio.post<ResponseBody>(
-        '/jobs/$jobId/chat',
-        data: {'message': message},
+        path,
+        data: data,
         options: Options(
           responseType: ResponseType.stream,
           receiveTimeout: const Duration(minutes: 3),

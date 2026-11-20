@@ -239,7 +239,7 @@ void main() {
       await tester.pumpWidget(host(SessionSummary(record: goldenRecord(), onSeek: (_) {})));
       final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNull);
-      expect(find.textContaining('no Claude API key'), findsOneWidget);
+      expect(find.textContaining('no Gemini or Claude API key'), findsOneWidget);
     });
 
     for (final MapEntry(key: name, value: size) in kSizes.entries) {

@@ -25,6 +25,7 @@ import 'widgets/status_strip.dart';
 import 'widgets/stroke_timeline.dart';
 import 'widgets/summary_chart.dart';
 import 'widgets/video_panel.dart';
+import '../coach/coach_report_card.dart';
 import '../../shared/widgets/hit_burst.dart';
 import 'widgets/hit_anchor.dart';
 import '../../core/theme/tokens.dart';
@@ -483,6 +484,11 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               onSeek: _seekMoment,
               chatAvailable: chatAvailable,
               onAskCoach: () => context.go(Routes.chat(widget.jobId)),
+              report: CoachReportCard(
+                jobId: widget.jobId,
+                fps: fps,
+                onSeek: widget.videoAvailable == true ? _seekMoment : null,
+              ),
             ),
           );
         },

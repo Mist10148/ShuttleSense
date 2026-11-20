@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
+import 'package:shuttlesense_app/data/models/coach.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/data/models/json.dart';
@@ -388,5 +389,72 @@ class FakeApiClient extends ApiClient {
     for (final e in chatEvents) {
       yield e;
     }
+  }
+
+  /// Events the next coachChat() streams back (POST /coach/chat, D42).
+  List<Json> coachEvents = [
+    {'type': 'delta', 'text': 'Land the split step as they hit '},
+    {
+      'type': 'done',
+      'message': {
+        'role': 'assistant',
+        'text': 'Land the split step as they hit [kb:footwork#split-step].',
+        'at': '2026-11-05T09:20:00Z',
+        'citations': <Json>[],
+      },
+      'disclaimer': 'Heuristic guidance',
+      'sources': [
+        {
+          'id': 'kb:footwork#split-step',
+          'title': 'Footwork, base position and split step: Split step',
+        },
+      ],
+    },
+  ];
+
+  /// The history each coachChat() call sent.
+  final coachHistories = <List<Json>>[];
+
+  @override
+  Stream<Json> coachChat(String message, {List<Json> history = const []}) async* {
+    calls.add('coachChat $message');
+    coachHistories.add(history);
+    final error = failWith;
+    if (error != null) throw error;
+    for (final e in coachEvents) {
+      yield e;
+    }
+  }
+
+  /// What coachReport() returns (GET /jobs/{id}/coach/report, D42).
+  Json coachReportJson = {
+    'summary': '3 hits in 1 rally. Top fix: bent hitting arm.',
+    'strengths': ['Low serve contact (1 of 1 checked)'],
+    'weaknesses': [
+      {
+        'title': 'Bent hitting arm at contact',
+        'evidence': 'Near player: bent hitting arm on 1 of 1 smashes',
+        'moments': [1.5],
+        'drill': 'Throw and reach for a straight arm',
+      },
+    ],
+    'drills': [
+      {
+        'name': 'Throw and reach for a straight arm',
+        'purpose': 'Targets elbow_extension.',
+        'how': 'Throw shuttles overhead from a side-on stance.',
+        'kb_source': 'kb:drills#throw-and-reach-for-a-straight-arm',
+      },
+    ],
+    'next_session_goals': ['Straighter arm on smashes'],
+    'generated_by': 'gemini',
+  };
+
+  @override
+  Future<CoachReport> coachReport(String jobId, {bool refresh = false}) async {
+    calls.add('coachReport $jobId${refresh ? ' refresh' : ''}');
+    final error = failWith;
+    if (error != null) throw error;
+    return CoachReport.fromJson(coachReportJson);
   }
 }

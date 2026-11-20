@@ -27,6 +27,11 @@ class HistoryScreen extends ConsumerWidget {
         title: const Text('History'),
         actions: [
           IconButton(
+            tooltip: 'Ask the coach',
+            onPressed: () => context.push(Routes.coach),
+            icon: const Icon(Icons.forum_outlined),
+          ),
+          IconButton(
             tooltip: 'Refresh',
             onPressed: () => ref.invalidate(jobsListProvider),
             icon: const Icon(Icons.refresh),
