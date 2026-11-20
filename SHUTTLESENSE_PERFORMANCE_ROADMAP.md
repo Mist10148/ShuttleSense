@@ -125,11 +125,11 @@
 
 **Objective:** Reduce final export time without reducing playback compatibility or obscuring quality tradeoffs.
 
-- [ ] Separately measure source-frame read, CPU overlay drawing, encoder-pipe backpressure, encoder initialization, and finalization.
-- [ ] Compare `libx264` and `h264_nvenc` on the same saved records, source frames, and overlays over short and longer recordings. Measure total time, output size, comparable visual quality against a reference, playback/seek, CPU/GPU use, and memory.
-- [ ] Validate frame count, timestamps, no missing frames/overlays, player/shuttle annotation alignment, and playback in Flutter and a common player.
-- [ ] Preserve `libx264` as default and NVENC as optional until repeated results demonstrate at least 5% median export improvement at comparable quality and compatible output. Retain CPU fallback and report failures that occur after encoding starts.
-- [ ] Document benchmark conditions and rejected or retained encoder settings. Existing 525-frame comparisons used non-equivalent quality settings and do not establish a default change.
+- [ ] Separately measure source-frame read, CPU overlay drawing, encoder-pipe backpressure, encoder initialization, and finalization. [Initial measurements](docs/results/watch_phase6_export_benchmark.md) separate host stages, but pipe blocking and actual asynchronous encoder readiness remain combined with other costs.
+- [ ] Compare `libx264` and `h264_nvenc` on the same saved records, source frames, and overlays over short and longer recordings. Measure total time, output size, comparable visual quality against a reference, playback/seek, CPU/GPU use, and memory. The [initial comparison](docs/results/watch_phase6_export_benchmark.md) uses two sections of one recording; perceptual quality, independent footage and robust memory measurements remain open.
+- [ ] Validate frame count, timestamps, no missing frames/overlays, player/shuttle annotation alignment, and playback in Flutter and a common player. Automated frame, timestamp and local player checks are reported; semantic alignment and visible streamed playback remain open.
+- [x] Preserve `libx264` as default and NVENC as optional until repeated results demonstrate at least 5% median export improvement at comparable quality and compatible output. Retain CPU fallback and report failures that occur after encoding starts. Fallback and post-start failure tests pass; no default change was made.
+- [x] Document benchmark conditions and rejected or retained encoder settings. The [export report](docs/results/watch_phase6_export_benchmark.md) records the preliminary comparison and retains the current default.
 
 **Dependencies:** Phase 1 measurement and representative saved sessions. **Likely areas:** `backend/shuttlesense/render/`, rendering tests, setup and results documentation.
 
@@ -138,11 +138,11 @@
 **Objective:** Validate the combined application and report which changes are suitable for normal use.
 
 - [ ] Test complete short, medium, and longer consented clips containing actual singles and doubles, spectators, occlusions, boundaries, and camera changes where supported. Use fixed calibration and settings and at least three alternating baseline/candidate runs.
-- [ ] Run backend Watch, stream, player-tracking, pose, tracking, API/schema, and rendering tests; run Flutter Watch tests and static analysis. Investigate failures rather than suppressing them.
+- [ ] Run backend Watch, stream, player-tracking, pose, tracking, API/schema, and rendering tests; run Flutter Watch tests and static analysis. The [validation report](docs/results/watch_phase7_validation_report.md) records 255 backend passes, 34 Flutter passes and clean analysis; the GPU fixture test skipped and web validation remains incomplete. Investigate failures rather than suppressing them.
 - [ ] Verify every normalized frame, court calibration, player identity, pose, shuttle, hits/strokes, analytics, preview, pause/resume, stop/disconnect, partial saves, export, playback, and seek.
-- [ ] Exercise CUDA with and without TensorRT RTX and CPU-only fallback. Test other supported platforms where available; explicitly list unavailable hardware and untested configurations.
+- [ ] Exercise CUDA with and without TensorRT RTX and CPU-only fallback. Short real-model CPU/CUDA/RTX smoke checks passed; production CPU-sequential fallback, full sessions and other supported platforms remain unvalidated. See the [validation report](docs/results/watch_phase7_validation_report.md).
 - [ ] Compare baseline and final model initialization, progress at 45 seconds, total fixed-section/full-clip time, normalized fps, median/p95 latency, sampled CPU/RAM/GPU/VRAM, export time, output size, labeled accuracy, and stability.
-- [ ] Produce a final implementation report: changes and files, defaults, optional flags, rejected/deferred experiments, reproducible commands, performance and accuracy evidence, compatibility/fallbacks, known limitations, and future work.
+- [x] Produce a final implementation report: changes and files, defaults, optional flags, rejected/deferred experiments, reproducible commands, performance and accuracy evidence, compatibility/fallbacks, known limitations, and future work. The [validation report](docs/results/watch_phase7_validation_report.md) explicitly records missing evidence and the remaining completion gate.
 
 **Final completion gate:** Every retained optimization passes its individual performance and accuracy checks; the combined Flutter workflow shows a repeatable improvement without functional regressions. Do not present estimates or synthetic-only results as real-world validation.
 
