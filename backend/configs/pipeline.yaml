@@ -50,6 +50,20 @@ stages:
     max_inpaint_gap_frames: 30  # InpaintNet repairs gaps up to this long; longer = out of play
     max_gap_frames: 8           # interpolate gaps up to this length (T2.3)
     outlier_px: 80              # isolated detection this far from the track is dropped
+    precision:                  # D43; read by tracking/postprocess.py (720p pixels)
+      depth_aware: true         # outlier / burst distances follow the image row
+      depth_far_scale: 0.7      # threshold multiplier at the top row (far court)
+      depth_near_scale: 1.2     # ... and at the bottom row (near court)
+      trajectory: true          # flight segments: drop off-flight points, smooth, fill
+      trajectory_live: false    # also on live / Watch windows (about 150 ms per tick)
+      split_angle_deg: 40       # a sharper turn ends a flight segment (never smoothed over)
+      min_split_speed_px: 2.0   # per frame, both sides, for a turn to count
+      reject_px: 12             # off both sides' agreeing flight by more = dropped
+      fill_max_gap: 20          # frames; filled only when one quadratic fits both ends
+      fill_max_rms_px: 4.0      # ... this well
+      fill_context: 8           # frames each side of a gap used for that fit
+      smooth_half_window: 3     # local quadratic over +-3 frames inside a segment
+      min_segment_points: 6     # shorter segments are left as detected
     # precomputed_csv: path/to/upstream_predict.csv   # use TrackNetV3 predict.py output
     # precomputed_space: source   # source = original frames/pixels; normalized = our tracking.csv
     trail_length: 12            # FR-2: 8 to 15 positions
@@ -97,6 +111,7 @@ stages:
     refine: true                 # nudge the tapped corners onto the painted lines (court/refine.py)
     refine_max_shift_px: 12      # at 720p; a corner is never moved further than this
     refine_min_support: 0.6      # share of the projected lines that must lie on markings
+    refine_least_squares: true   # then fit all line points found, not only 4 corners (D43)
 
   hits:
     enabled: true
@@ -104,6 +119,8 @@ stages:
     # (shuttlesense/timing.py). Pixel distances are for 720p.
     min_angle_deg: 60           # direction change threshold
     min_flip_px: 2.0            # a down-to-up turn smaller than this per frame is jitter
+    smooth_track: true          # measure turns on the track smoothed per flight (D43)
+    refine_hit_frame: true      # hit frame = where the flights before and after meet
     max_wrist_distance_px: 120  # at 720p
     min_frames_between_hits: 8
     rally_break_frames: 30      # shuttle unseen this long = new rally, same hitter allowed

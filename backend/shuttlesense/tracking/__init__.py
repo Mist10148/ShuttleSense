@@ -8,7 +8,18 @@ from shuttlesense.tracking.postprocess import (
     scale_to_video,
     track_arrays,
 )
-from shuttlesense.tracking.tracknet import run
+from shuttlesense.tracking.tracknet import run as _tracknet_run
+
+
+def run(record, ctx):
+    """The tracking stage on a whole uploaded clip: tracknet.run, with the flight fitting of
+    rectify switched on (postprocess.offline_tracking). Live and Watch windows call rectify
+    directly and keep their per-tick cost."""
+    from shuttlesense.tracking.postprocess import offline_tracking
+
+    with offline_tracking():
+        return _tracknet_run(record, ctx)
+
 
 __all__ = [
     "heatmap_to_xy",
