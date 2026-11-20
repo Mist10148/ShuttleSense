@@ -1,0 +1,10 @@
+{
+  "weights": {
+    "cnn": 0.5,
+    "lstm": 0.3,
+    "rf": 0.2
+  },
+  "method": "geometric",
+  "oof_macro_f1": 0.9181,
+  "equal_mean_oof_macro_f1": 0.916
+}
