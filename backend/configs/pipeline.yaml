@@ -134,6 +134,10 @@ stages:
     weights: weights/strokes/stroke_cnn.pt
     weights_lstm: weights/strokes/stroke_lstm.pt
     weights_rf: weights/strokes/stroke_rf.npz
+    # Test-time augmentation on uploaded clips (D41): the mirrored window and the hit a frame
+    # early and late are averaged in. Grouped CV, 1D CNN: macro-F1 0.909 -> 0.913.
+    tta_flip: true
+    tta_shifts: [-1, 1]
     # The window, the pose rule and the feature layout come from the checkpoint; these two
     # are only used for a checkpoint that does not say. Live mode waits window_frames / 2
     # frames after a hit before classifying it.

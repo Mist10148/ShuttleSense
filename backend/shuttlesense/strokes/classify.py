@@ -212,8 +212,14 @@ def model_probabilities(
     temperature = float(ckpt.get("temperature", 1.0))
     kind = ckpt.get("kind", "cnn")
     version = int(ckpt.get("feature_version", 1))
+    # Test-time augmentation runs each model once per view, so it is kept to uploaded clips
+    # (a stage context with an output folder); live and Watch windows classify every tick.
+    offline = ctx.out_dir is not None
     views = tta_windows(
-        x, use_traj, bool(cfg.get("tta_flip", False)), list(cfg.get("tta_shifts", []))
+        x,
+        use_traj,
+        offline and bool(cfg.get("tta_flip", False)),
+        list(cfg.get("tta_shifts", [])) if offline else [],
     )
     probs = np.mean(
         [
