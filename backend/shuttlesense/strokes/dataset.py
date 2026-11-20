@@ -7,7 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from shuttlesense.strokes.features import POSE_FEATURES, flip_window
+from shuttlesense.strokes.features import POSE_FEATURES, flip_window, sample_rows
+from shuttlesense.strokes.motion import expand, expanded_features
 
 
 def load_npz(features_dir: Path, match_ids: Sequence[str]) -> tuple[np.ndarray, np.ndarray]:
@@ -43,6 +44,7 @@ def augment(
     scale_jitter: float = 0.0,
     keypoint_dropout: float = 0.0,
     shuttle_dropout: float = 0.0,
+    time_warp: float = 0.0,
 ) -> np.ndarray:
     """Random time shift (+-max_shift frames), horizontal flip (p=0.5) and Gaussian noise.
 
@@ -54,8 +56,13 @@ def augment(
     - keypoint_dropout: each joint is zeroed for the whole window with this probability,
       as a joint the pose model keeps missing;
     - shuttle_dropout: with this probability the shuttle is hidden for a run of 2 to 8
-      frames, as a gap in the track.
+      frames, as a gap in the track;
+    - time_warp: the window is resampled around the hit at a speed in 1 +- time_warp, as a
+      faster or slower swing (or a clip at another frame rate) does. Missing frames stay
+      missing (features.sample_rows never bridges a gap).
     """
+    if time_warp > 0:
+        x = warp_window(x, 1.0 + rng.uniform(-time_warp, time_warp))
     x = shift_window(x, int(rng.integers(-max_shift, max_shift + 1)))
     if rng.random() < 0.5:
         x = flip_window(x, use_trajectory)
@@ -75,6 +82,25 @@ def augment(
     return x + rng.normal(0, noise, x.shape).astype(np.float32)
 
 
+def warp_window(x: np.ndarray, speed: float) -> np.ndarray:
+    """Resample a [T, F] window about its middle frame at `speed` (>1 is a faster swing)."""
+    t = len(x)
+    mid = t // 2
+    positions = mid + (np.arange(t) - mid) * speed
+    out = np.zeros_like(x)
+    present = np.any(x[:, :POSE_FEATURES] != 0, axis=1)
+    out[:, :POSE_FEATURES], _ = sample_rows(x[:, :POSE_FEATURES], present, positions)
+    if x.shape[1] > POSE_FEATURES:
+        seen = x[:, POSE_FEATURES + 2] > 0.5
+        sh, ok = sample_rows(x[:, POSE_FEATURES : POSE_FEATURES + 2], seen, positions)
+        out[ok, POSE_FEATURES : POSE_FEATURES + 2] = sh[ok]
+        out[ok, POSE_FEATURES + 2] = 1.0
+        # The step from the previous sample, at the new speed (features.shuttle_features).
+        step = ok[1:] & ok[:-1]
+        out[1:, POSE_FEATURES + 3 : POSE_FEATURES + 5][step] = (sh[1:] - sh[:-1])[step]
+    return out
+
+
 class StrokeDataset:
     """torch-compatible dataset yielding (X [F, T] float32, y int64)."""
 
@@ -90,19 +116,27 @@ class StrokeDataset:
         scale_jitter: float = 0.0,
         keypoint_dropout: float = 0.0,
         shuttle_dropout: float = 0.0,
+        time_warp: float = 0.0,
+        feature_version: int = 1,
+        arrays: tuple[np.ndarray, np.ndarray] | None = None,
     ) -> None:
-        x, self.y = load_npz(features_dir, match_ids)
+        # `arrays` (X, y) replaces the files, for cross-validation folds (scripts/cv_strokes.py).
+        x, self.y = arrays if arrays is not None else load_npz(features_dir, match_ids)
         self.x = x if use_trajectory or x.size == 0 else x[:, :, :POSE_FEATURES]
         self.use_trajectory = use_trajectory
         self.augment_data = augment_data
         self.max_shift, self.noise = max_shift, noise
         self.scale_jitter, self.keypoint_dropout = scale_jitter, keypoint_dropout
-        self.shuttle_dropout = shuttle_dropout
+        self.shuttle_dropout, self.time_warp = shuttle_dropout, time_warp
+        self.feature_version = feature_version
         self.rng = np.random.default_rng(seed)
 
     @property
     def in_features(self) -> int:
-        return int(self.x.shape[2]) if self.x.ndim == 3 and len(self.x) else 0
+        """Columns the model sees: the stored window plus the motion channels (motion.py)."""
+        if self.x.ndim != 3 or not len(self.x):
+            return 0
+        return expanded_features(int(self.x.shape[2]), self.feature_version)
 
     def __len__(self) -> int:
         return len(self.y)
@@ -119,7 +153,9 @@ class StrokeDataset:
                 self.scale_jitter,
                 self.keypoint_dropout,
                 self.shuttle_dropout,
+                self.time_warp,
             )
+        x = expand(x, self.feature_version)
         return np.ascontiguousarray(x.T, dtype=np.float32), self.y[i]
 
     def class_weights(self, num_classes: int) -> np.ndarray:

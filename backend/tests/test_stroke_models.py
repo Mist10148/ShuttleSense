@@ -423,7 +423,7 @@ def test_summary_v2_leaves_frames_without_data_out() -> None:
     assert np.isfinite(summary_features(np.zeros((2, 30, 39), np.float32), 2)).all()
     assert np.isfinite(summary_features(np.zeros((1, 1, 34), np.float32), 2)).all()
     with pytest.raises(ValueError):
-        summary_features(x, 3)
+        summary_features(x, 4)
 
 
 def test_forest_file_names_its_summary_version(

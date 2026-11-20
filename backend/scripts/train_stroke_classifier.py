@@ -15,10 +15,16 @@ copied to <checkpoint><ext>, the file the pipeline loads.
   window_fps. temperature is fitted on the val split after training (fit_temperature).
   train.shift_frames (2), train.noise (0.01) and train.label_smoothing (0) tune training;
   train.scale_jitter, train.keypoint_dropout and train.shuttle_dropout (all 0) add the
-  augmentation steps of strokes/dataset.py.
+  augmentation steps of strokes/dataset.py; train.time_warp resamples the swing faster or
+  slower. data.feature_version 2 adds the motion channels of strokes/motion.py.
+  train.loss is "ce" (default) or "logit_adjusted" (the class prior added to the logits
+  while training, Menon et al. 2021, instead of inverse-frequency weights); train.mixup
+  (alpha, 0 = off) mixes pairs of windows.
 - rf: scikit-learn trains the forest on summary features (strokes/rf.py); it is saved as
   plain arrays in an .npz file, which inference reads without scikit-learn.
   model.summary_version picks the summary rows; train.shift_copies adds shifted windows.
+  model.estimator "extra_trees" trains extremely randomised trees instead. A temperature
+  fitted on val (meta "temperature") calibrates the leaf frequencies.
 
 scripts/make_figures.py turns the metrics files into docs/results/strokes.md.
 """
@@ -87,6 +93,16 @@ def fit_temperature(logits: np.ndarray, y: np.ndarray) -> float:
     return round(float(grid[int(np.argmin([nll(logits, y, t) for t in grid]))]), 4)
 
 
+def fit_power_temperature(probs: np.ndarray, y: np.ndarray) -> float:
+    """fit_temperature for probabilities (the forest): p ** (1 / T), renormalised."""
+    return fit_temperature(np.log(np.maximum(probs, 1e-6)), y)
+
+
+def split_arrays(splits: dict, name: str):
+    """(X, y) given in memory for a split (cross-validation folds), else None."""
+    return (splits.get("arrays") or {}).get(name)
+
+
 def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajectory: bool) -> dict:
     """What inference needs to rebuild the feature window a model was trained on."""
     meta = {
@@ -97,6 +113,9 @@ def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajector
         "use_trajectory": use_trajectory,
         "pose_norm": cfg["data"].get("pose_norm", "bbox_height"),
     }
+    version = int(cfg["data"].get("feature_version", 1))
+    if version != 1 and kind != "rf":
+        meta["feature_version"] = version
     # The frame rate of the training windows; inference then covers the same time span on a
     # clip at another rate (strokes.features.build_window). Left out when the data has none.
     if cfg["data"].get("window_fps"):
@@ -107,7 +126,7 @@ def checkpoint_meta(cfg: dict, kind: str, train_ds, classes: list, use_trajector
 def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dict:
     """Fit a Random Forest on summary features; "checkpoint" is a strokes.rf.Forest."""
     try:
-        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
     except ImportError as exc:
         raise SystemExit("scikit-learn is needed to train the Random Forest") from exc
 
@@ -119,8 +138,12 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
     classes = list(cfg["data"]["classes"])
     features_dir = BACKEND_DIR / cfg["data"]["features_dir"]
     mcfg = cfg.get("model", {})
-    train_ds = StrokeDataset(features_dir, splits["train"], use_trajectory)
-    val_ds = StrokeDataset(features_dir, splits["val"], use_trajectory)
+    train_ds = StrokeDataset(
+        features_dir, splits["train"], use_trajectory, arrays=split_arrays(splits, "train")
+    )
+    val_ds = StrokeDataset(
+        features_dir, splits["val"], use_trajectory, arrays=split_arrays(splits, "val")
+    )
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise SystemExit("empty train or val split: check data/features and the split file")
     x, y = train_ds.x, train_ds.y
@@ -137,7 +160,10 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
             rows.append(summary_features(mirrored, version))
     y = np.concatenate([y] * len(rows))
     rows = np.concatenate(rows)
-    model = RandomForestClassifier(
+    estimator = (
+        ExtraTreesClassifier if mcfg.get("estimator") == "extra_trees" else RandomForestClassifier
+    )
+    model = estimator(
         n_estimators=mcfg.get("trees", 200),
         max_depth=mcfg.get("max_depth", 18),
         min_samples_leaf=mcfg.get("min_samples_leaf", 3),
@@ -152,8 +178,11 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
         meta["summary_version"] = version
     meta["config"] = {"model": mcfg}
     forest = Forest.from_sklearn(model, meta)
-    val_pred = forest.predict_proba(summary_features(val_ds.x, version)).argmax(1)
-    val = classification_report(val_ds.y, val_pred, classes)
+    val_probs = forest.predict_proba(summary_features(val_ds.x, version))
+    if tcfg.get("calibrate", True):
+        forest.meta["temperature"] = fit_power_temperature(val_probs, val_ds.y)
+        val_probs = forest.predict_proba(summary_features(val_ds.x, version))
+    val = classification_report(val_ds.y, val_probs.argmax(1), classes)
     print(json.dumps({"val_macro_f1": val["macro_f1"], "val_accuracy": val["accuracy"]}))
     result: dict = {
         "seed": seed,
@@ -161,9 +190,13 @@ def train_rf(cfg: dict, splits: dict, *, use_trajectory: bool, seed: int) -> dic
         "use_trajectory": use_trajectory,
         "history": [],
         "best_val_macro_f1": val["macro_f1"],
+        "temperature": forest.meta.get("temperature", 1.0),
+        "val_probs": val_probs,
     }
     if splits.get("test"):
-        test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
+        test_ds = StrokeDataset(
+            features_dir, splits["test"], use_trajectory, arrays=split_arrays(splits, "test")
+        )
         if len(test_ds):
             preds = forest.predict_proba(summary_features(test_ds.x, version)).argmax(1)
             result["test"] = classification_report(test_ds.y, preds, classes)
@@ -197,6 +230,7 @@ def train(
     classes = list(cfg["data"]["classes"])
     features_dir = BACKEND_DIR / cfg["data"]["features_dir"]
     tcfg = cfg["train"]
+    version = int(cfg["data"].get("feature_version", 1))
     seed_everything(seed)
     train_ds = StrokeDataset(
         features_dir,
@@ -209,19 +243,38 @@ def train(
         scale_jitter=float(tcfg.get("scale_jitter", 0.0)),
         keypoint_dropout=float(tcfg.get("keypoint_dropout", 0.0)),
         shuttle_dropout=float(tcfg.get("shuttle_dropout", 0.0)),
+        time_warp=float(tcfg.get("time_warp", 0.0)),
+        feature_version=version,
+        arrays=split_arrays(splits, "train"),
     )
-    val_ds = StrokeDataset(features_dir, splits["val"], use_trajectory)
+    val_ds = StrokeDataset(
+        features_dir,
+        splits["val"],
+        use_trajectory,
+        feature_version=version,
+        arrays=split_arrays(splits, "val"),
+    )
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise SystemExit("empty train or val split: check data/features and the split file")
 
     model = build_from_config(train_ds.in_features, cfg.get("model", {}), len(classes), kind)
     model = model.to(device)
     weights = None
-    if tcfg.get("class_weighting") == "inverse_frequency":
+    logit_adjustment = None
+    if tcfg.get("loss") == "logit_adjusted":
+        # tau * log(prior) is added to the logits in training only: the model learns
+        # balanced scores without reweighting the loss (Menon et al. 2021).
+        counts = np.bincount(train_ds.y, minlength=len(classes)).astype(np.float32)
+        prior = np.maximum(counts, 1) / counts.sum()
+        tau = float(tcfg.get("logit_adjust_tau", 1.0))
+        logit_adjustment = torch.from_numpy(tau * np.log(prior)).to(device)
+    elif tcfg.get("class_weighting") == "inverse_frequency":
         weights = torch.from_numpy(train_ds.class_weights(len(classes))).to(device)
     loss_fn = torch.nn.CrossEntropyLoss(
         weight=weights, label_smoothing=float(tcfg.get("label_smoothing", 0.0))
     )
+    mixup = float(tcfg.get("mixup", 0.0))
+    mix_rng = np.random.default_rng(seed + 1)
     opt = torch.optim.AdamW(model.parameters(), lr=tcfg["lr"], weight_decay=tcfg["weight_decay"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=tcfg["epochs"])
     loader = DataLoader(
@@ -238,7 +291,16 @@ def train(
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
-            loss = loss_fn(model(model_input(xb, kind)), yb)
+            lam = float(mix_rng.beta(mixup, mixup)) if mixup > 0 else 1.0
+            if lam < 1.0:
+                perm = torch.randperm(len(yb), device=xb.device)
+                xb = lam * xb + (1 - lam) * xb[perm]
+            logits = model(model_input(xb, kind))
+            if logit_adjustment is not None:
+                logits = logits + logit_adjustment
+            loss = loss_fn(logits, yb)
+            if lam < 1.0:
+                loss = lam * loss + (1 - lam) * loss_fn(logits, yb[perm])
             loss.backward()
             if tcfg.get("grad_clip"):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), tcfg["grad_clip"])
@@ -276,9 +338,16 @@ def train(
             "raw": nll(val_logits, val_ds.y),
             "scaled": nll(val_logits, val_ds.y, temperature),
         },
+        "val_logits": val_logits,
     }
     if splits.get("test"):
-        test_ds = StrokeDataset(features_dir, splits["test"], use_trajectory)
+        test_ds = StrokeDataset(
+            features_dir,
+            splits["test"],
+            use_trajectory,
+            feature_version=version,
+            arrays=split_arrays(splits, "test"),
+        )
         if len(test_ds):
             preds = predict(model, test_ds, 512, device, kind)
             result["test"] = classification_report(test_ds.y, preds, classes)
@@ -354,6 +423,8 @@ def main() -> None:
         ckpt = output_path(ckpt_base, suffix, seed)
         ckpt.parent.mkdir(parents=True, exist_ok=True)
         save_checkpoint(result.pop("checkpoint"), ckpt)
+        result.pop("val_logits", None)
+        result.pop("val_probs", None)
         metrics = output_path(metrics_base, suffix, seed)
         metrics.parent.mkdir(parents=True, exist_ok=True)
         metrics.write_text(json.dumps(result, indent=2), encoding="utf-8")
