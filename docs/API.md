@@ -323,10 +323,35 @@ Live video and events use fixed-rate slots anchored at the first decoded capture
 Ask the coach about a finished job (F22, [D18](DECISIONS.md)). Body `{"message": "Why did my smashes land short?"}` (1 to 1000 characters). The answer streams as Server-Sent Events (`text/event-stream`), one JSON object per `data:` line:
 
 - `{"type": "delta", "text": "..."}`: the next piece of the answer, as written;
-- `{"type": "done", "message": {...}, "disclaimer": "..."}`: the final chat message (`role`, `text`, `at`, `citations`). Citations are `[t=12.3s]` markers that matched a moment in the session data (hits, line calls, rally starts and ends, note moments); markers that matched nothing are removed from `text`, so the app should show this text in place of the streamed one;
-- `{"type": "error", "status": 429, "detail": "..."}`: the Claude API failed (rate limit, rejected key, offline); nothing is saved.
+- `{"type": "done", "message": {...}, "disclaimer": "...", "sources": [...]}`: the final chat message (`role`, `text`, `at`, `citations`). Citations are `[t=12.3s]` markers that matched a moment in the session data (hits, line calls, rally starts and ends, note moments); markers that matched nothing are removed from `text`, so the app should show this text in place of the streamed one. `sources` lists the knowledge-base chunks the answer cited as `[kb:footwork#split-step]` markers, each `{"id": "kb:footwork#split-step", "title": "Footwork, base position and split step: Split step"}`; markers naming a chunk that was not retrieved for this question are removed from `text`. Sources are not saved in the record;
+- `{"type": "error", "status": 429, "detail": "..."}`: the coach's provider failed (rate limit, rejected key, offline); nothing is saved.
 
-The question and the answer are appended to `record.chat.messages` and kept across re-renders. What is sent to the Claude API is listed in [PRIVACY.md](PRIVACY.md). `503` when the backend has no API key (`/health` reports `chat_available: false`), `409` unless the job is `done` or while another question on the same job is still being answered, `429` after `chat_max_messages` questions (in `/health`), `422` for an empty, blank or too long message.
+The answer comes from the RAG coach ([D42](DECISIONS.md)): the question is classified (session, history, knowledge, drills, injury, off topic), matching session chunks, past-session summaries and knowledge chunks are retrieved, and Gemini (or Claude) answers from them. An injury or pain question starts with a fixed reply that the coach cannot assess injuries; an off-topic question gets a fixed reply. The question and the answer are appended to `record.chat.messages` and kept across re-renders. What is sent to the provider is listed in [PRIVACY.md](PRIVACY.md). `503` when the backend has no Gemini or Claude API key (`/health` reports `chat_available: false`), `409` unless the job is `done` or while another question on the same job is still being answered, `429` after `chat_max_messages` questions (in `/health`), `422` for an empty, blank or too long message.
+
+### `POST /coach/chat`
+
+The general coach, not tied to one job ([D42](DECISIONS.md)): technique, tactics, rules, drills and progress across the finished jobs on this backend. Body `{"message": "Am I improving?", "history": [{"role": "user", "text": "..."}, {"role": "assistant", "text": "..."}]}`: `message` 1 to 1000 characters, `history` the earlier turns of this conversation (at most 40; the app keeps them, the server stores nothing). The answer streams as Server-Sent Events with the same `delta`, `done` (with `sources`) and `error` events as `POST /jobs/{job_id}/chat`; `citations` is always empty, since there is no video to seek. `503` without a Gemini or Claude API key, `409` while another general question is being answered, `429` after 10 questions in a minute, `422` for an empty, blank or too long message.
+
+### `GET /jobs/{job_id}/coach/report`
+
+The coaching report of a finished job ([D42](DECISIONS.md)):
+
+```json
+{
+  "summary": "...",
+  "strengths": ["High contact on overheads (5 of 6 checked)"],
+  "weaknesses": [{"title": "Bent hitting arm", "evidence": "...", "moments": [1.5, 9.2], "drill": "Throw and reach for a straight arm"}],
+  "drills": [{"name": "...", "purpose": "...", "how": "...", "kb_source": "kb:drills#throw-and-reach-for-a-straight-arm"}],
+  "next_session_goals": ["..."],
+  "generated_by": "gemini"
+}
+```
+
+`moments` are seconds into the video, each one a moment of the session data (others are dropped); `kb_source` is a retrieved knowledge chunk or `null`. `generated_by` is `gemini`, `claude` or `rules`: without a provider, or when the provider fails, the report is built from the session notes (`coaching`) without AI. A report is cached as `coach_report.json` in the job folder and written again when `record.json` changes; a `rules` report written because the provider failed is not cached. `404` for an unknown job or before `record.json` exists, `409` unless the job is `done` or while the report is being written.
+
+### `POST /jobs/{job_id}/coach/report`
+
+Writes the report again, ignoring the cache. Same response and errors as `GET`.
 
 ### `DELETE /jobs/{job_id}`
 
