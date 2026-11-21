@@ -69,10 +69,10 @@ def measured_stats(record: ClipRecord, question: str) -> Chunk:
         if hit.hitter:
             groups[hit.hitter].append(hit)
     lines = []
+    named = [k for k in STROKE_CLASSES if k.replace("_", " ") in question.lower()]
     for player, hits in groups.items():
         counts = Counter(h.stroke or "unclassified" for h in hits)
         lines.append(f"{player}: {len(hits)} hits; stroke counts: {_counts(counts)}.")
-        named = [k for k in STROKE_CLASSES if k.replace("_", " ") in question.lower()]
         for stroke in [None, *named]:
             measured = [
                 h for h in hits if h.speed_kmh is not None and (not stroke or h.stroke == stroke)

@@ -75,7 +75,7 @@ def test_model_report_moments_and_sources_are_checked() -> None:
     assert report.generated_by == "gemini"  # a fake provider reports as the default
     assert report.weaknesses[0].moments == [1.5]  # snapped to the hit; 42.0 dropped
     assert report.drills[0].kb_source == "kb:drills#throw-and-reach-for-a-straight-arm"
-    assert report.drills[1].kb_source is None
+    assert len(report.drills) == 1
     prompt = fake.json_calls[0]["prompt"]
     assert "[kb:drills#throw-and-reach-for-a-straight-arm]" in prompt and "TOP FIX" in prompt
 

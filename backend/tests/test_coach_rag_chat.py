@@ -230,3 +230,23 @@ def test_fastest_hit_comes_from_all_hits_and_preserves_precision():
     events = asyncio.run(_answer(coach, "What was my fastest shot?", record))
     assert "Which side" in events[-1]["message"]["text"]
     assert not coach.provider.streams
+
+    from datetime import UTC, datetime
+
+    from shuttlesense.schema import ChatMessage
+
+    history = [
+        ChatMessage(role="user", text="What was my fastest shot?", at=datetime.now(UTC)),
+        ChatMessage.model_validate(events[-1]["message"]),
+    ]
+
+    async def followup():
+        return [
+            e
+            async for e in answer(
+                coach, "near", history, ChatSettings(), digest=build_digest(record), record=record
+            )
+        ]
+
+    assert asyncio.run(followup())[-1]["type"] == "done"
+    assert "near, all strokes: fastest measured 65.4" in coach.provider.streams[-1]["system"]
