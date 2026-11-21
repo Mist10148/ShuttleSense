@@ -142,7 +142,7 @@ class LiveState {
   final List<FrameInfo> frames;
 
   /// Recent shuttle positions (processing pixels), newest last.
-  final List<({double x, double y})> trail;
+  final List<({double x, double y, double? speed})> trail;
   final Map<String, LivePlayer> players;
   final List<Hit> hits;
   final List<Rally> rallies;
@@ -218,7 +218,7 @@ class LiveState {
     String? sessionId,
     ({int width, int height})? size,
     List<CourtPoint>? courtCorners,
-    List<({double x, double y})>? trail,
+    List<({double x, double y, double? speed})>? trail,
     Map<String, LivePlayer>? players,
     Score? score,
     String? rallyState,
@@ -961,7 +961,7 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
     final shuttle = e['shuttle'] as Json?;
     var trail = state.trail;
     if (shuttle != null && shuttle['visible'] == 1) {
-      trail = [...trail, (x: asDouble(shuttle['x'])!, y: asDouble(shuttle['y'])!)];
+      trail = [...trail, (x: asDouble(shuttle['x'])!, y: asDouble(shuttle['y'])!, speed: speed)];
       if (trail.length > 12) trail = trail.sublist(trail.length - 12);
     } else if (trail.isNotEmpty && e['skipped'] != true) {
       trail = trail.sublist(1);

@@ -16,6 +16,15 @@ FAR = bgr("#E65100")
 NEAR_2 = bgr("#42A5F5")
 FAR_2 = bgr("#FFA726")
 SHUTTLE = bgr("#C6A700")
+SPEED_COLORS = tuple(bgr(hex_color) for hex_color in ("#36C665", "#FFD600", "#FF8900", "#F04444"))
+
+
+def speed_color(kmh: float | None) -> tuple[int, int, int] | None:
+    if kmh is None or not 0 <= kmh <= 450:
+        return None
+    return SPEED_COLORS[(kmh >= 30) + (kmh >= 60) + (kmh >= 100)]
+
+
 COURT = bgr("#FFFFFF")
 TEXT = bgr("#FFFFFF")
 PANEL = bgr("#000000")

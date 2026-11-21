@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
+import '../../../shared/widgets/shuttle_speed.dart';
 import '../live_controller.dart';
 
 /// The newest hit: stroke, player and speed, the live "callout".
@@ -111,7 +112,7 @@ class LiveOverlayPainter extends CustomPainter {
   });
 
   final ({int width, int height}) size;
-  final List<({double x, double y})> trail;
+  final List<({double x, double y, double? speed})> trail;
   final Map<String, LivePlayer> players;
   final PlayerColors colors;
 
@@ -133,7 +134,10 @@ class LiveOverlayPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(trail[i].x * sx, trail[i].y * sy),
         5 - 3 * age,
-        Paint()..color = colors.shuttle.withValues(alpha: 1 - 0.8 * age),
+        Paint()
+          ..color = (shuttleSpeedColor(trail[i].speed) ?? colors.shuttle).withValues(
+            alpha: 1 - 0.8 * age,
+          ),
       );
     }
   }

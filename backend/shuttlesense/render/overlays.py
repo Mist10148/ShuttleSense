@@ -475,12 +475,29 @@ def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         cv2.circle(img, _pt(*p), int(10 * s), color, max(2, int(3 * s)), cv2.LINE_AA)
 
 
+def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Retain the neutral trail and overlay a speed-colored center on measured positions."""
+    import cv2
+
+    draw_trail(img, record, i, state)
+    length = state.stage("tracking").get("trail_length", 12)
+    for frame in record.frames[max(0, i - length + 1) : i + 1]:
+        point = frame.shuttle
+        color = style.speed_color(frame.shuttle_speed_kmh)
+        if color is None or not point or not point.visible or point.x is None or point.y is None:
+            continue
+        age = (i - frame.frame) / max(length, 1)
+        radius = max(1, round((4 - 3 * age) * state.scale))
+        faded = tuple(round(channel * (1 - 0.8 * age)) for channel in color)
+        cv2.circle(img, _pt(point.x, point.y), radius, faded, -1, cv2.LINE_AA)
+
+
 LAYERS: dict[str, Layer] = {
     "score": draw_score,
     "minimap": draw_minimap,
     "speed": draw_speed,
     "court": draw_court,
-    "trail": draw_trail,
+    "trail": draw_speed_trail,
     "pose": draw_pose,
     "boxes": draw_boxes,
     "hits": draw_hits,

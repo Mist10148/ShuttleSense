@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../shared/widgets/shuttle_speed.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
 const double kCourtWidthM = 5.18;
@@ -151,53 +152,60 @@ class _CourtMinimapState extends State<CourtMinimap> {
             )
           : null,
       child: calibrated
-          ? Semantics(
-              label: [
-                minimapLabel(record, frameIndex),
-                if (widget.reviewCall case final call?)
-                  'Highlighted landing for rally ${call.rallyIndex + 1}.',
-                ?heat?.describe(),
-              ].join(' '),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // The whole court has to be on screen at once: the layout says how tall
-                  // the card may be, else most of the window is assumed.
-                  final room =
-                      CourtMaxHeight.maybeOf(context) ?? MediaQuery.sizeOf(context).height * 0.7;
-                  final (size, onSide) = courtViewLayout(
-                    constraints.maxWidth,
-                    room,
-                    doubles: doubles,
-                  );
-                  final scheme = Theme.of(context).colorScheme;
-                  return Center(
-                    child: SizedBox.fromSize(
-                      size: size,
-                      // Nothing is painted outside the picture (heat cells and marks used
-                      // to spill over the card and the panels around it).
-                      child: ClipRect(
-                        child: CustomPaint(
-                          painter: CourtPainter.fromRecord(
-                            record,
-                            frameIndex,
-                            lines: scheme.outline,
-                            surface: scheme.surfaceContainerHighest,
-                            runOff: scheme.surfaceContainerLow,
-                            players: PlayerColors.of(context),
-                            status: StatusColors.of(context),
-                            heat: heat,
-                            reviewLanding: widget.reviewCall?.landing,
-                            live: widget.live,
-                            rallyStart: widget.rallyStart,
-                            doubles: doubles,
-                            onSide: onSide,
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  label: [
+                    minimapLabel(record, frameIndex),
+                    if (widget.reviewCall case final call?)
+                      'Highlighted landing for rally ${call.rallyIndex + 1}.',
+                    ?heat?.describe(),
+                  ].join(' '),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // The whole court has to be on screen at once: the layout says how tall
+                      // the card may be, else most of the window is assumed.
+                      final room =
+                          CourtMaxHeight.maybeOf(context) ??
+                          MediaQuery.sizeOf(context).height * 0.7;
+                      final (size, onSide) = courtViewLayout(
+                        constraints.maxWidth,
+                        room,
+                        doubles: doubles,
+                      );
+                      final scheme = Theme.of(context).colorScheme;
+                      return Center(
+                        child: SizedBox.fromSize(
+                          size: size,
+                          // Nothing is painted outside the picture (heat cells and marks used
+                          // to spill over the card and the panels around it).
+                          child: ClipRect(
+                            child: CustomPaint(
+                              painter: CourtPainter.fromRecord(
+                                record,
+                                frameIndex,
+                                lines: scheme.outline,
+                                surface: scheme.surfaceContainerHighest,
+                                runOff: scheme.surfaceContainerLow,
+                                players: PlayerColors.of(context),
+                                status: StatusColors.of(context),
+                                heat: heat,
+                                reviewLanding: widget.reviewCall?.landing,
+                                live: widget.live,
+                                rallyStart: widget.rallyStart,
+                                doubles: doubles,
+                                onSide: onSide,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+                const ShuttleSpeedLegend(),
+              ],
             )
           : Text(
               record.mode == 'live'
@@ -477,9 +485,10 @@ class CourtPainter extends CustomPainter {
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
-    final trail = <(CourtPoint, bool)>[
+    final trail = <(CourtPoint, bool, double?)>[
       for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
-        ?shuttleOverCourt(record, i, doubles: isDoubles),
+        if (shuttleOverCourt(record, i, doubles: isDoubles) case final point?)
+          (point.$1, point.$2, record.frame(i)?.shuttleSpeedKmh),
     ];
     // Marks belong to the rally on screen. Live, that is the open rally (none between
     // rallies). Offline between rallies: the hits since the last rally ended.
@@ -532,7 +541,7 @@ class CourtPainter extends CustomPainter {
 
   /// Shuttle positions, oldest first, each with whether it is placed along the rally's
   /// flight line (true) or only mapped onto the floor (false; see [shuttleOverCourt]).
-  final List<(CourtPoint, bool)> trail;
+  final List<(CourtPoint, bool, double?)> trail;
   final List<(String, CourtPoint)> hitMarks;
 
   /// (landing point, called in, waiting for review), oldest first.
@@ -662,13 +671,16 @@ class CourtPainter extends CustomPainter {
     }
     for (var i = 0; i < trail.length; i++) {
       final age = (trail.length - 1 - i) / kTrailLength; // 0 = newest
-      final (p, placed) = trail[i];
+      final (p, placed, speed) = trail[i];
       // A position that is only the floor mapping of a shuttle in the air is a rough
       // guide: it is drawn smaller and fainter than one placed along the flight line.
       canvas.drawCircle(
         mark(p),
         (4 - 2.5 * age) * (placed ? 1 : 0.7),
-        Paint()..color = players.shuttle.withValues(alpha: (1 - 0.85 * age) * (placed ? 1 : 0.45)),
+        Paint()
+          ..color = (shuttleSpeedColor(speed) ?? players.shuttle).withValues(
+            alpha: (1 - 0.85 * age) * (placed ? 1 : 0.45),
+          ),
       );
     }
     if (trail.isNotEmpty) {
