@@ -1,10 +1,13 @@
 # Rules of badminton (BWF Laws, summary)
 
 ## Scoring system
-A match is the best of three games. Every rally scores a point for the side that wins it (rally-point scoring). A game is won by the first side to 21 points. At 20-all, the side that first gains a two-point lead wins the game. At 29-all, the side that scores the 30th point wins the game. The side winning a game serves first in the next game.
+Under the BWF 21-point rules in effect through 3 January 2027, a match is the best of three games. ShuttleSense sessions can have a different configured best-of value. Every rally scores a point for the side that wins it (rally-point scoring). A game is won by the first side to 21 points. At 20-all, the side that first gains a two-point lead wins the game. At 29-all, the side that scores the 30th point wins the game. The side winning a game serves first in the next game.
+
+## Scoring change in 2027
+BWF approved a best-of-three format with games to 15 starting 4 January 2027. For a recorded match, report the scoring settings and scores actually recorded.
 
 ## Intervals and change of ends
-When the leading score reaches 11 points, the players may take an interval of up to 60 seconds. Between games there is an interval of up to 120 seconds. Players change ends at the end of the first game, at the end of the second game if there is a third, and in the third game when the leading score reaches 11 points.
+Under the 21-point format, when the leading score reaches 11 points, the players may take an interval of up to 60 seconds. Between games there is an interval of up to 120 seconds. Players change ends at the end of the first game, at the end of the second game if there is a third, and in the third game when the leading score reaches 11 points.
 
 ## Singles service courts
 In singles, the server serves from the right service court when the server's score is even (0, 2, 4...) and from the left when it is odd. The singles service court is long and narrow: it extends to the back boundary line and uses the inner side lines. If the server wins the rally, the server scores and serves again from the other service court; if the receiver wins, the receiver scores and becomes the server.

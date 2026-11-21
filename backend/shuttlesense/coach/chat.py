@@ -140,6 +140,31 @@ def validate_citations(text: str, moments: list[Moment]) -> tuple[str, list[Mome
     return clean, sorted(found, key=lambda m: m.time_s)
 
 
+def source_details(chunk: Chunk) -> dict[str, str]:
+    doc = chunk.id.split("#")[0]
+    if chunk.id == "kb:rules#scoring-change-in-2027":
+        return {
+            "reference": "BWF Members Approve 3×15 Scoring System",
+            "edition": "25 April 2026",
+            "url": "https://bwfbadminton.com/news-single/2026/04/25/bwf-members-approve-3x15-scoring-system",
+        }
+    if doc == "kb:rules" and "shuttlesense" not in chunk.id:
+        return {
+            "reference": "BWF Laws of Badminton",
+            "edition": "Section 4.1, 21-point rules",
+            "url": "https://system.bwfbadminton.com/documents/folder_1_81/Statutes/"
+            "CHAPTER-4---RULES-OF-THE-GAME/SECTION%204.1-%20Laws%20of%20Badminton.pdf",
+        }
+    if doc in {"kb:footwork", "kb:overhead_strokes", "kb:net_and_midcourt", "kb:serve"}:
+        return {
+            "reference": "Further reading: BWF Shuttle Time Teachers’ Manual",
+            "edition": "Second edition, February 2021",
+            "url": "https://www.badminton.org.au/wp-content/uploads/2022/11/"
+            "1.-BWF-ST-Teachers-Manual_Inclusivity_ENGLISH.pdf",
+        }
+    return {}
+
+
 def validate_sources(text: str, chunks: list[Chunk]) -> tuple[str, list[dict[str, str]]]:
     """Drop [kb:...] tags of chunks that were not retrieved; return (text, cited sources).
 
@@ -154,7 +179,9 @@ def validate_sources(text: str, chunks: list[Chunk]) -> tuple[str, list[dict[str
         chunk = by_id.get(cid) or (docs.get(cid) if "#" not in cid else None)
         if chunk is None:
             return ""
-        cited.setdefault(cid, {"id": cid, "title": chunk.title})
+        cited.setdefault(
+            cid, {"id": cid, "title": chunk.title, "excerpt": chunk.text, **source_details(chunk)}
+        )
         return match.group(0)
 
     return _tidy(KB_CITATION.sub(keep, text)), list(cited.values())

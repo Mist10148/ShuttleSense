@@ -3,13 +3,28 @@ import 'json.dart';
 
 /// A knowledge-base chunk the coach cited, e.g. kb:footwork#split-step (docs/API.md).
 class CoachSource {
-  const CoachSource({required this.id, required this.title});
+  const CoachSource({
+    required this.id,
+    required this.title,
+    this.excerpt,
+    this.reference,
+    this.edition,
+    this.url,
+  });
 
   final String id;
   final String title;
 
-  factory CoachSource.fromJson(Json j) =>
-      CoachSource(id: j['id'] as String, title: j['title'] as String? ?? j['id'] as String);
+  final String? excerpt, reference, edition, url;
+
+  factory CoachSource.fromJson(Json j) => CoachSource(
+    id: j['id'] as String,
+    title: j['title'] as String? ?? j['id'] as String,
+    excerpt: j['excerpt'] as String?,
+    reference: j['reference'] as String?,
+    edition: j['edition'] as String?,
+    url: j['url'] as String?,
+  );
 
   static List<CoachSource> listFrom(Object? v) =>
       asList(v).map(CoachSource.fromJson).toList(growable: false);

@@ -114,6 +114,7 @@ void main() {
               {
                 'id': 'kb:overhead_strokes#contact-point-for-overheads',
                 'title': 'Overhead strokes: Contact point for overheads',
+                'excerpt': 'Reach up to contact the shuttle.',
               },
             ],
           },
@@ -128,6 +129,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('0:01.5'), findsOneWidget);
       expect(find.text('Contact point for overheads'), findsOneWidget);
+      await tester.tap(find.text('Contact point for overheads'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reach up to contact the shuttle.'), findsOneWidget);
     });
   });
 

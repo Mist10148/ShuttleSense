@@ -104,12 +104,10 @@ def test_general_chat_streams_without_a_job(tmp_path: Path, tiny_video: Path) ->
         done = _events(res)[-1]
         assert done["message"]["text"] == "Split step as they hit [kb:footwork#split-step]."
         assert done["message"]["citations"] == []  # no video: no times
-        assert done["sources"] == [
-            {
-                "id": "kb:footwork#split-step",
-                "title": "Footwork, base position and split step: Split step",
-            }
-        ]
+        (source,) = done["sources"]
+        assert source["id"] == "kb:footwork#split-step"
+        assert source["edition"] == "Second edition, February 2021"
+        assert source["excerpt"] and source["url"].startswith("https://")
         assert [m["text"] for m in fake.streams[0]["messages"]] == [
             "hi",
             "yo",
