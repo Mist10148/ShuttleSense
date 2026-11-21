@@ -542,3 +542,11 @@ controls. Older backends keep their existing controls. Pin a cue or set a person
 in Coach; switch to Referee for the timer and decision log. Stop and reopen History to
 review goals and moments. No new dependencies or API key are needed. The camera,
 perception-weight and physical-device acceptance checks still apply.
+
+### Verify the Gemini coach
+
+Set the backend Gemini API key using the settings above. To exercise the configured answer, routing and embedding models, set SHUTTLESENSE_TEST_GEMINI=1 and run the following from the backend directory with its virtual environment active.
+
+    python -m pytest tests/test_coach_rag_chat.py::test_live_gemini_synthetic_session -q
+
+The smoke test uses a temporary store and a generated video. It calls Gemini for session chat, general badminton chat and a coaching report. Ordinary CI runs use the offline provider fixtures.

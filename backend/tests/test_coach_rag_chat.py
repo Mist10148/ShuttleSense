@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 
@@ -250,3 +251,32 @@ def test_fastest_hit_comes_from_all_hits_and_preserves_precision():
 
     assert asyncio.run(followup())[-1]["type"] == "done"
     assert "near, all strokes: fastest measured 65.4" in coach.provider.streams[-1]["system"]
+
+
+@pytest.mark.skipif(os.getenv("SHUTTLESENSE_TEST_GEMINI") != "1", reason="opt-in Gemini API smoke")
+def test_live_gemini_synthetic_session(tmp_path: Path, tiny_video: Path):
+    """Exercise production model configuration with disposable synthetic data only."""
+    from shuttlesense.coach.router import route
+
+    with _client(tmp_path, coach_provider="gemini") as client:
+        provider = client.app.state.coach.provider
+        assert provider and provider.name == "gemini", "Set a backend Gemini API key"
+
+        async def model_checks():
+            vectors = await provider.embed(["badminton footwork"], "query")
+            assert len(vectors) == 1 and len(vectors[0]) > 0
+            routed = await route("How should I practise a split step?", provider, job_bound=False)
+            assert routed.source == "model"
+
+        client.portal.call(model_checks)
+        job = _done_job(client, tiny_video)
+        for endpoint, question in (
+            (f"/jobs/{job}/chat", "How many hits were recorded in this session?"),
+            ("/coach/chat", "What is a split step in badminton?"),
+        ):
+            response = client.post(endpoint, json={"message": question})
+            response.raise_for_status()
+            events = _events(response)
+            assert events[-1]["type"] == "done" and events[-1]["message"]["text"]
+            assert any(e["type"] == "delta" for e in events)
+        assert client.get(f"/jobs/{job}/coach/report").json()["generated_by"] == "gemini"
