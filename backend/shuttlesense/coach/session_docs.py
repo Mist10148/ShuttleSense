@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from shuttlesense.coach.index import Chunk
-from shuttlesense.schema import ClipRecord, Hit, load_record
+from shuttlesense.schema import STROKE_CLASSES, ClipRecord, Hit, load_record
 
 if TYPE_CHECKING:
     from shuttlesense.api.jobs import JobManager
@@ -58,6 +58,35 @@ def _hit_text(h: Hit) -> str:
     if fails:
         text += " (form fail: " + ", ".join(fails) + ")"
     return text
+
+
+def measured_stats(record: ClipRecord, question: str) -> Chunk:
+    """Full-record counts and measured maxima, independent of the retrieval window."""
+    groups: dict[str, list[Hit]] = defaultdict(list)
+    groups["all hits"] = record.hits
+    for hit in record.hits:
+        groups[hit.player].append(hit)
+        if hit.hitter:
+            groups[hit.hitter].append(hit)
+    lines = []
+    for player, hits in groups.items():
+        counts = Counter(h.stroke or "unclassified" for h in hits)
+        lines.append(f"{player}: {len(hits)} hits; stroke counts: {_counts(counts)}.")
+        named = [k for k in STROKE_CLASSES if k.replace("_", " ") in question.lower()]
+        for stroke in [None, *named]:
+            measured = [
+                h for h in hits if h.speed_kmh is not None and (not stroke or h.stroke == stroke)
+            ]
+            label = f"{player}, {stroke or 'all strokes'}"
+            if measured:
+                peak = max(measured, key=lambda h: h.speed_kmh)
+                lines.append(
+                    f"{label}: fastest measured {peak.speed_kmh:g} km/h (est.), "
+                    f"{peak.stroke or 'unclassified stroke'} {_t(peak.time_s)}."
+                )
+            else:
+                lines.append(f"{label}: no recorded speed estimate.")
+    return Chunk("session:measurements", "Measured session statistics", "\n".join(lines))
 
 
 def session_documents(record: ClipRecord) -> list[Chunk]:

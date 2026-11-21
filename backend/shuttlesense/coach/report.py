@@ -18,7 +18,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from shuttlesense.atomic import atomic_open
-from shuttlesense.coach.chat import CITATION_TOLERANCE_S, Coach, digest_header
+from shuttlesense.coach.chat import CITATION_TOLERANCE_S, Coach, digest_header, supplied_moments
 from shuttlesense.coach.digest import Digest
 from shuttlesense.coach.index import Chunk
 from shuttlesense.coach.session_docs import RULE_DRILLS, session_documents
@@ -188,8 +188,9 @@ async def generate_report(
         log.warning("coach report fell back to rules: %s", exc)
         return rules_report(record, retriever.by_id)
     known = {c.id for c in knowledge}
+    moments = supplied_moments(context.split("## Badminton knowledge")[0], digest)
     for w in out.weaknesses:
-        w.moments = _snap(w.moments, digest.moments)
+        w.moments = _snap(w.moments, moments)
     for d in out.drills:
         if d.kb_source not in known:
             d.kb_source = None

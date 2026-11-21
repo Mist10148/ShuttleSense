@@ -27,9 +27,10 @@ from shuttlesense.coach.session_docs import (
     HistoryCache,
     SessionSummary,
     history_documents,
+    measured_stats,
     session_documents,
 )
-from shuttlesense.schema import ChatMessage, ClipRecord, Moment
+from shuttlesense.schema import ChatMessage, ClipRecord, Moment, is_doubles
 
 if TYPE_CHECKING:
     from shuttlesense.coach.llm import LLMProvider
@@ -57,6 +58,12 @@ _RULES = """How to answer:
 - For facts about the player's sessions use only the session data below. If it does not \
 show something (for example footwork timing, racket grip, shuttle height, anything about the \
 opponent's intent), say that the data does not show it instead of guessing.
+- Use measured session statistics for counts and peak speeds. A missing stroke label is
+  unclassified. Describe progress by recorded side; different sessions may feature different people.
+  If comparable observations are missing, say which measurement is needed.
+- Tie each personal training recommendation to a measured event or recurring form rule
+  and a cited technique or drill. Use the session score for this match and the retrieved
+  rule edition for questions about official scoring.
 - Never invent numbers, strokes, rallies or times. Quote counts and values as they appear.
 - When you refer to a moment of this session, cite its time exactly as it appears in the \
 data, in the form [t=12.3s]. Cite only times that appear in the session data. The app turns \
@@ -202,6 +209,11 @@ def digest_header(digest: Digest) -> str:
     return head + ("\n(Long session: detail was shortened.)" if digest.shortened else "")
 
 
+def supplied_moments(context: str, digest: Digest | None) -> list[Moment]:
+    times = set(CITATION.findall(context))
+    return [m for m in digest.moments if f"{m.time_s:.1f}" in times] if digest else []
+
+
 def _section(title: str, chunks: list[Chunk]) -> str:
     if not chunks:
         return ""
@@ -237,6 +249,10 @@ async def retrieve(
         coaching = next((d for d in docs if d.id == "session:coaching"), None)
         if coaching is not None:
             session = _dedupe([coaching, *session])
+        session.insert(0, measured_stats(record, query))
+        score = next((d for d in docs if d.id == "session:score"), None)
+        if score:
+            session = _dedupe([score, *session])
     if intent == "history" and load_history is not None:
         summaries = await asyncio.to_thread(load_history)
         docs = history_documents(summaries)
@@ -272,7 +288,6 @@ async def answer(
     "sources"}. Raises ChatError (shown to the user) when the provider fails."""
     if coach.provider is None:
         raise ChatError("The coach is off: no Gemini or Claude API key is set.", 503)
-    moments = digest.moments if digest is not None else []
     routed = await route(question, coach.provider, job_bound=record is not None)
     prefix = ""
     if routed.intent == "off_topic":
@@ -280,6 +295,30 @@ async def answer(
         yield {"type": "delta", "text": text}
         yield _done(text, [], [])
         return
+    if record is not None and routed.intent != "safety":
+        personal_stat = re.search(r"\b(my|me|i)\b", question, re.I) and re.search(
+            r"\b(fastest|peak|score|count|how many|top speed)\b", question, re.I
+        )
+        sides = r"\b(near|far)(?:[_ -]?[12])?\b"
+        identity = any(
+            re.search(
+                r"\b(?:i (?:was|played|am)|i'm|my side (?:is|was)) (?:on )?(?:the )?" + sides,
+                m.text,
+                re.I,
+            )
+            or re.fullmatch(r"\s*(?:the )?" + sides + r"(?: side)?[.! ]*", m.text, re.I)
+            for m in history[-settings.history_messages :]
+            if m.role == "user"
+        )
+        if personal_stat and not identity and not re.search(sides, question, re.I):
+            text = (
+                "Which player were you (near_1, near_2, far_1 or far_2)?"
+                if is_doubles(record)
+                else "Which side did you play, near or far?"
+            )
+            yield {"type": "delta", "text": text}
+            yield _done(text, [], [])
+            return
     if routed.intent == "safety":
         prefix = SAFETY_REPLY
         yield {"type": "delta", "text": prefix}
@@ -294,8 +333,12 @@ async def answer(
     system = SYSTEM_PROMPT if digest is not None else GENERAL_PROMPT
     if digest is not None:
         system += "\n\n## Session data\n" + digest_header(digest)
+    session_context = (digest_header(digest) if digest else "") + _section("Session", session)
+    moments = supplied_moments(session_context, digest)
     system += _section("More session data (retrieved)", session)
     system += _section("The player's past sessions, oldest first", past)
+    if routed.intent == "history" and not past:
+        system += "\nNo comparable finished sessions were retrieved."
     system += _section("Badminton knowledge", knowledge)
     if prefix:
         system += (

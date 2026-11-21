@@ -52,7 +52,7 @@ DRILLS = re.compile(
 )
 SESSION = re.compile(
     r"\b(this (session|match|game|video|clip|rally)|today|rally \d+|my (match|game|session)|"
-    r"line calls?|t=\d|score|won|lost|why did (i|my))\b",
+    r"line calls?|t=\d|fastest shot|fastest stroke|top speed|score|won|lost|why did (i|my))\b",
     re.I,
 )
 KNOWLEDGE = re.compile(

@@ -212,3 +212,23 @@ def test_kb_tags_are_checked_against_retrieved_chunks(tag: str, kept: bool) -> N
     text, sources = validate_sources(f"Do this {tag}.", [Chunk("kb:a#x", "A: X", "t")])
     assert (tag in text) is kept
     assert bool(sources) is kept
+
+
+def test_fastest_hit_comes_from_all_hits_and_preserves_precision():
+    from shuttlesense.coach.session_docs import measured_stats
+    from shuttlesense.schema import Hit
+
+    record = load_golden()
+    record.hits = [
+        Hit(id=1, frame=30, time_s=1, player="near", stroke="smash", speed_kmh=65.4),
+        Hit(id=2, frame=60, time_s=2, player="far", stroke="clear", speed_kmh=91.2),
+        Hit(id=3, frame=90, time_s=3, player="near", stroke="smash"),
+    ]
+    text = measured_stats(record, "compare fastest smashes").text
+    assert "near, smash: fastest measured 65.4 km/h (est.), smash [t=1.0s]" in text
+    assert "far, smash: no recorded speed estimate" in text
+    assert "near: 2 hits; stroke counts: smash 2" in text
+    coach = _coach(FakeProvider())
+    events = asyncio.run(_answer(coach, "What was my fastest shot?", record))
+    assert "Which side" in events[-1]["message"]["text"]
+    assert not coach.provider.streams
