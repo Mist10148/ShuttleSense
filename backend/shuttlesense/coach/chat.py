@@ -319,16 +319,17 @@ async def answer(
     if coach.provider is None:
         raise ChatError("The coach is off: no Gemini or Claude API key is set.", 503)
     # A side alone answers the coach's clarification and belongs to the preceding question.
-    route_question = question
     if (
         record is not None
         and len(history) >= 2
         and history[-1].role == "assistant"
         and history[-1].text in (SINGLES_SIDE_QUESTION, DOUBLES_SIDE_QUESTION)
         and history[-2].role == "user"
+        and re.fullmatch(r"\s*(?:the )?(?:near|far)(?:[_ -]?[12])?(?: side)?[.! ]*", question, re.I)
     ):
-        route_question = f"{history[-2].text} Player's reply: {question}"
-    routed = await route(route_question, coach.provider, job_bound=record is not None)
+        routed = Route(intent="session")
+    else:
+        routed = await route(question, coach.provider, job_bound=record is not None)
     prefix = ""
     if routed.intent == "off_topic":
         text = OFF_TOPIC_REPLY
