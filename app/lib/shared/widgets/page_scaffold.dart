@@ -59,6 +59,7 @@ class PageHeader extends StatelessWidget {
     this.actions,
     this.below,
     this.showBack = true,
+    this.dense = false,
   });
 
   final String title;
@@ -68,12 +69,21 @@ class PageHeader extends StatelessWidget {
   /// A muted line under the title ("Updated 14:02").
   final String? below;
 
+  /// A smaller title for working screens (Results), where the content, not the page
+  /// name, should lead.
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final compact = Breakpoints.of(context).isCompact;
     // The brief's large light title, smaller on a phone so a word still fits the line.
-    final titleStyle = compact
+    final titleStyle = dense
+        ? theme.textTheme.headlineSmall?.copyWith(
+            fontSize: compact ? 22 : 24,
+            fontWeight: FontWeight.w500,
+          )
+        : compact
         ? theme.textTheme.headlineLarge?.copyWith(fontSize: 32)
         : theme.textTheme.headlineLarge;
     return LayoutBuilder(

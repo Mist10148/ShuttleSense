@@ -170,7 +170,12 @@ abstract final class AppTheme {
       colorScheme: scheme,
       useMaterial3: true,
       fontFamily: fontFamily,
-      extensions: [players, status, p],
+      extensions: [
+        players,
+        status,
+        p,
+        brightness == Brightness.dark ? AnalysisColors.dark : AnalysisColors.light,
+      ],
       visualDensity: VisualDensity.adaptivePlatformDensity,
       scaffoldBackgroundColor: p.page,
       textTheme: _textTheme(p),
