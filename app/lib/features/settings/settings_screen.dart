@@ -13,6 +13,7 @@ import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/status_pill.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/tactile.dart';
 
 /// Settings grouped as Connection, Appearance, Notifications, Privacy & data and About. The
 /// analysis mode is not here: the mode chooser on the Analyze tab is its one home.
@@ -31,6 +32,7 @@ class SettingsScreen extends ConsumerWidget {
       children: [
         SectionCard(
           title: 'Connection',
+          icon: Icons.dns_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -84,6 +86,7 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Appearance',
+          icon: Icons.palette_outlined,
           child: SegmentedButton<ThemeMode>(
             segments: const [
               ButtonSegment(
@@ -109,7 +112,8 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Notifications',
-          child: SwitchListTile(
+          icon: Icons.notifications_none,
+          child: TactileSwitchTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Notify when an analysis finishes'),
             subtitle: const Text('Only while the app is in the background'),
@@ -120,6 +124,7 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Privacy & data',
+          icon: Icons.shield_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,6 +162,7 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'About',
+          icon: Icons.info_outline,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

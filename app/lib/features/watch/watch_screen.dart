@@ -25,6 +25,7 @@ import '../upload/upload_controller.dart';
 import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/tactile.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -841,7 +842,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                             'be sampled to a lower frame rate.',
                 ),
                 if (realTime && health?.watchBackground == true)
-                  SwitchListTile(
+                  TactileSwitchTile(
                     title: const Text('Faster player analysis (experimental)'),
                     subtitle: const Text(
                       'May miss players or change hits and results; not always faster. '

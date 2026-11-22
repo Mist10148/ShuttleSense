@@ -20,6 +20,7 @@ import '../../shared/widgets/start_score_field.dart';
 import '../../shared/widgets/stroke_model_field.dart';
 import 'upload_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/tactile.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -176,7 +177,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SwitchListTile(
+              TactileSwitchTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Calibrate court'),
                 subtitle: const Text(

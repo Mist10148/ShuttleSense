@@ -289,8 +289,20 @@ class _JobTile extends ConsumerWidget {
       },
       child: Padding(
         padding: const EdgeInsets.only(bottom: Spacing.sm),
+        // The whole card is the button: it lifts and lights as one piece under the pointer.
         child: AppCard(
           padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: Spacing.xs),
+          semanticLabel: title,
+          onTap: () {
+            if (job.status == JobStatus.done && !hasResults(job)) {
+              // Finished, but its record is gone (e.g. the server's storage was wiped).
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('This job has no results on the server any more.')),
+              );
+              return;
+            }
+            context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id));
+          },
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: Spacing.sm),
             // The pastel backs up the icon shape: finished, failed, or still neutral.
@@ -328,16 +340,6 @@ class _JobTile extends ConsumerWidget {
                 ],
               ),
             ),
-            onTap: () {
-              if (job.status == JobStatus.done && !hasResults(job)) {
-                // Finished, but its record is gone (e.g. the server's storage was wiped).
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('This job has no results on the server any more.')),
-                );
-                return;
-              }
-              context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id));
-            },
             trailing: IconButton(
               tooltip: 'Delete',
               icon: const Icon(Icons.delete_outline),

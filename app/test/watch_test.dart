@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shuttlesense_app/shared/widgets/tactile.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
 import 'package:shuttlesense_app/features/mode/mode_screen.dart';
@@ -209,11 +210,11 @@ void main() {
     );
     await tester.tap(find.text('Choose video'));
     await tester.pumpAndSettle();
-    final faster = find.widgetWithText(SwitchListTile, 'Faster player analysis (experimental)');
-    expect(tester.widget<SwitchListTile>(faster).value, isFalse);
+    final faster = find.widgetWithText(TactileSwitchTile, 'Faster player analysis (experimental)');
+    expect(tester.widget<TactileSwitchTile>(faster).value, isFalse);
     await tester.tap(faster);
     await tester.pump();
-    expect(tester.widget<SwitchListTile>(faster).value, isTrue);
+    expect(tester.widget<TactileSwitchTile>(faster).value, isTrue);
     expect(
       tester
           .widget<SegmentedButton<bool>>(
