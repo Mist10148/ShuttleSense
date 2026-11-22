@@ -16,6 +16,7 @@ void paintShuttleTrail(
   Canvas canvas,
   List<ShuttleTrailSample> samples, {
   required bool hasCurrent,
+  double Function(int index)? ageAt,
 }) {
   if (samples.isEmpty) return;
   final head = samples.last.point;
@@ -35,7 +36,7 @@ void paintShuttleTrail(
   for (var i = 1; i < samples.length; i++) {
     final sample = samples[i];
     if (!sample.connected) continue;
-    final age = (samples.length - 1 - i) / samples.length;
+    final age = ageAt?.call(i) ?? (samples.length - 1 - i) / samples.length;
     final confidence = sample.approximate || samples[i - 1].approximate ? 0.55 : 1.0;
     paint.color = (shuttleSpeedColor(sample.speed) ?? Colors.grey.shade400).withValues(
       alpha: (0.85 - 0.65 * age) * confidence,

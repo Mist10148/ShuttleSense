@@ -53,9 +53,22 @@ void main() {
     expect(heat.far.fold<double>(0, (a, b) => a + b), closeTo(1 / 30, 1e-9));
     expect(
       heat.describe(),
-      'Heatmap: near player mostly at 2.7 m across, 1.9 m up the court; '
+      'Heatmap: near player mostly at 2.6 m across, 1.9 m up the court; '
       'far player mostly at 2.4 m across, 11.4 m up the court.',
     );
+  });
+
+  test('doubles alleys share the export grid origin and preserve player-seconds', () {
+    final heat = HeatGrid.fromRecord(
+      recordWith(const [
+        FrameInfo(frame: 0, nearPos: (x: -0.3, y: 1), near2Pos: (x: 5.5, y: 1)),
+        FrameInfo(frame: 1, farPos: (x: 2.6, y: 12)),
+      ]),
+    );
+    expect(HeatGrid.cellOrigin(0), (x: -2.0, y: -2.0));
+    expect(HeatGrid.cols, 37);
+    expect(heat.near.fold<double>(0, (a, b) => a + b), closeTo(2 / 30, 1e-9));
+    expect(heat.far.fold<double>(0, (a, b) => a + b), closeTo(1 / 30, 1e-9));
   });
 
   test('the heatmap kernel is in meters and wider far from the camera', () {
@@ -269,7 +282,7 @@ void main() {
     await tester.tap(find.text('Heatmap'));
     await tester.pump();
     // The centre of the 0.25 m cell the player stands in.
-    expect(find.bySemanticsLabel(RegExp('near player mostly at 2.7 m across')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('near player mostly at 2.6 m across')), findsOneWidget);
     expect(tester.takeException(), isNull);
     handle.dispose();
   });

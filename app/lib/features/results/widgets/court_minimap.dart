@@ -120,14 +120,18 @@ class CourtMinimap extends StatefulWidget {
 class _CourtMinimapState extends State<CourtMinimap> {
   var _heatmap = false;
   HeatGrid? _heat;
-  (String, int)? _heatKey;
+  (Object, int, int)? _heatKey;
 
   /// Built once per clip, and during a live session again every [kHeatRebuildFrames]
   /// frames (the live record is a new object on every event, and positions never change
   /// after the fact, so rebuilding on each one would cost a pass over every frame).
   HeatGrid _heatGrid() {
     final record = widget.record;
-    final key = (record.clipId, record.frames.length ~/ kHeatRebuildFrames);
+    final key = (
+      widget.live ? record.clipId : record,
+      record.frames.length ~/ kHeatRebuildFrames,
+      record.rallies.length,
+    );
     if (_heat == null || key != _heatKey) {
       _heat = HeatGrid.fromRecord(record);
       _heatKey = key;
@@ -146,7 +150,9 @@ class _CourtMinimapState extends State<CourtMinimap> {
       trailing: calibrated
           ? FilterChip(
               label: const Text('Heatmap'),
-              tooltip: 'Shade where each player stood over the whole clip',
+              tooltip: doubles
+                  ? 'Show time spent by each pair during play'
+                  : 'Show time spent by each player during play',
               selected: _heatmap,
               onSelected: (on) => setState(() => _heatmap = on),
             )
@@ -314,7 +320,7 @@ class HeatGrid {
   });
 
   static const double margin = 2.0;
-  static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
+  static final int cols = ((kCourtWidthM + 2 * margin) / kHeatCellM).ceil();
   static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
 
   /// Kernel width in meters at court depth [y].
@@ -334,13 +340,13 @@ class HeatGrid {
     final near = List.filled(cols * rows, 0.0), far = List.filled(cols * rows, 0.0);
     final seconds = 1 / (record.fps > 0 ? record.fps : 30.0);
     // Cell centres in court meters.
-    double cx(int c) => (c + 0.5) * kHeatCellM - margin - kDoublesAlleyM;
+    double cx(int c) => (c + 0.5) * kHeatCellM - margin;
     double cy(int r) => (r + 0.5) * kHeatCellM - margin;
     void add(List<double> grid, CourtPoint? p) {
       if (p == null || atClampEdge(p)) return;
       final sigma = sigmaAt(p.y);
       final reach = (3 * sigma / kHeatCellM).ceil();
-      final c0 = ((p.x + margin + kDoublesAlleyM) / kHeatCellM).floor();
+      final c0 = ((p.x + margin) / kHeatCellM).floor();
       final r0 = ((p.y + margin) / kHeatCellM).floor();
       final wx = <int, double>{}, wy = <int, double>{};
       for (var c = c0 - reach; c <= c0 + reach; c++) {
@@ -428,10 +434,8 @@ class HeatGrid {
   }
 
   /// Near-left corner of a cell in court meters.
-  static CourtPoint cellOrigin(int index) => (
-    x: (index % cols) * kHeatCellM - margin - kDoublesAlleyM,
-    y: (index ~/ cols) * kHeatCellM - margin,
-  );
+  static CourtPoint cellOrigin(int index) =>
+      (x: (index % cols) * kHeatCellM - margin, y: (index ~/ cols) * kHeatCellM - margin);
 
   /// Where each player stood most, for screen readers.
   String describe() {
@@ -724,10 +728,15 @@ class CourtPainter extends CustomPainter {
           ..style = PaintingStyle.stroke,
       );
     }
-    paintShuttleTrail(canvas, [
-      for (final (_, point, placed, speed, connected) in trail)
-        (point: mark(point), speed: speed, approximate: !placed, connected: connected),
-    ], hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex);
+    paintShuttleTrail(
+      canvas,
+      [
+        for (final (_, point, placed, speed, connected) in trail)
+          (point: mark(point), speed: speed, approximate: !placed, connected: connected),
+      ],
+      hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
+      ageAt: (i) => (frameIndex - trail[i].$1) / kTrailLength,
+    );
     canvas.restore();
   }
 
