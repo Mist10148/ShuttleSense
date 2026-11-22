@@ -106,6 +106,79 @@ void main() {
     await tester.pump(kHitBurstDuration);
   });
 
+  testWidgets('rapid detected hits each get a turn, and a rewind resets playback', (tester) async {
+    const hits = [
+      HitBurstEvent(id: 10, who: 'near', stroke: 'smash', timeS: 1),
+      HitBurstEvent(id: 11, who: 'far', stroke: 'drop', timeS: 1.05),
+      HitBurstEvent(id: 11, who: 'far', stroke: 'drop', timeS: 1.05),
+    ];
+    await pumpLayer(tester, hits, nowS: 1.08);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'SMASH!');
+
+    await tester.pump(kHitBurstDuration);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'DROP!');
+    await tester.pump(kHitBurstDuration);
+    expect(burst(tester), isNull);
+
+    await pumpLayer(tester, hits, nowS: 0.9);
+    expect(burst(tester), isNull);
+    await pumpLayer(tester, hits, nowS: 1.01);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'SMASH!');
+    await tester.pump(kHitBurstDuration);
+  });
+
+  testWidgets('the live feed supplies batched hits without replaying an old batch', (tester) async {
+    const hits = [
+      HitBurstEvent(id: 0, who: 'near', stroke: 'serve'),
+      HitBurstEvent(id: 1, who: 'far', stroke: 'lift'),
+    ];
+    Future<void> live({required bool mounted, String session = 'session A'}) => tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: HitBurstFeed(
+          session: session,
+          count: hits.length,
+          eventAt: (index) => hits[index],
+          child: mounted ? const HitBurstLayer(events: []) : const SizedBox.expand(),
+        ),
+      ),
+    );
+
+    await live(mounted: true);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'SERVE!');
+    await tester.pump(kHitBurstDuration);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'WHOOSH!');
+    await tester.pump(kHitBurstDuration);
+
+    await live(mounted: false);
+    await live(mounted: true);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester), isNull);
+    await live(mounted: true, session: 'session B');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'SERVE!');
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('reduced motion keeps the burst still', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: const HitBurstLayer(events: [HitBurstEvent(id: 1, who: 'near')]),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.still, isTrue);
+    await tester.pump(kHitBurstDuration);
+  });
+
   test('a Watch hit event is placed at the top of the box of the hitter', () {
     final frame = <String, dynamic>{
       'players': {
@@ -154,6 +227,29 @@ void main() {
     final seen = record(
       const FrameInfo(frame: 0, nearPos: (x: 2.59, y: 3.35), shuttlePos: (x: 1.295, y: 6.7)),
     );
+    final tracked = record(
+      FrameInfo.fromJson({
+        'frame': 0,
+        'shuttle': {'visible': 1, 'x': 155.4, 'y': 603},
+      }),
+    );
+    final trackedAt = hitAnchor(tracked, tracked.hits.single)!;
+    expect(trackedAt.dx, closeTo(0.3, 1e-6));
+    expect(trackedAt.dy, closeTo(0.45, 1e-6));
+    final measuredPlayer = record(
+      FrameInfo.fromJson({
+        'frame': 0,
+        'players': {
+          'near': {
+            'bbox': [80, 200, 50, 300],
+          },
+        },
+      }),
+    );
+    final besideHitter = hitAnchor(measuredPlayer, measuredPlayer.hits.single)!;
+    expect(besideHitter.dx, closeTo(105 / 518, 1e-6));
+    expect(besideHitter.dy, closeTo(200 / 1340, 1e-6));
+
     final at = hitAnchor(seen, seen.hits.single)!;
     expect(at.dx, closeTo(0.25, 1e-6));
     expect(at.dy, closeTo(0.5, 1e-6));

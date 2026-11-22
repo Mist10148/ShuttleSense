@@ -411,7 +411,11 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               controller: _controller,
               available: widget.videoAvailable,
               aspectRatio: record.height == 0 ? null : record.width / record.height,
-              overlay: HitBurstLayer(events: hitBurstsAt(record, frameIndex)),
+              overlay: HitBurstLayer(
+                events: hitBurstsAt(record, frameIndex),
+                nowS: fps > 0 ? frameIndex / fps : null,
+                session: record.clipId,
+              ),
             ),
             status: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

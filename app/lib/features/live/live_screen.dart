@@ -11,7 +11,9 @@ import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/start_score_field.dart';
 import '../../shared/widgets/stroke_model_field.dart';
 import '../calibration/calibration_screen.dart';
+import '../../shared/widgets/hit_burst.dart';
 import '../mode/mode_screen.dart';
+import '../results/widgets/hit_anchor.dart';
 import '../upload/upload_controller.dart';
 import 'live_controller.dart';
 import 'widgets/live_view.dart';
@@ -60,7 +62,7 @@ class LiveScreen extends ConsumerWidget {
     required bool waiting,
     required bool streaming,
   }) {
-    return Scaffold(
+    final screen = Scaffold(
       appBar: AppBar(
         title: const Text('Live'),
         actions: [
@@ -108,6 +110,12 @@ class LiveScreen extends ConsumerWidget {
           _ => LiveView(state: state),
         },
       ),
+    );
+    return HitBurstFeed(
+      session: state.sessionId,
+      count: state.hits.length,
+      eventAt: (i) => hitBurstEvent(state.record, state.hits[i]),
+      child: screen,
     );
   }
 }

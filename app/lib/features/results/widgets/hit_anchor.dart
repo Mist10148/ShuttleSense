@@ -7,20 +7,28 @@ import 'court_minimap.dart';
 
 /// Where [hit] happened in the video picture, as fractions of its width and height.
 ///
-/// The record keeps court positions, not pixels, so the spot is mapped back through the
-/// court corners. The shuttle's court position is its pixel pushed onto the floor, so
-/// mapping it back gives the shuttle's pixel again, the point of contact. Where the
-/// shuttle was not seen at the hit, or its position was cut off at the limit around the
-/// court, the hitter's feet are used, raised to about racket height. Null without a
-/// calibrated court: the burst then goes to the hitter's half of the picture.
+/// Prefer the measured video pixel. Older records may only have court positions, so
+/// inverse-project a usable shuttle position or fall back to the hitter's side.
 Offset? hitAnchor(ClipRecord record, Hit hit) {
-  final corners = record.courtCorners;
-  if (corners == null || corners.length != 4 || record.width <= 0 || record.height <= 0) {
-    return null;
-  }
-  final projection = CourtProjection.fromCorners(corners);
   final frame = record.frame(hit.frame);
-  if (projection == null || frame == null) return null;
+  if (frame == null || record.width <= 0 || record.height <= 0) return null;
+  if (frame.shuttlePixel case (x: final x, y: final y)) {
+    final at = hitBurstPicturePoint(x, y, record.width, record.height);
+    if (at != null) return at;
+  }
+  final slot = switch (hit.who) {
+    'near_1' => 'near',
+    'far_1' => 'far',
+    final slot => slot,
+  };
+  final hitter = frame.playerVideoAnchors[slot];
+  final racketArea = hitter == null
+      ? null
+      : hitBurstPicturePoint(hitter.x, hitter.y, record.width, record.height);
+  final corners = record.courtCorners;
+  if (corners == null || corners.length != 4) return racketArea;
+  final projection = CourtProjection.fromCorners(corners);
+  if (projection == null) return racketArea;
   Offset? toPicture(CourtPoint p, {double raise = 0}) {
     final px = projection.point(p.x / kCourtWidthM, p.y / kCourtLengthM);
     if (px == null) return null;
@@ -40,6 +48,7 @@ Offset? hitAnchor(ClipRecord record, Hit hit) {
       s.y < kCourtLengthM + limit) {
     if (toPicture(s) case final at?) return at;
   }
+  if (racketArea != null) return racketArea;
   final feet = frame.positionOf(hit.who);
   if (feet == null) return null;
   // A player's racket is above the feet by roughly a quarter of the picture at the near
@@ -47,10 +56,22 @@ Offset? hitAnchor(ClipRecord record, Hit hit) {
   return toPicture(feet, raise: hit.player == 'near' ? 0.22 : 0.09);
 }
 
-/// The burst for the hit playing at [frameIndex], or nothing once it is more than
-/// [kHitBurstWindowS] old (a seek far past a hit should not announce it).
+HitBurstEvent hitBurstEvent(ClipRecord record, Hit hit) => HitBurstEvent(
+  id: hit.id,
+  who: hit.who,
+  stroke: hit.stroke,
+  at: hitAnchor(record, hit),
+  timeS: hit.frame / (record.fps > 0 ? record.fps : 30.0),
+);
+
+/// Return every hit whose playback moment is in the current announcement window.
 List<HitBurstEvent> hitBurstsAt(ClipRecord record, int frameIndex) {
-  final hit = record.hitAt(frameIndex);
-  if (hit == null || frameIndex - hit.frame > kHitBurstWindowS * record.fps) return const [];
-  return [HitBurstEvent(id: hit.id, who: hit.who, stroke: hit.stroke, at: hitAnchor(record, hit))];
+  final oldest = frameIndex - kHitBurstWindowS * (record.fps > 0 ? record.fps : 30.0);
+  final recent = <HitBurstEvent>[];
+  for (final hit in record.hits.reversed) {
+    if (hit.frame > frameIndex) continue;
+    if (hit.frame < oldest) break;
+    recent.add(hitBurstEvent(record, hit));
+  }
+  return recent.reversed.toList();
 }

@@ -961,16 +961,16 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       near2Pos: asPoint(court?['near_2']),
       far2Pos: asPoint(court?['far_2']),
       shuttlePos: asPoint(court?['shuttle']),
+      shuttlePixel: FrameInfo.visibleShuttlePixel(e['shuttle']),
+      playerVideoAnchors: FrameInfo.readPlayerVideoAnchors(e['players']),
       shuttleSpeedKmh: speed,
       rallyState: e['rally_state'] as String?,
     );
     final frames = state.frames;
     _padFrames(frame);
     frame < frames.length ? frames[frame] = info : frames.add(info);
-    final shuttle = e['shuttle'] as Json?;
     List<LiveTrailPoint> trail = const [];
-    final x = asDouble(shuttle?['x']), y = asDouble(shuttle?['y']);
-    if (shuttle?['visible'] == 1 && x != null && y != null && x.isFinite && y.isFinite) {
+    if (info.shuttlePixel case (x: final x, y: final y)) {
       final phase = info.rallyState;
       final rally = asInt(e['rally_start_frame']);
       final previous = state.trail.lastOrNull;
