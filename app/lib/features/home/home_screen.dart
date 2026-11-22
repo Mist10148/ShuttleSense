@@ -9,12 +9,15 @@ import '../../data/models/clip_record.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/data_display.dart';
+import '../../shared/widgets/instruments.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
+import '../../shared/widgets/tactile.dart';
 import '../history/history_screen.dart';
 import '../mode/mode_screen.dart';
 import '../results/results_screen.dart' show hasResults;
+import '../results/widgets/stroke_timeline.dart' show formatClock;
 
 /// How many analyses "Recent analyses" lists.
 const _kRecent = 5;
@@ -29,22 +32,51 @@ class HomeScreen extends ConsumerWidget {
     final jobs = [...?ref.watch(jobsListProvider).valueOrNull]
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final latestDone = jobs.where(hasResults).firstOrNull;
+    final side = [
+      if (jobs.isEmpty) const _FirstRun() else _RecentAnalyses(jobs: jobs.take(_kRecent).toList()),
+      if (jobs.isEmpty || latestDone == null) const _CameraTip(),
+    ];
     return PageScaffold(
       title: 'Home',
       showBack: false,
-      maxWidth: 1200,
+      maxWidth: 1640,
       children: [
-        const AppCard(title: 'Start an analysis', child: ModeChoices()),
-        const SizedBox(height: Spacing.lg),
-        CardGrid(
-          children: [
-            if (jobs.isEmpty)
-              const _FirstRun()
-            else
-              _RecentAnalyses(jobs: jobs.take(_kRecent).toList()),
-            if (latestDone != null) _StrokeMix(job: latestDone),
-            if (jobs.isEmpty || latestDone == null) const _CameraTip(),
-          ],
+        Semantics(header: true, child: const EngravedLabel('Start an analysis')),
+        const SizedBox(height: Spacing.md),
+        const ModeChoices(),
+        const SizedBox(height: Spacing.xl),
+        LayoutBuilder(
+          builder: (context, box) {
+            final latest = latestDone == null ? null : _LatestAnalysis(job: latestDone);
+            if (box.maxWidth < 1000 || latest == null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (latest != null) ...[latest, const SizedBox(height: Spacing.xl)],
+                  for (final w in side) ...[w, const SizedBox(height: Spacing.xl)],
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: latest),
+                const SizedBox(width: Spacing.xl),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (i, w) in side.indexed) ...[
+                        if (i > 0) const SizedBox(height: Spacing.xl),
+                        w,
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -83,6 +115,7 @@ class _CameraTip extends StatelessWidget {
     return AppCard(
       color: p.peach,
       title: 'Camera setup',
+      icon: Icons.videocam_outlined,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -109,10 +142,18 @@ class _RecentAnalyses extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppCard(
     title: 'Recent analyses',
+    icon: Icons.history,
     subtitle: 'Newest first',
     onExpand: () => context.go(Routes.history),
     padding: const EdgeInsets.fromLTRB(Spacing.xl, Spacing.xl, Spacing.md, Spacing.md),
-    child: Column(children: [for (final job in jobs) _RecentRow(job: job)]),
+    child: Column(
+      children: [
+        for (final (i, job) in jobs.indexed) ...[
+          if (i > 0) const SizedBox(height: Spacing.sm),
+          _RecentRow(job: job),
+        ],
+      ],
+    ),
   );
 }
 
@@ -126,27 +167,35 @@ class _RecentRow extends ConsumerWidget {
     final p = AppPalette.of(context);
     final name = ref.watch(videoProvider(job.videoId)).valueOrNull?.filename;
     final running = !job.status.isFinished;
-    return ListRow(
-      leading: IconChip(
-        icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined,
-        background: job.isLive ? p.sky : p.lavender,
-      ),
-      title: name ?? (job.isLive ? 'Live session' : 'Analysis'),
-      subtitle: '${job.isLive ? 'Live' : 'Upload'} · ${formatJobDate(job.createdAt)}',
-      trailing: running
-          ? SizedBox(
-              width: 88,
-              child: GradientProgress(value: job.progress, label: 'Processing'),
-            )
-          : jobStatusPill(job),
+    final title = name ?? (job.isLive ? 'Live session' : 'Analysis');
+    // The same card History uses for its rows, so the hover is identical: the whole row
+    // lifts and gets a blue outline under the pointer.
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.xs, vertical: 2),
+      semanticLabel: title,
       onTap: () => context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+      child: ListRow(
+        leading: IconChip(
+          icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined,
+          background: job.isLive ? p.sky : p.lavender,
+        ),
+        title: title,
+        subtitle: '${job.isLive ? 'Live' : 'Upload'} · ${formatJobDate(job.createdAt)}',
+        trailing: running
+            ? SizedBox(
+                width: 88,
+                child: GradientProgress(value: job.progress, label: 'Processing'),
+              )
+            : jobStatusPill(job),
+      ),
     );
   }
 }
 
-/// Strokes of the latest finished analysis, by type, as labelled bars.
-class _StrokeMix extends ConsumerWidget {
-  const _StrokeMix({required this.job});
+/// The latest finished analysis as an instrument panel: its peak speed on a dial, its
+/// headline numbers in wells, and its stroke mix as a bank of faders.
+class _LatestAnalysis extends ConsumerWidget {
+  const _LatestAnalysis({required this.job});
 
   final Job job;
 
@@ -154,82 +203,115 @@ class _StrokeMix extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = AppPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final counts = ref.watch(recordProvider(job.id)).valueOrNull?.summary?.strokeCounts;
+    final record = ref.watch(recordProvider(job.id)).valueOrNull;
+    final summary = record?.summary;
+    final counts = summary?.strokeCounts;
     final name = ref.watch(videoProvider(job.videoId)).valueOrNull?.filename;
     final types = [
       for (final type in kStrokeLabels.keys)
         if ((counts?[type] ?? 0) > 0) type,
     ];
     final total = types.fold<int>(0, (sum, t) => sum + counts![t]!);
-    return AppCard(
-      title: 'Stroke mix',
-      subtitle: 'Latest analysis${name == null ? '' : ' · $name'}',
-      onExpand: () => context.go(Routes.results(job.id)),
-      child: counts == null
-          ? const Column(
-              children: [
-                Skeleton(),
-                SizedBox(height: Spacing.md),
-                Skeleton(),
-                SizedBox(height: Spacing.md),
-                Skeleton(),
-              ],
-            )
-          : total == 0
-          ? Text('No strokes were named in this analysis.', style: text.bodySmall)
-          : Column(
+    final seconds = record != null && record.fps > 0 && record.numFrames > 0
+        ? record.numFrames / record.fps
+        : null;
+    final stats = [
+      if (summary != null) ('Strokes', '${summary.totalHits}'),
+      if (record != null && record.rallies.isNotEmpty) ('Rallies', '${record.rallies.length}'),
+      if (seconds != null) ('Clip length', formatClock(seconds)),
+    ];
+
+    final Widget mix = counts == null
+        ? const Column(
+            children: [
+              Skeleton(),
+              SizedBox(height: Spacing.md),
+              Skeleton(),
+              SizedBox(height: Spacing.md),
+              Skeleton(),
+            ],
+          )
+        : total == 0
+        ? Text('No strokes were named in this analysis.', style: text.bodySmall)
+        : Recess(
+            radius: Radii.lg,
+            padding: const EdgeInsets.fromLTRB(Spacing.md, Spacing.lg, Spacing.md, Spacing.md),
+            child: Wrap(
+              alignment: WrapAlignment.spaceAround,
+              spacing: Spacing.lg,
+              runSpacing: Spacing.lg,
               children: [
                 for (final (i, type) in types.indexed)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Spacing.md),
-                    child: Semantics(
-                      label: '${kStrokeLabels[type]}: ${counts[type]} of $total strokes',
-                      excludeSemantics: true,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: Text(kStrokeLabels[type]!, style: text.bodyMedium)),
-                              Text(
-                                '${counts[type]} · ${(counts[type]! * 100 / total).round()}%',
-                                style: text.bodySmall?.copyWith(
-                                  fontFeatures: const [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: Spacing.xs),
-                          _Bar(fraction: counts[type]! / total, color: p.chart[i % p.chart.length]),
-                        ],
-                      ),
-                    ),
+                  Fader(
+                    height: MediaQuery.sizeOf(context).height < 900 ? 100 : 140,
+                    fraction: counts[type]! / total,
+                    color: p.chart[i % p.chart.length],
+                    label: kStrokeLabels[type]!,
+                    detail: '${counts[type]} · ${(counts[type]! * 100 / total).round()}%',
+                    semanticLabel: '${kStrokeLabels[type]}: ${counts[type]} of $total strokes',
                   ),
               ],
             ),
-    );
-  }
-}
+          );
 
-class _Bar extends StatelessWidget {
-  const _Bar({required this.fraction, required this.color});
-
-  final double fraction;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final shape = BorderRadius.circular(Radii.pill);
-    return Container(
-      height: Spacing.sm,
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(color: AppPalette.of(context).surface2, borderRadius: shape),
-      child: FractionallySizedBox(
-        widthFactor: fraction,
-        heightFactor: 1,
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: color, borderRadius: shape),
-        ),
+    return AppCard(
+      title: 'Latest analysis',
+      icon: Icons.insights_outlined,
+      subtitle: name,
+      semanticLabel: 'Latest analysis${name == null ? '' : ': $name'}',
+      onTap: () => context.go(Routes.results(job.id)),
+      onExpand: () => context.go(Routes.results(job.id)),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final dial = summary?.peakSpeedKmh == null
+              ? null
+              : SpeedDial(
+                  value: summary!.peakSpeedKmh!,
+                  label: 'Peak speed',
+                  size: MediaQuery.sizeOf(context).height < 900 ? 170 : 200,
+                );
+          final numbers = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (stats.isNotEmpty) ...[
+                Row(
+                  children: [
+                    for (final (i, (label, value)) in stats.indexed) ...[
+                      if (i > 0) const SizedBox(width: Spacing.sm),
+                      Expanded(
+                        child: KpiTile(label: label, value: value),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: Spacing.lg),
+              ],
+              const EngravedLabel('Stroke mix'),
+              const SizedBox(height: Spacing.sm),
+              mix,
+            ],
+          );
+          if (dial == null) return numbers;
+          if (box.maxWidth < 600) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: dial),
+                const SizedBox(height: Spacing.xl),
+                numbers,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              dial,
+              const SizedBox(width: Spacing.xl),
+              Expanded(child: numbers),
+            ],
+          );
+        },
       ),
     );
   }
