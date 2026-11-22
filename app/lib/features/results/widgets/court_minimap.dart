@@ -163,7 +163,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
               children: [
                 Semantics(
                   label: [
-                    minimapLabel(record, frameIndex),
+                    minimapLabel(record, frameIndex, doubles: doubles),
                     if (widget.reviewCall case final call?)
                       'Highlighted landing for rally ${call.rallyIndex + 1}.',
                     ?heat?.describe(),
@@ -226,19 +226,25 @@ class _CourtMinimapState extends State<CourtMinimap> {
 /// What the minimap shows at [frameIndex], for screen readers (T4.11): each player's and the
 /// shuttle's position in court meters (x across from the left sideline, y from the near
 /// baseline).
-String minimapLabel(ClipRecord record, int frameIndex) {
+String minimapLabel(ClipRecord record, int frameIndex, {bool? doubles}) {
   final f = record.frame(frameIndex);
   if (f == null) return 'Top-down court, no positions for this moment';
   String at(String who, CourtPoint? p) => p == null
       ? '$who not seen'
       : '$who at ${p.x.toStringAsFixed(1)} m across, ${p.y.toStringAsFixed(1)} m up the court';
-  if (record.isDoubles) {
+  final isDoubles = doubles ?? record.isDoubles;
+  final shuttle = shuttleOverCourt(record, frameIndex, doubles: isDoubles);
+  final location = at('Shuttle', shuttle?.$1);
+  final description = shuttle == null
+      ? location
+      : '$location (${shuttle.$2 ? 'rally estimate' : 'camera projection'})';
+  if (isDoubles) {
     return 'Top-down doubles court. ${at('Near player 1', f.nearPos)}. '
         '${at('Near player 2', f.near2Pos)}. ${at('Far player 1', f.farPos)}. '
-        '${at('Far player 2', f.far2Pos)}. ${at('Shuttle', f.shuttlePos)}.';
+        '${at('Far player 2', f.far2Pos)}. $description.';
   }
   return 'Top-down court. ${at('Near player', f.nearPos)}. ${at('Far player', f.farPos)}. '
-      '${at('Shuttle', f.shuttlePos)}.';
+      '$description.';
 }
 
 /// Where the shuttle is over the court at [frameIndex], and whether that is worked out

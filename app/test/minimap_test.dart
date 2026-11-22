@@ -164,6 +164,10 @@ void main() {
     );
     final (mid, placed) = shuttleOverCourt(record, 5)!;
     expect(placed, isTrue);
+    expect(
+      minimapLabel(record, 5),
+      contains('Shuttle at 2.5 m across, 7.0 m up the court (rally estimate)'),
+    );
     expect((mid.x, mid.y), (2.5, 7.0)); // halfway between the two players
     // After the last hit it flies to where it landed.
     final (late, _) = shuttleOverCourt(record, 15)!;
