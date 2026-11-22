@@ -290,7 +290,7 @@ String minimapLabel(ClipRecord record, int frameIndex) {
     }
   }
   if (to == null || toFrame == null || toFrame <= before.frame) return fallback();
-  if (frameIndex > toFrame) return (to, true);
+  if (frameIndex > toFrame) return fallback();
   final t = (frameIndex - before.frame) / (toFrame - before.frame);
   return ((x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t), true);
 }
@@ -501,6 +501,7 @@ class CourtPainter extends CustomPainter {
       final connected =
           trail.isNotEmpty &&
           trail.last.$1 == i - 1 &&
+          trail.last.$3 == point.$2 &&
           !boundaries.contains(i) &&
           frame?.rallyState == record.frame(i - 1)?.rallyState;
       trail.add((i, point.$1, point.$2, frame?.shuttleSpeedKmh, connected));

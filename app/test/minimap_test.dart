@@ -122,9 +122,9 @@ void main() {
       fps: 30,
       width: 1280,
       height: 720,
-      numFrames: 21,
+      numFrames: 22,
       frames: [
-        for (var i = 0; i <= 20; i++)
+        for (var i = 0; i <= 21; i++)
           FrameInfo(
             frame: i,
             nearPos: const (x: 1.0, y: 2.0),
@@ -155,6 +155,8 @@ void main() {
     // After the last hit it flies to where it landed.
     final (late, _) = shuttleOverCourt(record, 15)!;
     expect((late.x, late.y), (3.0, 6.5));
+    expect(shuttleOverCourt(record, 20), ((x: 2.0, y: 1.0), true));
+    expect(shuttleOverCourt(record, 21), ((x: 2.0, y: 20.0), false));
     // With no hit before it, only the floor mapping is left, and it is marked as such.
     const early = ClipRecord(
       schemaVersion: '1.7',

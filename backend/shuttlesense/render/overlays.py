@@ -8,6 +8,7 @@ touching the others.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
@@ -494,14 +495,19 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
             and s.visible
             and s.x is not None
             and s.y is not None
-            and np.isfinite((s.x, s.y)).all()
+            and math.isfinite(s.x)
+            and math.isfinite(s.y)
         ):
             return _pt(s.x, s.y)
         return None
 
+    frames = record.frames[max(0, i - length + 1) : i + 1]
+    if not frames:
+        return
+    points = [position(frame) for frame in frames]
     width = max(1, round(state.scale))
     radius = max(4, round(6 * state.scale))
-    head = position(record.frames[i])
+    head = points[-1]
     if head is not None:
         x, y = head
         left, top = max(0, x - radius), max(0, y - radius)
@@ -510,14 +516,13 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
         center_area = img[top:bottom, left:right]
         original = center_area.copy()
 
-    start = max(0, i - length + 1)
-    for j in range(start + 1, i + 1):
-        previous, current = record.frames[j - 1 : j + 1]
+    for j in range(1, len(frames)):
+        previous, current = frames[j - 1], frames[j]
         if current.frame != previous.frame + 1 or current.frame in boundaries:
             continue
         if previous.rally_state != current.rally_state:
             continue
-        a, b = position(previous), position(current)
+        a, b = points[j - 1], points[j]
         if a is None or b is None:
             continue
         clipped, a, b = cv2.clipLine((0, 0, img.shape[1], img.shape[0]), a, b)
@@ -532,7 +537,7 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
         color = style.speed_color(current.shuttle_speed_kmh) or style.UNCERTAIN
         a_local, b_local = (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0)
         cv2.line(overlay, a_local, b_local, color, width, cv2.LINE_AA)
-        alpha = 0.85 - 0.65 * (i - j) / length
+        alpha = 0.85 - 0.65 * (len(frames) - 1 - j) / length
         cv2.addWeighted(overlay, alpha, region, 1 - alpha, 0, dst=region)
 
     if head is not None:
