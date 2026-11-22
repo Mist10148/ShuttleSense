@@ -129,20 +129,15 @@ class LiveOverlayPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
     }
-    paintShuttleTrail(
-      canvas,
-      [
-        for (final sample in trail)
-          (
-            point: Offset(sample.x * sx, sample.y * sy),
-            speed: sample.speed,
-            approximate: false,
-            connected: true,
-          ),
-      ],
-      hasCurrent: trail.isNotEmpty,
-      neutral: colors.shuttle,
-    );
+    paintShuttleTrail(canvas, [
+      for (final sample in trail)
+        (
+          point: Offset(sample.x * sx, sample.y * sy),
+          speed: sample.speed,
+          approximate: false,
+          connected: true,
+        ),
+    ], hasCurrent: trail.isNotEmpty);
   }
 
   @override

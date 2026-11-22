@@ -723,15 +723,10 @@ class CourtPainter extends CustomPainter {
           ..style = PaintingStyle.stroke,
       );
     }
-    paintShuttleTrail(
-      canvas,
-      [
-        for (final (_, point, placed, speed, connected) in trail)
-          (point: mark(point), speed: speed, approximate: !placed, connected: connected),
-      ],
-      hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
-      neutral: players.shuttle,
-    );
+    paintShuttleTrail(canvas, [
+      for (final (_, point, placed, speed, connected) in trail)
+        (point: mark(point), speed: speed, approximate: !placed, connected: connected),
+    ], hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex);
     canvas.restore();
   }
 

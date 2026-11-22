@@ -490,7 +490,10 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
     def position(frame: Frame) -> tuple[int, int] | None:
         s = frame.shuttle
         if (
-            s and s.visible and s.x is not None and s.y is not None
+            s
+            and s.visible
+            and s.x is not None
+            and s.y is not None
             and np.isfinite((s.x, s.y)).all()
         ):
             return _pt(s.x, s.y)
@@ -526,7 +529,7 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
         y1 = min(img.shape[0], max(a[1], b[1]) + pad + 1)
         region = img[y0:y1, x0:x1]
         overlay = region.copy()
-        color = style.speed_color(current.shuttle_speed_kmh) or style.SHUTTLE
+        color = style.speed_color(current.shuttle_speed_kmh) or style.UNCERTAIN
         a_local, b_local = (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0)
         cv2.line(overlay, a_local, b_local, color, width, cv2.LINE_AA)
         alpha = 0.85 - 0.65 * (i - j) / length

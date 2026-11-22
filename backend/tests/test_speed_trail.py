@@ -30,7 +30,7 @@ def test_trail_draws_speed_segments_with_a_hollow_current_marker():
     red = img[20, 105]
     assert green[1] > green[0] and green[1] > green[2]
     assert yellow[1] > yellow[0] and yellow[2] > yellow[0]
-    assert neutral.any()
+    assert neutral[0] == neutral[1] == neutral[2] > 0
     assert orange[2] > orange[1] > orange[0]
     assert red[2] > red[1] and red[2] > red[0]
     assert tuple(img[20, 115]) == (11, 45, 70)
@@ -41,8 +41,7 @@ def test_trail_breaks_at_missing_samples_and_rally_boundaries():
     record = load_golden()
     record.rallies = [Rally(index=0, start_frame=0, end_frame=1, stroke_count=0)]
     record.frames = [
-        Frame(frame=i, shuttle=Shuttle(visible=1, x=15 + 20 * i, y=20))
-        for i in range(7)
+        Frame(frame=i, shuttle=Shuttle(visible=1, x=15 + 20 * i, y=20)) for i in range(7)
     ]
     record.frames[3].shuttle = Shuttle(visible=0)
     record.frames[6].shuttle = Shuttle(visible=0)
