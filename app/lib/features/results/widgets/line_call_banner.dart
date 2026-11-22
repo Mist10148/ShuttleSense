@@ -39,7 +39,7 @@ class LineCallBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final review = call.needsReview;
     final color = StatusColors.of(context).forCall(isIn: call.isIn, review: review);
-    final onCall = onColor(color);
+    final p = AppPalette.of(context);
     final word = review ? 'UNCERTAIN' : (call.isIn ? 'IN' : 'OUT');
     final margin = call.marginCm.abs().round();
     final side = call.marginCm >= 0 ? 'inside' : 'outside';
@@ -52,41 +52,45 @@ class LineCallBanner extends StatelessWidget {
     return Semantics(
       liveRegion: true,
       label: 'Line call $word. $detail',
-      child: Card(
-        color: color,
-        margin: const EdgeInsets.symmetric(vertical: Spacing.xs),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              ExcludeSemantics(
-                child: Text(
-                  word,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: onCall,
-                    fontWeight: FontWeight.bold,
-                  ),
+      // A quiet card in the page's surface: the call's colour is on the word and the edge
+      // only, so a green or red slab does not outshout the video above it.
+      child: Container(
+        margin: const EdgeInsets.only(top: Spacing.sm),
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.sm),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(color.withValues(alpha: 0.10), p.surface),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.45)),
+        ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            ExcludeSemantics(
+              child: Text(
+                word,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Color.lerp(color, p.ink, 0.15),
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              ExcludeSemantics(
-                child: Text(detail, style: TextStyle(color: onCall)),
-              ),
-              if (onDecide != null)
-                for (final c in ['in', 'out'])
-                  if (review || c != call.effectiveCall)
-                    FilledButton.tonal(
-                      onPressed: busy ? null : () => onDecide!(c),
-                      child: Text(
-                        review && c == call.call
-                            ? 'Confirm ${c.toUpperCase()}'
-                            : 'Call ${c.toUpperCase()}',
-                      ),
+            ),
+            ExcludeSemantics(
+              child: Text(detail, style: theme.textTheme.bodyMedium?.copyWith(color: p.text2)),
+            ),
+            if (onDecide != null)
+              for (final c in ['in', 'out'])
+                if (review || c != call.effectiveCall)
+                  OutlinedButton(
+                    onPressed: busy ? null : () => onDecide!(c),
+                    child: Text(
+                      review && c == call.call
+                          ? 'Confirm ${c.toUpperCase()}'
+                          : 'Call ${c.toUpperCase()}',
                     ),
-            ],
-          ),
+                  ),
+          ],
         ),
       ),
     );
