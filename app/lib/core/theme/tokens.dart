@@ -107,61 +107,71 @@ class AppPalette extends ThemeExtension<AppPalette> {
   List<Color> get pastels => [lavender, sky, mint, pink, peach];
 
   static const _series = [
-    Color(0xFF7DB3F0),
-    Color(0xFF9C8CF2),
-    Color(0xFFF2A7BE),
-    Color(0xFF8FD9B6),
-    Color(0xFFF5B98A),
+    Color(0xFF4F86C6),
+    Color(0xFF8C7AE6),
+    Color(0xFFE0779B),
+    Color(0xFF2E9E6B),
+    Color(0xFFE0911E),
   ];
 
   static const light = AppPalette(
-    ink: Color(0xFF1E1E1E),
+    ink: Color(0xFF112D4E),
     onInk: Color(0xFFFFFFFF),
-    text2: Color(0xFF5A5A5A),
-    text3: Color(0xFF6A6A6A),
-    surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFF4F4F6),
+    text2: Color(0xFF34465F),
+    text3: Color(0xFF4A5D78),
+    surface: Color(0xFFEEF1F6),
+    surface2: Color(0xFFE1E6EE),
     hairline: null,
-    lavender: Color(0xFFDCD8FC),
-    sky: Color(0xFFCFE5FB),
-    mint: Color(0xFFDDF5D3),
-    pink: Color(0xFFFADBE5),
-    peach: Color(0xFFFDE6CF),
-    brand: Color(0xFF2F8F5B),
-    info: Color(0xFF5B8DEF),
+    lavender: Color(0xFFE3DEFB),
+    sky: Color(0xFFD6E6F8),
+    mint: Color(0xFFD9F1E4),
+    pink: Color(0xFFF9DCE5),
+    peach: Color(0xFFFBE7D2),
+    brand: Color(0xFF1D7A50),
+    info: Color(0xFF3F72AF),
     chart: _series,
-    progress: [Color(0xFF7DB3F0), Color(0xFF8FD9B6)],
-    canvas: Color(0xFFEDEBF8),
-    canvasGlows: [Color(0xFFC9C6F5), Color(0xFFF6D5D0), Color(0xFFD4F1E4)],
-    page: Color(0xFFF8F7FC),
-    shell: Color(0xB3FFFFFF),
-    cardShadow: [BoxShadow(color: Color(0x0F1E1E3C), blurRadius: 24, offset: Offset(0, 8))],
-    popoverShadow: [BoxShadow(color: Color(0x241E1E3C), blurRadius: 40, offset: Offset(0, 16))],
+    progress: [Color(0xFF5A8BC6), Color(0xFF2E9E6B)],
+    canvas: Color(0xFFCDD5E2),
+    canvasGlows: [Color(0xFFC9D8F0), Color(0xFFE6DAF2), Color(0xFFD3EDE3)],
+    page: Color(0xFFCDD5E2),
+    shell: Color(0xFFCDD5E2),
+    cardShadow: [
+      BoxShadow(color: Color(0x1F112D4E), blurRadius: 26, offset: Offset(10, 12)),
+      BoxShadow(color: Color(0xBFFFFFFF), blurRadius: 22, offset: Offset(-8, -8)),
+    ],
+    popoverShadow: [
+      BoxShadow(color: Color(0x73112D4E), blurRadius: 40, spreadRadius: -18, offset: Offset(0, 18)),
+    ],
   );
 
   static const dark = AppPalette(
-    ink: Color(0xFFECEFED),
-    onInk: Color(0xFF151817),
-    text2: Color(0xFFA3A9A6),
-    text3: Color(0xFF959C99),
-    surface: Color(0xFF1A1D1C),
-    surface2: Color(0xFF252A28),
-    hairline: Color(0x0FFFFFFF),
-    lavender: Color(0xFF2E2B4D),
-    sky: Color(0xFF1F3347),
-    mint: Color(0xFF1F3A2B),
-    pink: Color(0xFF432631),
-    peach: Color(0xFF45321F),
-    brand: Color(0xFF5CC48A),
-    info: Color(0xFF8AAEF5),
+    ink: Color(0xFFECEDEF),
+    onInk: Color(0xFF11161D),
+    text2: Color(0xFFC2C5CB),
+    text3: Color(0xFF9EA2AA),
+    surface: Color(0xFF2A2C31),
+    surface2: Color(0xFF32353B),
+    hairline: null,
+    lavender: Color(0xFF2C2A4A),
+    sky: Color(0xFF1C3048),
+    mint: Color(0xFF1A3A2C),
+    pink: Color(0xFF42242F),
+    peach: Color(0xFF43301C),
+    brand: Color(0xFF5CC896),
+    info: Color(0xFF8CB0E0),
     chart: _series,
-    progress: [Color(0xFF7DB3F0), Color(0xFF8FD9B6)],
-    canvas: Color(0xFF0F1211),
-    canvasGlows: [Color(0x332F8F5B), Color(0x2E6E5BD9), Color(0x1A2F8F5B)],
-    page: Color(0xFF131615),
-    shell: Color(0xB3141716),
-    cardShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 24, offset: Offset(0, 8))],
-    popoverShadow: [BoxShadow(color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 16))],
+    progress: [Color(0xFF5A8BC6), Color(0xFF2E9E6B)],
+    canvas: Color(0xFF1F2125),
+    canvasGlows: [Color(0x403F72AF), Color(0x2E8C7AE6), Color(0x262E9E6B)],
+    page: Color(0xFF1F2125),
+    shell: Color(0xFF1F2125),
+    cardShadow: [
+      BoxShadow(color: Color(0x99000000), blurRadius: 26, offset: Offset(10, 12)),
+      BoxShadow(color: Color(0x0DFFFFFF), blurRadius: 18, offset: Offset(-6, -6)),
+    ],
+    popoverShadow: [
+      BoxShadow(color: Color(0xB3000000), blurRadius: 40, spreadRadius: -18, offset: Offset(0, 18)),
+    ],
   );
 
   static AppPalette of(BuildContext context) => Theme.of(context).extension<AppPalette>() ?? light;
@@ -303,4 +313,158 @@ class StatusColors extends ThemeExtension<StatusColors> {
       uncertain: Color.lerp(uncertain, other.uncertain, t)!,
     );
   }
+}
+
+/// The tactile layer: a moulded chassis lit from the top left, raised plates and keys you
+/// press, and sunken wells and screens that hold data. Light and dark keep the same recipe;
+/// only the tones change. Read with [TactileTokens.of].
+@immutable
+class TactileTokens extends ThemeExtension<TactileTokens> {
+  const TactileTokens({
+    required this.chassisTop,
+    required this.chassisBottom,
+    required this.raisedTop,
+    required this.raisedBottom,
+    required this.recess,
+    required this.screenTop,
+    required this.screenBottom,
+    required this.highlight,
+    required this.shade,
+    required this.innerShade,
+    required this.innerLight,
+    required this.rim,
+    required this.engraved,
+    required this.engravedShadow,
+    required this.keyEdge,
+    required this.capSheen,
+    required this.primary,
+    required this.primaryDeep,
+    required this.onPrimary,
+    this.flat = false,
+  });
+
+  /// The app body: a soft vertical gradient.
+  final Color chassisTop;
+  final Color chassisBottom;
+
+  /// Cards, plates and neutral keys.
+  final Color raisedTop;
+  final Color raisedBottom;
+
+  /// Wells, tracks and input slots.
+  final Color recess;
+
+  /// The inset display that holds the court and other drawings.
+  final Color screenTop;
+  final Color screenBottom;
+
+  /// Outer light (top left) and outer shadow (bottom right) of raised parts.
+  final Color highlight;
+  final Color shade;
+
+  /// Inner shadow and inner lip light of sunken parts.
+  final Color innerShade;
+  final Color innerLight;
+
+  /// The 1 px edge around raised parts.
+  final Color rim;
+
+  /// Small labels pressed into the surface, and the 1 px light or dark line that sells it.
+  final Color engraved;
+  final Color engravedShadow;
+
+  /// How far a key's visible base is darkened from its cap colour (0 to 1).
+  final double keyEdge;
+
+  /// How much lighter the top of a raised part is than its base colour (0 to 1).
+  final double capSheen;
+
+  /// High-contrast mode: depth collapses to plain borders (no shadows, highlights or sheen).
+  final bool flat;
+
+  /// The same tones with the depth collapsed to plain [border] lines, for high contrast.
+  TactileTokens asFlat(Color border) => TactileTokens(
+    chassisTop: chassisTop,
+    chassisBottom: chassisBottom,
+    raisedTop: raisedBottom,
+    raisedBottom: raisedBottom,
+    recess: recess,
+    screenTop: screenTop,
+    screenBottom: screenTop,
+    highlight: Colors.transparent,
+    shade: Colors.transparent,
+    innerShade: Colors.transparent,
+    innerLight: Colors.transparent,
+    rim: border,
+    engraved: engraved,
+    engravedShadow: Colors.transparent,
+    keyEdge: 0,
+    capSheen: 0,
+    primary: primary,
+    primaryDeep: primary,
+    onPrimary: onPrimary,
+    flat: true,
+  );
+
+  /// The main action: a steel-blue key with white text.
+  final Color primary;
+  final Color primaryDeep;
+  final Color onPrimary;
+
+  /// The base edge colour under a key of [cap] colour.
+  Color edgeFor(Color cap) => Color.lerp(cap, Colors.black, keyEdge)!;
+
+  static const light = TactileTokens(
+    chassisTop: Color(0xFFCDD5E2),
+    chassisBottom: Color(0xFFCDD5E2),
+    raisedTop: Color(0xFFFFFFFF),
+    raisedBottom: Color(0xFFEEF2F8),
+    recess: Color(0xFFDDE3EC),
+    screenTop: Color(0xFFF4F7FB),
+    screenBottom: Color(0xFFE6ECF4),
+    highlight: Color(0xCCFFFFFF),
+    shade: Color(0xB38D9CB4),
+    innerShade: Color(0xD98D9CB4),
+    innerLight: Color(0xB3FFFFFF),
+    rim: Color(0x80FFFFFF),
+    engraved: Color(0xFF4A5D78),
+    engravedShadow: Color(0xFFFFFFFF),
+    keyEdge: 0.12,
+    capSheen: 0.35,
+    primary: Color(0xFF3F72AF),
+    primaryDeep: Color(0xFF2C5A93),
+    onPrimary: Color(0xFFFFFFFF),
+  );
+
+  static const dark = TactileTokens(
+    chassisTop: Color(0xFF1F2125),
+    chassisBottom: Color(0xFF1F2125),
+    raisedTop: Color(0xFF2D3035),
+    raisedBottom: Color(0xFF26282D),
+    recess: Color(0xFF1A1C1F),
+    screenTop: Color(0xFF191B1E),
+    screenBottom: Color(0xFF1C1E22),
+    highlight: Color(0xFF292C31),
+    shade: Color(0xCC111214),
+    innerShade: Color(0xE60F1012),
+    innerLight: Color(0x14FFFFFF),
+    rim: Color(0x0FFFFFFF),
+    engraved: Color(0xFF9EA2AA),
+    engravedShadow: Color(0x99000000),
+    keyEdge: 0.35,
+    capSheen: 0.06,
+    primary: Color(0xFF3F72AF),
+    primaryDeep: Color(0xFF2C5A93),
+    onPrimary: Color(0xFFFFFFFF),
+  );
+
+  static TactileTokens of(BuildContext context) =>
+      Theme.of(context).extension<TactileTokens>() ??
+      (Theme.of(context).brightness == Brightness.dark ? dark : light);
+
+  @override
+  TactileTokens copyWith() => this;
+
+  @override
+  TactileTokens lerp(TactileTokens? other, double t) => other == null || t < 0.5 ? this : other;
 }
