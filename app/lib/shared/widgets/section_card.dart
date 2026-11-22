@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/tokens.dart';
+import 'surfaces.dart';
 
 /// Titled card used for result panels (minimap, scoreboard, timeline, …).
 class SectionCard extends StatelessWidget {
@@ -11,25 +11,5 @@ class SectionCard extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleSmall)),
-                ?trailing,
-              ],
-            ),
-            const SizedBox(height: Spacing.md),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AppCard(title: title, actions: [?trailing], child: child);
 }

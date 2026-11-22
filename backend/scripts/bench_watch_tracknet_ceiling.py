@@ -52,8 +52,15 @@ def main() -> None:
                 started = time.perf_counter()
                 times = []
                 with client.websocket_connect("/watch") as ws:
-                    ws.send_json({"type": "start", "video_id": video_id, "court": "doubles",
-                                  "corners": corners, "playback": "complete"})
+                    ws.send_json(
+                        {
+                            "type": "start",
+                            "video_id": video_id,
+                            "court": "doubles",
+                            "corners": corners,
+                            "playback": "complete",
+                        }
+                    )
                     initial = ws.receive_json()
                     if initial.get("type") != "started" or initial["frames"] < count:
                         raise RuntimeError(f"Unable to start required frames: {initial}")
@@ -81,13 +88,16 @@ def main() -> None:
                     time.sleep(0.1)
                 else:
                     raise TimeoutError("Export did not complete")
-                return {"mode": "bypass" if bypass else "normal", "frames": count,
-                        "setup_s": round(setup, 3),
-                        "processing_s": round(before_stop - started - setup, 3),
-                        "saved_s": round(saved_s, 3),
-                        "round_trip_median_ms": round(statistics.median(times), 3),
-                        "round_trip_p95_ms": round(sorted(times)[(95 * count + 99) // 100 - 1], 3),
-                        "job_id": saved["job_id"]}
+                return {
+                    "mode": "bypass" if bypass else "normal",
+                    "frames": count,
+                    "setup_s": round(setup, 3),
+                    "processing_s": round(before_stop - started - setup, 3),
+                    "saved_s": round(saved_s, 3),
+                    "round_trip_median_ms": round(statistics.median(times), 3),
+                    "round_trip_p95_ms": round(sorted(times)[(95 * count + 99) // 100 - 1], 3),
+                    "job_id": saved["job_id"],
+                }
 
             for mode in (False, True):
                 print("WARMUP " + json.dumps(run(args.warmup, mode)), flush=True)

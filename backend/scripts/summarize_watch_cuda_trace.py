@@ -29,9 +29,7 @@ def main() -> None:
     for event in events:
         if event.get("cat") != "cuda_runtime":
             continue
-        matching = [
-            r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]
-        ]
+        matching = [r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]]
         owner = min(matching, key=lambda r: r[1] - r[0])[2] if matching else "unattributed"
         correlation = event.get("args", {}).get("correlation")
         if matching and correlation is not None:
@@ -54,10 +52,16 @@ def main() -> None:
             for group in ("total", "unattributed") if owner == "unattributed" else ("total",):
                 copy_coverage[key][group][0] += 1
                 copy_coverage[key][group][1] += event.get("dur", 0)
-    print(json.dumps(
-        {"activities_count_total_us": activities, "sync_count_total_us": syncs,
-         "copy_coverage_count_total_us": copy_coverage}, indent=2
-    ))
+    print(
+        json.dumps(
+            {
+                "activities_count_total_us": activities,
+                "sync_count_total_us": syncs,
+                "copy_coverage_count_total_us": copy_coverage,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

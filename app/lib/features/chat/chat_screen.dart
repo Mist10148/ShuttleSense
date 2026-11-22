@@ -10,6 +10,7 @@ import '../../data/models/coach.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
 import '../results/widgets/session_summary.dart';
 import '../coach/source_chips.dart';
 import '../../core/theme/tokens.dart';
@@ -169,120 +170,169 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final limit = health?.chatMaxMessages ?? 0;
     final atLimit = limit > 0 && state.questions >= limit;
     final theme = Theme.of(context);
+    final p = AppPalette.of(context);
     final gutter = Breakpoints.gutter(Breakpoints.of(context));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ask your coach')),
       body: SafeArea(
-        child: !available
-            ? MessageView(
-                icon: Icons.forum_outlined,
-                message: health == null
-                    ? 'Checking the server…'
-                    : 'Coach chat is off on this server',
-                detail:
-                    'The server owner has not set a Gemini or Claude API key. Session notes in '
-                    'the Coach tab still work.\n\n$kChatPrivacy',
-              )
-            : MaxWidth(
-                maxWidth: 800,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, Spacing.sm, gutter, 0),
-                      child: Text(kChatPrivacy, style: theme.textTheme.bodySmall),
-                    ),
-                    Expanded(
-                      child: ListView(
-                        controller: _scroll,
-                        padding: EdgeInsets.all(gutter),
-                        children: [
-                          if (state.messages.isEmpty && state.streaming == null) ...[
-                            Text(
-                              'Ask about your strokes, rallies, line calls or what to work on. '
-                              'Answers come only from this session\'s data.',
-                              style: theme.textTheme.bodyMedium,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(gutter, Spacing.lg, gutter, Spacing.sm),
+          child: MaxWidth(
+            maxWidth: 900,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const PageHeader(title: 'Ask your coach'),
+                const SizedBox(height: Spacing.sm),
+                Expanded(
+                  child: !available
+                      ? MessageView(
+                          icon: Icons.forum_outlined,
+                          message: health == null
+                              ? 'Checking the server…'
+                              : 'Coach chat is off on this server',
+                          detail:
+                              'The server owner has not set a Gemini or Claude API key. Session notes in '
+                              'the Coach tab still work.\n\n$kChatPrivacy',
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(kChatPrivacy, style: theme.textTheme.bodySmall),
+                            Expanded(
+                              child: ListView(
+                                controller: _scroll,
+                                padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+                                children: [
+                                  if (state.messages.isEmpty && state.streaming == null) ...[
+                                    Text(
+                                      'Ask about your strokes, rallies, line calls or what to work on. '
+                                      'Answers come only from this session\'s data.',
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                    const SizedBox(height: Spacing.md),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        for (final q in kSuggestedQuestions)
+                                          ActionChip(label: Text(q), onPressed: () => _send(q)),
+                                      ],
+                                    ),
+                                  ],
+                                  for (final m in state.messages)
+                                    _Bubble(
+                                      message: m,
+                                      onSeek: _seek,
+                                      sources: sources[m.text] ?? const [],
+                                    ),
+                                  if (state.streaming != null)
+                                    _Bubble(
+                                      message: ChatMessage(
+                                        role: 'assistant',
+                                        text: state.streaming!.isEmpty ? '…' : state.streaming!,
+                                      ),
+                                      onSeek: _seek,
+                                    ),
+                                  if (state.error != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: Spacing.sm),
+                                      child: Text(
+                                        state.error!,
+                                        style: TextStyle(color: theme.colorScheme.error),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: Spacing.md),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final q in kSuggestedQuestions)
-                                  ActionChip(label: Text(q), onPressed: () => _send(q)),
-                              ],
+                            // One rounded bar: the question box and the send button inside it.
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(
+                                Spacing.lg,
+                                Spacing.xs,
+                                Spacing.xs,
+                                Spacing.xs,
+                              ),
+                              decoration: BoxDecoration(
+                                color: p.surface,
+                                borderRadius: BorderRadius.circular(Radii.xl),
+                                border: Border.all(color: p.hairline ?? p.surface2),
+                                boxShadow: p.cardShadow,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _input,
+                                      enabled: !state.busy && !atLimit,
+                                      maxLength: 1000,
+                                      minLines: 1,
+                                      maxLines: 4,
+                                      textInputAction: TextInputAction.send,
+                                      onSubmitted: (_) => _send(),
+                                      decoration: InputDecoration(
+                                        hintText: atLimit
+                                            ? 'Question limit for this session reached'
+                                            : 'Your question',
+                                        // The count is shown under the bar instead.
+                                        counterText: '',
+                                        filled: false,
+                                        border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        disabledBorder: InputBorder.none,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: Spacing.sm),
+                                  IconButton.filled(
+                                    tooltip: 'Send',
+                                    onPressed: state.busy || atLimit ? null : _send,
+                                    icon: state.busy
+                                        ? const SizedBox.square(
+                                            dimension: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.send),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                Spacing.lg,
+                                Spacing.sm,
+                                Spacing.lg,
+                                0,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      kCoachingDisclaimer,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                  if (limit > 0) ...[
+                                    const SizedBox(width: Spacing.md),
+                                    Text(
+                                      '${state.questions} of $limit',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                           ],
-                          for (final m in state.messages)
-                            _Bubble(
-                              message: m,
-                              onSeek: _seek,
-                              sources: sources[m.text] ?? const [],
-                            ),
-                          if (state.streaming != null)
-                            _Bubble(
-                              message: ChatMessage(
-                                role: 'assistant',
-                                text: state.streaming!.isEmpty ? '…' : state.streaming!,
-                              ),
-                              onSeek: _seek,
-                            ),
-                          if (state.error != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: Spacing.sm),
-                              child: Text(
-                                state.error!,
-                                style: TextStyle(color: theme.colorScheme.error),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, Spacing.sm),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _input,
-                              enabled: !state.busy && !atLimit,
-                              maxLength: 1000,
-                              minLines: 1,
-                              maxLines: 4,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _send(),
-                              decoration: InputDecoration(
-                                labelText: atLimit
-                                    ? 'Question limit for this session reached'
-                                    : 'Your question',
-                                counterText: limit > 0 ? '${state.questions} of $limit' : null,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: Spacing.sm),
-                          IconButton.filled(
-                            tooltip: 'Send',
-                            onPressed: state.busy || atLimit ? null : _send,
-                            icon: state.busy
-                                ? const SizedBox.square(
-                                    dimension: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.send),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, Spacing.sm),
-                      child: Text(
-                        kCoachingDisclaimer,
-                        style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-                      ),
-                    ),
-                  ],
+                        ),
                 ),
-              ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -297,23 +347,38 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final p = AppPalette.of(context);
     final user = message.fromUser;
+    const round = Radius.circular(Radii.lg);
+    const tail = Radius.circular(Radii.sm);
     return Align(
       alignment: user ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
-        child: Card(
-          color: user ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+        child: Container(
           margin: const EdgeInsets.symmetric(vertical: Spacing.xs),
+          decoration: BoxDecoration(
+            // Yours in ink on the right, the coach's in lavender on the left; the corner
+            // nearest the speaker's side stays tight.
+            color: user ? p.ink : p.lavender,
+            borderRadius: BorderRadius.only(
+              topLeft: round,
+              topRight: round,
+              bottomLeft: user ? round : tail,
+              bottomRight: user ? tail : round,
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(Spacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Semantics(
                   label: user ? 'You asked' : 'Coach answered',
-                  child: SelectableText(message.text),
+                  child: SelectableText(
+                    message.text,
+                    style: user ? TextStyle(color: p.onInk) : null,
+                  ),
                 ),
                 if (message.citations.isNotEmpty) ...[
                   const SizedBox(height: Spacing.sm),

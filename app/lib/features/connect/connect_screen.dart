@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/health.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
 
 /// Checks a server before it is saved; replaced in widget tests.
@@ -112,7 +113,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           ),
         ),
       );
-      context.go(Routes.mode);
+      context.go(Routes.dashboard);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -165,81 +166,95 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         IconButton(tooltip: 'Help', icon: const Icon(Icons.help_outline), onPressed: _showHelp),
       ],
       children: [
-        Icon(Icons.sports_tennis, size: 56, color: theme.colorScheme.primary),
+        // The app badge, as in the top bar.
+        Center(
+          child: IconChip(
+            icon: Icons.sports_tennis,
+            size: 64,
+            background: AppPalette.of(context).lavender,
+          ),
+        ),
         const SizedBox(height: Spacing.md),
         Text('ShuttleSense', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
         const SizedBox(height: Spacing.sm),
         Text(
           'Enter the address of the ShuttleSense backend: the laptop on your Wi-Fi '
           '(for example http://192.168.1.20:8000) or the Colab tunnel URL.',
-          style: theme.textTheme.bodyMedium,
+          style: theme.textTheme.bodyMedium?.copyWith(color: AppPalette.of(context).text2),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Spacing.xl),
-        TextField(
-          controller: _url,
-          keyboardType: TextInputType.url,
-          autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'Server address',
-            hintText: 'http://192.168.1.20:8000',
-            prefixIcon: Icon(Icons.dns_outlined),
-          ),
-          onChanged: (_) => setState(() {}),
-          onSubmitted: (_) => _connect(),
-        ),
-        if (recent.isNotEmpty) ...[
-          const SizedBox(height: Spacing.sm),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final url in recent)
-                ActionChip(
-                  avatar: const Icon(Icons.history, size: 16),
-                  label: Text(url),
-                  onPressed: () => setState(() => _url.text = url),
+              TextField(
+                controller: _url,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Server address',
+                  hintText: 'http://192.168.1.20:8000',
+                  prefixIcon: Icon(Icons.dns_outlined),
                 ),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _connect(),
+              ),
+              if (recent.isNotEmpty) ...[
+                const SizedBox(height: Spacing.sm),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final url in recent)
+                      ActionChip(
+                        avatar: const Icon(Icons.history, size: 16),
+                        label: Text(url),
+                        onPressed: () => setState(() => _url.text = url),
+                      ),
+                  ],
+                ),
+              ],
+              if (mixed) ...[
+                const SizedBox(height: Spacing.sm),
+                Text(
+                  'This page is served over https, so the browser blocks plain http servers. '
+                  'Use the https tunnel address instead.',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: Spacing.md),
+              TextField(
+                controller: _token,
+                obscureText: true,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Access token (if the server has one)',
+                  prefixIcon: Icon(Icons.key_outlined),
+                ),
+                onSubmitted: (_) => _connect(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: Spacing.md),
+                Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                  semanticsLabel: 'Error: $_error',
+                ),
+              ],
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _busy ? null : _connect,
+                icon: _busy
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.link),
+                label: const Text('Connect'),
+              ),
             ],
           ),
-        ],
-        if (mixed) ...[
-          const SizedBox(height: Spacing.sm),
-          Text(
-            'This page is served over https, so the browser blocks plain http servers. '
-            'Use the https tunnel address instead.',
-            style: TextStyle(color: theme.colorScheme.error),
-          ),
-        ],
-        const SizedBox(height: Spacing.md),
-        TextField(
-          controller: _token,
-          obscureText: true,
-          autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'Access token (if the server has one)',
-            prefixIcon: Icon(Icons.key_outlined),
-          ),
-          onSubmitted: (_) => _connect(),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: Spacing.md),
-          Text(
-            _error!,
-            style: TextStyle(color: theme.colorScheme.error),
-            semanticsLabel: 'Error: $_error',
-          ),
-        ],
-        const SizedBox(height: 20),
-        FilledButton.icon(
-          onPressed: _busy ? null : _connect,
-          icon: _busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.link),
-          label: const Text('Connect'),
         ),
       ],
     );

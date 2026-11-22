@@ -9,8 +9,10 @@ import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../shared/widgets/data_display.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
 import '../results/results_screen.dart' show hasResults;
 
@@ -107,9 +109,26 @@ class ProcessingScreen extends ConsumerWidget {
     final job = ref.watch(jobProvider(jobId));
 
     return job.when(
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Processing')),
-        body: const Center(child: CircularProgressIndicator()),
+      loading: () => const PageScaffold(
+        title: 'Processing',
+        children: [
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Skeleton(width: 220, height: 20, pulse: false),
+                SizedBox(height: Spacing.lg),
+                Skeleton(height: 8, pulse: false),
+                SizedBox(height: Spacing.xl),
+                Skeleton(pulse: false),
+                SizedBox(height: Spacing.md),
+                Skeleton(pulse: false),
+                SizedBox(height: Spacing.md),
+                Skeleton(pulse: false),
+              ],
+            ),
+          ),
+        ],
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(title: const Text('Processing')),
@@ -135,75 +154,136 @@ class ProcessingScreen extends ConsumerWidget {
       ),
       data: (job) => PageScaffold(
         title: 'Processing',
-        actions: [
-          if (!job.status.isFinished)
-            TextButton(onPressed: () => _cancel(context, ref), child: const Text('Cancel')),
-        ],
         children: [
-          _Header(job: job),
-          const SizedBox(height: Spacing.lg),
-          for (final stage in job.stages) _StageRow(stage: stage),
-          if (job.status == JobStatus.done) ...[
-            // Reached with Back from the results screen.
-            const SizedBox(height: Spacing.lg),
-            FilledButton.icon(
-              onPressed: () => context.go(Routes.results(jobId)),
-              icon: const Icon(Icons.insights),
-              label: const Text('View results'),
-            ),
-          ],
-          if (job.status == JobStatus.cancelled) ...[
-            const SizedBox(height: Spacing.lg),
-            OutlinedButton(
-              onPressed: () => context.go(Routes.home),
-              child: const Text('Back to upload'),
-            ),
-          ],
-          if (job.status == JobStatus.failed) ...[
-            const SizedBox(height: Spacing.lg),
-            Text(
-              job.error ?? 'Processing failed',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            const SizedBox(height: Spacing.sm),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // A live session cannot be processed again as an upload (its overrides and
-                // corrections belong to the live rallies), but its record is there.
-                if (hasResults(job))
-                  FilledButton.icon(
-                    onPressed: () => context.go(Routes.results(jobId)),
-                    icon: const Icon(Icons.insights),
-                    label: const Text('View results'),
-                  )
-                else
-                  FilledButton.icon(
-                    onPressed: () => _retry(context, ref, job),
-                    icon: const Icon(Icons.replay),
-                    label: const Text('Try again'),
-                  ),
-                OutlinedButton(
-                  onPressed: () => context.go(Routes.home),
-                  child: const Text('Back to upload'),
+                _Header(
+                  job: job,
+                  cancel: job.status.isFinished
+                      ? null
+                      : OutlinedButton(
+                          onPressed: () => _cancel(context, ref),
+                          child: const Text('Cancel'),
+                        ),
                 ),
+                ..._outcome(context, ref, job),
+                const SizedBox(height: Spacing.lg),
+                for (final stage in job.stages) _StageRow(stage: stage),
+                if (!job.status.isFinished) ...[
+                  const SizedBox(height: Spacing.sm),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Notify me when done'),
+                    subtitle: const Text('If the app is in the background when the job ends'),
+                    value: ref.watch(notifyWhenDoneProvider),
+                    onChanged: (on) => ref.read(notifyWhenDoneProvider.notifier).set(on),
+                  ),
+                ],
               ],
             ),
+          ),
+          if (!job.status.isFinished) ...[
+            const SizedBox(height: Spacing.xl),
+            const _ResultsPreview(),
           ],
         ],
       ),
     );
   }
+
+  /// What can be done once the job has ended: open the results, retry, or go back.
+  List<Widget> _outcome(BuildContext context, WidgetRef ref, Job job) => [
+    if (job.status == JobStatus.done) ...[
+      // Reached with Back from the results screen.
+      const SizedBox(height: Spacing.lg),
+      FilledButton.icon(
+        onPressed: () => context.go(Routes.results(jobId)),
+        icon: const Icon(Icons.insights),
+        label: const Text('View results'),
+      ),
+    ],
+    if (job.status == JobStatus.cancelled) ...[
+      const SizedBox(height: Spacing.lg),
+      OutlinedButton(onPressed: () => context.go(Routes.home), child: const Text('Back to upload')),
+    ],
+    if (job.status == JobStatus.failed) ...[
+      const SizedBox(height: Spacing.lg),
+      Text(
+        job.error ?? 'Processing failed',
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+      const SizedBox(height: Spacing.sm),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          // A live session cannot be processed again as an upload (its overrides and
+          // corrections belong to the live rallies), but its record is there.
+          if (hasResults(job))
+            FilledButton.icon(
+              onPressed: () => context.go(Routes.results(jobId)),
+              icon: const Icon(Icons.insights),
+              label: const Text('View results'),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _retry(context, ref, job),
+              icon: const Icon(Icons.replay),
+              label: const Text('Try again'),
+            ),
+          OutlinedButton(
+            onPressed: () => context.go(Routes.home),
+            child: const Text('Back to upload'),
+          ),
+        ],
+      ),
+    ],
+  ];
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.job});
+/// Where the results will appear, as still placeholder blocks while the job runs.
+class _ResultsPreview extends StatelessWidget {
+  const _ResultsPreview();
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    title: 'Results',
+    subtitle: 'Ready when processing finishes',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: Spacing.md),
+              const Expanded(child: Skeleton(height: 64, radius: Radii.md, pulse: false)),
+            ],
+          ],
+        ),
+        const SizedBox(height: Spacing.lg),
+        const Skeleton(height: 160, radius: Radii.md, pulse: false),
+        const SizedBox(height: Spacing.lg),
+        const Skeleton(width: 240, pulse: false),
+      ],
+    ),
+  );
+}
+
+class _Header extends ConsumerWidget {
+  const _Header({required this.job, required this.cancel});
 
   final Job job;
 
+  /// The Cancel button while the job can still be stopped.
+  final Widget? cancel;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = AppPalette.of(context);
+    final theme = Theme.of(context);
+    final name = ref.watch(videoProvider(job.videoId)).valueOrNull?.filename;
     final text = switch (job.status) {
       JobStatus.queued => 'Waiting in queue (position ${(job.queuePosition ?? 0) + 1})',
       JobStatus.running => 'Running: ${kStageLabels[job.currentStage] ?? job.currentStage ?? ''}',
@@ -222,18 +302,32 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(text, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: Spacing.sm),
-        Semantics(
-          label: 'Overall progress',
-          value: '$percent%',
-          child: LinearProgressIndicator(
-            value: job.status == JobStatus.queued ? null : job.progress,
-          ),
+        Row(
+          children: [
+            IconChip(icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined),
+            const SizedBox(width: Spacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name ?? (job.isLive ? 'Live session' : 'Analysis'),
+                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: p.text2)),
+                ],
+              ),
+            ),
+            Text('$percent%', style: theme.textTheme.titleMedium),
+            if (cancel != null) ...[const SizedBox(width: Spacing.md), cancel!],
+          ],
         ),
+        const SizedBox(height: Spacing.lg),
+        GradientProgress(value: job.progress, label: 'Overall progress'),
         if (timing.isNotEmpty) ...[
-          const SizedBox(height: Spacing.xs),
-          Text(timing, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: Spacing.sm),
+          Text(timing, style: theme.textTheme.bodySmall),
         ],
       ],
     );
@@ -249,7 +343,7 @@ class _StageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (icon, color) = switch (stage.status) {
-      'done' => (Icons.check_circle, scheme.primary),
+      'done' => (Icons.check_circle, AppPalette.of(context).brand),
       'running' => (Icons.autorenew, scheme.tertiary),
       'failed' => (Icons.error, scheme.error),
       'skipped' => (Icons.remove_circle_outline, scheme.outline),
@@ -261,7 +355,10 @@ class _StageRow extends StatelessWidget {
       leading: Icon(icon, color: color),
       title: Text(kStageLabels[stage.name] ?? stage.name),
       subtitle: stage.status == 'running'
-          ? LinearProgressIndicator(value: stage.progress == 0 ? null : stage.progress)
+          ? Padding(
+              padding: const EdgeInsets.only(top: Spacing.xs),
+              child: GradientProgress(value: stage.progress, height: 4),
+            )
           : null,
       trailing: Text(stage.status, style: Theme.of(context).textTheme.labelSmall),
     );

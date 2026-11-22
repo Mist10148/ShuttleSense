@@ -36,11 +36,14 @@ def main():
     sx, sy = reader.width / reader.source.width, reader.height / reader.source.height
     corners = [(args.corners[i] * sx, args.corners[i + 1] * sy) for i in range(0, 8, 2)]
     watch = load_config().get("watch", {})
-    kwargs = {"corners": corners, "court": "doubles",
-              "batch_size": int(watch.get("pose_batch_size", 1)),
-              "candidate_filter": watch.get("candidate_filter", "off"),
-              "player_provider": watch.get("player_provider", "cuda"),
-              "jpeg_roundtrip": True}
+    kwargs = {
+        "corners": corners,
+        "court": "doubles",
+        "batch_size": int(watch.get("pose_batch_size", 1)),
+        "candidate_filter": watch.get("candidate_filter", "off"),
+        "player_provider": watch.get("player_provider", "cuda"),
+        "jpeg_roundtrip": True,
+    }
 
     def trial(parallel, count):
         if device.startswith("cuda"):
@@ -70,10 +73,12 @@ def main():
         if not results:
             reference_analysis = analysis
         result = {
-            "mode": "concurrent" if parallel else "sequential", "frames": args.frames,
+            "mode": "concurrent" if parallel else "sequential",
+            "frames": args.frames,
             "median_ms": round(statistics.median(times), 3),
             "p95_ms": round(sorted(times)[(95 * len(times) + 99) // 100 - 1], 3),
-            "different_frames": differences, "different_shuttle_frames": shuttle_differences,
+            "different_frames": differences,
+            "different_shuttle_frames": shuttle_differences,
             "different_player_frames": player_differences,
             "analysis_equal_to_first": analysis == reference_analysis,
             "analysis_counts": {
@@ -81,14 +86,21 @@ def main():
             },
             "candidate_counts": (
                 {key: diagnostics[key] for key in ("frames", "people", "eligible", "excluded")}
-                if diagnostics else None
+                if diagnostics
+                else None
             ),
-            "resources": resources, "torch_peak_allocated_bytes": torch_peak,
+            "resources": resources,
+            "torch_peak_allocated_bytes": torch_peak,
         }
         results.append(result)
         print("TRIAL " + json.dumps(result), flush=True)
-    print("COMPLETE " + json.dumps({"device": device, "settings": kwargs | {"corners": corners},
-                                    "trials": len(results)}), flush=True)
+    print(
+        "COMPLETE "
+        + json.dumps(
+            {"device": device, "settings": kwargs | {"corners": corners}, "trials": len(results)}
+        ),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

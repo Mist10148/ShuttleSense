@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/responsive/breakpoints.dart';
+import '../../../shared/widgets/surfaces.dart';
 import 'court_minimap.dart';
 import '../../../core/theme/tokens.dart';
 
@@ -36,10 +39,10 @@ class ResultsLayout extends StatelessWidget {
       builder: (context, constraints) {
         final landscapePhone =
             constraints.maxHeight < 500 && constraints.maxWidth > constraints.maxHeight;
-        if (landscapePhone) return _landscape();
+        if (landscapePhone) return _landscape(context);
         final panel = sidePanelWidth(constraints.maxWidth);
         return switch (Breakpoints.forWidth(constraints.maxWidth)) {
-          WindowClass.compact => _compact(),
+          WindowClass.compact => _compact(context),
           WindowClass.medium => _medium(panel),
           WindowClass.expanded => _expanded(panel),
         };
@@ -52,17 +55,40 @@ class ResultsLayout extends StatelessWidget {
   static double sidePanelWidth(double width) =>
       (width * 0.3).clamp(300.0, 400.0).clamp(0.0, width * 0.4);
 
-  Widget _tabs() => DefaultTabController(
+  /// The video in a card. The card is only as tall as the video, and the video still gives
+  /// up height first when the space around it is short.
+  Widget _videoCard() => LayoutBuilder(
+    builder: (context, box) => AppCard(
+      padding: const EdgeInsets.all(Spacing.md),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: math.max(0, box.maxHeight - 2 * Spacing.md)),
+        child: Align(
+          heightFactor: 1,
+          child: ClipRRect(borderRadius: BorderRadius.circular(Radii.md), child: video),
+        ),
+      ),
+    ),
+  );
+
+  Widget _tabs(BuildContext context) => DefaultTabController(
     length: coach == null ? 3 : 4,
     child: Column(
       children: [
-        TabBar(
-          tabs: [
-            const Tab(text: 'Timeline'),
-            const Tab(text: 'Minimap'),
-            const Tab(text: 'Score'),
-            if (coach != null) const Tab(text: 'Coach'),
-          ],
+        // The stage-2 tabs: an ink pill for the active tab on a grey track.
+        Container(
+          padding: const EdgeInsets.all(Spacing.xs),
+          decoration: BoxDecoration(
+            color: AppPalette.of(context).surface2,
+            borderRadius: BorderRadius.circular(Radii.pill),
+          ),
+          child: TabBar(
+            tabs: [
+              const Tab(text: 'Timeline'),
+              const Tab(text: 'Minimap'),
+              const Tab(text: 'Score'),
+              if (coach != null) const Tab(text: 'Coach'),
+            ],
+          ),
         ),
         Expanded(
           child: TabBarView(
@@ -106,86 +132,83 @@ class ResultsLayout extends StatelessWidget {
     ),
   );
 
-  Widget _landscape() => Row(
+  Widget _landscape(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Expanded(
-        child: SingleChildScrollView(child: Column(children: [video, status])),
+        child: SingleChildScrollView(child: Column(children: [_videoCard(), status])),
       ),
-      Expanded(child: _tabs()),
+      const SizedBox(width: Spacing.md),
+      Expanded(child: _tabs(context)),
     ],
   );
 
   /// Video and status scroll when a line-call banner or warning makes them taller than
   /// their share, so the tabs never get squeezed out.
-  Widget _compact() {
+  Widget _compact(BuildContext context) {
     return Column(
       children: [
         Flexible(
           flex: 3,
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [video, status]),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [_videoCard(), status]),
           ),
         ),
-        Expanded(flex: 2, child: _tabs()),
+        const SizedBox(height: Spacing.sm),
+        Expanded(flex: 2, child: _tabs(context)),
       ],
     );
   }
 
+  /// The page around the layout gives the outer gutter, so these have none of their own.
   Widget _medium(double panel) {
-    return Padding(
-      padding: const EdgeInsets.all(Spacing.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                // In a short window (1000x540, say) a full-width video would leave the
-                // timeline a few pixels, so the video gives up height first.
-                Flexible(flex: 3, child: video),
-                status,
-                const SizedBox(height: Spacing.sm),
-                Expanded(flex: 2, child: timeline),
-              ],
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              // In a short window (1000x540, say) a full-width video would leave the
+              // timeline a few pixels, so the video gives up height first.
+              Flexible(flex: 3, child: _videoCard()),
+              status,
+              const SizedBox(height: Spacing.sm),
+              Expanded(flex: 2, child: timeline),
+            ],
           ),
-          const SizedBox(width: Spacing.lg),
-          SizedBox(width: panel, child: _panel()),
-        ],
-      ),
+        ),
+        const SizedBox(width: Spacing.lg),
+        SizedBox(width: panel, child: _panel()),
+      ],
     );
   }
 
   Widget _expanded(double panel) {
-    return Padding(
-      padding: const EdgeInsets.all(Spacing.xl),
-      child: Column(
-        children: [
-          Flexible(
-            flex: 3,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(child: video),
-                      status,
-                    ],
-                  ),
+    return Column(
+      children: [
+        Flexible(
+          flex: 3,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(child: _videoCard()),
+                    status,
+                  ],
                 ),
-                const SizedBox(width: Spacing.xl),
-                SizedBox(width: panel, child: _panel()),
-              ],
-            ),
+              ),
+              const SizedBox(width: Spacing.xl),
+              SizedBox(width: panel, child: _panel()),
+            ],
           ),
-          const SizedBox(height: Spacing.lg),
-          Expanded(flex: 2, child: timeline),
-        ],
-      ),
+        ),
+        const SizedBox(height: Spacing.lg),
+        Expanded(flex: 2, child: timeline),
+      ],
     );
   }
 }

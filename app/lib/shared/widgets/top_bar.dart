@@ -1,0 +1,195 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/router/app_router.dart';
+import '../../core/theme/tokens.dart';
+import '../../data/models/job.dart';
+import '../../data/repositories/analysis_repository.dart';
+import '../../features/history/history_screen.dart';
+import '../../features/results/results_screen.dart';
+import 'status_pill.dart';
+import 'surfaces.dart';
+
+/// How many analyses the notifications menu lists.
+const _kRecentJobs = 6;
+
+/// The bar above every page in the shell: search, analysis notifications and the server
+/// status. On a phone the search collapses to an icon and the brand shows on the left.
+class TopBar extends StatelessWidget {
+  const TopBar({super.key, required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        compact ? Spacing.lg : Spacing.sm,
+        Spacing.sm,
+        compact ? Spacing.sm : Spacing.lg,
+        Spacing.sm,
+      ),
+      child: Row(
+        children: [
+          if (compact) ...[
+            IconChip(
+              icon: Icons.sports_tennis,
+              size: 32,
+              background: AppPalette.of(context).lavender,
+            ),
+            const SizedBox(width: Spacing.sm),
+            Expanded(child: Text('ShuttleSense', style: text.titleMedium)),
+            IconButton(
+              tooltip: 'Search analyses',
+              onPressed: () => context.go(Routes.history),
+              icon: const Icon(Icons.search),
+            ),
+          ] else ...[
+            const Spacer(),
+            const SizedBox(width: 280, child: _SearchField()),
+            const SizedBox(width: Spacing.sm),
+          ],
+          const _NotificationsButton(),
+          const SizedBox(width: Spacing.xs),
+          _ServerStatus(compact: compact),
+        ],
+      ),
+    );
+  }
+}
+
+/// Searches analyses by file name: the text goes to History's search and History opens.
+class _SearchField extends ConsumerWidget {
+  const _SearchField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return TextField(
+      textInputAction: TextInputAction.search,
+      decoration: const InputDecoration(
+        prefixIcon: Icon(Icons.search),
+        hintText: 'Search analyses',
+        isDense: true,
+      ),
+      onSubmitted: (v) {
+        ref.read(historyQueryProvider.notifier).state = v.trim();
+        context.go(Routes.history);
+      },
+    );
+  }
+}
+
+/// A bell with the number of analyses still running; its menu lists the latest ones.
+class _NotificationsButton extends ConsumerWidget {
+  const _NotificationsButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final jobs = [...?ref.watch(jobsListProvider).valueOrNull]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final running = jobs.where((j) => !j.status.isFinished).length;
+    return MenuAnchor(
+      // Fetch the list again each time the menu opens, so it is never stale.
+      onOpen: () => ref.invalidate(jobsListProvider),
+      menuChildren: [
+        if (jobs.isEmpty) const MenuItemButton(onPressed: null, child: Text('No analyses yet')),
+        for (final job in jobs.take(_kRecentJobs))
+          MenuItemButton(
+            leadingIcon: Icon(_icon(job.status)),
+            onPressed: () =>
+                context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+            child: Text(_describe(job)),
+          ),
+      ],
+      builder: (context, menu, _) => IconButton(
+        tooltip: running == 0 ? 'Notifications' : 'Notifications: $running running',
+        onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+        icon: Badge(
+          isLabelVisible: running > 0,
+          label: Text('$running'),
+          child: const Icon(Icons.notifications_none),
+        ),
+      ),
+    );
+  }
+
+  static IconData _icon(JobStatus status) => switch (status) {
+    JobStatus.done => Icons.check_circle_outline,
+    JobStatus.failed => Icons.error_outline,
+    JobStatus.cancelled => Icons.cancel_outlined,
+    JobStatus.queued || JobStatus.running => Icons.hourglass_top,
+  };
+
+  static String _describe(Job job) {
+    final kind = job.isLive ? 'Live session' : 'Analysis';
+    return switch (job.status) {
+      JobStatus.done => '$kind finished',
+      JobStatus.failed => '$kind failed',
+      JobStatus.cancelled => '$kind cancelled',
+      JobStatus.queued => '$kind queued',
+      JobStatus.running => '$kind running · ${(job.progress * 100).round()}%',
+    };
+  }
+}
+
+/// Online, offline or checking, from GET /health. Opens Settings, where the connection is.
+class _ServerStatus extends ConsumerWidget {
+  const _ServerStatus({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (label, tone) = ref
+        .watch(healthProvider)
+        .when(
+          loading: () => ('Checking…', PillTone.neutral),
+          error: (_, _) => ('Offline', PillTone.bad),
+          data: (_) => ('Online', PillTone.good),
+        );
+    return Tooltip(
+      message: 'Server: $label',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.pill),
+        onTap: () => context.go(Routes.settings),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kMinTouchTarget, minWidth: kMinTouchTarget),
+          child: Center(
+            widthFactor: 1,
+            child: compact
+                ? _Dot(tone: tone, label: 'Server $label')
+                : StatusPill(label: label, tone: tone),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Just the coloured status dot, for the phone top bar.
+class _Dot extends StatelessWidget {
+  const _Dot({required this.tone, required this.label});
+
+  final PillTone tone;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = StatusColors.of(context);
+    final colour = switch (tone) {
+      PillTone.good => status.inCall,
+      PillTone.bad => status.outCall,
+      _ => AppPalette.of(context).text3,
+    };
+    return Semantics(
+      label: label,
+      child: Container(
+        width: 12,
+        height: 12,
+        decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+      ),
+    );
+  }
+}

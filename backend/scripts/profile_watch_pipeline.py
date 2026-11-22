@@ -203,7 +203,8 @@ def main():
     parallel = ParallelWatchPerception(model)
     temp_context = (
         tempfile.TemporaryDirectory(prefix="shuttlesense-profile-")
-        if args.record else contextlib.nullcontext(None)
+        if args.record
+        else contextlib.nullcontext(None)
     )
     with temp_context as temp:
         recording = Path(temp) / "recording.mp4" if args.record else None

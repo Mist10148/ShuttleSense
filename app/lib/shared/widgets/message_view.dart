@@ -20,6 +20,7 @@ class MessageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final p = AppPalette.of(context);
     // Scrolls rather than overflowing in a small box (the video slot on a phone) or at
     // large text sizes.
     return Center(
@@ -28,17 +29,14 @@ class MessageView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // The icon sits in a soft disc so empty and error states look deliberate.
+            // The icon sits in a pastel disc so empty and error states look deliberate.
             Container(
-              padding: const EdgeInsets.all(Spacing.lg),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
+              padding: const EdgeInsets.all(Spacing.xl),
+              decoration: BoxDecoration(color: p.lavender, shape: BoxShape.circle),
+              child: Icon(icon, size: 40, color: p.ink),
             ),
             const SizedBox(height: Spacing.lg),
-            Text(message, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(message, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
             if (detail != null) ...[
               const SizedBox(height: Spacing.xs),
               Text(

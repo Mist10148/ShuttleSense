@@ -107,9 +107,18 @@ void main() {
       find.ancestor(of: find.text('Random Forest'), matching: find.byType(SegmentedButton<String>)),
     );
 
+    /// The stroke model field sits under the "Advanced" disclosure on the upload screen.
+    Future<void> openAdvanced(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('Advanced'));
+      await tester.pump(); // lay out the scrolled page before tapping
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('the choice is remembered and a missing model is disabled', (tester) async {
       final api = FakeApiClient(health: health(['cnn', 'rf']));
       await pumpScreen(tester, const UploadScreen(), api: api, size: tablet);
+      await openAdvanced(tester);
       expect(find.text('Stroke model'), findsOneWidget);
       expect(field(tester).selected, {'cnn'});
       final lstm = field(tester).segments.firstWhere((s) => s.value == 'lstm');
@@ -134,6 +143,7 @@ void main() {
         prefs: {'options.stroke_model': 'lstm'},
         size: tablet,
       );
+      await openAdvanced(tester);
       expect(field(tester).selected, {'rf'});
     });
 
@@ -149,6 +159,7 @@ void main() {
         api: FakeApiClient(health: health([])),
         size: tablet,
       );
+      await openAdvanced(tester);
       expect(field(tester).segments.every((s) => !s.enabled), isTrue);
       expect(find.textContaining('No stroke model is installed'), findsOneWidget);
     });

@@ -59,8 +59,10 @@ def main() -> None:
         if args.device.startswith("cuda"):
             torch.cuda.synchronize(args.device)
 
-    timings = {name: {"prepare_ms": [], "upload_and_inference_ms": [], "total_ms": []}
-               for name in ("stack", "view")}
+    timings = {
+        name: {"prepare_ms": [], "upload_and_inference_ms": [], "total_ms": []}
+        for name in ("stack", "view")
+    }
     mismatches = {"input": 0, "heatmap": 0, "point": 0}
     max_heatmap_error = 0.0
     measured = 0
@@ -75,8 +77,9 @@ def main() -> None:
             prepared = _track_input_rgb(frames, mode, bg)
             batch = np.stack([prepared]) if name == "stack" else prepared[None, ...]
             prep_end = time.perf_counter()
-            with torch.inference_mode(), torch.autocast(
-                "cuda", enabled=args.device.startswith("cuda")
+            with (
+                torch.inference_mode(),
+                torch.autocast("cuda", enabled=args.device.startswith("cuda")),
             ):
                 heatmap = (
                     model(torch.from_numpy(batch).to(args.device))[:, -1:].float().cpu().numpy()
@@ -112,8 +115,9 @@ def main() -> None:
         batch = np.stack([_track_input_rgb(frames, mode, bg)])
         outputs = []
         for _ in range(2):
-            with torch.inference_mode(), torch.autocast(
-                "cuda", enabled=args.device.startswith("cuda")
+            with (
+                torch.inference_mode(),
+                torch.autocast("cuda", enabled=args.device.startswith("cuda")),
             ):
                 outputs.append(
                     model(torch.from_numpy(batch).to(args.device))[:, -1:].float().cpu().numpy()
@@ -122,20 +126,36 @@ def main() -> None:
         aa_max_error = max(aa_max_error, float(np.max(np.abs(outputs[0] - outputs[1]))))
 
     def summary(values):
-        return {"median": round(statistics.median(values), 3),
-                "p95": round(float(np.percentile(values, 95)), 3)}
+        return {
+            "median": round(statistics.median(values), 3),
+            "p95": round(float(np.percentile(values, 95)), 3),
+        }
 
-    print(json.dumps({
-        "frames": len(inputs), "repeats": args.repeats, "warmup_pairs": args.warmup,
-        "measured_pairs": measured, "seq_len": seq_len, "bg_mode": mode,
-        "device": args.device, "mismatches": mismatches,
-        "max_abs_heatmap_difference": max_heatmap_error,
-        "baseline_repeatability": {"pairs": min(12, len(inputs)),
-                                   "heatmap_mismatches": aa_mismatches,
-                                   "max_abs_heatmap_difference": aa_max_error},
-        "timings_ms": {name: {key: summary(value) for key, value in data.items()}
-                       for name, data in timings.items()},
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "frames": len(inputs),
+                "repeats": args.repeats,
+                "warmup_pairs": args.warmup,
+                "measured_pairs": measured,
+                "seq_len": seq_len,
+                "bg_mode": mode,
+                "device": args.device,
+                "mismatches": mismatches,
+                "max_abs_heatmap_difference": max_heatmap_error,
+                "baseline_repeatability": {
+                    "pairs": min(12, len(inputs)),
+                    "heatmap_mismatches": aa_mismatches,
+                    "max_abs_heatmap_difference": aa_max_error,
+                },
+                "timings_ms": {
+                    name: {key: summary(value) for key, value in data.items()}
+                    for name, data in timings.items()
+                },
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

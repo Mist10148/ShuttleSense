@@ -67,15 +67,15 @@ def main():
     players = sorted(paths["players"])
     if len(shuttle) != len(players) or args.skip_frames >= len(shuttle):
         raise ValueError("expected matching nonempty per-frame shuttle/player ranges")
-    shuttle, players = shuttle[args.skip_frames:], players[args.skip_frames:]
-    windows = merge([(min(s[0], p[0]), max(s[1], p[1]))
-                     for s, p in zip(shuttle, players, strict=True)])
+    shuttle, players = shuttle[args.skip_frames :], players[args.skip_frames :]
+    windows = merge(
+        [(min(s[0], p[0]), max(s[1], p[1])) for s, p in zip(shuttle, players, strict=True)]
+    )
     owner_by_correlation = {}
     for event in events:
         if event.get("cat") != "cuda_runtime":
             continue
-        matches = [r for r in by_thread.get(event.get("tid"), ())
-                   if r[0] <= event["ts"] <= r[1]]
+        matches = [r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]]
         correlation = event.get("args", {}).get("correlation")
         if matches and correlation is not None:
             owner_by_correlation[correlation] = min(matches, key=lambda r: r[1] - r[0])[2]
@@ -90,8 +90,9 @@ def main():
         while index < len(windows) and windows[index][0] < end:
             left, right = max(start, windows[index][0]), min(end, windows[index][1])
             if left < right:
-                owner = owner_by_correlation.get(event.get("args", {}).get("correlation"),
-                                                 "unattributed")
+                owner = owner_by_correlation.get(
+                    event.get("args", {}).get("correlation"), "unattributed"
+                )
                 kernels[owner].append((left, right))
             index += 1
     all_kernels = merge([interval for group in kernels.values() for interval in group])
@@ -106,19 +107,28 @@ def main():
         if cursor < end:
             gaps.append(end - cursor)
     gaps.sort()
-    print(json.dumps({
-        "frames": len(shuttle), "skipped_frames": args.skip_frames,
-        "frame_window_ms": duration(windows) / 1000,
-        "cpu_path_overlap_ms": duration(intersect(shuttle, players)) / 1000,
-        "gpu_kernel_union_ms": duration(all_kernels) / 1000,
-        "gpu_shuttle_player_overlap_ms": (
-            duration(intersect(kernels["shuttle"], player_kernels)) / 1000
-        ),
-        "gpu_unattributed_kernel_union_ms": duration(kernels["unattributed"]) / 1000,
-        "observed_kernel_gaps": {"count": len(gaps), "over_1ms": sum(x > 1000 for x in gaps),
-                                 "total_ms": sum(gaps) / 1000,
-                                 "max_ms": max(gaps, default=0) / 1000},
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "frames": len(shuttle),
+                "skipped_frames": args.skip_frames,
+                "frame_window_ms": duration(windows) / 1000,
+                "cpu_path_overlap_ms": duration(intersect(shuttle, players)) / 1000,
+                "gpu_kernel_union_ms": duration(all_kernels) / 1000,
+                "gpu_shuttle_player_overlap_ms": (
+                    duration(intersect(kernels["shuttle"], player_kernels)) / 1000
+                ),
+                "gpu_unattributed_kernel_union_ms": duration(kernels["unattributed"]) / 1000,
+                "observed_kernel_gaps": {
+                    "count": len(gaps),
+                    "over_1ms": sum(x > 1000 for x in gaps),
+                    "total_ms": sum(gaps) / 1000,
+                    "max_ms": max(gaps, default=0) / 1000,
+                },
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

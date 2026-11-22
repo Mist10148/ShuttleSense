@@ -8,6 +8,20 @@ import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
 
 void main() {
+  testWidgets('search, mode filter and status badge', (tester) async {
+    final live = Job.fromJson(jobJson(id: 'live1')..['mode'] = 'live');
+    final upload = Job.fromJson(jobJson());
+    await pumpScreen(tester, const HistoryScreen(), api: FakeApiClient(jobs: [live, upload]));
+    expect(find.text('Done'), findsNWidgets(2));
+    await tester.tap(find.text('Live'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Live ·'), findsOneWidget);
+    expect(find.textContaining('Upload ·'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'no such clip');
+    await tester.pumpAndSettle();
+    expect(find.text('No analyses match.'), findsOneWidget);
+  });
+
   testWidgets('shows the video filename', (tester) async {
     await pumpScreen(tester, const HistoryScreen());
     expect(find.text('rally01.mp4'), findsOneWidget);
@@ -42,6 +56,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('deleteJob job1'));
     expect(find.text('No analyses on this server yet'), findsOneWidget);
+    expect(find.text('Start an analysis'), findsOneWidget);
   });
 
   testWidgets('swipe to delete can also delete the video', (tester) async {

@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/app.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
+import 'package:shuttlesense_app/core/responsive/adaptive_shell.dart';
 import 'package:shuttlesense_app/core/responsive/breakpoints.dart';
+import 'package:shuttlesense_app/features/history/history_screen.dart';
 import 'package:shuttlesense_app/features/results/widgets/results_layout.dart';
 
 /// Phone portrait, tablet, laptop (docs/ARCHITECTURE.md §4).
@@ -49,27 +51,50 @@ void main() {
   });
 
   group('adaptive shell', () {
-    testWidgets('phone uses a bottom navigation bar', (tester) async {
+    testWidgets('phone uses a bottom navigation bar and a compact top bar', (tester) async {
       setSize(tester, phone);
       await pumpApp(tester, savedServer: 'http://localhost:8000');
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationRail), findsNothing);
-      expect(find.text('New analysis'), findsOneWidget);
+      expect(find.byType(IconRail), findsNothing);
+      expect(find.byTooltip('Search analyses'), findsOneWidget);
+      expect(find.text('Home'), findsWidgets);
+      expect(find.text('Start an analysis'), findsOneWidget);
     });
 
-    testWidgets('tablet uses a compact navigation rail', (tester) async {
-      setSize(tester, tablet);
-      await pumpApp(tester, savedServer: 'http://localhost:8000');
-      final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(rail.extended, isFalse);
-      expect(find.byType(NavigationBar), findsNothing);
-    });
+    for (final (name, size) in [('tablet', tablet), ('laptop', laptop)]) {
+      testWidgets('$name uses the icon rail inside the glass shell', (tester) async {
+        setSize(tester, size);
+        await pumpApp(tester, savedServer: 'http://localhost:8000');
+        expect(find.byType(IconRail), findsOneWidget);
+        expect(find.byType(NavigationBar), findsNothing);
+        expect(find.byTooltip('History'), findsOneWidget);
+        expect(find.widgetWithText(TextField, 'Search analyses'), findsOneWidget);
+      });
+    }
 
-    testWidgets('laptop uses an extended navigation rail', (tester) async {
+    testWidgets('rail buttons switch tabs and the theme', (tester) async {
       setSize(tester, laptop);
       await pumpApp(tester, savedServer: 'http://localhost:8000');
-      final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(rail.extended, isTrue);
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Connection'), findsOneWidget);
+
+      expect(Theme.of(tester.element(find.byType(IconRail))).brightness, Brightness.light);
+      await tester.tap(find.byTooltip('Switch to dark theme'));
+      await tester.pumpAndSettle();
+      expect(Theme.of(tester.element(find.byType(IconRail))).brightness, Brightness.dark);
+    });
+
+    testWidgets('top bar search opens History with the query', (tester) async {
+      setSize(tester, laptop);
+      await pumpApp(tester, savedServer: 'http://localhost:8000');
+      await tester.enterText(find.widgetWithText(TextField, 'Search analyses'), ' rally ');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      final history = find.byType(HistoryScreen);
+      expect(history, findsOneWidget);
+      final container = ProviderScope.containerOf(tester.element(history));
+      expect(container.read(historyQueryProvider), 'rally');
     });
   });
 

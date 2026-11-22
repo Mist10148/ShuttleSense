@@ -8,171 +8,106 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 
-/// F18: first screen after connecting. The last choice is highlighted and remembered.
-class ModeScreen extends ConsumerWidget {
+/// F18: the Analyze tab's landing view and the one place the mode is picked. The last choice
+/// carries a "Last used" badge and is remembered.
+class ModeScreen extends StatelessWidget {
   const ModeScreen({super.key});
 
   @override
+  Widget build(BuildContext context) => const PageScaffold(
+    title: 'How do you want to analyze?',
+    showBack: false,
+    maxWidth: 1080,
+    children: [ModeChoices(detailed: true)],
+  );
+}
+
+/// The three ways to analyze as pastel cards: Upload clip (lavender), Go live (sky), Watch &
+/// Analyze (mint). [detailed] adds the longer description and what each one needs (the mode
+/// chooser); without it each card has one line (Home). Picking one saves it and opens Analyze.
+class ModeChoices extends ConsumerWidget {
+  const ModeChoices({super.key, this.detailed = false});
+
+  final bool detailed;
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = AppPalette.of(context);
     final current = ref.watch(appModeProvider);
     final health = ref.watch(healthProvider).valueOrNull;
     final liveOff = health != null && !health.supportsLive;
     final watchSupported = kIsWeb || defaultTargetPlatform == TargetPlatform.windows;
+    final watchOn = health?.watchVideo == true && watchSupported;
     Future<void> pick(AppMode mode) async {
       await ref.read(appModeProvider.notifier).set(mode);
       if (context.mounted) context.go(Routes.home);
     }
 
-    return PageScaffold(
-      title: 'How do you want to analyze?',
+    String? lastUsed(AppMode mode, {bool available = true}) =>
+        current == mode && available ? 'Last used' : null;
+
+    return CardGrid(
+      minWidth: detailed ? 280 : 220,
       children: [
-        ModeCard(
+        PastelActionCard(
+          color: p.lavender,
           icon: Icons.upload_file,
           title: 'Upload clip',
-          description:
-              'Pick a recorded rally. The server processes it and shows full results, '
-              'line calls and coaching notes.',
-          selected: current == AppMode.upload,
+          description: detailed
+              ? 'Pick a recorded rally. The server processes it and shows full results, '
+                    'line calls and coaching notes.'
+              : 'Analyze a recorded rally.',
+          footnote: detailed ? 'You need: a recorded video file (MP4, MOV or AVI)' : null,
+          badge: lastUsed(AppMode.upload),
           onTap: () => pick(AppMode.upload),
         ),
-        const SizedBox(height: Spacing.lg),
-        ModeCard(
+        PastelActionCard(
+          color: p.sky,
           icon: Icons.videocam_outlined,
           title: 'Go live',
           description: liveOff
               ? 'This server is too old for live mode (clip record ${health.schemaVersion}). '
                     'Update the backend to use it.'
-              : 'Point a camera at the court and see the shuttle, score and line calls while '
-                    'you play. The session is saved to History when you stop.',
-          selected: current == AppMode.live && !liveOff,
+              : detailed
+              ? 'Point a camera at the court and see the shuttle, score and line calls while '
+                    'you play. The session is saved to History when you stop.'
+              : 'Use a camera at the court.',
+          footnote: detailed ? 'You need: a camera pointed at the court' : null,
+          badge: lastUsed(AppMode.live, available: !liveOff),
           onTap: liveOff ? null : () => pick(AppMode.live),
         ),
-        const SizedBox(height: Spacing.lg),
-        ModeCard(
+        PastelActionCard(
+          color: p.mint,
           icon: Icons.play_circle_outline,
           title: 'Watch & Analyze',
           description: !watchSupported
               ? 'Watch & Analyze is currently available in Chrome and Windows.'
-              : health?.watchVideo == true
+              : health?.watchVideo != true
+              ? 'Update the backend to use video-driven live analysis.'
+              : detailed
               ? 'Watch a recorded rally while the server analyzes it frame by frame.'
-              : 'Update the backend to use video-driven live analysis.',
-          selected: current == AppMode.watch && health?.watchVideo == true && watchSupported,
-          onTap: health?.watchVideo == true && watchSupported ? () => pick(AppMode.watch) : null,
+              : 'Play a video while it is analyzed.',
+          footnote: detailed
+              ? 'You need: a recorded video file, in Chrome or the Windows app'
+              : null,
+          badge: lastUsed(AppMode.watch, available: watchOn),
+          onTap: watchOn ? () => pick(AppMode.watch) : null,
         ),
       ],
     );
   }
 }
 
-class ModeCard extends StatelessWidget {
-  const ModeCard({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool selected;
-
-  /// Null when the choice is not available; the card is shown greyed out.
-  final VoidCallback? onTap;
+/// Page action that returns to the mode chooser, the one place the mode is picked.
+class ChangeModeButton extends StatelessWidget {
+  const ChangeModeButton({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      button: true,
-      enabled: onTap != null,
-      selected: selected,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        color: selected ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          side: BorderSide(
-            color: selected ? scheme.primary : scheme.outlineVariant,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(Spacing.md),
-                  decoration: BoxDecoration(
-                    color: onTap == null ? scheme.surfaceContainerHighest : scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(Radii.md),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 32,
-                    color: onTap == null ? scheme.outline : scheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: Spacing.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: Spacing.xs),
-                      Text(description),
-                      if (selected) ...[
-                        const SizedBox(height: Spacing.sm),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Spacing.sm,
-                            vertical: Spacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(Radii.sm),
-                          ),
-                          child: Text(
-                            'Last used',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.labelMedium?.copyWith(color: scheme.onPrimary),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// App bar action that switches between the upload and live screens.
-class SwitchModeButton extends ConsumerWidget {
-  const SwitchModeButton({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final live = ref.watch(appModeProvider) == AppMode.live;
-    final available = ref.watch(liveAvailableProvider);
-    return TextButton.icon(
-      // A server without live mode keeps the user on upload.
-      onPressed: live || available
-          ? () => ref.read(appModeProvider.notifier).set(live ? AppMode.upload : AppMode.live)
-          : null,
-      icon: Icon(live ? Icons.upload_file : Icons.videocam_outlined),
-      label: Text(live ? 'Upload clip' : 'Go live'),
-    );
-  }
+  Widget build(BuildContext context) => TextButton.icon(
+    onPressed: () => context.go(Routes.mode),
+    icon: const Icon(Icons.swap_horiz),
+    label: const Text('Change mode'),
+  );
 }

@@ -201,7 +201,9 @@ void main() {
       expect(find.text('Smash'), findsWidgets);
 
       // 9. History lists the job under the video's name.
-      await tapText(tester, 'History');
+      // The phone tab bar and the wide icon rail both label their buttons with tooltips.
+      await tester.tap(find.byTooltip('History'));
+      await tester.pump();
       await pumpUntil(tester, find.text(LocalFile(video).name));
     },
     skip: server.isEmpty || videoPath.isEmpty,
@@ -291,7 +293,9 @@ void main() {
       }
       await pumpUntil(tester, find.text('Open results'));
       final saved = live().savedJobId!;
-      await tapText(tester, 'History');
+      // The phone tab bar and the wide icon rail both label their buttons with tooltips.
+      await tester.tap(find.byTooltip('History'));
+      await tester.pump();
       final row = find.byKey(ValueKey(saved));
       await pumpUntil(tester, row);
       expect(find.descendant(of: row, matching: find.textContaining('Live · ')), findsOneWidget);

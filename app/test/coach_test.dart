@@ -229,6 +229,9 @@ void main() {
       expect(find.text(kCoachingDisclaimer), findsOneWidget);
       await tester.tap(find.text('0:01.5').first);
       expect(seeks.single.frame, 45);
+      // The summary card is taller than the 600px test window, so scroll to the button.
+      await tester.ensureVisible(find.text('Ask your coach'));
+      await tester.pump();
       await tester.tap(find.text('Ask your coach'));
       expect(asked, isTrue);
     });

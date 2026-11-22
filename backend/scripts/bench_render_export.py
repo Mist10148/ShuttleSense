@@ -61,30 +61,52 @@ class ChildSampler:
         self.thread.join()
 
     def summary(self):
-        return {label: {"rss_max_bytes": max((r[1] for r in self.rows if r[0] == is_parent),
-                                              default=None),
-                        "cpu_percent_max": max((r[2] for r in self.rows if r[0] == is_parent),
-                                               default=None)}
-                for label, is_parent in (("benchmark", True), ("child", False))}
+        return {
+            label: {
+                "rss_max_bytes": max((r[1] for r in self.rows if r[0] == is_parent), default=None),
+                "cpu_percent_max": max(
+                    (r[2] for r in self.rows if r[0] == is_parent), default=None
+                ),
+            }
+            for label, is_parent in (("benchmark", True), ("child", False))
+        }
 
 
 def probe(path, expected, fps):
     executable = shutil.which("ffprobe")
     if executable is None:
         return {"available": False}
-    output = subprocess.check_output([
-        executable, "-v", "error", "-select_streams", "v:0", "-show_entries",
-        "stream=codec_name,pix_fmt,width,height,avg_frame_rate,nb_frames:"
-        "frame=best_effort_timestamp_time", "-of", "json", str(path)
-    ], text=True)
+    output = subprocess.check_output(
+        [
+            executable,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,pix_fmt,width,height,avg_frame_rate,nb_frames:"
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
+            str(path),
+        ],
+        text=True,
+    )
     data = json.loads(output)
-    stamps = [float(f["best_effort_timestamp_time"]) for f in data.get("frames", [])
-              if "best_effort_timestamp_time" in f]
+    stamps = [
+        float(f["best_effort_timestamp_time"])
+        for f in data.get("frames", [])
+        if "best_effort_timestamp_time" in f
+    ]
     offsets = [abs(t - i / fps) for i, t in enumerate(stamps)]
-    return {"available": True, "stream": data.get("streams", []),
-            "timestamp_count": len(stamps), "expected_frames": expected,
-            "strictly_increasing": all(a < b for a, b in zip(stamps, stamps[1:], strict=False)),
-            "max_timestamp_offset_s": max(offsets, default=None)}
+    return {
+        "available": True,
+        "stream": data.get("streams", []),
+        "timestamp_count": len(stamps),
+        "expected_frames": expected,
+        "strictly_increasing": all(a < b for a, b in zip(stamps, stamps[1:], strict=False)),
+        "max_timestamp_offset_s": max(offsets, default=None),
+    }
 
 
 def quality(path, reader, record, count):
@@ -109,9 +131,12 @@ def quality(path, reader, record, count):
     finally:
         capture.release()
     mse = squared / values if values else None
-    return {"decoded_frames": decoded, "extra_frame": bool(extra),
-            "psnr_db": None if not mse else 10 * math.log10(255**2 / mse),
-            "mse": mse}
+    return {
+        "decoded_frames": decoded,
+        "extra_frame": bool(extra),
+        "psnr_db": None if not mse else 10 * math.log10(255**2 / mse),
+        "mse": mse,
+    }
 
 
 def main():
@@ -134,8 +159,13 @@ def main():
     for repeat in range(args.repeats):
         path = args.out_dir / f"{args.codec}_q{args.quality}_{args.frames}_{repeat}.mp4"
         state = RenderState(config={}, scale=style.scale_for(record.height))
-        writer = VideoWriter(path, fps=record.fps, size=(record.width, record.height),
-                             codec=args.codec, crf=args.quality)
+        writer = VideoWriter(
+            path,
+            fps=record.fps,
+            size=(record.width, record.height),
+            codec=args.codec,
+            crf=args.quality,
+        )
         times = {"reader_next_s": 0.0, "draw_s": 0.0, "write_s": 0.0}
         with ResourceSampler() as system, ChildSampler() as processes:
             start = time.perf_counter()
@@ -161,13 +191,20 @@ def main():
                 before_exit = time.perf_counter()
             times["writer_exit_s"] = time.perf_counter() - before_exit
             times["total_s"] = time.perf_counter() - start
-        result = {"codec_requested": args.codec, "codec_active": writer.codec,
-                  "backend": writer.backend, "quality_setting": args.quality,
-                  "frames": writer.frames,
-                  "repeat": repeat, "size_bytes": path.stat().st_size, "timing": times,
-                  "resources": system.summary(), "processes": processes.summary(),
-                  "probe": probe(path, args.frames, record.fps),
-                  "quality": quality(path, reader, record, args.frames)}
+        result = {
+            "codec_requested": args.codec,
+            "codec_active": writer.codec,
+            "backend": writer.backend,
+            "quality_setting": args.quality,
+            "frames": writer.frames,
+            "repeat": repeat,
+            "size_bytes": path.stat().st_size,
+            "timing": times,
+            "resources": system.summary(),
+            "processes": processes.summary(),
+            "probe": probe(path, args.frames, record.fps),
+            "quality": quality(path, reader, record, args.frames),
+        }
         print("RESULT " + json.dumps(result), flush=True)
 
 

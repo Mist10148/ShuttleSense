@@ -14,7 +14,12 @@ import '../../data/models/clip_record.dart';
 import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
+import '../../core/responsive/breakpoints.dart';
+import '../../shared/widgets/data_display.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
+import '../history/history_screen.dart' show formatJobDate;
 import 'downloads.dart';
 import 'widgets/court_minimap.dart';
 import 'widgets/line_call_banner.dart';
@@ -58,59 +63,173 @@ class ResultsScreen extends ConsumerWidget {
     final api = ref.watch(apiClientProvider);
     final outputs = job.valueOrNull?.outputs;
 
+    final j = job.valueOrNull;
+    final filename = j == null ? null : ref.watch(videoProvider(j.videoId)).valueOrNull?.filename;
+    final below = [?filename, if (j != null) formatJobDate(j.createdAt)].join(' · ');
+    final window = Breakpoints.of(context);
+    final gutter = Breakpoints.gutter(window);
+    // On a phone, or a window too short, the stats would cost the video its height.
+    final showStats = !window.isCompact && MediaQuery.sizeOf(context).height >= _kStatsMinHeight;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Results'),
-        actions: [
-          if (job.valueOrNull case final Job j)
-            IconButton(
-              tooltip: 'Change overlays',
-              icon: const Icon(Icons.layers_outlined),
-              onPressed: () => showRerenderSheet(context, ref, j),
-            ),
-          PopupMenuButton<ExportFile>(
-            tooltip: 'Download or share',
-            icon: const Icon(Icons.download),
-            onSelected: (file) => _download(context, ref, file),
-            itemBuilder: (_) => [
-              for (final file in ExportFile.values)
-                PopupMenuItem(
-                  value: file,
-                  enabled: switch (file) {
-                    ExportFile.video => outputs?.video ?? true,
-                    ExportFile.summary => outputs?.summary ?? true,
-                    ExportFile.hitsCsv => outputs?.hitsCsv ?? true,
-                    ExportFile.ralliesCsv => outputs?.ralliesCsv ?? true,
-                  },
-                  child: Text(file.label),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(gutter, Spacing.lg, gutter, Spacing.lg),
+          child: MaxWidth(
+            maxWidth: 1400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PageHeader(
+                  title: 'Results',
+                  below: below.isEmpty ? null : below,
+                  actions: _actions(context, ref, j, outputs),
                 ),
-            ],
+                const SizedBox(height: Spacing.lg),
+                Expanded(
+                  // A failed refresh (e.g. after a score correction) keeps the results on screen.
+                  child: record.when(
+                    skipError: true,
+                    loading: () => const _ResultsSkeleton(),
+                    error: (e, _) => MessageView(
+                      icon: Icons.error_outline,
+                      message: 'Could not load results',
+                      detail: '$e',
+                      action: FilledButton(
+                        onPressed: () => ref.invalidate(recordProvider(jobId)),
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                    data: (record) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showStats) ...[
+                          _StatsRow(record: record),
+                          const SizedBox(height: Spacing.lg),
+                        ],
+                        Expanded(
+                          child: _ResultsBody(
+                            jobId: jobId,
+                            record: record,
+                            videoUrl: api.videoUrl(jobId),
+                            headers: api.authHeaders,
+                            videoAvailable: outputs?.video,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-      // A failed refresh (e.g. after a score correction) keeps the results on screen.
-      body: record.when(
-        skipError: true,
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => MessageView(
-          icon: Icons.error_outline,
-          message: 'Could not load results',
-          detail: '$e',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(recordProvider(jobId)),
-            child: const Text('Retry'),
-          ),
-        ),
-        data: (record) => _ResultsBody(
-          jobId: jobId,
-          record: record,
-          videoUrl: api.videoUrl(jobId),
-          headers: api.authHeaders,
-          videoAvailable: outputs?.video,
         ),
       ),
     );
   }
+
+  List<Widget> _actions(BuildContext context, WidgetRef ref, Job? job, JobOutputs? outputs) => [
+    if (job case final Job j)
+      IconButton(
+        tooltip: 'Change overlays',
+        icon: const Icon(Icons.layers_outlined),
+        onPressed: () => showRerenderSheet(context, ref, j),
+      ),
+    PopupMenuButton<ExportFile>(
+      tooltip: 'Download or share',
+      icon: const Icon(Icons.download),
+      onSelected: (file) => _download(context, ref, file),
+      itemBuilder: (_) => [
+        for (final file in ExportFile.values)
+          PopupMenuItem(
+            value: file,
+            enabled: switch (file) {
+              ExportFile.video => outputs?.video ?? true,
+              ExportFile.summary => outputs?.summary ?? true,
+              ExportFile.hitsCsv => outputs?.hitsCsv ?? true,
+              ExportFile.ralliesCsv => outputs?.ralliesCsv ?? true,
+            },
+            child: Text(file.label),
+          ),
+      ],
+    ),
+  ];
+}
+
+/// Below this window height the stats row is left out (a landscape tablet still fits it).
+const _kStatsMinHeight = 640.0;
+
+/// The record's headline numbers; a number the record does not have gets no tile.
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.record});
+
+  final ClipRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = record.summary;
+    final seconds = record.fps > 0 && record.numFrames > 0 ? record.numFrames / record.fps : null;
+    final tiles = [
+      if (summary != null)
+        StatTile(label: 'Strokes', value: '${summary.totalHits}', icon: Icons.sports_tennis),
+      if (record.rallies.isNotEmpty)
+        StatTile(label: 'Rallies', value: '${record.rallies.length}', icon: Icons.repeat),
+      if (summary?.peakSpeedKmh case final peak?)
+        StatTile(label: 'Peak speed', value: '${peak.round()}', unit: 'km/h', icon: Icons.speed),
+      if (seconds != null)
+        StatTile(label: 'Clip length', value: formatClock(seconds), icon: Icons.timer_outlined),
+    ];
+    if (tiles.isEmpty) return const SizedBox.shrink();
+    return Row(
+      children: [
+        for (final (i, tile) in tiles.indexed) ...[
+          if (i > 0) const SizedBox(width: Spacing.lg),
+          Expanded(
+            child: AppCard(padding: const EdgeInsets.all(Spacing.lg), child: tile),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Grey blocks in the shape of the results layout while the record loads.
+class _ResultsSkeleton extends StatelessWidget {
+  const _ResultsSkeleton();
+
+  static const _fill = Skeleton(height: double.infinity, radius: Radii.lg, pulse: false);
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      if (Breakpoints.forWidth(box.maxWidth) == WindowClass.compact) {
+        return const Column(
+          children: [
+            AspectRatio(aspectRatio: 16 / 9, child: _fill),
+            SizedBox(height: Spacing.md),
+            Skeleton(height: 40, radius: Radii.pill, pulse: false),
+            SizedBox(height: Spacing.md),
+            Expanded(child: _fill),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          const Expanded(
+            child: Column(
+              children: [
+                Expanded(flex: 3, child: _fill),
+                SizedBox(height: Spacing.lg),
+                Expanded(flex: 2, child: _fill),
+              ],
+            ),
+          ),
+          const SizedBox(width: Spacing.lg),
+          SizedBox(width: ResultsLayout.sidePanelWidth(box.maxWidth), child: _fill),
+        ],
+      );
+    },
+  );
 }
 
 /// T5.12: pick overlays and re-render the annotated video from cached results.

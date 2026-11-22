@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/config/server_config.dart';
+import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/video_info.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/message_view.dart';
+import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
 import '../upload/upload_controller.dart';
 import '../../core/theme/tokens.dart';
 
@@ -82,56 +85,123 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
   @override
   Widget build(BuildContext context) {
     final video = ref.watch(videoProvider(widget.videoId));
-    final next = _corners.length < 4 ? _corners.length : null;
-    final convex = isConvex(_corners);
-    final theme = Theme.of(context);
+    final window = Breakpoints.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Court calibration'),
-        actions: [
-          IconButton(
-            tooltip: 'Undo',
-            onPressed: _corners.isEmpty ? null : () => setState(_corners.removeLast),
-            icon: const Icon(Icons.undo),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            Breakpoints.gutter(window),
+            Spacing.xl,
+            Breakpoints.gutter(window),
+            Spacing.lg,
           ),
-          TextButton(
-            onPressed: _submitting ? null : () => _start(withCorners: false),
-            child: const Text('Skip'),
+          child: MaxWidth(
+            maxWidth: 1200,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PageHeader(
+                  title: 'Court calibration',
+                  actions: [
+                    IconButton(
+                      tooltip: 'Undo',
+                      onPressed: _corners.isEmpty ? null : () => setState(_corners.removeLast),
+                      icon: const Icon(Icons.undo),
+                    ),
+                    IconButton(
+                      tooltip: 'Reset',
+                      onPressed: _corners.isEmpty ? null : () => setState(_corners.clear),
+                      icon: const Icon(Icons.restart_alt),
+                    ),
+                    // On a phone Skip sits under Start processing, leaving the title room.
+                    if (window == WindowClass.expanded) _skip(),
+                  ],
+                ),
+                const SizedBox(height: Spacing.lg),
+                Expanded(
+                  child: video.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => MessageView(icon: Icons.error_outline, message: e.toString()),
+                    data: (info) => window == WindowClass.expanded ? _wide(info) : _narrow(info),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  int? get _next => _corners.length < 4 ? _corners.length : null;
+
+  /// Laptop: the frame on the left, the corner checklist and the start button beside it.
+  Widget _wide(VideoInfo info) => Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(child: _frameCard(info)),
+      const SizedBox(width: Spacing.lg),
+      SizedBox(
+        width: 320,
+        child: AppCard(
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: CornerDiagram(next: _next, size: const Size(96, 128)),
+                ),
+                const SizedBox(height: Spacing.lg),
+                _instruction(),
+                const SizedBox(height: Spacing.md),
+                for (var i = 0; i < 4; i++)
+                  _CornerStep(index: i, done: i < _corners.length, next: i == _next),
+                const SizedBox(height: Spacing.md),
+                _help(),
+                const Spacer(),
+                ..._footer(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  /// Phone and tablet: instruction, frame, then the start button, in one column.
+  Widget _narrow(VideoInfo info) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          CornerDiagram(next: _next),
+          const SizedBox(width: Spacing.md),
+          Expanded(child: _instruction()),
         ],
       ),
-      body: video.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => MessageView(icon: Icons.error_outline, message: e.toString()),
-        data: (info) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(Spacing.md),
-              child: Row(
-                children: [
-                  CornerDiagram(next: next),
-                  const SizedBox(width: Spacing.md),
-                  Expanded(
-                    child: Text(
-                      next == null
-                          ? (convex
-                                ? 'All 4 corners set. Drag a corner to adjust, then start.'
-                                : 'The corners cross over. Drag them so they go around the '
-                                      'court in order: near left, near right, far right, far left.')
-                          : 'Tap the ${kCornerNames[next]} corner of the singles court '
-                                '(${next + 1} of 4), also for doubles. Pinch or scroll to zoom.',
-                      style: next == null && !convex
-                          ? TextStyle(color: theme.colorScheme.error)
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Text('Skipping calibration disables player detection.'),
-            const Text('For best accuracy, use a fixed camera and keep the whole court visible.'),
-            Expanded(
+      const SizedBox(height: Spacing.md),
+      Expanded(child: _frameCard(info)),
+      const SizedBox(height: Spacing.sm),
+      _help(),
+      ..._footer(),
+      Center(child: _skip()),
+    ],
+  );
+
+  Widget _skip() => TextButton(
+    onPressed: _submitting ? null : () => _start(withCorners: false),
+    child: const Text('Skip'),
+  );
+
+  Widget _frameCard(VideoInfo info) => AppCard(
+    padding: const EdgeInsets.all(Spacing.md),
+    child: Expanded(
+      child: Column(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(Radii.md),
               child: _VideoFrameCanvas(
                 info: info,
                 frame: _frame,
@@ -142,68 +212,119 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                 onMove: (i, c) => setState(() => _corners[i] = c),
               ),
             ),
-            if (info.numFrames > 1)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
-                child: Row(
-                  children: [
-                    const Text('Frame'),
-                    Expanded(
-                      child: Slider(
-                        value: _sliding ?? _frame.toDouble(),
-                        max: (info.numFrames - 1).toDouble(),
-                        divisions: (info.numFrames - 1).clamp(1, 100),
-                        label:
-                            '${((_sliding ?? _frame) / (info.fps == 0 ? 30 : info.fps)).toStringAsFixed(1)} s',
-                        semanticFormatterCallback: (v) => 'Frame ${v.round()}',
-                        onChanged: (v) => setState(() => _sliding = v),
-                        onChangeEnd: (v) => setState(() {
-                          _sliding = null;
-                          _frame = v.round();
-                        }),
-                      ),
-                    ),
-                  ],
+          ),
+          if (info.numFrames > 1)
+            Row(
+              children: [
+                const Text('Frame'),
+                Expanded(
+                  child: Slider(
+                    value: _sliding ?? _frame.toDouble(),
+                    max: (info.numFrames - 1).toDouble(),
+                    divisions: (info.numFrames - 1).clamp(1, 100),
+                    label:
+                        '${((_sliding ?? _frame) / (info.fps == 0 ? 30 : info.fps)).toStringAsFixed(1)} s',
+                    semanticFormatterCallback: (v) => 'Frame ${v.round()}',
+                    onChanged: (v) => setState(() => _sliding = v),
+                    onChangeEnd: (v) => setState(() {
+                      _sliding = null;
+                      _frame = v.round();
+                    }),
+                  ),
                 ),
-              ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(Spacing.sm),
-                child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-              ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.all(Spacing.md),
-                child: FilledButton.icon(
-                  onPressed: convex && !_submitting ? () => _start(withCorners: true) : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start processing'),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _instruction() {
+    final next = _next;
+    final crossed = next == null && !isConvex(_corners);
+    return Text(
+      next == null
+          ? (crossed
+                ? 'The corners cross over. Drag them so they go around the '
+                      'court in order: near left, near right, far right, far left.'
+                : 'All 4 corners set. Drag a corner to adjust, then start.')
+          : 'Tap the ${kCornerNames[next]} corner of the singles court '
+                '(${next + 1} of 4), also for doubles. Pinch or scroll to zoom.',
+      style: crossed ? TextStyle(color: Theme.of(context).colorScheme.error) : null,
+    );
+  }
+
+  Widget _help() => Text(
+    'Skipping calibration disables player detection. For best accuracy, use a fixed camera '
+    'and keep the whole court visible.',
+    style: Theme.of(context).textTheme.bodySmall,
+  );
+
+  List<Widget> _footer() => [
+    if (_error != null)
+      Padding(
+        padding: const EdgeInsets.only(top: Spacing.sm),
+        child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ),
+    const SizedBox(height: Spacing.md),
+    FilledButton.icon(
+      onPressed: isConvex(_corners) && !_submitting ? () => _start(withCorners: true) : null,
+      icon: const Icon(Icons.play_arrow),
+      label: const Text('Start processing'),
+    ),
+  ];
+}
+
+/// One line of the corner checklist: a brand-green check once set, a filled ring for the
+/// corner to tap next.
+class _CornerStep extends StatelessWidget {
+  const _CornerStep({required this.index, required this.done, required this.next});
+
+  final int index;
+  final bool done;
+  final bool next;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+      child: Row(
+        children: [
+          Icon(
+            done
+                ? Icons.check_circle
+                : (next ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+            size: 20,
+            color: done ? p.brand : (next ? p.ink : p.text3),
+          ),
+          const SizedBox(width: Spacing.sm),
+          Text(
+            '${index + 1}. ${kCornerNames[index]}',
+            style: next ? text.titleSmall : text.bodyMedium?.copyWith(color: p.text2),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Small court sketch highlighting the corner to tap next.
+/// Court sketch highlighting the corner to tap next.
 class CornerDiagram extends StatelessWidget {
-  const CornerDiagram({super.key, required this.next});
+  const CornerDiagram({super.key, required this.next, this.size = const Size(44, 60)});
 
   /// Index into [kCornerNames], or null when all corners are set.
   final int? next;
+  final Size size;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
       label: next == null ? 'All corners set' : 'Next corner: ${kCornerNames[next!]}',
-      child: SizedBox(
-        width: 44,
-        height: 60,
+      child: SizedBox.fromSize(
+        size: size,
         child: CustomPaint(
           painter: _DiagramPainter(next: next, line: scheme.outline, accent: scheme.primary),
         ),
@@ -420,14 +541,19 @@ class CornersPainter extends CustomPainter {
       canvas.drawLine(points[i], points[i + 1], line);
     }
     if (points.length == 4) canvas.drawLine(points[3], points[0], line);
+    final ring = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
     for (var i = 0; i < points.length; i++) {
-      canvas.drawCircle(points[i], 7, Paint()..color = OverlayColors.corners);
+      canvas.drawCircle(points[i], 10, Paint()..color = OverlayColors.cornerMarkers[i]);
+      canvas.drawCircle(points[i], 10, ring);
       final label = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
           style: const TextStyle(
             color: OverlayColors.cornerLabel,
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.bold,
           ),
         ),

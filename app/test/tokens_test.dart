@@ -23,6 +23,26 @@ void main() {
     }
   });
 
+  test('palette text and ink combinations meet 4.5:1 in both themes', () {
+    for (final p in [AppPalette.light, AppPalette.dark]) {
+      for (final bg in [p.surface, p.surface2, ...p.pastels]) {
+        for (final fg in [p.ink, p.text2]) {
+          expect(_contrast(fg, bg), greaterThanOrEqualTo(4.5), reason: '$fg on $bg');
+        }
+      }
+      for (final bg in [p.surface, p.surface2]) {
+        expect(_contrast(p.text3, bg), greaterThanOrEqualTo(4.5), reason: 'text3 on $bg');
+      }
+      expect(_contrast(p.onInk, p.ink), greaterThanOrEqualTo(4.5));
+    }
+  });
+
+  test('both themes carry the palette and use the Outfit font', () {
+    expect(AppTheme.light().extension<AppPalette>(), AppPalette.light);
+    expect(AppTheme.dark().extension<AppPalette>(), AppPalette.dark);
+    expect(AppTheme.light().textTheme.bodyMedium?.fontFamily, AppTheme.fontFamily);
+  });
+
   test('both themes carry the status colours', () {
     expect(AppTheme.light().extension<StatusColors>(), StatusColors.light);
     expect(AppTheme.dark().extension<StatusColors>(), StatusColors.dark);
