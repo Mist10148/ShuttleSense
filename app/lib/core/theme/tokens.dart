@@ -193,6 +193,60 @@ abstract final class OverlayColors {
   static const Color shuttle = Colors.yellowAccent;
 }
 
+/// The results screen's accent: lime marks only what is happening now (the current shot,
+/// its mark on the bar, its timeline row). Follows the app's light or dark theme.
+@immutable
+class AnalysisColors extends ThemeExtension<AnalysisColors> {
+  const AnalysisColors({
+    required this.accent,
+    required this.onAccent,
+    required this.accentInk,
+    required this.track,
+  });
+
+  /// Lime fill (the shot block, the current row's tint).
+  final Color accent;
+  final Color onAccent;
+
+  /// The accent as text or a small mark on the page: dark olive on light, lime on dark.
+  final Color accentInk;
+
+  /// Empty part of bars and tracks.
+  final Color track;
+
+  static const light = AnalysisColors(
+    accent: Color(0xFFC6F24E),
+    onAccent: Color(0xFF1E1E1E),
+    accentInk: Color(0xFF4F6B00),
+    track: Color(0xFFE6E6EC),
+  );
+
+  static const dark = AnalysisColors(
+    accent: Color(0xFFC6F24E),
+    onAccent: Color(0xFF151817),
+    accentInk: Color(0xFFC6F24E),
+    track: Color(0xFF30363A),
+  );
+
+  static AnalysisColors of(BuildContext context) =>
+      Theme.of(context).extension<AnalysisColors>() ??
+      (Theme.of(context).brightness == Brightness.dark ? dark : light);
+
+  @override
+  AnalysisColors copyWith() => this;
+
+  @override
+  AnalysisColors lerp(AnalysisColors? other, double t) => other == null || t < 0.5 ? this : other;
+}
+
+/// Big figures on the analysis screens (speed, shot number, score): condensed and tabular.
+const TextStyle kFigureStyle = TextStyle(
+  fontWeight: FontWeight.w600,
+  fontFeatures: [FontFeature.tabularFigures()],
+  height: 0.95,
+  letterSpacing: -0.5,
+);
+
 double _contrast(Color a, Color b) {
   final la = a.computeLuminance(), lb = b.computeLuminance();
   return (la > lb ? la + 0.05 : lb + 0.05) / (la > lb ? lb + 0.05 : la + 0.05);

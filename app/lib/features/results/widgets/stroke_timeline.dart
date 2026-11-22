@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
+import '../../../shared/widgets/shuttle_speed.dart';
 
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
@@ -71,10 +72,11 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
     final strokes = {for (final h in widget.hits) ?h.stroke};
     final hits = _visible;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: Spacing.xs),
+          padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, Spacing.sm),
           child: Row(
             children: [
               for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
@@ -139,6 +141,9 @@ class _HitRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = PlayerColors.of(context);
+    final p = AppPalette.of(context);
+    final a = AnalysisColors.of(context);
+    final text = Theme.of(context).textTheme;
     final stroke = kStrokeLabels[hit.stroke] ?? 'Unclassified';
     final player = playerLabel(hit.who);
     final details = [
@@ -146,45 +151,127 @@ class _HitRow extends StatelessWidget {
       if (hit.speedKmh != null) '~${hit.speedKmh!.round()} km/h (est.)',
       ?hit.tip,
     ].join(' · ');
+    final speed = hit.speedKmh;
+    final speedColor = shuttleSpeedColor(speed);
     return Semantics(
       button: true,
       label: '$player player, $stroke at ${formatClock(hit.timeS)}',
       hint: 'Double tap to jump to this hit. Long press for details.',
       excludeSemantics: true,
-      // The tile's own actions are excluded with its semantics, so give them back here.
+      // The row's own actions are excluded with its semantics, so give them back here.
       onTap: () => onSeek(hit),
       onLongPress: () => showHitDetails(context, hit),
-      child: ListTile(
-        selected: selected,
-        onTap: () => onSeek(hit),
-        onLongPress: () => showHitDetails(context, hit),
-        leading: CircleAvatar(
-          radius: 14,
-          backgroundColor: colors.forPlayer(hit.who),
-          child: Text(
-            // N / F, or N1 / N2 / F1 / F2 for a doubles partner.
-            playerLabel(hit.who).replaceAll(RegExp('[a-z ]'), ''),
-            style: TextStyle(
-              color: onColor(colors.forPlayer(hit.who)),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 3),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => onSeek(hit),
+            onLongPress: () => showHitDetails(context, hit),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: selected ? a.accent.withValues(alpha: 0.14) : null,
+                borderRadius: BorderRadius.circular(10),
+                border: selected ? Border.all(color: a.accentInk.withValues(alpha: 0.5)) : null,
+              ),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final wide = box.maxWidth >= 620;
+                  return Row(
+                    children: [
+                      const SizedBox(width: Spacing.md),
+                      SizedBox(
+                        width: 58,
+                        child: Text(
+                          formatClock(hit.timeS),
+                          style: kFigureStyle.copyWith(
+                            fontSize: 18,
+                            color: selected ? a.accentInk : p.ink,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 52,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colors.forPlayer(hit.who),
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: Text(
+                              textAlign: TextAlign.center,
+                              // N / F, or N1 / N2 / F1 / F2 for a doubles partner.
+                              player.replaceAll(RegExp('[a-z ]'), ''),
+                              style: TextStyle(
+                                color: onColor(colors.forPlayer(hit.who)),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Spacing.md),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hit.uncertain ? '$stroke ?' : stroke,
+                              style: text.titleSmall?.copyWith(
+                                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                              ),
+                            ),
+                            if (details.isNotEmpty)
+                              Text(
+                                details,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.bodySmall?.copyWith(color: p.text2, fontSize: 13),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (wide && speed != null && speedColor != null) ...[
+                        const SizedBox(width: Spacing.md),
+                        ExcludeSemantics(
+                          child: Container(
+                            width: 64,
+                            height: 4,
+                            alignment: Alignment.centerLeft,
+                            decoration: BoxDecoration(
+                              color: a.track,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                            child: FractionallySizedBox(
+                              widthFactor: (speed / 300).clamp(0.04, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: speedColor,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      IconButton(
+                        tooltip: 'Details',
+                        color: p.text3,
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: () => showHitDetails(context, hit),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        title: Text(hit.uncertain ? '$stroke ?' : stroke),
-        subtitle: details.isEmpty
-            ? null
-            : Text(details, maxLines: 2, overflow: TextOverflow.ellipsis),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(formatClock(hit.timeS)),
-            IconButton(
-              tooltip: 'Details',
-              icon: const Icon(Icons.info_outline),
-              onPressed: () => showHitDetails(context, hit),
-            ),
-          ],
         ),
       ),
     );

@@ -117,7 +117,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
                     HitBurstEvent(
                       id: state.hits.last.id,
                       who: state.hits.last.who,
-                      stroke: state.hits.last.stroke,
+                      stroke: state.hits.last.uncertain ? null : state.hits.last.stroke,
                     ),
                   ],
                 ),

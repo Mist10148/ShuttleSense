@@ -35,13 +35,14 @@ const int kHeatRebuildFrames = 30;
 
 /// Run-off drawn around the court lines, in meters. A player or a landing outside the
 /// lines stays inside the picture; anything further out is shown at the edge of this band.
-const double kRunOffM = 1.5;
+const double kRunOffM = 2.0; // the heatmap grid's margin, so no cell is cut off
 
 /// The court's long side is never drawn shorter than this, however little room there is.
 const double kMinCourtLength = 220;
 
-/// Height the card needs besides the court itself: padding, the title row and the gap.
-const double _kCardChrome = 100;
+/// Height the card needs besides the court itself: padding, the title, the row of views
+/// and the legend.
+const double _kCardChrome = 150;
 
 /// Width / height of the picture: the court, the doubles alleys and the run-off band.
 double courtViewAspect({required bool doubles}) =>
@@ -117,8 +118,18 @@ class CourtMinimap extends StatefulWidget {
   State<CourtMinimap> createState() => _CourtMinimapState();
 }
 
+/// What the court card shows besides the players.
+enum CourtView { positions, heatmap, rallyPath, landings }
+
+const _kViewLabels = {
+  CourtView.positions: 'Live',
+  CourtView.heatmap: 'Heatmap',
+  CourtView.rallyPath: 'Path',
+  CourtView.landings: 'Landings',
+};
+
 class _CourtMinimapState extends State<CourtMinimap> {
-  var _heatmap = false;
+  var _view = CourtView.positions;
   HeatGrid? _heat;
   (Object, int, int)? _heatKey;
 
@@ -144,23 +155,42 @@ class _CourtMinimapState extends State<CourtMinimap> {
     final record = widget.record, frameIndex = widget.frameIndex;
     final calibrated = record.courtCorners != null;
     final doubles = widget.doubles ?? record.isDoubles;
-    final heat = calibrated && _heatmap ? _heatGrid() : null;
+    final heat = calibrated && _view == CourtView.heatmap ? _heatGrid() : null;
     return SectionCard(
       title: 'Court',
-      trailing: calibrated
-          ? FilterChip(
-              label: const Text('Heatmap'),
-              tooltip: doubles
-                  ? 'Show time spent by each pair during play'
-                  : 'Show time spent by each player during play',
-              selected: _heatmap,
-              onSelected: (on) => setState(() => _heatmap = on),
-            )
-          : null,
       child: calibrated
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // One line that scrolls sideways on a narrow card, so the card keeps one
+                // height and the court the room it was given.
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    spacing: Spacing.xs,
+                    children: [
+                      for (final MapEntry(key: view, value: label) in _kViewLabels.entries)
+                        ChoiceChip(
+                          label: Text(label),
+                          showCheckmark: false,
+                          visualDensity: VisualDensity.compact,
+                          tooltip: switch (view) {
+                            CourtView.positions => 'Players and the shuttle now',
+                            CourtView.heatmap =>
+                              doubles
+                                  ? 'Show time spent by each pair during play'
+                                  : 'Show time spent by each player during play',
+                            CourtView.rallyPath =>
+                              'Where each stroke of this rally was played, in order',
+                            CourtView.landings => 'Every landing called in or out in the clip',
+                          },
+                          selected: _view == view,
+                          onSelected: (_) => setState(() => _view = view),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: Spacing.md),
                 Semantics(
                   label: [
                     minimapLabel(record, frameIndex, doubles: doubles),
@@ -192,8 +222,13 @@ class _CourtMinimapState extends State<CourtMinimap> {
                                 record,
                                 frameIndex,
                                 lines: scheme.outline,
-                                surface: scheme.surfaceContainerHighest,
-                                runOff: scheme.surfaceContainerLow,
+                                // A grey run-off band around a slightly darker court, so the
+                                // court reads as a shape on the white card.
+                                surface: Color.alphaBlend(
+                                  scheme.outline.withValues(alpha: 0.12),
+                                  scheme.surfaceContainerHighest,
+                                ),
+                                runOff: scheme.surfaceContainerHighest,
                                 players: PlayerColors.of(context),
                                 status: StatusColors.of(context),
                                 heat: heat,
@@ -202,6 +237,8 @@ class _CourtMinimapState extends State<CourtMinimap> {
                                 rallyStart: widget.rallyStart,
                                 doubles: doubles,
                                 onSide: onSide,
+                                rallyPath: _view == CourtView.rallyPath,
+                                allLandings: _view == CourtView.landings,
                               ),
                             ),
                           ),
@@ -210,7 +247,7 @@ class _CourtMinimapState extends State<CourtMinimap> {
                     },
                   ),
                 ),
-                const ShuttleSpeedLegend(),
+                if (heat != null) HeatLegend(heat: heat) else const ShuttleSpeedLegend(),
               ],
             )
           : Text(
@@ -475,6 +512,7 @@ class CourtPainter extends CustomPainter {
     this.heat,
     this.doubles = false,
     this.onSide = false,
+    this.rallyPath = false,
   }) : runOff = runOff ?? surface;
 
   /// Collects the current frame, the trail and the hitters' positions in this rally.
@@ -492,6 +530,8 @@ class CourtPainter extends CustomPainter {
     int? rallyStart,
     bool? doubles,
     bool onSide = false,
+    bool rallyPath = false,
+    bool allLandings = false,
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
@@ -542,7 +582,7 @@ class CourtPainter extends CustomPainter {
     ];
     final landings = [
       for (final c in record.lineCalls)
-        if (c.frame <= frameIndex) (c.landing, c.isIn, c.needsReview),
+        if (allLandings || c.frame <= frameIndex) (c.landing, c.isIn, c.needsReview),
     ];
     return CourtPainter(
       frameIndex: frameIndex,
@@ -559,6 +599,7 @@ class CourtPainter extends CustomPainter {
       heat: heat,
       doubles: isDoubles,
       onSide: onSide,
+      rallyPath: rallyPath,
     );
   }
 
@@ -589,6 +630,9 @@ class CourtPainter extends CustomPainter {
 
   /// The court lies on its side: near end on the left, far end on the right.
   final bool onSide;
+
+  /// The rally's strokes joined in order and numbered (the Rally path view).
+  final bool rallyPath;
 
   @override
   void paint(Canvas canvas, Size box) {
@@ -638,7 +682,7 @@ class CourtPainter extends CustomPainter {
           final o = HeatGrid.cellOrigin(i);
           canvas.drawRect(
             toCanvas((x: o.x, y: o.y + kHeatCellM)) & Size(kHeatCellM * sx, kHeatCellM * sy),
-            Paint()..color = color.withValues(alpha: 0.08 + 0.55 * shade[i]),
+            Paint()..color = color.withValues(alpha: heatAlpha(shade[i])),
           );
         }
       }
@@ -690,7 +734,39 @@ class CourtPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
     }
-    for (final (who, p) in hitMarks) {
+    if (rallyPath && hitMarks.isNotEmpty) {
+      final points = [for (final (_, p) in hitMarks) mark(p)];
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final o in points.skip(1)) {
+        path.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = lines
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+      for (final (i, (who, _)) in hitMarks.indexed) {
+        final o = points[i];
+        final c = players.forPlayer(who);
+        canvas.drawCircle(o, 10, Paint()..color = c);
+        // On a court lying on its side the number is turned back, so it reads upright.
+        canvas.save();
+        canvas.translate(o.dx, o.dy);
+        if (onSide) canvas.rotate(-math.pi / 2);
+        final label = TextPainter(
+          text: TextSpan(
+            text: '${i + 1}',
+            style: TextStyle(color: onColor(c), fontSize: 11, fontWeight: FontWeight.w700),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
+        canvas.restore();
+      }
+    }
+    for (final (who, p) in rallyPath ? const <(String, CourtPoint)>[] : hitMarks) {
       final c = players.forPlayer(who);
       final cross = Paint()
         ..color = c
@@ -762,7 +838,62 @@ class CourtPainter extends CustomPainter {
       old.heat != heat ||
       old.doubles != doubles ||
       old.onSide != onSide ||
+      old.rallyPath != rallyPath ||
       !listEquals(old.trail, trail) ||
       !listEquals(old.hitMarks, hitMarks) ||
       !listEquals(old.landings, landings);
+}
+
+/// How opaque a heat cell is for its shade (0..1): a faint floor so a brief visit still
+/// shows, rising quickly through the middle so busy areas read at a glance.
+double heatAlpha(double shade) => 0.10 + 0.78 * math.pow(shade.clamp(0.0, 1.0), 0.8);
+
+/// The heatmap's key: each side's colour from little to most time, and what "most" is.
+class HeatLegend extends StatelessWidget {
+  const HeatLegend({super.key, required this.heat});
+
+  final HeatGrid heat;
+
+  @override
+  Widget build(BuildContext context) {
+    final players = PlayerColors.of(context);
+    final text = Theme.of(context).textTheme.bodySmall;
+    final top = math.max(heat.nearMax, heat.farMax);
+    Widget key(Color c, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 44,
+          height: 8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(2),
+            gradient: LinearGradient(
+              colors: [
+                c.withValues(alpha: heatAlpha(0)),
+                c.withValues(alpha: heatAlpha(1)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: Spacing.xs),
+        Text(label, style: text),
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: Spacing.sm),
+      child: Wrap(
+        spacing: Spacing.md,
+        runSpacing: Spacing.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          key(players.near, heat.doubles ? 'Near pair' : 'Near'),
+          key(players.far, heat.doubles ? 'Far pair' : 'Far'),
+          Text(
+            'Time in play per 25 cm square, up to ${top.toStringAsFixed(top < 1 ? 2 : 1)} s',
+            style: text,
+          ),
+        ],
+      ),
+    );
+  }
 }

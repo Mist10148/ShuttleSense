@@ -209,15 +209,15 @@ void main() {
     // Room to spare: upright and as wide as the card.
     final (wide, wideOnSide) = courtViewLayout(300, 2000, doubles: false);
     expect(wideOnSide, isFalse);
-    expect(wide.width, 300);
+    expect(wide.width, closeTo(300, 1e-9));
     expect(wide.height, closeTo(300 / aspect, 0.01));
     // A side panel shorter than the court: it shrinks to fit, same shape, still upright.
     final (short, shortOnSide) = courtViewLayout(368, 560, doubles: false);
     expect(shortOnSide, isFalse);
-    expect(short.height, 460);
+    expect(short.height, 410); // 560 less the card's title, views and legend
     expect(short.width / short.height, closeTo(aspect, 1e-9));
     // The tab under a phone's video is short and wide: the court lies on its side there.
-    final (flat, flatOnSide) = courtViewLayout(304, 240, doubles: false);
+    final (flat, flatOnSide) = courtViewLayout(304, 290, doubles: false);
     expect(flatOnSide, isTrue);
     expect(flat.height, 140);
     expect(flat.height / flat.width, closeTo(aspect, 1e-9));
@@ -248,10 +248,9 @@ void main() {
           ),
         ),
       );
-      if (find.text('Minimap').evaluate().isNotEmpty) {
-        await tester.tap(find.text('Minimap'));
-        await tester.pumpAndSettle();
-      }
+      // A phone scrolls the page down to the court; a laptop has it beside the video.
+      await tester.ensureVisible(find.text('Heatmap'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Heatmap'));
       await tester.pump();
       final court = find.descendant(
@@ -260,7 +259,10 @@ void main() {
       );
       final box = tester.getRect(court.last);
       final scroll = tester.getRect(
-        find.ancestor(of: find.byType(CourtMinimap), matching: find.byType(SingleChildScrollView)),
+        // The Court section's own scroll (a laptop's page scrolls around it too).
+        find
+            .ancestor(of: find.byType(CourtMinimap), matching: find.byType(SingleChildScrollView))
+            .first,
       );
       expect(box.top, greaterThanOrEqualTo(scroll.top));
       expect(box.bottom, lessThanOrEqualTo(scroll.bottom));

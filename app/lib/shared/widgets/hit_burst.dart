@@ -11,16 +11,25 @@ const Duration kHitBurstDuration = Duration(milliseconds: 420);
 /// A hit whose moment passed longer ago than this (seconds) is not announced late.
 const double kHitBurstWindowS = 0.8;
 
-/// The word a hit pops up with: the stroke when the model named it, else a plain hit.
+/// The word a hit pops up with: the stroke's own badminton name when the model named it
+/// (the same names as the timeline), else a plain HIT. Callers pass no stroke for a
+/// low-confidence one, so the animation never names a stroke the model is unsure of.
 String hitBurstWord(String? stroke) => switch (stroke) {
-  'smash' => 'SMASH!',
-  'clear' => 'POW!',
-  'drop' => 'DROP!',
-  'net_shot' => 'TAP!',
-  'lift' => 'WHOOSH!',
-  'serve' => 'SERVE!',
-  _ => 'HIT!',
+  'smash' => 'SMASH',
+  'clear' => 'CLEAR',
+  'drop' => 'DROP',
+  'net_shot' => 'NET SHOT',
+  'lift' => 'LIFT',
+  'serve' => 'SERVE',
+  _ => 'HIT',
 };
+
+/// Below this confidence a stroke's name is a guess, so a burst just says HIT
+/// (the timeline marks the same strokes with "?").
+const double kHitBurstMinConfidence = 0.5;
+
+String? _sureStroke(String? stroke, num? confidence) =>
+    confidence != null && confidence < kHitBurstMinConfidence ? null : stroke;
 
 /// One hit to announce over a video.
 @immutable
@@ -69,7 +78,7 @@ class HitBurstEvent {
     return HitBurstEvent(
       id: id,
       who: who,
-      stroke: hit['stroke'] as String?,
+      stroke: _sureStroke(hit['stroke'] as String?, hit['confidence'] as num?),
       at: at,
       timeS: (hit['time_s'] as num?)?.toDouble(),
     );

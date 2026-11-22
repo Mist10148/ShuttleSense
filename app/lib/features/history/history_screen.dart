@@ -107,7 +107,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     Widget padded(Widget child) => Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter),
       child: MaxWidth(
-        maxWidth: 720,
+        maxWidth: 960,
         child: SizedBox(width: double.infinity, child: child),
       ),
     );
