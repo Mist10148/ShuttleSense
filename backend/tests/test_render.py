@@ -115,6 +115,30 @@ def test_writer_reports_ffmpeg_error_instead_of_broken_pipe(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_writer_reports_encoder_failure_after_first_frame(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    from shuttlesense.render import writer as writer_module
+
+    fail_after_frame = (
+        "import sys; sys.stdin.buffer.read(64 * 48 * 3); "
+        "sys.stderr.write('encoder failed after input'); sys.exit(7)"
+    )
+    monkeypatch.setattr(writer_module, "find_ffmpeg", lambda: sys.executable)
+    monkeypatch.setattr(
+        writer_module, "ffmpeg_command", lambda *a, **k: [sys.executable, "-c", fail_after_frame]
+    )
+    out = tmp_path / "out.mp4"
+    with (
+        pytest.raises(RuntimeError, match="encoder failed after input"),
+        VideoWriter(out, fps=25, size=(64, 48)) as writer,
+    ):
+        writer.write(next(_frames(1)))
+    assert writer.frames == 1
+    assert writer._proc is not None and writer._proc.returncode == 7
+    assert not out.exists()
+
+
 def _record_with_track():
     from shuttlesense.schema import ClipRecord, Frame, Shuttle
 
@@ -194,7 +218,8 @@ def test_layers_respect_overlay_selection() -> None:
     only_boxes = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["boxes"], state)
     assert not only_boxes[60, 100].any() and only_boxes[40, 50].any()
     only_trail = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["trail"], state)
-    assert only_trail[60, 100].any() and not only_trail[40, 50].any()
+    assert only_trail[54, 100].any() and not only_trail[40, 50].any()
+    assert not only_trail[60, 100].any()
     nothing = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["minimap?"], state)
     assert not nothing.any()
 

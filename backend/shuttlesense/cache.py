@@ -54,6 +54,8 @@ def key_config(stage: str, stages_config: dict[str, Any]) -> dict[str, Any]:
     own = strip(stages_config.get(stage, {}))
     if stage == "pose":
         own["_player_selection_version"] = 9
+    if stage == "analytics":
+        own["_court_position_version"] = 2
     extra = {name: strip(stages_config.get(name, {})) for name in EXTRA_BLOCKS.get(stage, ())}
     return {**own, "_blocks": extra} if extra else own
 

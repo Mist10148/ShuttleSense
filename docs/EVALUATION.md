@@ -37,7 +37,7 @@ Most results are to be filled in from the reports in §1. Each benchmark report 
 
 | What | Result | Report |
 | --- | --- | --- |
-| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 91.2% ± 0.6%, LSTM 90.2% ± 0.5%, Random Forest 84.7% ± 0.3%. Target ≥ 70%. (third evaluation on this test split: the LSTM and the forest were retrained on Nov 16, the CNN was not replaced; Nov 15: 91.2%, 89.0%, 84.3%; Nov 14: 89.5%, 88.1%, 82.1%) | [results/strokes.md](results/strokes.md) |
+| Stroke macro accuracy, 6 classes, BST test split (3,136 strokes, 3 seeds) | 1D CNN 91.2% ± 0.6%, LSTM 90.2% ± 0.5%, Random Forest 85.3% ± 0.2%; ensemble with the fitted weights 92.2% (shipped models, before the rally context). Target ≥ 70%. (Fourth evaluation on this test split, Nov 20: the forest was retrained with velocity rows and calibration, and the ensemble weights were fitted; every choice was made by match-grouped cross-validation first, D41, [results/strokes_cv.md](results/strokes_cv.md). Third evaluation: the LSTM and the forest were retrained on Nov 16, the CNN was not replaced; Nov 15: 91.2%, 89.0%, 84.3%; Nov 14: 89.5%, 88.1%, 82.1%) | [results/strokes.md](results/strokes.md) |
 | The same with rally and court context, shipped weights (one seed each) | 1D CNN 91.8% → 93.4%, LSTM 90.7% → 92.3%, Random Forest 85.0% → 89.5%, ensemble of the three 91.6% → 93.8%. Annotated hit frames stand in for the hit detector, so the gain in the app will be smaller | [results/stroke_context.md](results/stroke_context.md) |
 | Ablation: shuttle trajectory features (1D CNN) | pose only 77.5% ± 0.7% against 91.2% ± 0.6% with the shuttle (1D CNN) | [results/strokes.md](results/strokes.md) |
 | Stroke confidence | The networks store a softmax temperature fitted on the validation split (0.53 for the CNN, 0.60 for the LSTM), so `confidence` is calibrated on broadcast data; the predicted class is unchanged. Not measured on phone footage | [results/strokes.md](results/strokes.md) |
@@ -90,10 +90,40 @@ timing during rallies.
 
 - Shuttle tracking after the Nov 16 changes (overlapping windows on uploads, burst and gap clean-up, clean-up of the live and Watch window before hit detection). Each has unit tests on synthetic tracks; none has an accuracy number, because no frame of team footage has a labelled shuttle position (`scripts/label_shuttle.py`, `scripts/eval_tracking.py`).
 - The court map after the Nov 16 changes: the floor point under the ankles, the snapped corners and the shuttle placed between the two hitters. These follow from geometry and are tested on constructed cases, not against surveyed positions.
+- Tracking precision (D43): sub-pixel heatmap peaks, depth-scaled outlier thresholds, flight-by-flight fitting and hit timing, and the least-squares court fit. On synthetic corrupted rallies the track error falls from about 40 px to 7 px (`tests/test_tracking_precision.py`); on real footage there is no number yet. Without labels, `scripts/eval_track_smoothness.py record.json --rectify` compares jitter, visible share and hit count before and after on any processed clip.
+- The heatmap (D44): seconds per 0.25 m cell with a depth-dependent Gaussian, in the app and in `heatmap.json`. Tested for its mass, peak position and kernel width on constructed positions, not against tracked players.
 - What the extra clean-up and the stroke context cost per frame in Watch & Analyze on its target GPU. This pass ran on a CPU without the pose stack.
 
 - Where hit detection fails: shuttle out of frame, occlusion by the player, net shots with little direction change. The stroke models were trained on annotated hit frames; a detected hit a few frames off is covered only by the ±2 to ±4 frame shift used in training.
 - Broadcast vs phone gap: camera height and angle, motion blur, frame rate. A clip at another frame rate is now sampled over the same one-second span the models were trained on, which has a unit test but no accuracy measurement.
+
+### Court placement spot check (Nov 22)
+
+Manually labeled visible shoe contact points and singles court lines on a development clip and
+a separate held-out broadcast clip. Re-ran the existing player tracker with the labeled court
+corners, then compared the old and new floor-position calculations on the same detections and
+homography. The development clip needed correctly ordered corner taps before the comparison.
+Errors below use the same available frames for both methods.
+
+| Clip and side | Labeled frames | Missing before / after | Median before → after (m) | 90th percentile before → after (m) |
+| --- | ---: | ---: | ---: | ---: |
+| Development singles, near | 5 | 0 / 0 | 0.105 → 0.105 | 0.122 → 0.122 |
+| Development singles, far | 5 | 0 / 0 | 0.550 → 0.549 | 0.603 → 0.592 |
+| Held-out singles, near | 9 | 1 / 1 | 0.169 → 0.128 | 0.467 → 0.410 |
+| Held-out singles, far | 8 | 2 / 2 | 0.176 → 0.178 | 0.413 → 0.407 |
+
+The near-side median and 90th percentile both improved on the held-out clip. The far-side
+median was effectively flat at the precision of the hand labels. The sample is too small for
+an overall accuracy claim.
+
+In the local doubles clip, the camera crops the near baseline, so the check compared foot
+points in source pixels using the same pose detections. Near-side median / 90th-percentile
+errors were 10.8 / 18.1 px before and 11.2 / 18.1 px after, with one of six labeled points
+unmatched in both versions. Far-side errors were 5.7 / 13.8 px in both versions, with all
+six points matched. Doubles accuracy in court meters remains unmeasured.
+
+Reanalyze saved uploads to refresh player coordinates. A video re-render refreshes the
+shuttle trail using the existing tracking data.
 
 ## 6. Threats to validity
 

@@ -15,7 +15,8 @@ data:
 
 model:
   trees: 150
-  summary_version: 2            # statistics over frames that hold data (strokes/rf.py)
+  summary_version: 3            # v2 statistics plus velocity rows (strokes/rf.py, D41):
+                                # grouped 5-fold CV macro-F1 0.854 -> 0.864
   max_depth: 18                 # depth and leaf size, chosen on the val split
   min_samples_leaf: 3
   max_features: 0.2             # share of the summary values tried at a split (was sqrt)

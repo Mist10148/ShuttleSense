@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
 /// How long one burst stays on screen.
-const Duration kHitBurstDuration = Duration(milliseconds: 750);
+const Duration kHitBurstDuration = Duration(milliseconds: 420);
 
 /// A hit whose moment passed longer ago than this (seconds) is not announced late.
 const double kHitBurstWindowS = 0.8;
@@ -43,7 +44,12 @@ class HitBurstEvent {
     final who = (hit['hitter'] ?? side).toString();
     Offset? at;
     final players = frame?['display_players'] ?? frame?['players'];
-    if (players is Map && frameWidth != null && frameHeight != null) {
+    final shuttle = frame?['shuttle'];
+    final sameFrame = hit['frame'] != null && hit['frame'] == frame?['frame'];
+    if (sameFrame && shuttle is Map && shuttle['visible'] == 1) {
+      at = hitBurstPicturePoint(shuttle['x'], shuttle['y'], frameWidth, frameHeight);
+    }
+    if (at == null && players is Map && frameWidth != null && frameHeight != null) {
       final slot = switch (who) {
         'near_1' => 'near',
         'far_1' => 'far',
@@ -51,9 +57,13 @@ class HitBurstEvent {
       };
       final player = players[slot] ?? players[side];
       final box = player is Map ? player['bbox'] : null;
-      if (box is List && box.length == 4 && frameWidth > 0 && frameHeight > 0) {
-        final b = [for (final v in box) (v as num).toDouble()];
-        at = Offset((b[0] + b[2] / 2) / frameWidth, b[1] / frameHeight);
+      if (box is List && box.length == 4 && box.every((v) => v is num)) {
+        at = hitBurstPicturePoint(
+          (box[0] as num) + (box[2] as num) / 2,
+          box[1],
+          frameWidth,
+          frameHeight,
+        );
       }
     }
     return HitBurstEvent(
@@ -93,6 +103,95 @@ class HitBurstEvent {
   int get hashCode => Object.hash(id, who, stroke, at, timeS);
 }
 
+Offset? hitBurstPicturePoint(Object? x, Object? y, num? width, num? height) {
+  if (x is! num || y is! num || width == null || height == null || width <= 0 || height <= 0) {
+    return null;
+  }
+  if (!x.isFinite ||
+      !y.isFinite ||
+      !width.isFinite ||
+      !height.isFinite ||
+      x < 0 ||
+      x > width ||
+      y < 0 ||
+      y > height) {
+    return null;
+  }
+  return Offset(x / width, y / height);
+}
+
+/// Supplies the complete live hit sequence through the existing video overlay.
+class HitBurstFeed extends StatefulWidget {
+  const HitBurstFeed({
+    super.key,
+    required this.session,
+    required this.count,
+    required this.keyAt,
+    required this.eventAt,
+    required this.child,
+  });
+
+  final Object? session;
+  final int count;
+  final Object Function(int) keyAt;
+  final HitBurstEvent Function(int) eventAt;
+  final Widget child;
+
+  @override
+  State<HitBurstFeed> createState() => _HitBurstFeedState();
+}
+
+class _HitBurstFeedState extends State<HitBurstFeed> {
+  final Set<Object> _delivered = {};
+  int _scannedCount = 0;
+
+  @override
+  void didUpdateWidget(HitBurstFeed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session || widget.count < _scannedCount) {
+      _delivered.clear();
+      _scannedCount = 0;
+    }
+  }
+
+  List<HitBurstEvent> take() {
+    if (_scannedCount == widget.count) return const [];
+    // The displayed timeline is sorted by frame, so a newly committed hit can be
+    // inserted before already delivered hits.
+    final events = [
+      for (var i = 0; i < widget.count; i++)
+        if (_delivered.add(widget.keyAt(i))) widget.eventAt(i),
+    ];
+    _scannedCount = widget.count;
+    return events;
+  }
+
+  @override
+  Widget build(BuildContext context) => _HitBurstFeedData(
+    session: widget.session,
+    count: widget.count,
+    take: take,
+    child: widget.child,
+  );
+}
+
+class _HitBurstFeedData extends InheritedWidget {
+  const _HitBurstFeedData({
+    required this.session,
+    required this.count,
+    required this.take,
+    required super.child,
+  });
+
+  final Object? session;
+  final int count;
+  final List<HitBurstEvent> Function() take;
+
+  @override
+  bool updateShouldNotify(_HitBurstFeedData oldWidget) =>
+      oldWidget.session != session || oldWidget.count != count;
+}
+
 /// A comic-book burst ("HIT!", "SMASH!", "POW!") that pops over a video when a player
 /// hits the shuttle. Lay it over the picture in a [Stack]; it never takes pointer events
 /// and is left out of the semantics tree (the hit is already announced in text).
@@ -102,7 +201,7 @@ class HitBurstEvent {
 /// skipped. Without it an event plays as soon as it is given. An event that leaves
 /// [events] and comes back (the user seeks back onto a hit) plays again.
 class HitBurstLayer extends StatefulWidget {
-  const HitBurstLayer({super.key, required this.events, this.nowS});
+  const HitBurstLayer({super.key, required this.events, this.nowS, this.session}) : _watch = false;
 
   /// Watch & Analyze: every hit received so far, as the server sent them, keyed by id.
   HitBurstLayer.watch({
@@ -112,7 +211,9 @@ class HitBurstLayer extends StatefulWidget {
     num? frameWidth,
     num? frameHeight,
     this.nowS,
-  }) : events = [
+  }) : session = null,
+       _watch = true,
+       events = [
          for (final hit in hits.values)
            ?HitBurstEvent.fromJson(
              hit,
@@ -124,6 +225,8 @@ class HitBurstLayer extends StatefulWidget {
 
   final List<HitBurstEvent> events;
   final double? nowS;
+  final Object? session;
+  final bool _watch;
 
   @override
   State<HitBurstLayer> createState() => _HitBurstLayerState();
@@ -133,16 +236,17 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: kHitBurstDuration,
-  );
+  )..addStatusListener(_onStatus);
 
-  /// Hits already shown, with their time: a new session reuses ids from 0, and the same
-  /// id at another time is another hit.
-  final Map<Object, double?> _played = {};
+  final Set<(Object, double?)> _seen = {};
+  final Queue<HitBurstEvent> _pending = Queue();
   HitBurstEvent? _current;
+  Object? _session;
+  double? _lastClock;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _sync();
   }
 
@@ -153,22 +257,45 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
   }
 
   void _sync() {
-    final ids = {for (final e in widget.events) e.id};
-    _played.removeWhere((id, _) => !ids.contains(id));
-    HitBurstEvent? next;
-    for (final e in widget.events) {
-      if (_played.containsKey(e.id) && _played[e.id] == e.timeS) continue;
-      final now = widget.nowS, t = e.timeS;
-      if (now != null && t != null && now < t) continue; // the video has not reached it yet
-      _played[e.id] = t;
-      // Too late to be the moment of the hit: not shown.
-      if (now != null && t != null && now - t > kHitBurstWindowS) continue;
-      next = e; // several at once: the newest one is shown
+    final feed = context.dependOnInheritedWidgetOfExactType<_HitBurstFeedData>();
+    final session = feed?.session ?? widget.session;
+    final now = widget.nowS;
+    final elapsed = now == null || _lastClock == null ? null : now - _lastClock!;
+    final seeked = elapsed != null && (elapsed < -0.02 || elapsed > kHitBurstWindowS);
+    final allowLateWatchHit = widget._watch && elapsed != null && !seeked;
+    if (session != _session || seeked) {
+      _seen.clear();
+      _pending.clear();
+      _current = null;
+      _controller.stop();
     }
-    if (next != null) {
-      _current = next;
-      _controller.forward(from: 0);
+    _session = session;
+    _lastClock = now;
+
+    Iterable<HitBurstEvent> events = widget.events;
+    if (feed != null) {
+      events = feed.take();
+    } else {
+      final keys = {for (final event in events) (event.id, event.timeS)};
+      _seen.retainAll(keys);
     }
+    for (final event in events) {
+      final t = event.timeS;
+      if (now != null && t != null && now < t) continue;
+      if (!_seen.add((event.id, t))) continue;
+      if (now != null && t != null && now - t > kHitBurstWindowS && !allowLateWatchHit) continue;
+      _pending.add(event);
+    }
+    if (!_controller.isAnimating) _showNext();
+  }
+
+  void _onStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) _showNext();
+  }
+
+  void _showNext() {
+    _current = _pending.isEmpty ? null : _pending.removeFirst();
+    if (_current != null) _controller.forward(from: 0);
   }
 
   @override
@@ -181,6 +308,7 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
   Widget build(BuildContext context) {
     final colors = PlayerColors.of(context);
     final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final fontFamily = Theme.of(context).textTheme.labelLarge?.fontFamily;
     return IgnorePointer(
       child: ExcludeSemantics(
         child: AnimatedBuilder(
@@ -192,7 +320,13 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
               size: Size.infinite,
               painter: HitBurstPainter(
                 word: hitBurstWord(event.stroke),
-                at: event.at ?? Offset(0.5, event.who.startsWith('near') ? 0.62 : 0.3),
+                at:
+                    event.at ??
+                    (event.who.startsWith('near')
+                        ? const Offset(0.15, 0.72)
+                        : const Offset(0.85, 0.28)),
+                offsetFromAnchor: event.at != null,
+                fontFamily: fontFamily,
                 accent: colors.forPlayer(event.who),
                 progress: _controller.value,
                 still: still,
@@ -214,12 +348,16 @@ class HitBurstPainter extends CustomPainter {
     required this.accent,
     required this.progress,
     this.still = false,
+    this.offsetFromAnchor = true,
+    this.fontFamily,
   });
 
   final String word;
   final Offset at;
   final Color accent;
   final double progress;
+  final bool offsetFromAnchor;
+  final String? fontFamily;
 
   /// Reduced motion: no pop or wobble, only the fade.
   final bool still;
@@ -245,19 +383,27 @@ class HitBurstPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final radius = (size.shortestSide * 0.17).clamp(34.0, 96.0);
-    // The whole burst stays inside the picture, however close to an edge the hit was.
-    final reach = radius * 1.36;
-    final centre = Offset(
-      (at.dx * size.width).clamp(
-        math.min(reach, size.width / 2),
-        math.max(size.width - reach, size.width / 2),
-      ),
-      (at.dy * size.height).clamp(
-        math.min(reach, size.height / 2),
-        math.max(size.height - reach, size.height / 2),
-      ),
-    );
+    final radius = math.min(size.shortestSide / 4, (size.shortestSide * 0.085).clamp(18.0, 48.0));
+    // Include the shadow, outer spikes and peak animation scale.
+    final reach = radius * 1.7;
+    final room = (Offset.zero & size).deflate(reach);
+    final anchor = Offset(at.dx * size.width, at.dy * size.height);
+    final shift = reach + 8;
+    final candidates = at.dx < 0.5
+        ? [Offset(shift, 0), Offset(0, -shift), Offset(0, shift), Offset(-shift, 0)]
+        : [Offset(-shift, 0), Offset(0, -shift), Offset(0, shift), Offset(shift, 0)];
+    final centre = candidates
+        .map((offset) => anchor + (offsetFromAnchor ? offset : Offset.zero))
+        .firstWhere(
+          room.contains,
+          orElse: () => Offset(
+            (anchor.dx + (offsetFromAnchor ? candidates.first.dx : 0.0)).clamp(
+              room.left,
+              room.right,
+            ),
+            anchor.dy.clamp(room.top, room.bottom),
+          ),
+        );
     // Pop out past full size and settle (first third), hold, fade (last third).
     final pop = still ? 1.0 : Curves.elasticOut.transform((progress / 0.45).clamp(0.0, 1.0));
     final scale = still ? 1.0 : 0.35 + 0.65 * pop;
@@ -293,6 +439,7 @@ class HitBurstPainter extends CustomPainter {
         text: word,
         style: TextStyle(
           fontSize: fontSize,
+          fontFamily: fontFamily,
           fontWeight: FontWeight.w900,
           fontStyle: FontStyle.italic,
           letterSpacing: fontSize * 0.02,
@@ -302,9 +449,9 @@ class HitBurstPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    var fontSize = radius * 0.62;
+    var fontSize = math.max(10.0, radius * 0.62);
     final width = text(Paint(), fontSize).width;
-    final span = radius * 1.75;
+    final span = radius * 2.15;
     if (width > span) fontSize *= span / width;
     final outline = text(
       Paint()
@@ -327,5 +474,7 @@ class HitBurstPainter extends CustomPainter {
       old.word != word ||
       old.at != at ||
       old.accent != accent ||
-      old.still != still;
+      old.still != still ||
+      old.fontFamily != fontFamily ||
+      old.offsetFromAnchor != offsetFromAnchor;
 }

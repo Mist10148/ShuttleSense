@@ -281,6 +281,8 @@ class FrameInfo {
     this.nearPos,
     this.farPos,
     this.shuttlePos,
+    this.shuttlePixel,
+    this.playerVideoAnchors = const {},
     this.shuttleSpeedKmh,
     this.rallyState,
     this.near2Pos,
@@ -298,6 +300,30 @@ class FrameInfo {
   final CourtPoint? near2Pos;
   final CourtPoint? far2Pos;
   final CourtPoint? shuttlePos;
+  final ({double x, double y})? shuttlePixel;
+  final Map<String, ({double x, double y})> playerVideoAnchors;
+
+  static Map<String, ({double x, double y})> readPlayerVideoAnchors(Object? value) {
+    if (value is! Map) return const {};
+    final result = <String, ({double x, double y})>{};
+    for (final slot in ['near', 'far', 'near_2', 'far_2']) {
+      final player = value[slot];
+      final box = player is Map ? player['bbox'] : null;
+      if (box is! List || box.length != 4) continue;
+      final x = asDouble(box[0]), y = asDouble(box[1]), width = asDouble(box[2]);
+      if (x == null || y == null || width == null || width <= 0) continue;
+      result[slot] = (x: x + width / 2, y: y);
+    }
+    return result;
+  }
+
+  static ({double x, double y})? visibleShuttlePixel(Object? value) {
+    if (value is! Map || value['visible'] != 1) return null;
+    final x = asDouble(value['x']), y = asDouble(value['y']);
+    if (x == null || y == null || !x.isFinite || !y.isFinite) return null;
+    return (x: x, y: y);
+  }
+
   final double? shuttleSpeedKmh;
 
   /// in_play or between_rallies.
@@ -322,6 +348,8 @@ class FrameInfo {
       near2Pos: asPoint(pos?['near_2']),
       far2Pos: asPoint(pos?['far_2']),
       shuttlePos: asPoint(pos?['shuttle']),
+      shuttlePixel: visibleShuttlePixel(j['shuttle']),
+      playerVideoAnchors: readPlayerVideoAnchors(j['players']),
       shuttleSpeedKmh: asDouble(j['shuttle_speed_kmh']),
       rallyState: j['rally_state'] as String?,
     );

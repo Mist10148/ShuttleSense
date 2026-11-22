@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../shared/widgets/shuttle_speed.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
 const double kCourtWidthM = 5.18;
@@ -21,7 +22,13 @@ const double kDoublesLongServiceM = 0.76;
 const int kTrailLength = 15;
 
 /// Side of a heatmap cell in meters.
-const double kHeatCellM = 0.5;
+const double kHeatCellM = 0.25;
+
+/// Heatmap kernel width in meters at the near and the far baseline (D44, same as
+/// backend/shuttlesense/analytics/heatmap.py): wider far from the camera, where a pixel
+/// covers more court and the foot point is less certain.
+const double kHeatSigmaNearM = 0.30;
+const double kHeatSigmaFarM = 0.45;
 
 /// Frames between heatmap rebuilds while a live session grows.
 const int kHeatRebuildFrames = 30;
@@ -113,14 +120,18 @@ class CourtMinimap extends StatefulWidget {
 class _CourtMinimapState extends State<CourtMinimap> {
   var _heatmap = false;
   HeatGrid? _heat;
-  (String, int)? _heatKey;
+  (Object, int, int)? _heatKey;
 
   /// Built once per clip, and during a live session again every [kHeatRebuildFrames]
   /// frames (the live record is a new object on every event, and positions never change
   /// after the fact, so rebuilding on each one would cost a pass over every frame).
   HeatGrid _heatGrid() {
     final record = widget.record;
-    final key = (record.clipId, record.frames.length ~/ kHeatRebuildFrames);
+    final key = (
+      widget.live ? record.clipId : record,
+      record.frames.length ~/ kHeatRebuildFrames,
+      record.rallies.length,
+    );
     if (_heat == null || key != _heatKey) {
       _heat = HeatGrid.fromRecord(record);
       _heatKey = key;
@@ -139,59 +150,68 @@ class _CourtMinimapState extends State<CourtMinimap> {
       trailing: calibrated
           ? FilterChip(
               label: const Text('Heatmap'),
-              tooltip: 'Shade where each player stood over the whole clip',
+              tooltip: doubles
+                  ? 'Show time spent by each pair during play'
+                  : 'Show time spent by each player during play',
               selected: _heatmap,
               onSelected: (on) => setState(() => _heatmap = on),
             )
           : null,
       child: calibrated
-          ? Semantics(
-              label: [
-                minimapLabel(record, frameIndex),
-                if (widget.reviewCall case final call?)
-                  'Highlighted landing for rally ${call.rallyIndex + 1}.',
-                ?heat?.describe(),
-              ].join(' '),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // The whole court has to be on screen at once: the layout says how tall
-                  // the card may be, else most of the window is assumed.
-                  final room =
-                      CourtMaxHeight.maybeOf(context) ?? MediaQuery.sizeOf(context).height * 0.7;
-                  final (size, onSide) = courtViewLayout(
-                    constraints.maxWidth,
-                    room,
-                    doubles: doubles,
-                  );
-                  final scheme = Theme.of(context).colorScheme;
-                  return Center(
-                    child: SizedBox.fromSize(
-                      size: size,
-                      // Nothing is painted outside the picture (heat cells and marks used
-                      // to spill over the card and the panels around it).
-                      child: ClipRect(
-                        child: CustomPaint(
-                          painter: CourtPainter.fromRecord(
-                            record,
-                            frameIndex,
-                            lines: scheme.outline,
-                            surface: scheme.surfaceContainerHighest,
-                            runOff: scheme.surfaceContainerLow,
-                            players: PlayerColors.of(context),
-                            status: StatusColors.of(context),
-                            heat: heat,
-                            reviewLanding: widget.reviewCall?.landing,
-                            live: widget.live,
-                            rallyStart: widget.rallyStart,
-                            doubles: doubles,
-                            onSide: onSide,
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  label: [
+                    minimapLabel(record, frameIndex, doubles: doubles),
+                    if (widget.reviewCall case final call?)
+                      'Highlighted landing for rally ${call.rallyIndex + 1}.',
+                    ?heat?.describe(),
+                  ].join(' '),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // The whole court has to be on screen at once: the layout says how tall
+                      // the card may be, else most of the window is assumed.
+                      final room =
+                          CourtMaxHeight.maybeOf(context) ??
+                          MediaQuery.sizeOf(context).height * 0.7;
+                      final (size, onSide) = courtViewLayout(
+                        constraints.maxWidth,
+                        room,
+                        doubles: doubles,
+                      );
+                      final scheme = Theme.of(context).colorScheme;
+                      return Center(
+                        child: SizedBox.fromSize(
+                          size: size,
+                          // Nothing is painted outside the picture (heat cells and marks used
+                          // to spill over the card and the panels around it).
+                          child: ClipRect(
+                            child: CustomPaint(
+                              painter: CourtPainter.fromRecord(
+                                record,
+                                frameIndex,
+                                lines: scheme.outline,
+                                surface: scheme.surfaceContainerHighest,
+                                runOff: scheme.surfaceContainerLow,
+                                players: PlayerColors.of(context),
+                                status: StatusColors.of(context),
+                                heat: heat,
+                                reviewLanding: widget.reviewCall?.landing,
+                                live: widget.live,
+                                rallyStart: widget.rallyStart,
+                                doubles: doubles,
+                                onSide: onSide,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+                const ShuttleSpeedLegend(),
+              ],
             )
           : Text(
               record.mode == 'live'
@@ -206,19 +226,25 @@ class _CourtMinimapState extends State<CourtMinimap> {
 /// What the minimap shows at [frameIndex], for screen readers (T4.11): each player's and the
 /// shuttle's position in court meters (x across from the left sideline, y from the near
 /// baseline).
-String minimapLabel(ClipRecord record, int frameIndex) {
+String minimapLabel(ClipRecord record, int frameIndex, {bool? doubles}) {
   final f = record.frame(frameIndex);
   if (f == null) return 'Top-down court, no positions for this moment';
   String at(String who, CourtPoint? p) => p == null
       ? '$who not seen'
       : '$who at ${p.x.toStringAsFixed(1)} m across, ${p.y.toStringAsFixed(1)} m up the court';
-  if (record.isDoubles) {
+  final isDoubles = doubles ?? record.isDoubles;
+  final shuttle = shuttleOverCourt(record, frameIndex, doubles: isDoubles);
+  final location = at('Shuttle', shuttle?.$1);
+  final description = shuttle == null
+      ? location
+      : '$location (${shuttle.$2 ? 'rally estimate' : 'camera projection'})';
+  if (isDoubles) {
     return 'Top-down doubles court. ${at('Near player 1', f.nearPos)}. '
         '${at('Near player 2', f.near2Pos)}. ${at('Far player 1', f.farPos)}. '
-        '${at('Far player 2', f.far2Pos)}. ${at('Shuttle', f.shuttlePos)}.';
+        '${at('Far player 2', f.far2Pos)}. $description.';
   }
   return 'Top-down court. ${at('Near player', f.nearPos)}. ${at('Far player', f.farPos)}. '
-      '${at('Shuttle', f.shuttlePos)}.';
+      '$description.';
 }
 
 /// Where the shuttle is over the court at [frameIndex], and whether that is worked out
@@ -276,13 +302,18 @@ String minimapLabel(ClipRecord record, int frameIndex) {
     }
   }
   if (to == null || toFrame == null || toFrame <= before.frame) return fallback();
-  if (frameIndex > toFrame) return (to, true);
+  if (frameIndex > toFrame) return fallback();
   final t = (frameIndex - before.frame) / (toFrame - before.frame);
   return ((x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t), true);
 }
 
-/// How often each player stood in each [kHeatCellM] cell of the court (and up to 2 m
-/// beyond the lines, as far as the backend keeps a position), over the rallies of the clip.
+/// How long each side stood in each [kHeatCellM] cell of the court (and up to 2 m beyond
+/// the lines, as far as the backend keeps a position), over the rallies of the clip.
+///
+/// Same method as the backend's heatmap.json (D44): each frame in play adds 1 / fps
+/// seconds at a player's position, spread by a Gaussian in meters that widens away from
+/// the camera. Positions pinned to the 2 m clamp edge are left out: the player was
+/// somewhere beyond it, not there.
 class HeatGrid {
   HeatGrid._(
     this.near,
@@ -295,16 +326,55 @@ class HeatGrid {
   });
 
   static const double margin = 2.0;
-  static final int cols = ((kCourtWidthM + 2 * margin + 2 * kDoublesAlleyM) / kHeatCellM).ceil();
+  static final int cols = ((kCourtWidthM + 2 * margin) / kHeatCellM).ceil();
   static final int rows = ((kCourtLengthM + 2 * margin) / kHeatCellM).ceil();
 
+  /// Kernel width in meters at court depth [y].
+  static double sigmaAt(double y) =>
+      kHeatSigmaNearM + (kHeatSigmaFarM - kHeatSigmaNearM) * (y / kCourtLengthM).clamp(0.0, 1.0);
+
+  /// Whether [p] sits on the edge the backend clamps positions to (2 m around the court).
+  static bool atClampEdge(CourtPoint p) {
+    const tol = 1e-3;
+    return p.x <= -margin + tol ||
+        p.x >= kCourtWidthM + margin - tol ||
+        p.y <= -margin + tol ||
+        p.y >= kCourtLengthM + margin - tol;
+  }
+
   factory HeatGrid.fromRecord(ClipRecord record) {
-    final near = List.filled(cols * rows, 0), far = List.filled(cols * rows, 0);
-    void add(List<int> grid, CourtPoint? p) {
-      if (p == null) return;
-      final c = ((p.x + margin + kDoublesAlleyM) / kHeatCellM).floor();
-      final r = ((p.y + margin) / kHeatCellM).floor();
-      if (c >= 0 && c < cols && r >= 0 && r < rows) grid[r * cols + c]++;
+    final near = List.filled(cols * rows, 0.0), far = List.filled(cols * rows, 0.0);
+    final seconds = 1 / (record.fps > 0 ? record.fps : 30.0);
+    // Cell centres in court meters.
+    double cx(int c) => (c + 0.5) * kHeatCellM - margin;
+    double cy(int r) => (r + 0.5) * kHeatCellM - margin;
+    void add(List<double> grid, CourtPoint? p) {
+      if (p == null || atClampEdge(p)) return;
+      final sigma = sigmaAt(p.y);
+      final reach = (3 * sigma / kHeatCellM).ceil();
+      final c0 = ((p.x + margin) / kHeatCellM).floor();
+      final r0 = ((p.y + margin) / kHeatCellM).floor();
+      final wx = <int, double>{}, wy = <int, double>{};
+      for (var c = c0 - reach; c <= c0 + reach; c++) {
+        if (c < 0 || c >= cols) continue;
+        final d = (cx(c) - p.x) / sigma;
+        wx[c] = math.exp(-0.5 * d * d);
+      }
+      for (var r = r0 - reach; r <= r0 + reach; r++) {
+        if (r < 0 || r >= rows) continue;
+        final d = (cy(r) - p.y) / sigma;
+        wy[r] = math.exp(-0.5 * d * d);
+      }
+      final total =
+          wx.values.fold<double>(0, (a, b) => a + b) * wy.values.fold<double>(0, (a, b) => a + b);
+      if (total <= 0) return;
+      // Normalised over the cells it reaches, so every frame adds exactly its time.
+      final k = seconds / total;
+      for (final MapEntry(key: r, value: vy) in wy.entries) {
+        for (final MapEntry(key: c, value: vx) in wx.entries) {
+          grid[r * cols + c] += k * vx * vy;
+        }
+      }
     }
 
     // Only frames in play count: between rallies a player waits or fetches the shuttle,
@@ -326,7 +396,7 @@ class HeatGrid {
       add(far, f.farPos);
       add(far, f.far2Pos);
     }
-    int max(List<int> g) => g.fold(0, (a, b) => a > b ? a : b);
+    double max(List<double> g) => g.fold(0.0, (a, b) => a > b ? a : b);
     return HeatGrid._(
       near,
       far,
@@ -338,9 +408,9 @@ class HeatGrid {
     );
   }
 
-  /// Frame counts per cell, row-major from the near-left corner (court y grows away).
-  final List<int> near, far;
-  final int nearMax, farMax;
+  /// Seconds per cell, row-major from the near-left corner (court y grows away).
+  final List<double> near, far;
+  final double nearMax, farMax;
 
   /// How strongly each cell is shaded, 0 to 1 (see [shade]).
   final List<double> nearShade, farShade;
@@ -348,51 +418,35 @@ class HeatGrid {
   /// Doubles: each grid covers both partners of a side.
   final bool doubles;
 
-  /// Counts spread over the neighbouring cells and scaled to 0..1.
+  /// Seconds per cell scaled to 0..1.
   ///
-  /// A position is good to a few tens of centimetres, less than a cell, so a count is
-  /// shared with the cells around it (weights 4 for the cell, 2 for its sides, 1 for its
-  /// corners): a player standing on a cell border no longer makes a checkerboard. The scale
-  /// tops out at the 95th percentile of the shaded cells, so the single busiest cell does
-  /// not leave the rest of the court too faint to read.
-  static List<double> shade(List<int> counts) {
-    final out = List.filled(cols * rows, 0.0);
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        final n = counts[r * cols + c];
-        if (n == 0) continue;
-        for (var dr = -1; dr <= 1; dr++) {
-          for (var dc = -1; dc <= 1; dc++) {
-            final rr = r + dr, cc = c + dc;
-            if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
-            out[rr * cols + cc] += n * (dr == 0 ? 2 : 1) * (dc == 0 ? 2 : 1) / 16;
-          }
-        }
-      }
-    }
+  /// The scale tops out at the 95th percentile of the cells holding a noticeable share
+  /// (over 1% of the busiest), so the single busiest cell does not leave the rest of the
+  /// court too faint to read, and never below 60% of the busiest cell, so a clip with few
+  /// cells keeps its gradient.
+  static List<double> shade(List<double> seconds) {
+    final out = List.filled(seconds.length, 0.0);
+    final peak = seconds.fold(0.0, (a, b) => a > b ? a : b);
+    if (peak <= 0) return out;
     final seen = [
-      for (final v in out)
-        if (v > 0) v,
+      for (final v in seconds)
+        if (v > peak * 0.01) v,
     ]..sort();
-    if (seen.isEmpty) return out;
-    // Never below 60% of the busiest cell, so a clip with few cells keeps its gradient.
-    final top = math.max(seen[((seen.length - 1) * 0.95).round()], seen.last * 0.6);
+    final top = math.max(seen[((seen.length - 1) * 0.95).round()], peak * 0.6);
     for (var i = 0; i < out.length; i++) {
-      out[i] = (out[i] / top).clamp(0.0, 1.0);
+      out[i] = (seconds[i] / top).clamp(0.0, 1.0);
     }
     return out;
   }
 
   /// Near-left corner of a cell in court meters.
-  static CourtPoint cellOrigin(int index) => (
-    x: (index % cols) * kHeatCellM - margin - kDoublesAlleyM,
-    y: (index ~/ cols) * kHeatCellM - margin,
-  );
+  static CourtPoint cellOrigin(int index) =>
+      (x: (index % cols) * kHeatCellM - margin, y: (index ~/ cols) * kHeatCellM - margin);
 
   /// Where each player stood most, for screen readers.
   String describe() {
-    String where(String who, List<int> grid, int max) {
-      if (max == 0) return '$who not seen';
+    String where(String who, List<double> grid, double max) {
+      if (max <= 0) return '$who not seen';
       final o = cellOrigin(grid.indexOf(max));
       final x = (o.x + kHeatCellM / 2).toStringAsFixed(1);
       final y = (o.y + kHeatCellM / 2).toStringAsFixed(1);
@@ -441,10 +495,27 @@ class CourtPainter extends CustomPainter {
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
-    final trail = <(CourtPoint, bool)>[
-      for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
-        ?shuttleOverCourt(record, i, doubles: isDoubles),
-    ];
+    final trail = <(int, CourtPoint, bool, double?, bool)>[];
+    final first = math.max(0, frameIndex - kTrailLength + 1);
+    final boundaries = {
+      for (final rally in record.rallies)
+        if (rally.startFrame <= frameIndex && rally.endFrame >= first - 1) ...[
+          rally.startFrame,
+          rally.endFrame + 1,
+        ],
+    };
+    for (var i = first; i <= frameIndex; i++) {
+      final point = shuttleOverCourt(record, i, doubles: isDoubles);
+      if (point == null) continue;
+      final frame = record.frame(i);
+      final connected =
+          trail.isNotEmpty &&
+          trail.last.$1 == i - 1 &&
+          trail.last.$3 == point.$2 &&
+          !boundaries.contains(i) &&
+          frame?.rallyState == record.frame(i - 1)?.rallyState;
+      trail.add((i, point.$1, point.$2, frame?.shuttleSpeedKmh, connected));
+    }
     // Marks belong to the rally on screen. Live, that is the open rally (none between
     // rallies). Offline between rallies: the hits since the last rally ended.
     int? start;
@@ -496,7 +567,7 @@ class CourtPainter extends CustomPainter {
 
   /// Shuttle positions, oldest first, each with whether it is placed along the rally's
   /// flight line (true) or only mapped onto the floor (false; see [shuttleOverCourt]).
-  final List<(CourtPoint, bool)> trail;
+  final List<(int, CourtPoint, bool, double?, bool)> trail;
   final List<(String, CourtPoint)> hitMarks;
 
   /// (landing point, called in, waiting for review), oldest first.
@@ -544,6 +615,11 @@ class CourtPainter extends CustomPainter {
       x: p.x.clamp(-alley - kRunOffM + inset, kCourtWidthM + alley + kRunOffM - inset),
       y: p.y.clamp(-kRunOffM + inset, kCourtLengthM + kRunOffM - inset),
     ));
+    Offset? playerMark(CourtPoint p) {
+      final o = toCanvas(p);
+      return (Offset.zero & size).contains(o) ? o : null;
+    }
+
     // The outer lines of the court (doubles sidelines when there are alleys).
     final court = Rect.fromPoints(
       toCanvas((x: -alley, y: kCourtLengthM)),
@@ -620,47 +696,23 @@ class CourtPainter extends CustomPainter {
         ..color = c
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
-      final o = mark(p);
+      final o = playerMark(p);
+      if (o == null) continue;
       canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
       canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
     }
-    for (var i = 0; i < trail.length; i++) {
-      final age = (trail.length - 1 - i) / kTrailLength; // 0 = newest
-      final (p, placed) = trail[i];
-      // A position that is only the floor mapping of a shuttle in the air is a rough
-      // guide: it is drawn smaller and fainter than one placed along the flight line.
-      canvas.drawCircle(
-        mark(p),
-        (4 - 2.5 * age) * (placed ? 1 : 0.7),
-        Paint()..color = players.shuttle.withValues(alpha: (1 - 0.85 * age) * (placed ? 1 : 0.45)),
-      );
-    }
-    if (trail.isNotEmpty) {
-      // The light theme's yellow is faint on the court; a ring in the line colour keeps the
-      // newest position visible (3:1, T4.11).
-      canvas.drawCircle(
-        mark(trail.last.$1),
-        5,
-        Paint()
-          ..color = lines
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-    }
-
     final f = frame;
-    if (f?.nearPos case final near?) {
-      canvas.drawCircle(mark(near), 7, Paint()..color = players.near);
-    }
-    if (f?.farPos case final far?) {
-      canvas.drawCircle(mark(far), 7, Paint()..color = players.far);
+    for (final (p, color) in [(f?.nearPos, players.near), (f?.farPos, players.far)]) {
+      final o = p == null ? null : playerMark(p);
+      if (o != null) canvas.drawCircle(o, 7, Paint()..color = color);
     }
     // Doubles partners: their own colour, with a ring so they differ by shape too.
     for (final (p, color) in [(f?.near2Pos, players.near2), (f?.far2Pos, players.far2)]) {
-      if (p == null) continue;
-      canvas.drawCircle(mark(p), 6, Paint()..color = color);
+      final o = p == null ? null : playerMark(p);
+      if (o == null) continue;
+      canvas.drawCircle(o, 6, Paint()..color = color);
       canvas.drawCircle(
-        mark(p),
+        o,
         8,
         Paint()
           ..color = color
@@ -682,6 +734,15 @@ class CourtPainter extends CustomPainter {
           ..style = PaintingStyle.stroke,
       );
     }
+    paintShuttleTrail(
+      canvas,
+      [
+        for (final (_, point, placed, speed, connected) in trail)
+          (point: mark(point), speed: speed, approximate: !placed, connected: connected),
+      ],
+      hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
+      ageAt: (i) => (frameIndex - trail[i].$1) / kTrailLength,
+    );
     canvas.restore();
   }
 

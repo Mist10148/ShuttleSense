@@ -113,9 +113,15 @@ ruff check . && ruff format --check . && pytest
 | `SHUTTLESENSE_MAX_UPLOAD_MB` | `1024` | Upload size limit |
 | `SHUTTLESENSE_CONFIG` | `configs/pipeline.yaml` | Pipeline config file |
 | `SHUTTLESENSE_LIVE_SESSION_TTL_S` | `60` | How long a dropped live session waits for the app to resume before it is saved |
-| `SHUTTLESENSE_ANTHROPIC_API_KEY` | unset (falls back to `ANTHROPIC_API_KEY`) | Turns the coach chat on. Keep it in the backend's environment only, never in the app or the repo; see [PRIVACY.md](PRIVACY.md) for what is sent |
-| `SHUTTLESENSE_CHAT_MODEL` | `claude-opus-5-5` | Claude model for the coach chat |
-| `SHUTTLESENSE_CHAT_EFFORT` | `medium` | `low` to `max`; lower is cheaper and faster |
+| `SHUTTLESENSE_GEMINI_API_KEY` | unset (falls back to `GEMINI_API_KEY`) | Turns the RAG coach on with Gemini (D42): session chat, general coach and coaching report. Create a key in Google AI Studio; keep it in the backend's environment only, never in the app or the repo; see [PRIVACY.md](PRIVACY.md) for what is sent |
+| `SHUTTLESENSE_COACH_PROVIDER` | `gemini` | `gemini` uses Gemini when its key is set, else Claude; `claude` prefers Claude; `off` turns the coach off |
+| `SHUTTLESENSE_GEMINI_MODEL` | `gemini-3.8-flash` | Gemini model for answers and the coaching report |
+| `SHUTTLESENSE_GEMINI_FAST_MODEL` | `gemini-3.5-flash-lite` | Gemini model that classifies each question before retrieval |
+| `SHUTTLESENSE_GEMINI_EMBED_MODEL` | `gemini-embedding-2` | Embeddings for retrieval; the knowledge-base vectors are cached in `<storage>/coach_index.npz` |
+| `SHUTTLESENSE_COACH_TOP_K` | `6` | Retrieved chunks per source (session, past sessions, knowledge) |
+| `SHUTTLESENSE_ANTHROPIC_API_KEY` | unset (falls back to `ANTHROPIC_API_KEY`) | Optional: the coach answers with Claude instead (when no Gemini key is set, or with `SHUTTLESENSE_COACH_PROVIDER=claude`). Keep it in the backend's environment only |
+| `SHUTTLESENSE_CHAT_MODEL` | `claude-opus-5-5` | Claude model for the coach (Claude provider only) |
+| `SHUTTLESENSE_CHAT_EFFORT` | `medium` | `low` to `max`; lower is cheaper and faster (Claude provider only) |
 | `SHUTTLESENSE_CHAT_MAX_MESSAGES` | `20` | Questions allowed per session |
 | `SHUTTLESENSE_CHAT_MAX_DIGEST_CHARS` | `24000` | Session data sent per question; longer sessions are summarized per rally |
 | `SHUTTLESENSE_FAKE_PIPELINE` | `0` | `1` returns the golden record (`backend/tests/fixtures/golden_record.json`) scaled to each upload instead of running models, so the app shows full results without a GPU. CLI equivalent: `python -m shuttlesense.run --fake ...` |
@@ -536,3 +542,11 @@ controls. Older backends keep their existing controls. Pin a cue or set a person
 in Coach; switch to Referee for the timer and decision log. Stop and reopen History to
 review goals and moments. No new dependencies or API key are needed. The camera,
 perception-weight and physical-device acceptance checks still apply.
+
+### Verify the Gemini coach
+
+Set the backend Gemini API key using the settings above. To exercise the configured answer, routing and embedding models, set SHUTTLESENSE_TEST_GEMINI=1 and run the following from the backend directory with its virtual environment active.
+
+    python -m pytest tests/test_coach_rag_chat.py::test_live_gemini_synthetic_session -q
+
+The smoke test uses a temporary store and a generated video. It calls Gemini for session chat, general badminton chat and a coaching report. Ordinary CI runs use the offline provider fixtures.

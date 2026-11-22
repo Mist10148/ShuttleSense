@@ -22,6 +22,7 @@ class SessionSummary extends StatefulWidget {
     this.onAskCoach,
     this.chatAvailable = false,
     this.onGoalChanged,
+    this.report,
   });
 
   final ClipRecord record;
@@ -31,6 +32,9 @@ class SessionSummary extends StatefulWidget {
   final VoidCallback? onAskCoach;
   final bool chatAvailable;
   final void Function(PracticeGoal, bool)? onGoalChanged;
+
+  /// The AI coaching report card (D42), shown above the way into the chat.
+  final Widget? report;
 
   @override
   State<SessionSummary> createState() => _SessionSummaryState();
@@ -140,6 +144,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             for (final goal in generalGoals) _goalCard(goal),
             for (final note in generalNotes) _noteTile(note),
           ],
+          ?widget.report,
           const SizedBox(height: Spacing.md),
           FilledButton.icon(
             onPressed: widget.chatAvailable ? widget.onAskCoach : null,
@@ -150,7 +155,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             Padding(
               padding: const EdgeInsets.only(top: Spacing.xs),
               child: Text(
-                'Coach chat is off on this server (no Claude API key). Notes still work.',
+                'Coach chat is off on this server (no Gemini or Claude API key). Notes still work.',
                 style: theme.textTheme.bodySmall,
               ),
             ),

@@ -69,7 +69,8 @@ def track_overlapping(
                 xy[i] = scale_to_video(np.array([[x, y]]), input_size, size)[0]
                 visible[i] = 1
 
-    for first in range(0, len(starts), batch_size):
+    first = 0
+    while first < len(starts):
         chunk = starts[first : first + batch_size]
         inputs = []
         for window_start in chunk:
@@ -81,8 +82,16 @@ def track_overlapping(
         if not inputs:
             break
         batch = torch.from_numpy(np.stack(inputs))
-        with torch.autocast("cuda", enabled=str(device).startswith("cuda")):
-            heatmaps = model(batch.to(device)).float().cpu().numpy()
+        try:
+            with torch.autocast("cuda", enabled=str(device).startswith("cuda")):
+                heatmaps = model(batch.to(device)).float().cpu().numpy()
+        except torch.OutOfMemoryError:
+            if len(inputs) == 1:
+                raise
+            # Retry the same windows before accumulating any predictions from them.
+            batch_size = max(1, len(inputs) // 2)
+            del batch, inputs
+            continue
         for window_start, sequence in zip(chunk, heatmaps, strict=False):
             for offset, heatmap in enumerate(sequence):
                 i = window_start + offset
@@ -95,10 +104,10 @@ def track_overlapping(
                 else:
                     total[i] = weighted
                     weight_sum[i] = float(weights[offset])
-        done = first + len(inputs)
+        first += len(inputs)
         # Frames before the next window's start can no longer change.
-        finish(starts[done] if done < len(starts) else n)
+        finish(starts[first] if first < len(starts) else n)
         if progress is not None:
-            progress(min(0.9, 0.9 * done / len(starts)))
+            progress(min(0.9, 0.9 * first / len(starts)))
     finish(n)
     return xy, visible

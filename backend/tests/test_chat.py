@@ -164,11 +164,12 @@ def test_chat_streams_and_saves_validated_answers(tmp_path: Path, tiny_video: Pa
 
 def test_chat_off_without_key(tmp_path: Path, tiny_video: Path, monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with _client(tmp_path) as client:
         assert client.get("/health").json()["chat_available"] is False
         job_id = _done_job(client, tiny_video)
         res = client.post(f"/jobs/{job_id}/chat", json={"message": "hi"})
-        assert res.status_code == 503 and "no Claude API key" in res.json()["detail"]
+        assert res.status_code == 503 and "no Gemini or Claude API key" in res.json()["detail"]
 
 
 def test_message_limit_and_validation(tmp_path: Path, tiny_video: Path) -> None:

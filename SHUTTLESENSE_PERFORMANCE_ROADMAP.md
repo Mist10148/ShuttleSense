@@ -85,7 +85,7 @@
 
 **Objective:** Reduce detection and pose cost while protecting player identities and downstream analysis.
 
-- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. [Profiling](docs/results/watch_phase3_pose_profile.md) covers three short singles/doubles broadcast sections and an approximate CUDA trace; representative consented footage and full transfer attribution remain outstanding.
+- [ ] Measure detector preprocessing/inference/postprocessing, accepted candidate counts, pose crops, batch inference, postprocessing, tracker updates, and transfer costs on representative footage. [Profiling](docs/results/watch_phase3_pose_profile.md) covers three short singles/doubles broadcast sections and an approximate CUDA trace with unassigned activity reported. Phone profiling is deferred at the owner's direction; representative coverage and exact transfer attribution remain unverified.
 - [ ] Compare batch sizes 4, 8, and 16 with the same TensorRT RTX profile and CUDA fallback. Record cold compilation, warm runtime, frame latency, candidate counts, VRAM, and actual Flutter end-to-end time.
 - [ ] Evaluate court- and track-aware filtering in shadow mode against the current filter. Include players near boundaries, jumping, overlapping partners, occlusion, bystanders, tracking loss, and reacquisition.
 - [ ] Keep focused-candidate selection disabled by default. Do not cap people or tighten boundaries solely because they improve an isolated benchmark.
@@ -99,9 +99,9 @@
 
 **Objective:** Optimize shuttle inference only if measured as a meaningful end-to-end bottleneck.
 
-- [ ] Audit temporal window construction, resized-input caching, initialization, inference mode, tensor allocation, CPU/GPU copies, heatmap decoding, and coordinate conversion.
-- [ ] Test low-risk buffer/copy improvements against the current PyTorch path, preserving inputs, temporal ordering, and output semantics.
-- [ ] Consider ONNX or TensorRT conversion only after lower-risk work and only if TrackNet remains material. Measure build/warm-up time, temporal shapes, operator support, precision, memory, portability, and fallback. Existing TrackNet RTX and GPU-window paths are experimental and disabled.
+- [x] Audit temporal window construction, resized-input caching, initialization, inference mode, tensor allocation, CPU/GPU copies, heatmap decoding, and coordinate conversion. See the [TrackNetV3 audit](docs/results/watch_phase4_tracknet_audit.md); isolated costs and end-to-end impact still require measurement.
+- [x] Test a low-risk single-window batch-copy improvement against the current PyTorch path. The [experiment](docs/results/watch_phase4_single_batch_experiment.md) preserved input values and sampled decoded outputs, but raw heatmaps differed; the candidate remains experimental and is not enabled.
+- [ ] Consider ONNX or TensorRT conversion only after lower-risk work and only if TrackNet remains material. Measure build/warm-up time, temporal shapes, operator support, precision, memory, portability, and fallback. The [conversion decision](docs/results/watch_phase4_conversion_gate.md) includes backend and Flutter bypass experiments; Flutter results were noisy and did not show a repeatable benefit. TrackNet RTX and GPU-window paths remain experimental and disabled.
 - [ ] Evaluate held-out shuttle recall, coordinate error, visibility, trajectory continuity, occlusion, and effects on hits and strokes.
 - [ ] Enable a replacement only with at least 5% repeatable end-to-end median improvement and no decrease in shuttle/hit recall or worsening of coordinate and trajectory/visibility errors. Keep PyTorch fallback.
 - [ ] If TrackNet is not limiting, document the evidence and defer invasive optimization.
@@ -112,8 +112,8 @@
 
 **Objective:** Address demonstrated scheduling, allocation, transfer, or initialization bottlenecks.
 
-- [ ] Capture an opt-in Nsight Systems or equivalent trace of the actual frame-by-frame path, then compare with unprofiled timings. Examine GPU model overlap, transfers, synchronization, kernel gaps, CPU waits, allocations, initialization, and contention.
-- [ ] Compare sequential and concurrent perception with identical input and providers, including correctness, memory, session lifetime, errors, and cancellation. Do not interpret GPU utilization alone as efficiency.
+- [ ] Capture an opt-in Nsight Systems or equivalent trace of the actual frame-by-frame path, then compare with unprofiled timings. Examine GPU model overlap, transfers, synchronization, kernel gaps, CPU waits, allocations, initialization, and contention. The [coordination trace](docs/results/watch_phase5_coordination_trace.md) covers an offline frame-processing diagnostic with before/after untraced runs; complete client-path, OS wait, memory-peak and contention attribution remain open.
+- [ ] Compare sequential and concurrent perception with identical input and providers, including correctness, memory, session lifetime, errors, and cancellation. The [comparison](docs/results/watch_phase5_concurrency_comparison.md) covers repeated short real-model runs and worker/lifecycle tests; long-session memory, real in-flight cancellation and broader footage remain open. Do not interpret GPU utilization alone as efficiency.
 - [ ] If evidence supports it, test bounded ONNX Runtime, OpenCV, and PyTorch thread settings individually. Avoid global thread changes and oversubscription without measurements.
 - [ ] Evaluate session warm-up, safe reuse, tensor-buffer reuse, and host/device copy reduction only where identified as costly. Check memory ownership, session isolation, and cleanup.
 - [ ] Measure process CPU/RAM and sampled GPU/VRAM behavior; test sequential and CPU fallbacks and record lower-memory device limitations where hardware is available.
@@ -125,11 +125,11 @@
 
 **Objective:** Reduce final export time without reducing playback compatibility or obscuring quality tradeoffs.
 
-- [ ] Separately measure source-frame read, CPU overlay drawing, encoder-pipe backpressure, encoder initialization, and finalization.
-- [ ] Compare `libx264` and `h264_nvenc` on the same saved records, source frames, and overlays over short and longer recordings. Measure total time, output size, comparable visual quality against a reference, playback/seek, CPU/GPU use, and memory.
-- [ ] Validate frame count, timestamps, no missing frames/overlays, player/shuttle annotation alignment, and playback in Flutter and a common player.
-- [ ] Preserve `libx264` as default and NVENC as optional until repeated results demonstrate at least 5% median export improvement at comparable quality and compatible output. Retain CPU fallback and report failures that occur after encoding starts.
-- [ ] Document benchmark conditions and rejected or retained encoder settings. Existing 525-frame comparisons used non-equivalent quality settings and do not establish a default change.
+- [ ] Separately measure source-frame read, CPU overlay drawing, encoder-pipe backpressure, encoder initialization, and finalization. [Initial measurements](docs/results/watch_phase6_export_benchmark.md) separate host stages, but pipe blocking and actual asynchronous encoder readiness remain combined with other costs.
+- [ ] Compare `libx264` and `h264_nvenc` on the same saved records, source frames, and overlays over short and longer recordings. Measure total time, output size, comparable visual quality against a reference, playback/seek, CPU/GPU use, and memory. The [initial comparison](docs/results/watch_phase6_export_benchmark.md) uses two sections of one recording; perceptual quality, independent footage and robust memory measurements remain open.
+- [ ] Validate frame count, timestamps, no missing frames/overlays, player/shuttle annotation alignment, and playback in Flutter and a common player. Automated frame, timestamp and local player checks are reported; semantic alignment and visible streamed playback remain open.
+- [x] Preserve `libx264` as default and NVENC as optional until repeated results demonstrate at least 5% median export improvement at comparable quality and compatible output. Retain CPU fallback and report failures that occur after encoding starts. Fallback and post-start failure tests pass; no default change was made.
+- [x] Document benchmark conditions and rejected or retained encoder settings. The [export report](docs/results/watch_phase6_export_benchmark.md) records the preliminary comparison and retains the current default.
 
 **Dependencies:** Phase 1 measurement and representative saved sessions. **Likely areas:** `backend/shuttlesense/render/`, rendering tests, setup and results documentation.
 
@@ -138,11 +138,11 @@
 **Objective:** Validate the combined application and report which changes are suitable for normal use.
 
 - [ ] Test complete short, medium, and longer consented clips containing actual singles and doubles, spectators, occlusions, boundaries, and camera changes where supported. Use fixed calibration and settings and at least three alternating baseline/candidate runs.
-- [ ] Run backend Watch, stream, player-tracking, pose, tracking, API/schema, and rendering tests; run Flutter Watch tests and static analysis. Investigate failures rather than suppressing them.
+- [ ] Run backend Watch, stream, player-tracking, pose, tracking, API/schema, and rendering tests; run Flutter Watch tests and static analysis. The [validation report](docs/results/watch_phase7_validation_report.md) records 255 backend passes, 34 Flutter passes and clean analysis; the GPU fixture test skipped and web validation remains incomplete. Investigate failures rather than suppressing them.
 - [ ] Verify every normalized frame, court calibration, player identity, pose, shuttle, hits/strokes, analytics, preview, pause/resume, stop/disconnect, partial saves, export, playback, and seek.
-- [ ] Exercise CUDA with and without TensorRT RTX and CPU-only fallback. Test other supported platforms where available; explicitly list unavailable hardware and untested configurations.
+- [ ] Exercise CUDA with and without TensorRT RTX and CPU-only fallback. Short real-model CPU/CUDA/RTX smoke checks passed; production CPU-sequential fallback, full sessions and other supported platforms remain unvalidated. See the [validation report](docs/results/watch_phase7_validation_report.md).
 - [ ] Compare baseline and final model initialization, progress at 45 seconds, total fixed-section/full-clip time, normalized fps, median/p95 latency, sampled CPU/RAM/GPU/VRAM, export time, output size, labeled accuracy, and stability.
-- [ ] Produce a final implementation report: changes and files, defaults, optional flags, rejected/deferred experiments, reproducible commands, performance and accuracy evidence, compatibility/fallbacks, known limitations, and future work.
+- [x] Produce a final implementation report: changes and files, defaults, optional flags, rejected/deferred experiments, reproducible commands, performance and accuracy evidence, compatibility/fallbacks, known limitations, and future work. The [validation report](docs/results/watch_phase7_validation_report.md) explicitly records missing evidence and the remaining completion gate.
 
 **Final completion gate:** Every retained optimization passes its individual performance and accuracy checks; the combined Flutter workflow shows a repeatable improvement without functional regressions. Do not present estimates or synthetic-only results as real-world validation.
 

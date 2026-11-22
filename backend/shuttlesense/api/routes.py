@@ -134,7 +134,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         auth_required=bool(settings.token),
         stages=request.app.state.available_stages,
         stroke_models=_stroke_models(request, settings),
-        chat_available=request.app.state.chat_client is not None,
+        chat_available=request.app.state.coach.provider is not None,
         chat_max_messages=settings.chat_max_messages,
         watch_match_type=not settings.fake_pipeline,
     )
@@ -679,12 +679,15 @@ async def chat(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
     """Ask the coach about a finished job; the answer streams as Server-Sent Events."""
-    from shuttlesense.coach.chat import ChatError, ChatSettings, stream_answer
+    from shuttlesense.coach.chat import ChatError, ChatSettings
+    from shuttlesense.coach.chat import answer as coach_answer
     from shuttlesense.coach.digest import build_digest
 
-    client = request.app.state.chat_client
-    if client is None:
-        raise HTTPException(status_code=503, detail="coach chat is off: no Claude API key set")
+    coach = request.app.state.coach
+    if coach.provider is None:
+        raise HTTPException(
+            status_code=503, detail="coach chat is off: no Gemini or Claude API key set"
+        )
     job = _job_or_404(jobs, job_id)
     if job.status != "done":
         raise HTTPException(status_code=409, detail="wait until the job has finished")
@@ -716,7 +719,9 @@ async def chat(
         history = record.chat.messages if record.chat else []
         question = ChatMessage(role="user", text=body.message.strip(), at=utcnow())
         digest = build_digest(record, settings.chat_max_digest_chars)
-        chat_settings = ChatSettings(model=settings.chat_model, effort=settings.chat_effort)
+        chat_settings = ChatSettings(
+            model=settings.chat_model, effort=settings.chat_effort, top_k=settings.coach_top_k
+        )
     except Exception:
         # The stream never starts, so its `finally` would not clear the mark: without this
         # the job refuses questions and re-renders until the mark times out.
@@ -725,7 +730,10 @@ async def chat(
 
     async def events() -> AsyncIterator[str]:
         try:
-            async for event in stream_answer(client, digest, history, question.text, chat_settings):
+            async for event in coach_answer(
+                coach, question.text, history, chat_settings, digest=digest, record=record,
+                load_history=lambda: coach.history.summaries(storage, jobs),
+            ):  # fmt: skip
                 if event["type"] == "done":
                     answer = ChatMessage.model_validate(event["message"])
                     await asyncio.to_thread(_save_chat, storage, jobs, job_id, [question, answer])

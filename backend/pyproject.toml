@@ -17,6 +17,9 @@ shuttlesense = "shuttlesense.run:main"
 [tool.setuptools.packages.find]
 include = ["shuttlesense*"]
 
+[tool.setuptools.package-data]
+"shuttlesense.coach" = ["knowledge/*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

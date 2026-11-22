@@ -8,6 +8,7 @@ touching the others.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
@@ -18,7 +19,7 @@ from typing import Any
 import numpy as np
 
 from shuttlesense.render import style
-from shuttlesense.schema import ClipRecord
+from shuttlesense.schema import ClipRecord, Frame
 from shuttlesense.stage import StageContext
 
 log = logging.getLogger("uvicorn.error")
@@ -475,12 +476,85 @@ def draw_score(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
         cv2.circle(img, _pt(*p), int(10 * s), color, max(2, int(3 * s)), cv2.LINE_AA)
 
 
+def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:
+    """Draw alpha-blended speed segments and leave the shuttle visible inside its ring."""
+    import cv2
+
+    length = max(1, int(state.stage("tracking").get("trail_length", 12)))
+    if state.cache.get("trail_record") is not record:
+        state.cache["trail_record"] = record
+        state.cache["trail_boundaries"] = {
+            frame for rally in record.rallies for frame in (rally.start_frame, rally.end_frame + 1)
+        }
+    boundaries = state.cache["trail_boundaries"]
+
+    def position(frame: Frame) -> tuple[int, int] | None:
+        s = frame.shuttle
+        if (
+            s
+            and s.visible
+            and s.x is not None
+            and s.y is not None
+            and math.isfinite(s.x)
+            and math.isfinite(s.y)
+        ):
+            return _pt(s.x, s.y)
+        return None
+
+    frames = record.frames[max(0, i - length + 1) : i + 1]
+    if not frames:
+        return
+    points = [position(frame) for frame in frames]
+    width = max(1, round(state.scale))
+    radius = max(4, round(6 * state.scale))
+    head = points[-1]
+    if head is not None:
+        x, y = head
+        left, top = max(0, x - radius), max(0, y - radius)
+        right = max(left, min(img.shape[1], x + radius + 1))
+        bottom = max(top, min(img.shape[0], y + radius + 1))
+        center_area = img[top:bottom, left:right]
+        original = center_area.copy()
+
+    for j in range(1, len(frames)):
+        previous, current = frames[j - 1], frames[j]
+        if current.frame != previous.frame + 1 or current.frame in boundaries:
+            continue
+        if previous.rally_state != current.rally_state:
+            continue
+        a, b = points[j - 1], points[j]
+        if a is None or b is None:
+            continue
+        clipped, a, b = cv2.clipLine((0, 0, img.shape[1], img.shape[0]), a, b)
+        if not clipped:
+            continue
+        pad = width + 2
+        x0, y0 = max(0, min(a[0], b[0]) - pad), max(0, min(a[1], b[1]) - pad)
+        x1 = min(img.shape[1], max(a[0], b[0]) + pad + 1)
+        y1 = min(img.shape[0], max(a[1], b[1]) + pad + 1)
+        region = img[y0:y1, x0:x1]
+        overlay = region.copy()
+        color = style.speed_color(current.shuttle_speed_kmh) or style.UNCERTAIN
+        a_local, b_local = (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0)
+        cv2.line(overlay, a_local, b_local, color, width, cv2.LINE_AA)
+        alpha = 0.85 - 0.65 * (len(frames) - 1 - j) / length
+        cv2.addWeighted(overlay, alpha, region, 1 - alpha, 0, dst=region)
+
+    if head is not None:
+        if original.size:
+            yy, xx = np.ogrid[top:bottom, left:right]
+            inside = (xx - head[0]) ** 2 + (yy - head[1]) ** 2 < radius**2
+            center_area[inside] = original[inside]
+        cv2.circle(img, head, radius, (22, 22, 22), width + 2, cv2.LINE_AA)
+        cv2.circle(img, head, radius, (255, 255, 255), width, cv2.LINE_AA)
+
+
 LAYERS: dict[str, Layer] = {
     "score": draw_score,
     "minimap": draw_minimap,
     "speed": draw_speed,
     "court": draw_court,
-    "trail": draw_trail,
+    "trail": draw_speed_trail,
     "pose": draw_pose,
     "boxes": draw_boxes,
     "hits": draw_hits,

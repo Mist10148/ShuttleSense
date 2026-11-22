@@ -32,7 +32,7 @@ jobs:
       - name: Lint
         run: |
           ruff check .
-          ruff format --check .
+          python scripts/check_format.py
       - name: Docs links
         run: python scripts/check_links.py
       - name: Test

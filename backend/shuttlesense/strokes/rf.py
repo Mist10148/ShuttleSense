@@ -84,7 +84,8 @@ def _shuttle_summary(sh: np.ndarray, mid: int) -> np.ndarray:
     return np.stack(cols, axis=1)
 
 
-SUMMARY_VERSION = 2
+SUMMARY_VERSION = 3
+SUMMARY_VERSIONS = (1, 2, 3)
 
 
 def _masked(values: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, ...]:
@@ -151,12 +152,55 @@ def _summary_v2(x: np.ndarray) -> np.ndarray:
     return np.concatenate([np.asarray(p, dtype=np.float32) for p in parts], axis=1)
 
 
+def _motion_summary(x: np.ndarray) -> np.ndarray:
+    """Version 3 rows on top of version 2: velocity values from strokes/motion.py.
+
+    Wrist speed (peak, at the hit, where the peak falls) and, with a shuttle, its speed
+    before and after the hit, the ratio of the two, its direction of travel after the hit
+    and its peak acceleration around the hit. Drop and smash differ most in these.
+    """
+    from shuttlesense.strokes.motion import MOTION_POSE, expand
+
+    n, t, f = x.shape
+    mid = t // 2
+    near = slice(max(mid - 2, 0), min(mid + 3, t))
+    m = expand(x, 2)
+    wrists = m[:, :, f + MOTION_POSE - 2 : f + MOTION_POSE]  # [N, T, 2]
+    parts = [
+        wrists.max(1),
+        wrists[:, near].mean(1),
+        wrists.argmax(1) / max(t - 1, 1),
+    ]
+    if f > POSE_FEATURES:
+        base = f + MOTION_POSE
+        speed = m[:, :, base]
+        direction = m[:, :, base + 1 : base + 3]
+        accel = np.linalg.norm(m[:, :, base + 3 : base + 5], axis=-1)
+        seen = x[:, :, POSE_FEATURES + 2] > 0.5
+
+        def mean_seen(values: np.ndarray, part: slice) -> np.ndarray:
+            mask = seen[:, part]
+            while mask.ndim < values[:, part].ndim:
+                mask = mask[..., None]
+            return (values[:, part] * mask).sum(1) / np.maximum(mask.sum(1), 1)
+
+        before, after = slice(0, mid), slice(mid + 1, t)
+        s_before, s_after = mean_seen(speed, before), mean_seen(speed, after)
+        parts += [
+            np.stack([s_before, s_after, s_after / np.maximum(s_before, 1e-3)], axis=1),
+            np.where(seen[:, after], speed[:, after], 0.0).max(1, keepdims=True),
+            mean_seen(direction, after),
+            accel[:, near].max(1, keepdims=True),
+        ]
+    return np.concatenate([np.asarray(p, dtype=np.float32) for p in parts], axis=1)
+
+
 def summary_features(x: np.ndarray, version: int = 1) -> np.ndarray:
     """[N, D] summary rows from windows [N, T, F] (F = 34 pose-only, or 39 with the shuttle).
 
     `version` is stored with a forest (meta "summary_version", 1 when missing) so each file
     is read with the rows it was trained on. Version 2 (`_summary_v2`) leaves frames without
-    data out of the statistics. Version 1:
+    data out of the statistics; version 3 adds velocity rows (`_motion_summary`). Version 1:
 
     Per value: mean, standard deviation, minimum, maximum, and the mean of the three frames
     around the hit (the window centre). Then: wrist and elbow speed (peak, mean, and where the
@@ -165,10 +209,12 @@ def summary_features(x: np.ndarray, version: int = 1) -> np.ndarray:
     it is seen, its mean step and speed before and after the hit, and its height range.
     """
     x = np.asarray(x, dtype=np.float32)
-    if version not in (1, SUMMARY_VERSION):
+    if version not in SUMMARY_VERSIONS:
         raise ValueError(f"unknown summary version {version!r}")
     if version == 2:
         return _summary_v2(x)
+    if version == 3:
+        return np.concatenate([_summary_v2(x), _motion_summary(x)], axis=1)
     n, t, f = x.shape
     mid = t // 2
     near = slice(max(mid - 1, 0), min(mid + 2, t))
@@ -258,7 +304,14 @@ class Forest:
                 go_left = rows[inner, self.feature[at]] <= self.threshold[at]
                 node[inner] = np.where(go_left, self.left[at], self.right[at])
             total += self.value[node]
-        return (total / max(len(self.roots), 1)).astype(np.float32)
+        probs = total / max(len(self.roots), 1)
+        # Leaf frequencies are over-confident; a temperature fitted on held-out windows at
+        # training time (meta "temperature", 1 = as the trees give them) softens them.
+        temperature = float(self.meta.get("temperature", 1.0))
+        if abs(temperature - 1.0) > 1e-6:
+            probs = np.power(np.maximum(probs, 1e-6), 1.0 / temperature)
+            probs /= probs.sum(1, keepdims=True)
+        return probs.astype(np.float32)
 
     def save(self, path: Path) -> None:
         """Write the arrays compressed; leaf distributions are stored as float16."""

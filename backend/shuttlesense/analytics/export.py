@@ -196,7 +196,12 @@ def keep_chat(record: ClipRecord, out_dir: Path) -> None:
 
 
 def write_exports(record: ClipRecord, out_dir: Path) -> None:
-    """Write record.json, summary.json, hits.csv and rallies.csv to out_dir."""
+    """Write record.json, summary.json, heatmap.json, hits.csv and rallies.csv to out_dir.
+
+    heatmap.json (analytics/heatmap.py) is written only with a calibrated court; a stale
+    one from an earlier run without a court is removed.
+    """
+    from shuttlesense.analytics.heatmap import build_heatmap
     from shuttlesense.courtside import coaching_recap
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -215,6 +220,11 @@ def write_exports(record: ClipRecord, out_dir: Path) -> None:
         "decision_log": [e.model_dump(mode="json") for e in record.decision_log],
     }
     atomic_write_text(out_dir / "summary.json", json.dumps(summary, indent=2))
+    heatmap = build_heatmap(record)
+    if heatmap is not None:
+        atomic_write_text(out_dir / "heatmap.json", json.dumps(heatmap, separators=(",", ":")))
+    else:
+        (out_dir / "heatmap.json").unlink(missing_ok=True)
 
     with atomic_open(out_dir / "rallies.csv", newline="", encoding=CSV_ENCODING) as f:
         writer = csv.writer(f)

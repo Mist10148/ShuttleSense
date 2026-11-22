@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import numpy as np
@@ -82,13 +83,21 @@ def softmax(logits: np.ndarray) -> np.ndarray:
 
 
 def predict_proba(
-    model: Any, kind: str, x: np.ndarray, device: str, temperature: float = 1.0
+    model: Any,
+    kind: str,
+    x: np.ndarray,
+    device: str,
+    temperature: float = 1.0,
+    *,
+    feature_version: int = 1,
 ) -> np.ndarray:
     """[N, classes] probabilities for windows x [N, T, F] from any of the three models.
 
     `temperature` divides the logits of a network before the softmax (1.0 leaves them as
     they are). Training fits it on the validation split and stores it in the checkpoint, so
     `confidence` is closer to how often the model is right; the predicted class is unchanged.
+    `feature_version` 2 adds the motion channels a network was trained with (motion.py);
+    the forest computes its own from the window (summary version 3).
     """
     if kind == "rf":
         from shuttlesense.strokes.rf import summary_features
@@ -96,27 +105,77 @@ def predict_proba(
         return model.predict_proba(summary_features(x, model.meta.get("summary_version", 1)))
     import torch
 
+    if feature_version != 1:
+        from shuttlesense.strokes.motion import expand
+
+        x = expand(x, feature_version)
     batch = x if kind == "lstm" else np.transpose(x, (0, 2, 1))
     with torch.inference_mode():
         logits = model(torch.from_numpy(np.ascontiguousarray(batch)).to(device))
     return softmax(logits.float().cpu().numpy() / max(float(temperature), 1e-3))
 
 
+def tta_windows(x: np.ndarray, use_trajectory: bool, flip: bool, shifts: list[int]) -> list:
+    """The windows test-time augmentation averages over: x itself, its mirror image and x
+    moved by each of `shifts` frames (the hit a frame early or late). Training sees all of
+    these, so averaging them evens out a hit frame that is off by one or a pose that reads
+    differently mirrored."""
+    from shuttlesense.strokes.dataset import shift_window
+    from shuttlesense.strokes.features import flip_window
+
+    views = [x]
+    if flip:
+        views.append(np.stack([flip_window(w, use_trajectory) for w in x]))
+    for s in shifts:
+        if s:
+            views.append(np.stack([shift_window(w.copy(), int(s)) for w in x]))
+    return views
+
+
+def ensemble_weights(names: tuple[str, ...]) -> dict[str, float]:
+    """Per-member weights of the ensemble, fitted on held-out folds (scripts/cv_strokes.py)
+    and stored next to the weights; equal weights when the file is missing."""
+    path = BACKEND_DIR / ENSEMBLE_FILE
+    weights = {n: 1.0 for n in names}
+    if path.is_file():
+        try:
+            stored = json.loads(path.read_text(encoding="utf-8")).get("weights", {})
+            weights.update({n: float(stored[n]) for n in names if n in stored})
+        except (OSError, ValueError, TypeError):
+            pass
+    return weights
+
+
+ENSEMBLE_FILE = "weights/strokes/ensemble.json"
+
+
 def average_probabilities(
-    parts: list[tuple[np.ndarray, list[str]]], classes: list[str]
+    parts: list[tuple[np.ndarray, list[str]]],
+    classes: list[str],
+    weights: list[float] | None = None,
+    geometric: bool = False,
 ) -> np.ndarray:
     """Mean of several models' [N, classes] probabilities, each given with its class order.
 
     The models' confidences are already calibrated (temperature for the networks, leaf
     frequencies for the forest), so a plain mean lets a confident model outvote two unsure
     ones. A class a model does not know counts as 0 for it.
+
+    `weights` (one per part, default equal) weigh the members; `geometric` averages log
+    probabilities instead (a weighted product), where one model that rules a class out
+    pulls it down more than in the plain mean.
     """
+    weights = list(weights) if weights is not None else [1.0] * len(parts)
     total = np.zeros((len(parts[0][0]), len(classes)), dtype=np.float64)
-    for probs, order in parts:
+    for (probs, order), w in zip(parts, weights, strict=True):
+        aligned = np.zeros_like(total)
         for j, c in enumerate(order):
             if c in classes:
-                total[:, classes.index(c)] += probs[:, j]
-    total /= len(parts)
+                aligned[:, classes.index(c)] = probs[:, j]
+        total += w * (np.log(np.maximum(aligned, 1e-6)) if geometric else aligned)
+    total /= max(sum(weights), 1e-12)
+    if geometric:
+        total = np.exp(total - total.max(axis=1, keepdims=True))
     return total / np.maximum(total.sum(axis=1, keepdims=True), 1e-12)
 
 
@@ -151,7 +210,36 @@ def model_probabilities(
         ]
     )
     temperature = float(ckpt.get("temperature", 1.0))
-    return predict_proba(model, ckpt.get("kind", "cnn"), x, ctx.device, temperature), classes
+    kind = ckpt.get("kind", "cnn")
+    version = int(ckpt.get("feature_version", 1))
+    # Test-time augmentation runs each model once per view, so it is kept to uploaded clips
+    # (a stage context with an output folder); live and Watch windows classify every tick.
+    offline = ctx.out_dir is not None
+    views = tta_windows(
+        x,
+        use_traj,
+        offline and bool(cfg.get("tta_flip", False)),
+        list(cfg.get("tta_shifts", [])) if offline else [],
+    )
+    probs = np.mean(
+        [
+            predict_proba(model, kind, v, ctx.device, temperature, feature_version=version)
+            for v in views
+        ],
+        axis=0,
+    )
+    return probs, classes
+
+
+def _ensemble_geometric() -> bool:
+    path = BACKEND_DIR / ENSEMBLE_FILE
+    try:
+        return (
+            path.is_file()
+            and json.loads(path.read_text(encoding="utf-8")).get("method") == "geometric"
+        )
+    except (OSError, ValueError):
+        return False
 
 
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
@@ -166,7 +254,14 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     probs, classes = parts[0]
     if len(parts) > 1:
         classes = list(STROKE_CLASSES)
-        probs = average_probabilities(parts, classes)
+        members = registry.members(name)
+        stored = ensemble_weights(members)
+        probs = average_probabilities(
+            parts,
+            classes,
+            [stored[m] for m in members],
+            geometric=_ensemble_geometric(),
+        )
     for hit, p in zip(record.hits, probs, strict=True):
         best = int(p.argmax())
         hit.stroke = classes[best]

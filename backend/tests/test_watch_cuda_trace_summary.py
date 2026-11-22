@@ -24,6 +24,13 @@ def test_trace_summary_correlates_nested_launch_and_leaves_other_copies_unattrib
                         "args": {"correlation": 42},
                     },
                     {"cat": "cuda_runtime", "tid": 7, "ts": 1016, "name": "cudaLaunchKernel"},
+                    {
+                        "cat": "cuda_runtime",
+                        "tid": 8,
+                        "ts": 1016,
+                        "name": "cudaDeviceSynchronize",
+                        "dur": 5,
+                    },
                     {"cat": "gpu_memcpy", "name": "HtoD", "dur": 8, "args": {"correlation": 42}},
                     {"cat": "gpu_memcpy", "name": "DtoH", "dur": 3, "args": {"correlation": 77}},
                     {"cat": "kernel", "dur": 4},
@@ -51,3 +58,12 @@ def test_trace_summary_correlates_nested_launch_and_leaves_other_copies_unattrib
     assert result["activities_count_total_us"]["unattributed"]["DtoH"] == [1, 3]
     assert result["activities_count_total_us"]["unattributed"]["kernel"] == [1, 4]
     assert result["sync_count_total_us"]["pose"] == [1, 2]
+    assert result["sync_count_total_us"]["unattributed"] == [1, 5]
+    assert result["copy_coverage_count_total_us"]["HtoD"] == {
+        "total": [1, 8],
+        "unattributed": [0, 0.0],
+    }
+    assert result["copy_coverage_count_total_us"]["DtoH"] == {
+        "total": [1, 3],
+        "unattributed": [1, 3],
+    }

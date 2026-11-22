@@ -97,7 +97,7 @@ P1 features are the minimum shippable product and are finished by the end of Wee
 | F19 | Live processing of a camera feed with incremental overlay events and a reduced-quality indicator | P3 | Reference demo |
 | F20 | Line calls per landing (IN / OUT / UNCERTAIN) with margin, confidence and user override | P3 | Reference demo |
 | F21 | Session coaching notes: pattern-level cues and top 3 fixes linked to timeline moments | P3 | Original idea |
-| F22 | Coach chat grounded in the clip record (Claude API), with tap-to-seek citations | P3 | Original idea |
+| F22 | AI coach (Gemini by default, Claude optional) grounded by retrieval over the clip record, past sessions and a local badminton knowledge base: session chat with tap-to-seek citations and knowledge sources, a general coach, and a coaching report (D42) | P3 | Original idea |
 | C5 | Live screen: camera preview, live calibration, start/stop, live results layout | P3 | Flutter client |
 | C6 | Chat screen and session summary view | P3 | Flutter client |
 | F17 | Automatic court line detection (no taps) | Future | Reference demo |

@@ -6,11 +6,13 @@ import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/clip_record.dart';
+import '../../data/models/coach.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../results/widgets/session_summary.dart';
+import '../coach/source_chips.dart';
 import '../../core/theme/tokens.dart';
 
 class ChatState {
@@ -66,6 +68,13 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
             );
           case 'done':
             final answer = ChatMessage.fromJson(event['message'] as Map<String, dynamic>);
+            // D42: the knowledge the answer cited; not saved in the record, shown this session.
+            final sources = CoachSource.listFrom(event['sources']);
+            if (sources.isNotEmpty) {
+              ref
+                  .read(chatSourcesProvider(arg).notifier)
+                  .update((m) => {...m, answer.text: sources});
+            }
             state = ChatState(messages: [...state.messages, answer]);
             finished = true;
           case 'error':
@@ -90,6 +99,11 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
 
 final chatControllerProvider = AutoDisposeNotifierProviderFamily<ChatController, ChatState, String>(
   ChatController.new,
+);
+
+/// Knowledge sources of this session's answers, by answer text (D42).
+final chatSourcesProvider = StateProvider.family<Map<String, List<CoachSource>>, String>(
+  (ref, jobId) => const {},
 );
 
 const kSuggestedQuestions = [
@@ -151,6 +165,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final health = ref.watch(healthProvider).valueOrNull;
     final available = health?.chatAvailable ?? false;
     final state = ref.watch(chatControllerProvider(widget.jobId));
+    final sources = ref.watch(chatSourcesProvider(widget.jobId));
     ref.listen(chatControllerProvider(widget.jobId), (_, _) => _scrollToEnd());
     final limit = health?.chatMaxMessages ?? 0;
     final atLimit = limit > 0 && state.questions >= limit;
@@ -177,7 +192,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ? 'Checking the server…'
                               : 'Coach chat is off on this server',
                           detail:
-                              'The server owner has not set a Claude API key. Session notes in '
+                              'The server owner has not set a Gemini or Claude API key. Session notes in '
                               'the Coach tab still work.\n\n$kChatPrivacy',
                         )
                       : Column(
@@ -206,7 +221,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ),
                                   ],
                                   for (final m in state.messages)
-                                    _Bubble(message: m, onSeek: _seek),
+                                    _Bubble(
+                                      message: m,
+                                      onSeek: _seek,
+                                      sources: sources[m.text] ?? const [],
+                                    ),
                                   if (state.streaming != null)
                                     _Bubble(
                                       message: ChatMessage(
@@ -320,10 +339,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.onSeek});
+  const _Bubble({required this.message, required this.onSeek, this.sources = const []});
 
   final ChatMessage message;
   final ValueChanged<Moment> onSeek;
+  final List<CoachSource> sources;
 
   @override
   Widget build(BuildContext context) {
@@ -363,6 +383,10 @@ class _Bubble extends StatelessWidget {
                 if (message.citations.isNotEmpty) ...[
                   const SizedBox(height: Spacing.sm),
                   MomentChips(moments: message.citations, onSeek: onSeek),
+                ],
+                if (sources.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SourceChips(sources: sources),
                 ],
               ],
             ),

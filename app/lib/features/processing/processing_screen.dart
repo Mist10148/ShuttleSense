@@ -102,6 +102,8 @@ class ProcessingScreen extends ConsumerWidget {
       // old results.
       if (next.isLoading || next.valueOrNull?.status != JobStatus.done) return;
       if (prev?.valueOrNull?.status == JobStatus.done && prev?.isLoading == false) return;
+      // Opened by a link to results or chat, this page is built under them: stay there.
+      if (ModalRoute.of(context)?.isCurrent == false) return;
       context.go(Routes.results(jobId));
     });
     final job = ref.watch(jobProvider(jobId));

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../features/calibration/calibration_screen.dart';
 import '../../features/chat/chat_screen.dart';
+import '../../features/coach/coach_screen.dart';
 import '../../features/connect/connect_screen.dart';
 import '../../features/history/history_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -34,6 +35,7 @@ abstract final class Routes {
   static const history = '/history';
   static const settings = '/settings';
   static const styleguide = '/styleguide';
+  static const coach = '/coach';
 
   static String calibrate(String videoId) => '/videos/$videoId/calibrate';
   static String job(String jobId) => '/jobs/$jobId';
@@ -83,6 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.connect, builder: (context, state) => const ConnectScreen()),
       GoRoute(path: Routes.styleguide, builder: (context, state) => const StyleguideScreen()),
+      GoRoute(path: Routes.coach, builder: (context, state) => const CoachScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [

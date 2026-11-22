@@ -40,7 +40,7 @@ void main() {
     expect(minimapLabel(record, 5), contains('no positions'));
   });
 
-  test('the heatmap counts where each player stood', () {
+  test('the heatmap adds up the time each player stood in each place', () {
     final record = recordWith(const [
       FrameInfo(frame: 0, nearPos: (x: 2.6, y: 1.9), farPos: (x: 2.4, y: 11.4)),
       FrameInfo(frame: 1, nearPos: (x: 2.7, y: 1.8)),
@@ -48,16 +48,46 @@ void main() {
       FrameInfo(frame: 3, nearPos: (x: 40, y: 1)), // a glitch far off the court is dropped
     ]);
     final heat = HeatGrid.fromRecord(record);
-    expect(heat.near.fold<int>(0, (a, b) => a + b), 3);
-    expect((heat.nearMax, heat.farMax), (2, 1));
+    // Seconds: three frames at 30 fps for the near player, one for the far one.
+    expect(heat.near.fold<double>(0, (a, b) => a + b), closeTo(3 / 30, 1e-9));
+    expect(heat.far.fold<double>(0, (a, b) => a + b), closeTo(1 / 30, 1e-9));
     expect(
       heat.describe(),
-      'Heatmap: near player mostly at 2.8 m across, 1.8 m up the court; '
-      'far player mostly at 2.3 m across, 11.3 m up the court.',
+      'Heatmap: near player mostly at 2.6 m across, 1.9 m up the court; '
+      'far player mostly at 2.4 m across, 11.4 m up the court.',
     );
   });
 
-  test('the heatmap counts frames in play only, and shades around a busy cell', () {
+  test('doubles alleys share the export grid origin and preserve player-seconds', () {
+    final heat = HeatGrid.fromRecord(
+      recordWith(const [
+        FrameInfo(frame: 0, nearPos: (x: -0.3, y: 1), near2Pos: (x: 5.5, y: 1)),
+        FrameInfo(frame: 1, farPos: (x: 2.6, y: 12)),
+      ]),
+    );
+    expect(HeatGrid.cellOrigin(0), (x: -2.0, y: -2.0));
+    expect(HeatGrid.cols, 37);
+    expect(heat.near.fold<double>(0, (a, b) => a + b), closeTo(2 / 30, 1e-9));
+    expect(heat.far.fold<double>(0, (a, b) => a + b), closeTo(1 / 30, 1e-9));
+  });
+
+  test('the heatmap kernel is in meters and wider far from the camera', () {
+    expect(HeatGrid.sigmaAt(0), lessThan(HeatGrid.sigmaAt(kCourtLengthM)));
+    final near = HeatGrid.fromRecord(
+      recordWith(const [FrameInfo(frame: 0, nearPos: (x: 2.6, y: 1.0))]),
+    );
+    final far = HeatGrid.fromRecord(
+      recordWith(const [FrameInfo(frame: 0, farPos: (x: 2.6, y: 12.4))]),
+    );
+    // The same 1/30 s spread wider: a lower peak far away.
+    expect(near.nearMax, greaterThan(far.farMax));
+    // Roughly 1 σ (0.3 m) from the peak cell the density has fallen, but not to nothing.
+    final peak = near.near.indexOf(near.nearMax);
+    expect(near.near[peak + 1] / near.nearMax, inExclusiveRange(0.5, 1.0));
+    expect(near.near[peak + 4], lessThan(near.nearMax * 0.05));
+  });
+
+  test('the heatmap counts frames in play only, and shades around a busy place', () {
     const record = ClipRecord(
       schemaVersion: '1.7',
       clipId: 'c',
@@ -71,7 +101,8 @@ void main() {
         FrameInfo(frame: 2, nearPos: (x: 2.6, y: 1.9)),
         FrameInfo(frame: 3, nearPos: (x: 2.6, y: 1.9)),
         FrameInfo(frame: 4, nearPos: (x: 0.2, y: 0.2)), // and after it
-        FrameInfo(frame: 5, nearPos: (x: 7.1, y: 15.3)), // pinned at the 2 m limit: kept
+        // Pinned at the 2 m clamp edge: the player was somewhere beyond it, so dropped.
+        FrameInfo(frame: 5, nearPos: (x: 7.18, y: 15.4)),
       ],
       hits: [],
       rallies: [
@@ -81,13 +112,15 @@ void main() {
       courtCorners: [(x: 0, y: 0), (x: 1, y: 0), (x: 1, y: 1), (x: 0, y: 1)],
     );
     final heat = HeatGrid.fromRecord(record);
-    expect(heat.near.fold<int>(0, (a, b) => a + b), 4);
-    expect(heat.nearMax, 3);
-    final busiest = heat.near.indexOf(3);
+    expect(heat.near.fold<double>(0, (a, b) => a + b), closeTo(3 / 30, 1e-9));
+    final busiest = heat.near.indexOf(heat.nearMax);
+    final o = HeatGrid.cellOrigin(busiest);
+    expect((o.x - 2.6).abs(), lessThanOrEqualTo(kHeatCellM));
+    expect((o.y - 1.9).abs(), lessThanOrEqualTo(kHeatCellM));
     expect(heat.nearShade[busiest], 1.0);
     // The cells next to it are shaded less, and a cell far away not at all.
     expect(heat.nearShade[busiest + 1], inExclusiveRange(0.0, 1.0));
-    expect(heat.nearShade[busiest + 4], 0.0);
+    expect(heat.nearShade[busiest + 8], 0.0);
     expect(heat.farShade.every((v) => v == 0), isTrue);
   });
 
@@ -102,9 +135,9 @@ void main() {
       fps: 30,
       width: 1280,
       height: 720,
-      numFrames: 21,
+      numFrames: 22,
       frames: [
-        for (var i = 0; i <= 20; i++)
+        for (var i = 0; i <= 21; i++)
           FrameInfo(
             frame: i,
             nearPos: const (x: 1.0, y: 2.0),
@@ -131,10 +164,16 @@ void main() {
     );
     final (mid, placed) = shuttleOverCourt(record, 5)!;
     expect(placed, isTrue);
+    expect(
+      minimapLabel(record, 5),
+      contains('Shuttle at 2.5 m across, 7.0 m up the court (rally estimate)'),
+    );
     expect((mid.x, mid.y), (2.5, 7.0)); // halfway between the two players
     // After the last hit it flies to where it landed.
     final (late, _) = shuttleOverCourt(record, 15)!;
     expect((late.x, late.y), (3.0, 6.5));
+    expect(shuttleOverCourt(record, 20), ((x: 2.0, y: 1.0), true));
+    expect(shuttleOverCourt(record, 21), ((x: 2.0, y: 20.0), false));
     // With no hit before it, only the floor mapping is left, and it is marked as such.
     const early = ClipRecord(
       schemaVersion: '1.7',
@@ -246,7 +285,8 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('Heatmap: ')), findsNothing);
     await tester.tap(find.text('Heatmap'));
     await tester.pump();
-    expect(find.bySemanticsLabel(RegExp('near player mostly at 2.8 m across')), findsOneWidget);
+    // The centre of the 0.25 m cell the player stands in.
+    expect(find.bySemanticsLabel(RegExp('near player mostly at 2.6 m across')), findsOneWidget);
     expect(tester.takeException(), isNull);
     handle.dispose();
   });

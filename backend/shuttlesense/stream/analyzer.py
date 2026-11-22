@@ -163,7 +163,9 @@ class StreamAnalyzer:
             PLAYER_MARGIN_M,
             SHUTTLE_MARGIN_M,
             clamp_to_court,
-            player_point,
+        )
+        from shuttlesense.analytics.positions import (
+            court_player_point as player_point,
         )
         from shuttlesense.analytics.speed import speeds_kmh
         from shuttlesense.court import image_to_court
@@ -177,7 +179,10 @@ class StreamAnalyzer:
             point = image_to_court(h, np.array([px]))[0]
             if not np.isfinite(point).all():
                 return None
-            point = clamp_to_court(point, size, margin)  # as offline (analytics/positions.py)
+            clipped = clamp_to_court(point, size, margin)
+            if margin == PLAYER_MARGIN_M and not np.array_equal(point, clipped):
+                return None
+            point = clipped
             return round(float(point[0]), 3), round(float(point[1]), 3)
 
         min_score = self.min_keypoint_score

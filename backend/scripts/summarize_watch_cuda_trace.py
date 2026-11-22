@@ -30,15 +30,15 @@ def main() -> None:
         if event.get("cat") != "cuda_runtime":
             continue
         matching = [r for r in by_thread.get(event.get("tid"), ()) if r[0] <= event["ts"] <= r[1]]
-        if matching:
-            owner = min(matching, key=lambda r: r[1] - r[0])[2]
-            correlation = event.get("args", {}).get("correlation")
-            if correlation is not None:
-                owners[correlation] = owner
-            if "Synchronize" in event.get("name", ""):
-                syncs[owner][0] += 1
-                syncs[owner][1] += event.get("dur", 0)
+        owner = min(matching, key=lambda r: r[1] - r[0])[2] if matching else "unattributed"
+        correlation = event.get("args", {}).get("correlation")
+        if matching and correlation is not None:
+            owners[correlation] = owner
+        if "Synchronize" in event.get("name", ""):
+            syncs[owner][0] += 1
+            syncs[owner][1] += event.get("dur", 0)
     activities = defaultdict(lambda: defaultdict(lambda: [0, 0.0]))
+    copy_coverage = defaultdict(lambda: {"total": [0, 0.0], "unattributed": [0, 0.0]})
     for event in events:
         category = event.get("cat")
         if category not in ("kernel", "gpu_memcpy", "gpu_memset"):
@@ -48,9 +48,18 @@ def main() -> None:
         values = activities[owner][key]
         values[0] += 1
         values[1] += event.get("dur", 0)
+        if category == "gpu_memcpy":
+            for group in ("total", "unattributed") if owner == "unattributed" else ("total",):
+                copy_coverage[key][group][0] += 1
+                copy_coverage[key][group][1] += event.get("dur", 0)
     print(
         json.dumps(
-            {"activities_count_total_us": activities, "sync_count_total_us": syncs}, indent=2
+            {
+                "activities_count_total_us": activities,
+                "sync_count_total_us": syncs,
+                "copy_coverage_count_total_us": copy_coverage,
+            },
+            indent=2,
         )
     )
 

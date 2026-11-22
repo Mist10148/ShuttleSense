@@ -14,7 +14,9 @@ import '../../shared/widgets/surfaces.dart';
 import '../../shared/widgets/start_score_field.dart';
 import '../../shared/widgets/stroke_model_field.dart';
 import '../calibration/calibration_screen.dart';
+import '../../shared/widgets/hit_burst.dart';
 import '../mode/mode_screen.dart';
+import '../results/widgets/hit_anchor.dart';
 import '../upload/upload_controller.dart';
 import 'live_controller.dart';
 import 'widgets/live_view.dart';
@@ -64,7 +66,7 @@ class LiveScreen extends ConsumerWidget {
     required bool streaming,
   }) {
     final gutter = Breakpoints.gutter(Breakpoints.of(context));
-    return Scaffold(
+    final screen = Scaffold(
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(gutter, Spacing.lg, gutter, 0),
@@ -120,6 +122,13 @@ class LiveScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+    return HitBurstFeed(
+      session: state.sessionId,
+      count: state.hits.length,
+      keyAt: (i) => (state.hits[i].id, state.hits[i].frame),
+      eventAt: (i) => hitBurstEvent(state.record, state.hits[i]),
+      child: screen,
     );
   }
 }

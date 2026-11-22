@@ -144,6 +144,17 @@ void main() {
     expect(visited, ['/jobs/job1/results']);
   });
 
+  testWidgets('a link to the chat of a finished job stays on the chat', (tester) async {
+    // The processing page sits under results and chat; its first load of the done job
+    // must not take the user away from the page they opened.
+    final router = await pumpJobRoutes(tester, [
+      fixedJob(Job.fromJson(jobJson())),
+    ], initialLocation: '/jobs/job1/results/chat');
+    await pumpFrames(tester);
+    expect(router.routeInformationProvider.value.uri.path, '/jobs/job1/results/chat');
+    expect(find.text('chat'), findsOneWidget);
+  });
+
   testWidgets('a re-render shows progress instead of the old results', (tester) async {
     // First build: the finished job. After the re-render invalidates the provider: queued.
     final builds = <StreamController<Job>>[];
@@ -203,12 +214,16 @@ void main() {
 
 /// The app's own nesting: results is a child of the processing route, so the processing
 /// screen (and its listener) stays mounted under the results screen.
-Future<GoRouter> pumpJobRoutes(WidgetTester tester, List<Override> overrides) async {
+Future<GoRouter> pumpJobRoutes(
+  WidgetTester tester,
+  List<Override> overrides, {
+  String initialLocation = '/jobs/job1',
+}) async {
   setSize(tester, phone);
   SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000'});
   final preferences = await SharedPreferences.getInstance();
   final router = GoRouter(
-    initialLocation: '/jobs/job1',
+    initialLocation: initialLocation,
     routes: [
       GoRoute(path: '/', builder: (_, _) => const Text('home')),
       GoRoute(
@@ -218,6 +233,12 @@ Future<GoRouter> pumpJobRoutes(WidgetTester tester, List<Override> overrides) as
           GoRoute(
             path: 'results',
             builder: (_, _) => const Scaffold(body: Text('results')),
+            routes: [
+              GoRoute(
+                path: 'chat',
+                builder: (_, _) => const Scaffold(body: Text('chat')),
+              ),
+            ],
           ),
         ],
       ),

@@ -78,6 +78,15 @@ class RallySummary {
 /// A player box and keypoints in processing pixels, for the overlay.
 typedef LivePlayer = ({List<double> bbox, List<List<double>> keypoints, bool held});
 
+typedef LiveTrailPoint = ({
+  int frame,
+  double x,
+  double y,
+  double? speed,
+  String? phase,
+  int? rally,
+});
+
 /// Everything the live screen shows. Lists grow during the session and are shared between
 /// states, so a frame event costs no copying.
 class LiveState {
@@ -142,7 +151,7 @@ class LiveState {
   final List<FrameInfo> frames;
 
   /// Recent shuttle positions (processing pixels), newest last.
-  final List<({double x, double y})> trail;
+  final List<LiveTrailPoint> trail;
   final Map<String, LivePlayer> players;
   final List<Hit> hits;
   final List<Rally> rallies;
@@ -218,7 +227,7 @@ class LiveState {
     String? sessionId,
     ({int width, int height})? size,
     List<CourtPoint>? courtCorners,
-    List<({double x, double y})>? trail,
+    List<LiveTrailPoint>? trail,
     Map<String, LivePlayer>? players,
     Score? score,
     String? rallyState,
@@ -952,19 +961,28 @@ class LiveController extends AutoDisposeNotifier<LiveState> {
       near2Pos: asPoint(court?['near_2']),
       far2Pos: asPoint(court?['far_2']),
       shuttlePos: asPoint(court?['shuttle']),
+      shuttlePixel: FrameInfo.visibleShuttlePixel(e['shuttle']),
+      playerVideoAnchors: FrameInfo.readPlayerVideoAnchors(e['players']),
       shuttleSpeedKmh: speed,
       rallyState: e['rally_state'] as String?,
     );
     final frames = state.frames;
     _padFrames(frame);
     frame < frames.length ? frames[frame] = info : frames.add(info);
-    final shuttle = e['shuttle'] as Json?;
-    var trail = state.trail;
-    if (shuttle != null && shuttle['visible'] == 1) {
-      trail = [...trail, (x: asDouble(shuttle['x'])!, y: asDouble(shuttle['y'])!)];
-      if (trail.length > 12) trail = trail.sublist(trail.length - 12);
-    } else if (trail.isNotEmpty && e['skipped'] != true) {
-      trail = trail.sublist(1);
+    List<LiveTrailPoint> trail = const [];
+    if (info.shuttlePixel case (x: final x, y: final y)) {
+      final phase = info.rallyState;
+      final rally = asInt(e['rally_start_frame']);
+      final previous = state.trail.lastOrNull;
+      final continuous =
+          previous != null &&
+          previous.frame == frame - 1 &&
+          previous.phase == phase &&
+          previous.rally == rally;
+      trail = [
+        if (continuous) ...state.trail.skip(state.trail.length > 11 ? 1 : 0),
+        (frame: frame, x: x, y: y, speed: speed, phase: phase, rally: rally),
+      ];
     }
     final players = <String, LivePlayer>{};
     final display = (e['display_players'] as Json?) ?? (e['players'] as Json?);

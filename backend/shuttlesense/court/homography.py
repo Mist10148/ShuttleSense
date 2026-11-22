@@ -6,12 +6,15 @@ Court coordinates are meters with the origin at the near-left corner.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import numpy as np
 
 from shuttlesense.schema import COURT_SIZE_M, ClipRecord, Court, Point
 from shuttlesense.stage import StageContext, StageSkipped
+
+log = logging.getLogger(__name__)
 
 
 def court_corners_m(size: Point = COURT_SIZE_M) -> np.ndarray:
@@ -31,6 +34,17 @@ def validate_corners(corners: Sequence[Sequence[float]]) -> None:
         cross.append(ab[0] * bc[1] - ab[1] * bc[0])
     if not (all(c > 0 for c in cross) or all(c < 0 for c in cross)):
         raise ValueError("court corners must form a convex quadrilateral in the documented order")
+
+
+def upload_corners(corners: Sequence[Sequence[float]]) -> list[list[float]]:
+    """Keep the tapped near-left anchor and follow the baseline first in image space."""
+    validate_corners(corners)
+    points = [list(p) for p in corners]
+    first, second, _, last = np.asarray(points)
+    a, b = second - first, last - first
+    if a[0] * b[1] - a[1] * b[0] > 0:
+        return [points[0], points[3], points[2], points[1]]
+    return points
 
 
 def compute_homography(
@@ -104,13 +118,15 @@ def job_corners(ctx: StageContext) -> list[list[float]] | None:
         frame = next((f for _, f in reader), None)
         if frame is not None:
             size = tuple(cfg.get("court_size_m", COURT_SIZE_M))
-            refined, _ = refine_corners(
+            refined, report = refine_corners(
                 frame,
                 corners,
                 size,
                 max_shift_px=float(cfg["refine_max_shift_px"]),
                 min_support=float(cfg["refine_min_support"]),
+                lsq=bool(cfg.get("refine_least_squares", True)),
             )
+            log.info("court corners refined: %s", report)
             try:
                 validate_corners(refined)
                 corners = refined

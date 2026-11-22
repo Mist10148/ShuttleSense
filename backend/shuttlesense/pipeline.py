@@ -145,7 +145,9 @@ def run_pipeline(
     """
     config = dict(config or {})
     if court_corners_px:
-        config["court_corners_px"] = [list(c) for c in court_corners_px]
+        from shuttlesense.court.homography import upload_corners
+
+        config["court_corners_px"] = upload_corners(court_corners_px)
     disabled = [n for n, opts in config.get("stages", {}).items() if not opts.get("enabled", True)]
 
     record = ClipRecord(
@@ -166,6 +168,8 @@ def run_pipeline(
         stage_cfg = config.get("stages", {}).get(spec.name, {})
         files = cache.file_stamps(stage_cfg, BACKEND_DIR)
         key_cfg = cache.key_config(spec.name, config.get("stages", {}))
+        if spec.name == "tracking":
+            key_cfg["top_edge_gap_version"] = 1
         key = cache.next_key(key, spec.name, enabled, key_cfg, spec.name in installed, files)
         if not enabled:
             continue

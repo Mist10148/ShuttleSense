@@ -29,7 +29,7 @@ class Health {
   /// record 1.4, which has one model and no choice.
   final List<String>? strokeModels;
 
-  /// The backend has a Claude API key, so the coach chat works.
+  /// The backend has a coach provider key (Gemini, or Claude), so the coach chat works.
   final bool chatAvailable;
   final int chatMaxMessages;
   final bool watchVideo;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,14 +30,51 @@ class Settings(BaseSettings):
     chat_effort: str = "medium"
     chat_max_messages: int = 20  # questions per session
     chat_max_digest_chars: int = 24000  # longer sessions are summarized per rally
+    # RAG coach (D42). GEMINI_API_KEY is used when SHUTTLESENSE_GEMINI_API_KEY is not set.
+    # coach_provider: "gemini" prefers Gemini and falls back to Claude when only an Anthropic
+    # key is set; "claude" prefers Claude; "off" turns the coach off.
+    gemini_api_key: SecretStr | None = None
+    coach_provider: Literal["gemini", "claude", "off"] = "gemini"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_fast_model: str = "gemini-3.5-flash-lite"  # intent routing
+    gemini_embed_model: str = "gemini-embedding-2"
+    coach_top_k: int = 6  # retrieved chunks per source (session, history, knowledge)
 
     @property
-    def chat_key(self) -> str | None:
+    def claude_key(self) -> str | None:
         import os
 
         if self.anthropic_api_key is not None:
             return self.anthropic_api_key.get_secret_value() or None
         return os.environ.get("ANTHROPIC_API_KEY") or None
+
+    @property
+    def gemini_key(self) -> str | None:
+        import os
+
+        if self.gemini_api_key is not None:
+            return self.gemini_api_key.get_secret_value() or None
+        return os.environ.get("GEMINI_API_KEY") or None
+
+    @property
+    def active_provider(self) -> Literal["gemini", "claude"] | None:
+        """The coach provider in use: the preferred one if its key is set, else the other."""
+        if self.coach_provider == "off":
+            return None
+        keys = {"gemini": self.gemini_key, "claude": self.claude_key}
+        other = "claude" if self.coach_provider == "gemini" else "gemini"
+        for name in (self.coach_provider, other):
+            if keys[name]:
+                return name  # type: ignore[return-value]
+        return None
+
+    @property
+    def chat_key(self) -> str | None:
+        """The active coach provider's key (None: the coach is off)."""
+        active = self.active_provider
+        if active is None:
+            return None
+        return self.gemini_key if active == "gemini" else self.claude_key
 
     @property
     def cors_origin_list(self) -> list[str]:
