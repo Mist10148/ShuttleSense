@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
 const double kCourtWidthM = 5.18;
@@ -166,28 +167,30 @@ class _CourtMinimapState extends State<CourtMinimap> {
                 // height and the court the room it was given.
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: Row(
-                    spacing: Spacing.xs,
-                    children: [
-                      for (final MapEntry(key: view, value: label) in _kViewLabels.entries)
-                        ChoiceChip(
-                          label: Text(label),
-                          showCheckmark: false,
-                          visualDensity: VisualDensity.compact,
-                          tooltip: switch (view) {
-                            CourtView.positions => 'Players and the shuttle now',
-                            CourtView.heatmap =>
-                              doubles
-                                  ? 'Show time spent by each pair during play'
-                                  : 'Show time spent by each player during play',
-                            CourtView.rallyPath =>
-                              'Where each stroke of this rally was played, in order',
-                            CourtView.landings => 'Every landing called in or out in the clip',
-                          },
-                          selected: _view == view,
-                          onSelected: (_) => setState(() => _view = view),
-                        ),
-                    ],
+                  child: Tray(
+                    child: Row(
+                      spacing: Spacing.xs,
+                      children: [
+                        for (final MapEntry(key: view, value: label) in _kViewLabels.entries)
+                          ChoiceChip(
+                            label: Text(label),
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                            tooltip: switch (view) {
+                              CourtView.positions => 'Players and the shuttle now',
+                              CourtView.heatmap =>
+                                doubles
+                                    ? 'Show time spent by each pair during play'
+                                    : 'Show time spent by each player during play',
+                              CourtView.rallyPath =>
+                                'Where each stroke of this rally was played, in order',
+                              CourtView.landings => 'Every landing called in or out in the clip',
+                            },
+                            selected: _view == view,
+                            onSelected: (_) => setState(() => _view = view),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: Spacing.md),

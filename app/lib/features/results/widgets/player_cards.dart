@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
+import '../../../shared/widgets/tactile.dart';
 import 'court_minimap.dart' show HeatGrid;
 
 /// How far and how fast a player moved, from the court positions in the record.
@@ -162,10 +163,10 @@ class _Card extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(Spacing.md + 2, Spacing.md, Spacing.md, Spacing.md),
         decoration: BoxDecoration(
-          color: p.surface,
+          gradient: raisedGradient(TactileTokens.of(context)),
           borderRadius: BorderRadius.circular(16),
-          border: p.hairline == null ? null : Border.all(color: p.hairline!),
-          boxShadow: p.cardShadow,
+          border: Border.all(color: TactileTokens.of(context).rim),
+          boxShadow: raisedShadows(TactileTokens.of(context), depth: 0.7),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

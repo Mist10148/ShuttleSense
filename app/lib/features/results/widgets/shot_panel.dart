@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
+import '../../../shared/widgets/tactile.dart';
 import 'stroke_timeline.dart' show formatClock;
 
 /// What the shot panel shows at one frame: the current stroke, the shuttle speed, the rally
@@ -145,10 +146,10 @@ class ShotPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.lg, Spacing.lg, Spacing.md),
       decoration: BoxDecoration(
-        color: p.surface,
+        gradient: raisedGradient(TactileTokens.of(context)),
         borderRadius: BorderRadius.circular(16),
-        border: p.hairline == null ? null : Border.all(color: p.hairline!),
-        boxShadow: p.cardShadow,
+        border: Border.all(color: TactileTokens.of(context).rim),
+        boxShadow: raisedShadows(TactileTokens.of(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/responsive/breakpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import 'court_minimap.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Arranges the results screen (docs/ARCHITECTURE.md §4).
 ///
@@ -97,15 +98,14 @@ class ResultsLayout extends StatelessWidget {
       ('Score', scroll(scoreboard)),
       if (coach != null) ('Coach', scroll(coach!)),
     ];
-    final p = AppPalette.of(context);
     return DefaultTabController(
       length: sections.length,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: p.surface,
+          gradient: raisedGradient(TactileTokens.of(context)),
           borderRadius: BorderRadius.circular(16),
-          border: p.hairline == null ? null : Border.all(color: p.hairline!),
-          boxShadow: p.cardShadow,
+          border: Border.all(color: TactileTokens.of(context).rim),
+          boxShadow: raisedShadows(TactileTokens.of(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,11 +114,10 @@ class ResultsLayout extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(Spacing.sm, Spacing.sm, Spacing.sm, 0),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: p.surface2,
-                    borderRadius: BorderRadius.circular(Radii.pill),
-                  ),
+                child: Recess(
+                  radius: Radii.pill,
+                  padding: EdgeInsets.zero,
+                  depth: 3,
                   child: Padding(
                     padding: const EdgeInsets.all(3),
                     child: TabBar(

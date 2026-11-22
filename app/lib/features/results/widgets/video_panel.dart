@@ -5,6 +5,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Playback speeds offered for reviewing strokes.
 const kPlaybackRates = [0.25, 0.5, 1.0];
@@ -44,7 +46,16 @@ class VideoPanel extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Video(controller: controller!),
+                  // The player's own controls sit on the footage: plain white icons, not the
+                  // app's raised keys, which would read as glowing squares over the video.
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      iconButtonTheme: IconButtonThemeData(
+                        style: IconButton.styleFrom(foregroundColor: Colors.white),
+                      ),
+                    ),
+                    child: Video(controller: controller!),
+                  ),
                   ?overlay,
                 ],
               ),
@@ -124,43 +135,52 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 4,
-      children: [
-        IconButton(
-          tooltip: 'Previous frame (Left arrow)',
-          icon: const Icon(Icons.skip_previous),
-          onPressed: () => stepFrame(widget.target, widget.fps, -1),
-        ),
-        StreamBuilder<bool>(
-          stream: widget.target.playingChanges,
-          initialData: widget.target.playing,
-          builder: (context, snapshot) {
-            final playing = snapshot.data ?? false;
-            return IconButton(
-              tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
-              icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-              onPressed: widget.target.playOrPause,
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Next frame (Right arrow)',
-          icon: const Icon(Icons.skip_next),
-          onPressed: () => stepFrame(widget.target, widget.fps, 1),
-        ),
-        SegmentedButton<double>(
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          segments: [
-            for (final r in kPlaybackRates)
-              ButtonSegment(value: r, label: Text('${r == 1 ? '1' : r}×'), tooltip: '$r× speed'),
-          ],
-          selected: {_rate},
-          onSelectionChanged: (s) => _setRate(s.first),
-        ),
-      ],
+    // One sunken console: frame keys either side of the blue play key, then the speed.
+    return Tray(
+      padding: const EdgeInsets.all(Spacing.xs + 2),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          IconButton(
+            tooltip: 'Previous frame (Left arrow)',
+            icon: const Icon(Icons.skip_previous),
+            onPressed: () => stepFrame(widget.target, widget.fps, -1),
+          ),
+          StreamBuilder<bool>(
+            stream: widget.target.playingChanges,
+            initialData: widget.target.playing,
+            builder: (context, snapshot) {
+              final playing = snapshot.data ?? false;
+              return IconButton(
+                style: tactileButtonStyle(TactileButtonKind.primary).copyWith(
+                  foregroundColor: WidgetStatePropertyAll(TactileTokens.of(context).onPrimary),
+                  minimumSize: const WidgetStatePropertyAll(Size(56, kMinTouchTarget - 4)),
+                ),
+                tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                onPressed: widget.target.playOrPause,
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'Next frame (Right arrow)',
+            icon: const Icon(Icons.skip_next),
+            onPressed: () => stepFrame(widget.target, widget.fps, 1),
+          ),
+          SegmentedButton<double>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              for (final r in kPlaybackRates)
+                ButtonSegment(value: r, label: Text('${r == 1 ? '1' : r}×'), tooltip: '$r× speed'),
+            ],
+            selected: {_rate},
+            onSelectionChanged: (s) => _setRate(s.first),
+          ),
+        ],
+      ),
     );
   }
 }
