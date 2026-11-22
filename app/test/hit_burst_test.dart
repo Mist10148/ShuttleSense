@@ -36,12 +36,12 @@ HitBurstPainter? burst(WidgetTester tester) {
 
 void main() {
   test('each stroke has its word, and an unnamed hit is a plain HIT!', () {
-    expect(hitBurstWord('smash'), 'SMASH!');
-    expect(hitBurstWord('clear'), 'POW!');
-    expect(hitBurstWord(null), 'HIT!');
-    expect(hitBurstWord('something new'), 'HIT!');
+    expect(hitBurstWord('smash'), 'SMASH');
+    expect(hitBurstWord('clear'), 'CLEAR');
+    expect(hitBurstWord(null), 'HIT');
+    expect(hitBurstWord('something new'), 'HIT');
     for (final stroke in kStrokeLabels.keys) {
-      expect(hitBurstWord(stroke), isNot('HIT!'), reason: stroke);
+      expect(hitBurstWord(stroke), isNot('HIT'), reason: stroke);
     }
   });
 
@@ -55,7 +55,7 @@ void main() {
     await pumpLayer(tester, const [smash]);
     await tester.pump(const Duration(milliseconds: 100));
     final shown = burst(tester)!;
-    expect(shown.word, 'SMASH!');
+    expect(shown.word, 'SMASH');
     expect(shown.at, const Offset(0.4, 0.5));
     expect(shown.accent, AppTheme.playerColorsLight.near);
 
@@ -69,12 +69,12 @@ void main() {
     // The next hit does, and so does the first one after it left and came back (a seek).
     await pumpLayer(tester, const [HitBurstEvent(id: 2, who: 'far')]);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)!.word, 'HIT!');
+    expect(burst(tester)!.word, 'HIT');
     expect(burst(tester)!.at.dy, lessThan(0.5)); // no position: the far half of the picture
     await tester.pump(kHitBurstDuration);
     await pumpLayer(tester, const [smash]);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)!.word, 'SMASH!');
+    expect(burst(tester)!.word, 'SMASH');
     await tester.pump(kHitBurstDuration);
   });
 
@@ -93,7 +93,7 @@ void main() {
     expect(burst(tester), isNull);
     await pumpLayer(tester, events, nowS: 6.05);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)!.word, 'POW!');
+    expect(burst(tester)!.word, 'CLEAR');
     await tester.pump(kHitBurstDuration);
 
     // A new session counts its hits from 0 again: the same id at another time is new.
@@ -102,7 +102,7 @@ void main() {
       HitBurstEvent(id: 1, who: 'far', stroke: 'clear', timeS: 6.0),
     ], nowS: 7.1);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)!.word, 'DROP!');
+    expect(burst(tester)!.word, 'DROP');
     await tester.pump(kHitBurstDuration);
   });
 
@@ -114,11 +114,11 @@ void main() {
     ];
     await pumpLayer(tester, hits, nowS: 1.08);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'SMASH!');
+    expect(burst(tester)?.word, 'SMASH');
 
     await tester.pump(kHitBurstDuration);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'DROP!');
+    expect(burst(tester)?.word, 'DROP');
     await tester.pump(kHitBurstDuration);
     expect(burst(tester), isNull);
 
@@ -126,7 +126,7 @@ void main() {
     expect(burst(tester), isNull);
     await pumpLayer(tester, hits, nowS: 1.01);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'SMASH!');
+    expect(burst(tester)?.word, 'SMASH');
     await tester.pump(kHitBurstDuration);
   });
 
@@ -150,16 +150,16 @@ void main() {
 
     await live(mounted: true);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'SERVE!');
+    expect(burst(tester)?.word, 'SERVE');
     await tester.pump(kHitBurstDuration);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'WHOOSH!');
+    expect(burst(tester)?.word, 'LIFT');
     await tester.pump(kHitBurstDuration);
 
     hits.insert(1, const HitBurstEvent(id: 2, who: 'near', stroke: 'smash'));
     await live(mounted: true);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'SMASH!');
+    expect(burst(tester)?.word, 'SMASH');
     await tester.pump(kHitBurstDuration);
 
     await live(mounted: false);
@@ -168,7 +168,7 @@ void main() {
     expect(burst(tester), isNull);
     await live(mounted: true, session: 'session B');
     await tester.pump(const Duration(milliseconds: 100));
-    expect(burst(tester)?.word, 'SERVE!');
+    expect(burst(tester)?.word, 'SERVE');
     await tester.pumpAndSettle();
   });
 
@@ -285,7 +285,7 @@ void main() {
               child: CustomPaint(
                 size: const Size(640, 360),
                 painter: HitBurstPainter(
-                  word: 'SMASH!',
+                  word: 'SMASH',
                   at: at,
                   accent: AppTheme.playerColorsLight.near,
                   progress: 0.5,

@@ -59,7 +59,7 @@ Offset? hitAnchor(ClipRecord record, Hit hit) {
 HitBurstEvent hitBurstEvent(ClipRecord record, Hit hit) => HitBurstEvent(
   id: hit.id,
   who: hit.who,
-  stroke: hit.stroke,
+  stroke: hit.uncertain ? null : hit.stroke, // a guess is shown as a plain HIT
   at: hitAnchor(record, hit),
   timeS: hit.frame / (record.fps > 0 ? record.fps : 30.0),
 );
