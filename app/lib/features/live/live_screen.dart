@@ -114,6 +114,7 @@ class LiveScreen extends ConsumerWidget {
     return HitBurstFeed(
       session: state.sessionId,
       count: state.hits.length,
+      keyAt: (i) => (state.hits[i].id, state.hits[i].frame),
       eventAt: (i) => hitBurstEvent(state.record, state.hits[i]),
       child: screen,
     );

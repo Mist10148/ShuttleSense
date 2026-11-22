@@ -126,12 +126,14 @@ class HitBurstFeed extends StatefulWidget {
     super.key,
     required this.session,
     required this.count,
+    required this.keyAt,
     required this.eventAt,
     required this.child,
   });
 
   final Object? session;
   final int count;
+  final Object Function(int) keyAt;
   final HitBurstEvent Function(int) eventAt;
   final Widget child;
 
@@ -140,17 +142,27 @@ class HitBurstFeed extends StatefulWidget {
 }
 
 class _HitBurstFeedState extends State<HitBurstFeed> {
-  int _read = 0;
+  final Set<Object> _delivered = {};
+  int _scannedCount = 0;
 
   @override
   void didUpdateWidget(HitBurstFeed oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session != widget.session || widget.count < _read) _read = 0;
+    if (oldWidget.session != widget.session || widget.count < _scannedCount) {
+      _delivered.clear();
+      _scannedCount = 0;
+    }
   }
 
   List<HitBurstEvent> take() {
-    final events = [for (var i = _read; i < widget.count; i++) widget.eventAt(i)];
-    _read = widget.count;
+    if (_scannedCount == widget.count) return const [];
+    // The displayed timeline is sorted by frame, so a newly committed hit can be
+    // inserted before already delivered hits.
+    final events = [
+      for (var i = 0; i < widget.count; i++)
+        if (_delivered.add(widget.keyAt(i))) widget.eventAt(i),
+    ];
+    _scannedCount = widget.count;
     return events;
   }
 
@@ -296,6 +308,7 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
   Widget build(BuildContext context) {
     final colors = PlayerColors.of(context);
     final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final fontFamily = Theme.of(context).textTheme.labelLarge?.fontFamily;
     return IgnorePointer(
       child: ExcludeSemantics(
         child: AnimatedBuilder(
@@ -313,6 +326,7 @@ class _HitBurstLayerState extends State<HitBurstLayer> with SingleTickerProvider
                         ? const Offset(0.15, 0.72)
                         : const Offset(0.85, 0.28)),
                 offsetFromAnchor: event.at != null,
+                fontFamily: fontFamily,
                 accent: colors.forPlayer(event.who),
                 progress: _controller.value,
                 still: still,
@@ -335,6 +349,7 @@ class HitBurstPainter extends CustomPainter {
     required this.progress,
     this.still = false,
     this.offsetFromAnchor = true,
+    this.fontFamily,
   });
 
   final String word;
@@ -342,6 +357,7 @@ class HitBurstPainter extends CustomPainter {
   final Color accent;
   final double progress;
   final bool offsetFromAnchor;
+  final String? fontFamily;
 
   /// Reduced motion: no pop or wobble, only the fade.
   final bool still;
@@ -367,9 +383,9 @@ class HitBurstPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final radius = math.min(size.shortestSide / 4, (size.shortestSide * 0.085).clamp(16.0, 48.0));
+    final radius = math.min(size.shortestSide / 4, (size.shortestSide * 0.085).clamp(18.0, 48.0));
     // Include the shadow, outer spikes and peak animation scale.
-    final reach = radius * 1.58;
+    final reach = radius * 1.7;
     final room = (Offset.zero & size).deflate(reach);
     final anchor = Offset(at.dx * size.width, at.dy * size.height);
     final shift = reach + 8;
@@ -423,6 +439,7 @@ class HitBurstPainter extends CustomPainter {
         text: word,
         style: TextStyle(
           fontSize: fontSize,
+          fontFamily: fontFamily,
           fontWeight: FontWeight.w900,
           fontStyle: FontStyle.italic,
           letterSpacing: fontSize * 0.02,
@@ -434,7 +451,7 @@ class HitBurstPainter extends CustomPainter {
     )..layout();
     var fontSize = math.max(10.0, radius * 0.62);
     final width = text(Paint(), fontSize).width;
-    final span = radius * 1.75;
+    final span = radius * 2.15;
     if (width > span) fontSize *= span / width;
     final outline = text(
       Paint()
@@ -457,5 +474,7 @@ class HitBurstPainter extends CustomPainter {
       old.word != word ||
       old.at != at ||
       old.accent != accent ||
-      old.still != still;
+      old.still != still ||
+      old.fontFamily != fontFamily ||
+      old.offsetFromAnchor != offsetFromAnchor;
 }

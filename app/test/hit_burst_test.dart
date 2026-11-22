@@ -131,9 +131,9 @@ void main() {
   });
 
   testWidgets('the live feed supplies batched hits without replaying an old batch', (tester) async {
-    const hits = [
-      HitBurstEvent(id: 0, who: 'near', stroke: 'serve'),
-      HitBurstEvent(id: 1, who: 'far', stroke: 'lift'),
+    final hits = [
+      const HitBurstEvent(id: 0, who: 'near', stroke: 'serve'),
+      const HitBurstEvent(id: 1, who: 'far', stroke: 'lift'),
     ];
     Future<void> live({required bool mounted, String session = 'session A'}) => tester.pumpWidget(
       MaterialApp(
@@ -141,6 +141,7 @@ void main() {
         home: HitBurstFeed(
           session: session,
           count: hits.length,
+          keyAt: (index) => hits[index].id,
           eventAt: (index) => hits[index],
           child: mounted ? const HitBurstLayer(events: []) : const SizedBox.expand(),
         ),
@@ -155,6 +156,12 @@ void main() {
     expect(burst(tester)?.word, 'WHOOSH!');
     await tester.pump(kHitBurstDuration);
 
+    hits.insert(1, const HitBurstEvent(id: 2, who: 'near', stroke: 'smash'));
+    await live(mounted: true);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(burst(tester)?.word, 'SMASH!');
+    await tester.pump(kHitBurstDuration);
+
     await live(mounted: false);
     await live(mounted: true);
     await tester.pump(const Duration(milliseconds: 100));
@@ -167,10 +174,10 @@ void main() {
 
   testWidgets('reduced motion keeps the burst still', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: MediaQuery(
-          data: const MediaQueryData(disableAnimations: true),
-          child: const HitBurstLayer(events: [HitBurstEvent(id: 1, who: 'near')]),
+          data: MediaQueryData(disableAnimations: true),
+          child: HitBurstLayer(events: [HitBurstEvent(id: 1, who: 'near')]),
         ),
       ),
     );
