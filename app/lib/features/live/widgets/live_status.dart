@@ -112,7 +112,7 @@ class LiveOverlayPainter extends CustomPainter {
   });
 
   final ({int width, int height}) size;
-  final List<({double x, double y, double? speed})> trail;
+  final List<LiveTrailPoint> trail;
   final Map<String, LivePlayer> players;
   final PlayerColors colors;
 
@@ -129,17 +129,20 @@ class LiveOverlayPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
     }
-    for (var i = 0; i < trail.length; i++) {
-      final age = (trail.length - 1 - i) / trail.length;
-      canvas.drawCircle(
-        Offset(trail[i].x * sx, trail[i].y * sy),
-        5 - 3 * age,
-        Paint()
-          ..color = (shuttleSpeedColor(trail[i].speed) ?? colors.shuttle).withValues(
-            alpha: 1 - 0.8 * age,
+    paintShuttleTrail(
+      canvas,
+      [
+        for (final sample in trail)
+          (
+            point: Offset(sample.x * sx, sample.y * sy),
+            speed: sample.speed,
+            approximate: false,
+            connected: true,
           ),
-      );
-    }
+      ],
+      hasCurrent: trail.isNotEmpty,
+      neutral: colors.shuttle,
+    );
   }
 
   @override

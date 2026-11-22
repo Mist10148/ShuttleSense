@@ -218,7 +218,8 @@ def test_layers_respect_overlay_selection() -> None:
     only_boxes = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["boxes"], state)
     assert not only_boxes[60, 100].any() and only_boxes[40, 50].any()
     only_trail = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["trail"], state)
-    assert only_trail[60, 100].any() and not only_trail[40, 50].any()
+    assert only_trail[54, 100].any() and not only_trail[40, 50].any()
+    assert not only_trail[60, 100].any()
     nothing = draw_frame(np.zeros((90, 160, 3), np.uint8), record, 5, ["minimap?"], state)
     assert not nothing.any()
 

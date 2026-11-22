@@ -485,11 +485,26 @@ class CourtPainter extends CustomPainter {
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
-    final trail = <(CourtPoint, bool, double?)>[
-      for (var i = (frameIndex - kTrailLength + 1).clamp(0, frameIndex); i <= frameIndex; i++)
-        if (shuttleOverCourt(record, i, doubles: isDoubles) case final point?)
-          (point.$1, point.$2, record.frame(i)?.shuttleSpeedKmh),
-    ];
+    final trail = <(int, CourtPoint, bool, double?, bool)>[];
+    final first = math.max(0, frameIndex - kTrailLength + 1);
+    final boundaries = {
+      for (final rally in record.rallies)
+        if (rally.startFrame <= frameIndex && rally.endFrame >= first - 1) ...[
+          rally.startFrame,
+          rally.endFrame + 1,
+        ],
+    };
+    for (var i = first; i <= frameIndex; i++) {
+      final point = shuttleOverCourt(record, i, doubles: isDoubles);
+      if (point == null) continue;
+      final frame = record.frame(i);
+      final connected =
+          trail.isNotEmpty &&
+          trail.last.$1 == i - 1 &&
+          !boundaries.contains(i) &&
+          frame?.rallyState == record.frame(i - 1)?.rallyState;
+      trail.add((i, point.$1, point.$2, frame?.shuttleSpeedKmh, connected));
+    }
     // Marks belong to the rally on screen. Live, that is the open rally (none between
     // rallies). Offline between rallies: the hits since the last rally ended.
     int? start;
@@ -541,7 +556,7 @@ class CourtPainter extends CustomPainter {
 
   /// Shuttle positions, oldest first, each with whether it is placed along the rally's
   /// flight line (true) or only mapped onto the floor (false; see [shuttleOverCourt]).
-  final List<(CourtPoint, bool, double?)> trail;
+  final List<(int, CourtPoint, bool, double?, bool)> trail;
   final List<(String, CourtPoint)> hitMarks;
 
   /// (landing point, called in, waiting for review), oldest first.
@@ -675,33 +690,6 @@ class CourtPainter extends CustomPainter {
       canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
       canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
     }
-    for (var i = 0; i < trail.length; i++) {
-      final age = (trail.length - 1 - i) / kTrailLength; // 0 = newest
-      final (p, placed, speed) = trail[i];
-      // A position that is only the floor mapping of a shuttle in the air is a rough
-      // guide: it is drawn smaller and fainter than one placed along the flight line.
-      canvas.drawCircle(
-        mark(p),
-        (4 - 2.5 * age) * (placed ? 1 : 0.7),
-        Paint()
-          ..color = (shuttleSpeedColor(speed) ?? players.shuttle).withValues(
-            alpha: (1 - 0.85 * age) * (placed ? 1 : 0.45),
-          ),
-      );
-    }
-    if (trail.isNotEmpty) {
-      // The light theme's yellow is faint on the court; a ring in the line colour keeps the
-      // newest position visible (3:1, T4.11).
-      canvas.drawCircle(
-        mark(trail.last.$1),
-        5,
-        Paint()
-          ..color = lines
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-    }
-
     final f = frame;
     for (final (p, color) in [(f?.nearPos, players.near), (f?.farPos, players.far)]) {
       final o = p == null ? null : playerMark(p);
@@ -735,6 +723,15 @@ class CourtPainter extends CustomPainter {
           ..style = PaintingStyle.stroke,
       );
     }
+    paintShuttleTrail(
+      canvas,
+      [
+        for (final (_, point, placed, speed, connected) in trail)
+          (point: mark(point), speed: speed, approximate: !placed, connected: connected),
+      ],
+      hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
+      neutral: players.shuttle,
+    );
     canvas.restore();
   }
 

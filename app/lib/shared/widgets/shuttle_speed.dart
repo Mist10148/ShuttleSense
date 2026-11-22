@@ -10,6 +10,53 @@ Color? shuttleSpeedColor(double? kmh) {
   return speedColors[3];
 }
 
+typedef ShuttleTrailSample = ({Offset point, double? speed, bool approximate, bool connected});
+
+void paintShuttleTrail(
+  Canvas canvas,
+  List<ShuttleTrailSample> samples, {
+  required bool hasCurrent,
+  required Color neutral,
+}) {
+  if (samples.isEmpty) return;
+  final head = samples.last.point;
+  const radius = 5.0;
+  canvas.save();
+  if (hasCurrent) {
+    canvas.clipPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(canvas.getLocalClipBounds())
+        ..addOval(Rect.fromCircle(center: head, radius: radius)),
+    );
+  }
+  final paint = Paint()
+    ..strokeWidth = 1.5
+    ..strokeCap = StrokeCap.round;
+  for (var i = 1; i < samples.length; i++) {
+    final sample = samples[i];
+    if (!sample.connected) continue;
+    final age = (samples.length - 1 - i) / samples.length;
+    final confidence = sample.approximate || samples[i - 1].approximate ? 0.55 : 1.0;
+    paint.color = (shuttleSpeedColor(sample.speed) ?? neutral).withValues(
+      alpha: (0.85 - 0.65 * age) * confidence,
+    );
+    canvas.drawLine(samples[i - 1].point, sample.point, paint);
+  }
+  canvas.restore();
+  if (hasCurrent) {
+    paint
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..color = const Color(0xFF171717);
+    canvas.drawCircle(head, radius, paint);
+    paint
+      ..strokeWidth = 1.25
+      ..color = Colors.white;
+    canvas.drawCircle(head, radius, paint);
+  }
+}
+
 class ShuttleSpeedLegend extends StatelessWidget {
   const ShuttleSpeedLegend({super.key});
 
