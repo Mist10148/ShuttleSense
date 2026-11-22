@@ -187,6 +187,9 @@ def validate_sources(text: str, chunks: list[Chunk]) -> tuple[str, list[dict[str
         )
         return match.group(0)
 
+    # Session and history chunk IDs are internal retrieval labels. Timestamp citations
+    # and the validated knowledge chips are the references displayed by the app.
+    text = re.sub(r"\[(?:session|history):[\w#.-]+\]", "", text)
     return _tidy(KB_CITATION.sub(keep, text)), list(cited.values())
 
 

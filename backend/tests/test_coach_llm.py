@@ -94,6 +94,37 @@ def test_gemini_streams_with_system_instruction_and_roles() -> None:
     assert [c.role for c in call["contents"]] == ["user", "model", "user"]
 
 
+def test_gemini_uses_fast_model_on_initial_timeout() -> None:
+    class SlowPrimary(FakeModels):
+        async def generate_content_stream(self, **kwargs):
+            if kwargs["model"] == "primary":
+                raise httpx.ReadTimeout("busy")
+            return await super().generate_content_stream(**kwargs)
+
+    sdk = SlowPrimary()
+    provider = _gemini(sdk, model="primary", fast_model="secondary")
+    assert _run(_collect(provider.stream("rules", [_q()]))) == ["Hi ", "there"]
+    assert sdk.calls[0][1]["model"] == "secondary"
+
+
+def test_gemini_does_not_restart_a_partial_answer() -> None:
+    class Interrupted(FakeModels):
+        async def generate_content_stream(self, **kwargs):
+            self.calls.append(("stream", kwargs))
+
+            async def chunks():
+                yield SimpleNamespace(text="First sentence.", candidates=[])
+                raise httpx.ReadTimeout("disconnected")
+
+            return chunks()
+
+    models = Interrupted()
+    provider = _gemini(models, model="primary", fast_model="secondary")
+    with pytest.raises(ChatError):
+        _run(_collect(provider.stream("rules", [_q()])))
+    assert len(models.calls) == 1
+
+
 def test_gemini_truncation_and_safety_stops() -> None:
     out = _run(_collect(_gemini(FakeModels(finish="MAX_TOKENS")).stream("s", [_q()])))
     assert out[-1] == TRUNCATED

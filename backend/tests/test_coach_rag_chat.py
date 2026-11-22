@@ -27,7 +27,7 @@ from shuttlesense.coach.llm import ChatError, FakeProvider
 from shuttlesense.fake import load_golden
 
 ANSWER = (
-    "Your arm was bent at contact [t={t}s] and [t=42.0s]. Reach up early "
+    "Your arm was bent at contact [session:overview] [t={t}s] and [t=42.0s]. Reach up early "
     "[kb:footwork#split-step] and [kb:made_up#nothing]."
 )
 
@@ -73,6 +73,7 @@ def test_job_chat_retrieves_validates_and_returns_sources(tmp_path: Path, tiny_v
         text = done["message"]["text"]
         assert f"[t={hit_t}s]" in text and "[t=42.0s]" not in text
         assert "[kb:made_up#nothing]" not in text
+        assert "[session:overview]" not in text
         assert [round(c["time_s"], 1) for c in done["message"]["citations"]] == [hit_t]
         assert "[kb:footwork#split-step]" in text
         assert [s["id"] for s in done["sources"]] == ["kb:footwork#split-step"]
@@ -277,6 +278,7 @@ def test_live_gemini_synthetic_session(tmp_path: Path, tiny_video: Path):
             response = client.post(endpoint, json={"message": question})
             response.raise_for_status()
             events = _events(response)
-            assert events[-1]["type"] == "done" and events[-1]["message"]["text"]
+            assert events[-1]["type"] == "done", (endpoint, events[-1])
+            assert events[-1]["message"]["text"]
             assert any(e["type"] == "delta" for e in events)
         assert client.get(f"/jobs/{job}/coach/report").json()["generated_by"] == "gemini"

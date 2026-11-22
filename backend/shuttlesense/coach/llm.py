@@ -110,11 +110,24 @@ class GeminiProvider:
         if client is None:
             from google import genai
 
-            client = genai.Client(api_key=api_key)
+            client = genai.Client(
+                api_key=api_key,
+                http_options={
+                    "timeout": 20_000,
+                    "retry_options": {"attempts": 1},
+                },
+            )
         self.client = client
         self.model, self.fast_model = model, fast_model
         self.embed_model, self.embed_dim = embed_model, embed_dim
         self.temperature, self.max_output_tokens = temperature, max_output_tokens
+
+    @staticmethod
+    def _temporary_failure(exc: Exception) -> bool:
+        import httpx
+        from google.genai import errors
+
+        return isinstance(exc, (TimeoutError, httpx.TimeoutException, errors.ServerError))
 
     @staticmethod
     def _contents(messages: list[dict[str, str]]) -> list[Any]:
@@ -136,21 +149,28 @@ class GeminiProvider:
             temperature=self.temperature,
             max_output_tokens=self.max_output_tokens,
         )
+        contents = self._contents(messages)
+        models = list(dict.fromkeys((self.model, self.fast_model)))
+        emitted = False
         finish = None
-        try:
-            chunks = await self.client.aio.models.generate_content_stream(
-                model=self.model, contents=self._contents(messages), config=config
-            )
-            async for chunk in chunks:
-                for cand in chunk.candidates or []:
-                    if cand.finish_reason is not None:
-                        finish = str(getattr(cand.finish_reason, "name", cand.finish_reason))
-                if chunk.text:
-                    yield chunk.text
-        except (ChatError, Refused):
-            raise
-        except Exception as exc:
-            raise describe_gemini_error(exc) from exc
+        for model in models:
+            try:
+                chunks = await self.client.aio.models.generate_content_stream(
+                    model=model, contents=contents, config=config
+                )
+                async for chunk in chunks:
+                    for cand in chunk.candidates or []:
+                        if cand.finish_reason is not None:
+                            finish = str(getattr(cand.finish_reason, "name", cand.finish_reason))
+                    if chunk.text:
+                        emitted = True
+                        yield chunk.text
+                break
+            except (ChatError, Refused):
+                raise
+            except Exception as exc:
+                if emitted or finish or model == models[-1] or not self._temporary_failure(exc):
+                    raise describe_gemini_error(exc) from exc
         if finish in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"):
             raise Refused(finish)
         if finish == "MAX_TOKENS":
@@ -168,12 +188,16 @@ class GeminiProvider:
             response_mime_type="application/json",
             response_schema=schema,
         )
-        try:
-            res = await self.client.aio.models.generate_content(
-                model=self.fast_model if fast else self.model, contents=prompt, config=config
-            )
-        except Exception as exc:
-            raise describe_gemini_error(exc) from exc
+        models = [self.fast_model] if fast else list(dict.fromkeys((self.model, self.fast_model)))
+        for model in models:
+            try:
+                res = await self.client.aio.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
+                break
+            except Exception as exc:
+                if model == models[-1] or not self._temporary_failure(exc):
+                    raise describe_gemini_error(exc) from exc
         parsed = getattr(res, "parsed", None)
         if isinstance(parsed, schema):
             return parsed
