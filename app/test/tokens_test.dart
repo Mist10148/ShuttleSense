@@ -74,10 +74,7 @@ void main() {
   });
 
   test('high-contrast themes collapse depth to plain borders', () {
-    for (final theme in [
-      AppTheme.light(highContrast: true),
-      AppTheme.dark(highContrast: true),
-    ]) {
+    for (final theme in [AppTheme.light(highContrast: true), AppTheme.dark(highContrast: true)]) {
       final t = theme.extension<TactileTokens>()!;
       expect(t.flat, isTrue);
       expect(t.shade.a, 0);
