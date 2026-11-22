@@ -74,6 +74,32 @@ def player_point(
     return x + w / 2, y + h
 
 
+def court_player_point(p: Player, min_score: float = MIN_KEYPOINT_SCORE) -> tuple[float, float]:
+    """Estimate the player's support point from measured ankles and the shoe baseline."""
+    x, y, w, h = p.bbox
+    bottom = y + h
+    ankles = [
+        (ax, ay)
+        for ax, ay, score in p.keypoints[LEFT_ANKLE : RIGHT_ANKLE + 1]
+        if score >= min_score
+        and x - 0.05 * w <= ax <= x + 1.05 * w
+        and y <= ay <= bottom + 0.05 * h
+    ]
+    if len(ankles) == 2 and h > 0:
+        upper, lower = sorted(ankles, key=lambda ankle: ankle[1])
+        separation = (lower[1] - upper[1]) / h
+        weight = min(1.0, max(0.0, (separation - 0.06) / 0.10))
+        if lower[1] < bottom - 0.12 * h:
+            weight = 0.0
+        ax = (upper[0] + lower[0]) / 2 + weight * (lower[0] - upper[0]) / 2
+        ay = (upper[1] + lower[1]) / 2 + weight * (lower[1] - upper[1]) / 2
+        return ax, min(bottom, ay + ANKLE_FLOOR_RATIO * h)
+    if len(ankles) == 1 and h > 0 and ankles[0][1] >= bottom - 0.12 * h:
+        ax, ay = ankles[0]
+        return ax, min(bottom, ay + ANKLE_FLOOR_RATIO * h)
+    return x + w / 2, bottom
+
+
 def _runs(valid: np.ndarray) -> list[tuple[int, int]]:
     """(start, end) of each run of consecutive True values, end exclusive."""
     edges = np.flatnonzero(np.diff(np.concatenate([[0], valid.astype(int), [0]])))
@@ -126,6 +152,32 @@ def smooth_nan(
     return out
 
 
+def _smooth_court_players(points: np.ndarray, window: int, fps: float) -> np.ndarray:
+    out = points.copy()
+    if fps > 0 and len(out) >= 3:
+        max_step = MAX_PLAYER_SPEED_MPS / fps
+        with np.errstate(invalid="ignore"):
+            steps = np.linalg.norm(np.diff(points, axis=0), axis=1)
+            bypass = np.linalg.norm(points[2:] - points[:-2], axis=1)
+            rejected = (steps[:-1] > max_step) & (steps[1:] > max_step) & (bypass <= 2 * max_step)
+        out[np.flatnonzero(rejected) + 1] = np.nan
+
+    valid = np.isfinite(out).all(axis=1)
+    for start, end in _runs(valid):
+        run = out[start:end].copy()
+        for i in range(1, len(run) - 1):
+            radius = min(window // 2, i, len(run) - i - 1)
+            if radius > 0:
+                samples = run[i - radius : i + radius + 1]
+                # Use an observed point nearest to the median, so a split step does not
+                # produce a location between unrelated x and y samples.
+                median = np.median(samples, axis=0)
+                if not np.array_equal(median, run[i]):
+                    nearest = np.argmin(np.linalg.norm(samples - median, axis=1))
+                    out[start + i] = samples[nearest]
+    return out
+
+
 def clamped_mask(
     points: np.ndarray, size: tuple[float, float], margin: float, tol: float = 1e-3
 ) -> np.ndarray:
@@ -165,6 +217,7 @@ def project_positions(
     player_margin_m: float = PLAYER_MARGIN_M,
     shuttle_margin_m: float = SHUTTLE_MARGIN_M,
     min_keypoint_score: float = MIN_KEYPOINT_SCORE,
+    refine_players: bool = False,
 ) -> dict[str, np.ndarray]:
     """(N, 2) court positions per key ("near", "far", "shuttle", and "near_2", "far_2" in
     doubles); NaN where unknown."""
@@ -178,11 +231,12 @@ def project_positions(
         return out
     h = np.asarray(record.court.homography)
     width, length = record.court.court_size_m
+    estimate = court_player_point if refine_players else player_point
     for i, f in enumerate(record.frames):
         for side in players:
             p = getattr(f.players, side)
             if p is not None and p.court_position_valid:
-                out[side][i] = player_point(p, min_keypoint_score)
+                out[side][i] = estimate(p, min_keypoint_score)
         s = f.shuttle
         if s is not None and s.visible and s.x is not None and s.y is not None:
             out["shuttle"][i] = s.x, s.y
@@ -191,9 +245,18 @@ def project_positions(
         px = out[key]
         valid = ~np.isnan(px).any(axis=1)
         if valid.any():
-            px[valid] = clamp_to_court(image_to_court(h, px[valid]), (width, length), margin)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                projected = image_to_court(h, px[valid])
+            px[valid] = clamp_to_court(projected, (width, length), margin)
+            if refine_players and key != "shuttle":
+                outside = clamped_mask(px, (width, length), margin)
+                px[outside] = np.nan
         if key != "shuttle":  # the shuttle is smoothed by the speed estimate instead
-            out[key] = smooth_nan(px, smooth, fps=record.fps or None)
+            out[key] = (
+                _smooth_court_players(px, smooth, record.fps)
+                if refine_players
+                else smooth_nan(px, smooth, fps=record.fps or None)
+            )
     return out
 
 

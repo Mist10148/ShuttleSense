@@ -589,6 +589,11 @@ class CourtPainter extends CustomPainter {
       x: p.x.clamp(-alley - kRunOffM + inset, kCourtWidthM + alley + kRunOffM - inset),
       y: p.y.clamp(-kRunOffM + inset, kCourtLengthM + kRunOffM - inset),
     ));
+    Offset? playerMark(CourtPoint p) {
+      final o = toCanvas(p);
+      return (Offset.zero & size).contains(o) ? o : null;
+    }
+
     // The outer lines of the court (doubles sidelines when there are alleys).
     final court = Rect.fromPoints(
       toCanvas((x: -alley, y: kCourtLengthM)),
@@ -665,7 +670,8 @@ class CourtPainter extends CustomPainter {
         ..color = c
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
-      final o = mark(p);
+      final o = playerMark(p);
+      if (o == null) continue;
       canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
       canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
     }
@@ -697,18 +703,17 @@ class CourtPainter extends CustomPainter {
     }
 
     final f = frame;
-    if (f?.nearPos case final near?) {
-      canvas.drawCircle(mark(near), 7, Paint()..color = players.near);
-    }
-    if (f?.farPos case final far?) {
-      canvas.drawCircle(mark(far), 7, Paint()..color = players.far);
+    for (final (p, color) in [(f?.nearPos, players.near), (f?.farPos, players.far)]) {
+      final o = p == null ? null : playerMark(p);
+      if (o != null) canvas.drawCircle(o, 7, Paint()..color = color);
     }
     // Doubles partners: their own colour, with a ring so they differ by shape too.
     for (final (p, color) in [(f?.near2Pos, players.near2), (f?.far2Pos, players.far2)]) {
-      if (p == null) continue;
-      canvas.drawCircle(mark(p), 6, Paint()..color = color);
+      final o = p == null ? null : playerMark(p);
+      if (o == null) continue;
+      canvas.drawCircle(o, 6, Paint()..color = color);
       canvas.drawCircle(
-        mark(p),
+        o,
         8,
         Paint()
           ..color = color

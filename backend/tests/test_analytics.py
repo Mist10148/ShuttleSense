@@ -3,7 +3,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from shuttlesense.analytics.positions import player_point, project_positions
+from shuttlesense.analytics.positions import (
+    _smooth_court_players,
+    court_player_point,
+    player_point,
+    project_positions,
+)
 from shuttlesense.analytics.speed import hit_speed, speeds_kmh
 from shuttlesense.analytics.stage import count_strokes, strokes_so_far
 from shuttlesense.analytics.stage import run as analytics_run
@@ -35,6 +40,28 @@ def test_falls_back_to_bbox_bottom() -> None:
     kps[16] = (140.0, 520.0, 0.1)  # one ankle not confident
     assert player_point(Player(bbox=(80, 300, 80, 240), keypoints=kps)) == (120.0, 540.0)
     assert player_point(Player(bbox=(80, 300, 80, 240))) == (120.0, 540.0)
+
+
+def test_court_point_weights_planted_ankles_and_rejects_bad_keypoints() -> None:
+    kps = [(0.0, 0.0, 0.0)] * 17
+    kps[15], kps[16] = (110.0, 390.0, 0.9), (150.0, 392.0, 0.9)
+    p = Player(bbox=(100, 200, 80, 200), keypoints=kps)
+    assert court_player_point(p) == (130.0, 399.0)
+    p.keypoints[15] = (110.0, 348.0, 0.9)
+    assert court_player_point(p) == (150.0, 400.0)
+    p.keypoints[15] = (20.0, 390.0, 0.9)
+    assert court_player_point(p) == (150.0, 400.0)
+    p.keypoints[16] = (150.0, 320.0, 0.9)
+    assert court_player_point(p) == (140.0, 400.0)
+
+
+def test_refined_motion_rejects_single_frame_jump_and_keeps_gap_edges() -> None:
+    x = np.array([0.0, 0.1, 2.0, 0.3, 0.4, np.nan, 2.0, 2.2, 2.4])
+    points = np.column_stack([x, x])
+    actual = _smooth_court_players(points, window=5, fps=30)
+    expected = points.copy()
+    expected[2] = np.nan
+    np.testing.assert_allclose(actual, expected, equal_nan=True)
 
 
 def test_stage_reads_the_pose_keypoint_threshold() -> None:

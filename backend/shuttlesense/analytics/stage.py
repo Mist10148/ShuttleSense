@@ -42,7 +42,10 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     cfg = ctx.stage_config("analytics")
     min_score = ctx.stage_config("pose").get("min_keypoint_score", MIN_KEYPOINT_SCORE)
     positions = project_positions(
-        record, smooth=cfg.get("position_smoothing", 5), min_keypoint_score=min_score
+        record,
+        smooth=cfg.get("position_smoothing", 5),
+        min_keypoint_score=min_score,
+        refine_players=True,
     )
     apply_positions(record, positions)
 
