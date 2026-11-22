@@ -18,7 +18,6 @@ import '../../core/responsive/breakpoints.dart';
 import '../../shared/widgets/data_display.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
-import '../../shared/widgets/surfaces.dart';
 import '../history/history_screen.dart' show formatJobDate;
 import 'downloads.dart';
 import 'widgets/court_minimap.dart';
@@ -26,14 +25,16 @@ import 'widgets/line_call_banner.dart';
 import 'widgets/results_layout.dart';
 import 'widgets/scoreboard.dart';
 import 'widgets/session_summary.dart';
-import 'widgets/status_strip.dart';
+import 'widgets/shot_marker_bar.dart';
+import 'widgets/player_cards.dart';
+import 'widgets/shot_panel.dart';
 import 'widgets/stroke_timeline.dart';
 import 'widgets/summary_chart.dart';
 import 'widgets/video_panel.dart';
 import '../coach/coach_report_card.dart';
 import '../../shared/widgets/hit_burst.dart';
 import 'widgets/hit_anchor.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -68,26 +69,26 @@ class ResultsScreen extends ConsumerWidget {
     final below = [?filename, if (j != null) formatJobDate(j.createdAt)].join(' · ');
     final window = Breakpoints.of(context);
     final gutter = Breakpoints.gutter(window);
-    // On a phone, or a window too short, the stats would cost the video its height.
-    final showStats = !window.isCompact && MediaQuery.sizeOf(context).height >= _kStatsMinHeight;
 
     return Scaffold(
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(gutter, Spacing.lg, gutter, Spacing.lg),
           child: MaxWidth(
-            maxWidth: 1400,
+            maxWidth: 1600,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 PageHeader(
                   title: 'Results',
+                  dense: true,
                   below: below.isEmpty ? null : below,
                   actions: _actions(context, ref, j, outputs),
                 ),
                 const SizedBox(height: Spacing.lg),
                 Expanded(
-                  // A failed refresh (e.g. after a score correction) keeps the results on screen.
+                  // A failed refresh (e.g. after a score correction) keeps the results
+                  // on screen.
                   child: record.when(
                     skipError: true,
                     loading: () => const _ResultsSkeleton(),
@@ -100,23 +101,12 @@ class ResultsScreen extends ConsumerWidget {
                         child: const Text('Retry'),
                       ),
                     ),
-                    data: (record) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (showStats) ...[
-                          _StatsRow(record: record),
-                          const SizedBox(height: Spacing.lg),
-                        ],
-                        Expanded(
-                          child: _ResultsBody(
-                            jobId: jobId,
-                            record: record,
-                            videoUrl: api.videoUrl(jobId),
-                            headers: api.authHeaders,
-                            videoAvailable: outputs?.video,
-                          ),
-                        ),
-                      ],
+                    data: (record) => _ResultsBody(
+                      jobId: jobId,
+                      record: record,
+                      videoUrl: api.videoUrl(jobId),
+                      headers: api.authHeaders,
+                      videoAvailable: outputs?.video,
                     ),
                   ),
                 ),
@@ -156,9 +146,6 @@ class ResultsScreen extends ConsumerWidget {
   ];
 }
 
-/// Below this window height the stats row is left out (a landscape tablet still fits it).
-const _kStatsMinHeight = 640.0;
-
 /// The record's headline numbers; a number the record does not have gets no tile.
 class _StatsRow extends StatelessWidget {
   const _StatsRow({required this.record});
@@ -180,15 +167,98 @@ class _StatsRow extends StatelessWidget {
         StatTile(label: 'Clip length', value: formatClock(seconds), icon: Icons.timer_outlined),
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
-    return Row(
-      children: [
-        for (final (i, tile) in tiles.indexed) ...[
-          if (i > 0) const SizedBox(width: Spacing.lg),
-          Expanded(
-            child: AppCard(padding: const EdgeInsets.all(Spacing.lg), child: tile),
+    final fill = AppPalette.of(context).surface2;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = box.maxWidth >= 720 ? tiles.length : 2;
+        final width = (box.maxWidth - Spacing.md * (columns - 1)) / columns;
+        return Wrap(
+          spacing: Spacing.md,
+          runSpacing: Spacing.md,
+          children: [
+            for (final tile in tiles)
+              Container(
+                width: width,
+                padding: const EdgeInsets.all(Spacing.lg),
+                decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(12)),
+                child: tile,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Under the video: the shot marks, the playback controls with the clock, and a line call
+/// waiting for review.
+class _StageControls extends StatelessWidget {
+  const _StageControls({
+    required this.record,
+    required this.frameIndex,
+    required this.fps,
+    required this.controls,
+    required this.onSeek,
+    this.banner,
+  });
+
+  final ClipRecord record;
+  final int frameIndex;
+  final double fps;
+  final Widget? controls;
+  final ValueChanged<Moment> onSeek;
+  final Widget? banner;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final total = record.numFrames > 0 ? record.numFrames / fps : null;
+    return Padding(
+      padding: const EdgeInsets.only(top: Spacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppPalette.of(context).surface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.md, Spacing.xs),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (record.hits.isNotEmpty || record.lineCalls.isNotEmpty)
+                    ShotMarkerBar(record: record, frameIndex: frameIndex, onSeek: onSeek),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: Spacing.md,
+                    children: [
+                      ?controls,
+                      Text.rich(
+                        TextSpan(
+                          text: formatClock(frameIndex / fps),
+                          children: [
+                            if (total != null)
+                              TextSpan(
+                                text: ' / ${formatClock(total)}',
+                                style: TextStyle(color: p.text3),
+                              ),
+                          ],
+                        ),
+                        style: kFigureStyle.copyWith(color: p.ink, fontSize: 19),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
+          ?banner,
         ],
-      ],
+      ),
     );
   }
 }
@@ -213,19 +283,21 @@ class _ResultsSkeleton extends StatelessWidget {
           ],
         );
       }
-      return Row(
+      // The stage (video beside the shot panel) over the sections.
+      return const Column(
         children: [
-          const Expanded(
-            child: Column(
+          Expanded(
+            flex: 3,
+            child: Row(
               children: [
                 Expanded(flex: 3, child: _fill),
-                SizedBox(height: Spacing.lg),
+                SizedBox(width: Spacing.xl - Spacing.xs),
                 Expanded(flex: 2, child: _fill),
               ],
             ),
           ),
-          const SizedBox(width: Spacing.lg),
-          SizedBox(width: ResultsLayout.sidePanelWidth(box.maxWidth), child: _fill),
+          SizedBox(height: Spacing.lg),
+          Expanded(flex: 2, child: _fill),
         ],
       );
     },
@@ -522,7 +594,6 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
       child: ValueListenableBuilder<int>(
         valueListenable: _frameIndex,
         builder: (context, frameIndex, _) {
-          final frame = record.frame(frameIndex);
           final currentHit = record.hitAt(frameIndex);
           final call = bannerCall(record, frameIndex);
           return ResultsLayout(
@@ -536,22 +607,31 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                 session: record.clipId,
               ),
             ),
-            status: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            status: _StageControls(
+              record: record,
+              frameIndex: frameIndex,
+              fps: fps,
+              onSeek: _seekMoment,
+              controls: widget.videoAvailable == true
+                  ? PlaybackControls(target: _target, fps: fps)
+                  : null,
+              banner: call == null
+                  ? null
+                  : LineCallBanner(
+                      call: call,
+                      busy: _correcting,
+                      onDecide: (decision) => _decide(call, decision),
+                    ),
+            ),
+            shot: ShotPanel(record: record, frameIndex: frameIndex),
+            compactShot: ShotPanel(record: record, frameIndex: frameIndex, dense: true),
+            players: PlayerCards(record: record, frameIndex: frameIndex),
+            stats: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (widget.videoAvailable == true) PlaybackControls(target: _target, fps: fps),
-                StatusStrip(
-                  rallyState: frame?.rallyState,
-                  speedKmh: frame?.shuttleSpeedKmh,
-                  peakSpeedKmh: record.summary?.peakSpeedKmh,
-                  strokeCount: record.strokesSoFar(frameIndex),
-                ),
-                if (call != null)
-                  LineCallBanner(
-                    call: call,
-                    busy: _correcting,
-                    onDecide: (decision) => _decide(call, decision),
-                  ),
+                _StatsRow(record: record),
+                const SizedBox(height: Spacing.lg),
+                chart,
               ],
             ),
             timeline: StrokeTimeline(
@@ -580,8 +660,6 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   record: record,
                   onSeek: widget.videoAvailable == true ? _seekMoment : null,
                 ),
-                const SizedBox(height: Spacing.lg),
-                chart,
               ],
             ),
             coach: SessionSummary(

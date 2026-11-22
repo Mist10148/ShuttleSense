@@ -120,24 +120,29 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    for (final (name, size, tabs) in [
-      ('phone', phone, true),
-      ('phone landscape', const Size(780, 360), true),
-      ('tablet', tablet, false),
-      ('tablet landscape', const Size(1100, 800), false),
-      ('short desktop window', const Size(1000, 540), false),
-      ('laptop', laptop, false),
-      ('wide desktop', const Size(1920, 1080), false),
+    for (final (name, size) in [
+      ('phone', phone),
+      ('phone landscape', const Size(780, 360)),
+      ('tablet', tablet),
+      ('tablet landscape', const Size(1100, 800)),
+      ('short desktop window', const Size(1000, 540)),
+      ('laptop', laptop),
+      ('wide desktop', const Size(1920, 1080)),
     ]) {
       testWidgets('$name renders without overflow', (tester) async {
         await pumpLayout(tester, size);
         expect(tester.takeException(), isNull);
-        expect(find.byType(TabBar), tabs ? findsOneWidget : findsNothing);
+        // One section at a time on every size, so each gets the full width.
+        expect(find.byType(TabBar), findsOneWidget);
         expect(find.byKey(const Key('status')), findsOneWidget);
-        if (!tabs) {
-          expect(find.byKey(const Key('minimap')), findsOneWidget);
-          expect(find.byKey(const Key('scoreboard')), findsOneWidget);
-        }
+        // The court is always on screen with the video, not behind a tab.
+        expect(find.byKey(const Key('minimap')), findsOneWidget);
+        await tester.ensureVisible(find.text('Score'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Score'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('scoreboard')), findsOneWidget);
+        expect(tester.takeException(), isNull);
       });
     }
 
@@ -151,10 +156,10 @@ void main() {
       expect(video.width, greaterThan(400));
     });
 
-    test('side panel stays between 300 and 400 dp', () {
-      expect(ResultsLayout.sidePanelWidth(800), 300);
+    test('the right column stays between 360 and 440 dp', () {
+      expect(ResultsLayout.sidePanelWidth(800), 360);
       expect(ResultsLayout.sidePanelWidth(1280), 384);
-      expect(ResultsLayout.sidePanelWidth(1920), 400);
+      expect(ResultsLayout.sidePanelWidth(1920), 440);
     });
   });
 }

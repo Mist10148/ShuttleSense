@@ -267,11 +267,12 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        if (size == phone) {
-          expect(find.text('Coach'), findsOneWidget); // a fourth tab
-        } else {
-          expect(find.text('Top things to fix'), findsOneWidget);
-        }
+        await tester.ensureVisible(find.text('Coach')); // its own section on every size
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Coach'));
+        await tester.pumpAndSettle();
+        expect(find.text('Top things to fix'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       });
     }
   });
