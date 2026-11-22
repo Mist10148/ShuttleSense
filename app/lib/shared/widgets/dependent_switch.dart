@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'helper_text.dart';
+import 'tactile.dart';
 
 /// A switch that only works while another setting is on. With [blockedBy] set it is
 /// greyed out and says what to turn on ("Turn on Calibrate court to enable").
@@ -23,7 +24,7 @@ class DependentSwitch extends StatelessWidget {
   final String? blockedBy;
 
   @override
-  Widget build(BuildContext context) => SwitchListTile(
+  Widget build(BuildContext context) => TactileSwitchTile(
     contentPadding: EdgeInsets.zero,
     title: Text(title),
     subtitle: Column(

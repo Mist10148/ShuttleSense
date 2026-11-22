@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
@@ -79,15 +80,19 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
           padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, Spacing.sm),
           child: Row(
             children: [
-              for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(label),
-                    selected: _player == value,
-                    onSelected: (_) => setState(() => _player = value),
-                  ),
+              Tray(
+                child: Row(
+                  spacing: Spacing.xs,
+                  children: [
+                    for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
+                      ChoiceChip(
+                        label: Text(label),
+                        selected: _player == value,
+                        onSelected: (_) => setState(() => _player = value),
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(width: Spacing.sm),
               PopupMenuButton<String?>(
                 tooltip: 'Filter by stroke',

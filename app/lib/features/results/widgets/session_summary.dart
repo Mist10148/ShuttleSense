@@ -6,6 +6,7 @@ import '../../../data/models/clip_record.dart';
 import '../../../shared/disclaimers.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../core/theme/tokens.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Seek requests from other screens (chat citations) to a job's results player.
 final seekRequestProvider = StateProvider.family<Moment?, String>((ref, jobId) => null);
@@ -94,24 +95,62 @@ class _SessionSummaryState extends State<SessionSummary> {
     final generalGoals = record.practiceGoals.where((goal) => goal.player == null).toList();
     return SectionCard(
       title: 'Coach',
+      // One even rhythm: each section is its heading with its content, a fixed gap apart.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: Spacing.lg,
         children: [
-          Text('Session recap', style: theme.textTheme.titleLarge),
-          if (record.score?.matchWinner != null)
-            Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
-          if (record.score != null)
-            Text('Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}'),
-          if (record.summary != null && record.summary!.strokeCounts.isNotEmpty) ...[
-            Text('Session stroke totals', style: theme.textTheme.titleSmall),
-            Wrap(
-              spacing: 8,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: Spacing.xs,
+            children: [
+              Text('Session recap', style: theme.textTheme.titleLarge),
+              if (record.score?.matchWinner != null)
+                Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
+              if (record.score != null)
+                Text(
+                  'Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: AppPalette.of(context).text2),
+                ),
+            ],
+          ),
+          if (record.summary != null && record.summary!.strokeCounts.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Spacing.sm,
               children: [
-                for (final item in record.summary!.strokeCounts.entries)
-                  Chip(label: Text('${kStrokeLabels[item.key] ?? item.key}: ${item.value}')),
+                const EngravedLabel('Session stroke totals'),
+                Wrap(
+                  spacing: Spacing.sm,
+                  runSpacing: Spacing.sm,
+                  children: [
+                    for (final item in record.summary!.strokeCounts.entries)
+                      RaisedTile(
+                        radius: 10,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Spacing.md,
+                          vertical: Spacing.sm,
+                        ),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: '${kStrokeLabels[item.key] ?? item.key}  '),
+                              TextSpan(
+                                text: '${item.value}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                          semanticsLabel: '${kStrokeLabels[item.key] ?? item.key}: ${item.value}',
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
-          ],
           if (notes.any((note) => note.player != null) ||
               record.practiceGoals.any((goal) => goal.player != null))
             CoachPlayerFilter(
@@ -129,23 +168,32 @@ class _SessionSummaryState extends State<SessionSummary> {
                   : 'Not enough evidence of a repeated pattern in this session.',
               style: theme.textTheme.bodyMedium,
             )
-          else ...[
-            Text('Top things to fix', style: theme.textTheme.titleSmall),
-            for (final (i, note) in top.indexed) _noteTile(note, rank: i + 1),
-          ],
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Spacing.xs,
+              children: [
+                const EngravedLabel('Top things to fix'),
+                for (final (i, note) in top.indexed) _noteTile(note, rank: i + 1),
+              ],
+            ),
           if (others.isNotEmpty)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: Text('More player notes (${others.length})'),
               children: [for (final note in others) _noteTile(note)],
             ),
-          if (generalNotes.isNotEmpty || generalGoals.isNotEmpty) ...[
-            Text('Session-wide notes and goals', style: theme.textTheme.titleSmall),
-            for (final goal in generalGoals) _goalCard(goal),
-            for (final note in generalNotes) _noteTile(note),
-          ],
+          if (generalNotes.isNotEmpty || generalGoals.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Spacing.xs,
+              children: [
+                const EngravedLabel('Session-wide notes and goals'),
+                for (final goal in generalGoals) _goalCard(goal),
+                for (final note in generalNotes) _noteTile(note),
+              ],
+            ),
           ?widget.report,
-          const SizedBox(height: Spacing.md),
           FilledButton.icon(
             onPressed: widget.chatAvailable ? widget.onAskCoach : null,
             icon: const Icon(Icons.forum_outlined),
@@ -159,7 +207,6 @@ class _SessionSummaryState extends State<SessionSummary> {
                 style: theme.textTheme.bodySmall,
               ),
             ),
-          const SizedBox(height: Spacing.sm),
           Text(
             kCoachingDisclaimer,
             style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),

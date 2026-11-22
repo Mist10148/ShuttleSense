@@ -35,6 +35,7 @@ import '../coach/coach_report_card.dart';
 import '../../shared/widgets/hit_burst.dart';
 import 'widgets/hit_anchor.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/tactile.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -167,7 +168,6 @@ class _StatsRow extends StatelessWidget {
         StatTile(label: 'Clip length', value: formatClock(seconds), icon: Icons.timer_outlined),
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
-    final fill = AppPalette.of(context).surface2;
     return LayoutBuilder(
       builder: (context, box) {
         final columns = box.maxWidth >= 720 ? tiles.length : 2;
@@ -177,11 +177,9 @@ class _StatsRow extends StatelessWidget {
           runSpacing: Spacing.md,
           children: [
             for (final tile in tiles)
-              Container(
+              SizedBox(
                 width: width,
-                padding: const EdgeInsets.all(Spacing.lg),
-                decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(12)),
-                child: tile,
+                child: RaisedTile(padding: const EdgeInsets.all(Spacing.lg), child: tile),
               ),
           ],
         );
@@ -221,8 +219,10 @@ class _StageControls extends StatelessWidget {
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              color: AppPalette.of(context).surface,
+              gradient: raisedGradient(TactileTokens.of(context)),
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: TactileTokens.of(context).rim),
+              boxShadow: raisedShadows(TactileTokens.of(context), depth: 0.7),
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.md, Spacing.xs),

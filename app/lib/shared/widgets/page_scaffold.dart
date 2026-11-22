@@ -26,11 +26,18 @@ class PageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gutter = Breakpoints.gutter(Breakpoints.of(context));
+    final size = MediaQuery.sizeOf(context);
+    final short = size.height < 900;
+    final gutter = size.width >= 1600 ? Spacing.xxxl : Breakpoints.gutter(Breakpoints.of(context));
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: EdgeInsets.fromLTRB(gutter, Spacing.xl, gutter, Spacing.xxl),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            short ? Spacing.md : Spacing.xl,
+            gutter,
+            Spacing.xxl,
+          ),
           children: [
             MaxWidth(
               maxWidth: maxWidth,
@@ -38,7 +45,7 @@ class PageScaffold extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   PageHeader(title: title, actions: actions, showBack: showBack),
-                  const SizedBox(height: Spacing.xl),
+                  SizedBox(height: short ? Spacing.lg : Spacing.xl),
                   ...children,
                 ],
               ),
@@ -83,15 +90,16 @@ class PageHeader extends StatelessWidget {
             fontSize: compact ? 22 : 24,
             fontWeight: FontWeight.w500,
           )
-        : compact
-        ? theme.textTheme.headlineLarge?.copyWith(fontSize: 32)
+        : compact || MediaQuery.sizeOf(context).height < 900
+        ? theme.textTheme.headlineLarge?.copyWith(fontSize: compact ? 32 : 38)
         : theme.textTheme.headlineLarge;
     return LayoutBuilder(
       builder: (context, box) => Row(
         children: [
           if (showBack && Navigator.of(context).canPop()) ...[
             const BackButton(),
-            const SizedBox(width: Spacing.xs),
+            // A clear gap between the back key and the title block it sits beside.
+            const SizedBox(width: Spacing.lg),
           ],
           Expanded(
             child: Column(
@@ -99,7 +107,7 @@ class PageHeader extends StatelessWidget {
               children: [
                 Semantics(header: true, child: Text(title, style: titleStyle)),
                 if (below != null) ...[
-                  const SizedBox(height: Spacing.xs),
+                  const SizedBox(height: 2),
                   Text(below!, style: theme.textTheme.bodySmall),
                 ],
               ],

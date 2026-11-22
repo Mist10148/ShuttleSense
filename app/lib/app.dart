@@ -15,6 +15,8 @@ class ShuttleSenseApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      highContrastTheme: AppTheme.light(highContrast: true),
+      highContrastDarkTheme: AppTheme.dark(highContrast: true),
       themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
     );

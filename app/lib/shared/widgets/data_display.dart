@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import 'tactile.dart';
 
 /// A big light number with its unit and a caption: "312 km/h · Max smash".
 class StatTile extends StatelessWidget {
@@ -104,19 +105,25 @@ class GradientProgress extends StatelessWidget {
     return Semantics(
       label: label,
       value: '${(fraction * 100).round()}%',
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(color: p.surface2, borderRadius: shape),
-        alignment: Alignment.centerLeft,
-        child: AnimatedFractionallySizedBox(
-          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : Motion.normal,
-          curve: Motion.curve,
-          widthFactor: fraction,
-          heightFactor: 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: shape,
-              gradient: LinearGradient(colors: p.progress),
+      child: Recess(
+        radius: Radii.pill,
+        padding: EdgeInsets.zero,
+        depth: 2,
+        child: SizedBox(
+          height: height,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AnimatedFractionallySizedBox(
+              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : Motion.normal,
+              curve: Motion.curve,
+              widthFactor: fraction,
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: shape,
+                  gradient: LinearGradient(colors: p.progress),
+                ),
+              ),
             ),
           ),
         ),

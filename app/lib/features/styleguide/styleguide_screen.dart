@@ -5,10 +5,12 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/data_display.dart';
 import '../../shared/widgets/dependent_switch.dart';
 import '../../shared/widgets/helper_text.dart';
+import '../../shared/widgets/instruments.dart';
 import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/status_pill.dart';
 import '../../shared/widgets/step_indicator.dart';
 import '../../shared/widgets/surfaces.dart';
+import '../../shared/widgets/tactile.dart';
 
 /// Every design token and shared component on one page, in light or dark (/styleguide).
 /// Reachable without a server so the look can be reviewed on any machine.
@@ -105,6 +107,27 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
             ),
             AppCard(title: 'Lists and progress', child: _lists(p)),
             AppCard(title: 'Status', child: _status()),
+            AppCard(
+              title: 'Tactile',
+              subtitle: 'Keys, wells, screens and lights',
+              child: Wrap(
+                spacing: Spacing.lg,
+                runSpacing: Spacing.lg,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  KeyCap(onTap: () {}, child: const Text('Key')),
+                  KeyCap(onTap: () {}, selected: true, child: const Text('Pressed')),
+                  KeyCap(onTap: () {}, color: p.lavender, child: const Text('Pastel key')),
+                  const KeyCap(onTap: null, child: Text('Disabled')),
+                  const Recess(child: Text('Recess')),
+                  const InsetScreen(child: Text('Inset screen')),
+                  Led(color: p.brand),
+                  const EngravedLabel('Engraved label'),
+                  const SpeedDial(value: 298, label: 'Peak speed', size: 180),
+                  Fader(fraction: 0.47, color: p.chart[1], label: 'Net shot', detail: '7 · 47%'),
+                ],
+              ),
+            ),
             const AppCard(
               title: 'Empty state',
               child: MessageView(
@@ -206,7 +229,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
         selected: {_match},
         onSelectionChanged: (s) => setState(() => _match = s.first),
       ),
-      SwitchListTile(
+      TactileSwitchTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('Calibrate court'),
         value: _calibrate,

@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import 'tactile.dart';
 
 /// The page canvas: a base colour with three soft glows (lavender, peach, mint in light mode;
 /// faint green and violet in dark mode).
@@ -60,6 +61,26 @@ class GlassPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final shape = BorderRadius.circular(radius);
+    if (tint == null) {
+      // The app body: an opaque moulded chassis, lit from the top left.
+      final t = TactileTokens.of(context);
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [t.chassisTop, t.chassisBottom],
+          ),
+          border: Border.all(color: t.rim),
+          boxShadow: p.popoverShadow,
+        ),
+        child: ClipRRect(
+          borderRadius: shape,
+          child: Padding(padding: padding, child: child),
+        ),
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(borderRadius: shape, boxShadow: p.popoverShadow),
       child: ClipRRect(
@@ -68,7 +89,7 @@ class GlassPanel extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: tint ?? p.shell,
+              color: tint,
               borderRadius: shape,
               border: Border.all(color: p.hairline ?? p.surface.withValues(alpha: 0.6)),
             ),
@@ -94,11 +115,15 @@ class AppCard extends StatefulWidget {
     this.onTap,
     this.semanticLabel,
     this.color,
+    this.icon,
     this.padding = const EdgeInsets.all(Spacing.xl),
   });
 
   final Widget child;
   final String? title;
+
+  /// A small icon in a sunken well before the title.
+  final IconData? icon;
   final String? subtitle;
   final List<Widget> actions;
   final VoidCallback? onExpand;
@@ -122,13 +147,20 @@ class _AppCardState extends State<AppCard> {
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
+    final t = TactileTokens.of(context);
     final theme = Theme.of(context);
     final still = MediaQuery.disableAnimationsOf(context);
     final lifted = _hovered && widget.onTap != null && !still;
     final shape = BorderRadius.circular(Radii.lg);
+    // Hovering a tappable card lights its whole edge, not just the part under the pointer.
     final edge = _focused
-        ? Border.all(color: p.ink, width: 2)
-        : (p.hairline == null ? null : Border.all(color: p.hairline!));
+        ? Border.all(color: t.primary, width: 2)
+        : Border.all(
+            color: lifted
+                ? t.primary.withValues(alpha: 0.4)
+                : (t.flat ? t.rim : Colors.transparent),
+            width: 2,
+          );
 
     Widget body = Padding(
       padding: widget.padding,
@@ -140,13 +172,31 @@ class _AppCardState extends State<AppCard> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (widget.icon != null) ...[
+                  Recess(
+                    radius: 10,
+                    padding: EdgeInsets.zero,
+                    depth: 2.5,
+                    child: SizedBox.square(
+                      dimension: 36,
+                      child: Icon(widget.icon, size: 18, color: p.info),
+                    ),
+                  ),
+                  const SizedBox(width: Spacing.md),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Semantics(
                         header: true,
-                        child: Text(widget.title!, style: theme.textTheme.titleLarge),
+                        child: Text(
+                          widget.title!,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
                       ),
                       if (widget.subtitle != null)
                         Text(widget.subtitle!, style: theme.textTheme.bodySmall),
@@ -176,6 +226,10 @@ class _AppCardState extends State<AppCard> {
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: shape,
+          splashFactory: NoSplash.splashFactory,
+          hoverColor: Colors.transparent,
+          highlightColor: t.recess.withValues(alpha: 0.25),
+          focusColor: Colors.transparent,
           onHover: (v) => setState(() => _hovered = v),
           onFocusChange: (v) => setState(() => _focused = v),
           child: body,
@@ -188,14 +242,21 @@ class _AppCardState extends State<AppCard> {
     return AnimatedContainer(
       duration: still ? Duration.zero : Motion.fast,
       curve: Motion.curve,
-      transform: Matrix4.translationValues(0, lifted ? -2 : 0, 0),
+      transform: Matrix4.translationValues(0, lifted ? -3 : 0, 0),
       decoration: BoxDecoration(
-        color: widget.color ?? p.surface,
+        gradient: widget.color == null ? convexGradient(t) : raisedGradient(t, widget.color),
         borderRadius: shape,
         border: edge,
-        boxShadow: lifted ? p.popoverShadow : p.cardShadow,
+        boxShadow: [...raisedShadows(t, depth: lifted ? 1.3 : 1)],
       ),
-      child: body,
+      child: CustomPaint(
+        foregroundPainter: BevelPainter(
+          radius: Radii.lg,
+          light: bevelColors(context).$1,
+          dark: bevelColors(context).$2,
+        ),
+        child: body,
+      ),
     );
   }
 }
@@ -212,14 +273,44 @@ class IconChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
+    final t = TactileTokens.of(context);
+    final tint = background;
+    if (tint != null) {
+      // A small well pressed into the surface, tinted by the pastel, with the icon in a
+      // deeper shade of the same colour.
+      final hsl = HSLColor.fromColor(tint);
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      final iconColor = tint == p.surface || tint == p.surface2
+          ? p.text2
+          : hsl
+                .withSaturation((hsl.saturation * 1.2).clamp(0.35, 0.75))
+                .withLightness(dark ? 0.72 : 0.38)
+                .toColor();
+      return Recess(
+        radius: size * 0.3,
+        padding: EdgeInsets.zero,
+        depth: 2.5,
+        color: Color.lerp(t.recess, tint, dark ? 0.35 : 0.55),
+        child: SizedBox.square(
+          dimension: size,
+          child: Icon(icon, size: size * 0.48, color: iconColor),
+        ),
+      );
+    }
+    // Without a tint: a small raised ink key with a light icon.
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: background ?? p.ink,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color.lerp(p.ink, Colors.white, 0.18)!, p.ink],
+        ),
         borderRadius: BorderRadius.circular(Radii.md),
+        boxShadow: chipShadows(t),
       ),
-      child: Icon(icon, size: size / 2, color: background == null ? p.onInk : p.ink),
+      child: Icon(icon, size: size / 2, color: p.onInk),
     );
   }
 }
@@ -255,40 +346,55 @@ class PastelActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final card = AppCard(
-      color: enabled ? color : p.surface2,
-      onTap: onTap,
-      semanticLabel: [title, description, ?badge].join('. '),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconChip(icon: icon, background: enabled ? null : p.surface),
-              const Spacer(),
-              if (badge != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 2),
+    final t = TactileTokens.of(context);
+    // Icon well and badge on top, then the title and description: a key you can read at a
+    // glance, sized a little smaller than a full card.
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconChip(icon: icon, background: enabled ? color : p.surface2, size: 44),
+            const Spacer(),
+            if (badge != null)
+              Flexible(
+                flex: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 3),
                   decoration: BoxDecoration(
-                    color: p.surface.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(Radii.pill),
+                    gradient: primaryGradient(t),
+                    borderRadius: BorderRadius.circular(7),
                   ),
-                  child: Text(badge!, style: text.labelMedium),
+                  child: Text(
+                    badge!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.labelMedium?.copyWith(
+                      color: t.onPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-            ],
-          ),
-          const SizedBox(height: Spacing.lg),
-          Text(title, style: text.titleLarge),
-          const SizedBox(height: Spacing.xs),
-          Text(description, style: text.bodyMedium?.copyWith(color: p.text2)),
-          if (footnote != null) ...[
-            const SizedBox(height: Spacing.sm),
-            Text(footnote!, style: text.bodySmall),
+              ),
           ],
+        ),
+        const SizedBox(height: 14),
+        Text(title, style: text.titleLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(description, style: text.bodyMedium?.copyWith(color: p.text2)),
+        if (footnote != null) ...[
+          const SizedBox(height: Spacing.sm),
+          Text(footnote!, style: text.bodySmall),
         ],
-      ),
+      ],
     );
-    return enabled ? card : Semantics(enabled: false, child: card);
+    return KeyCap(
+      onTap: onTap,
+      ring: badge != null && enabled ? t.primary.withValues(alpha: 0.7) : null,
+      semanticLabel: [title, description, ?badge].join('. '),
+      padding: const EdgeInsets.all(20),
+      child: content,
+    );
   }
 }
 

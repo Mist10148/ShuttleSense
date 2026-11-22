@@ -14,6 +14,7 @@ import '../../shared/widgets/message_view.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/tactile.dart';
 import '../results/results_screen.dart' show hasResults;
 
 const kStageLabels = {
@@ -173,7 +174,7 @@ class ProcessingScreen extends ConsumerWidget {
                 for (final stage in job.stages) _StageRow(stage: stage),
                 if (!job.status.isFinished) ...[
                   const SizedBox(height: Spacing.sm),
-                  SwitchListTile(
+                  TactileSwitchTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Notify me when done'),
                     subtitle: const Text('If the app is in the background when the job ends'),

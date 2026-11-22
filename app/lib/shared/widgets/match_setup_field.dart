@@ -1,3 +1,4 @@
+import 'tactile.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/models/clip_record.dart';
@@ -89,7 +90,7 @@ class MatchSetupField extends StatelessWidget {
         if (showChangeEnds) ...[
           row(
             'Change ends',
-            Switch(
+            TactileSwitch(
               key: const Key('auto-change-ends'),
               value: value.autoChangeEnds,
               onChanged: (on) => onChanged(value.withAutoChangeEnds(on)),

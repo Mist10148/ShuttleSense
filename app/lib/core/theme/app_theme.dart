@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/tactile.dart';
 import 'tokens.dart';
 
 export 'tokens.dart';
@@ -80,11 +81,22 @@ abstract final class AppTheme {
   /// The bundled font (assets/fonts, SIL Open Font License).
   static const String fontFamily = 'Outfit';
 
-  static ThemeData light() =>
-      _build(Brightness.light, playerColorsLight, StatusColors.light, AppPalette.light);
+  /// [highContrast]: the system asked for more contrast, so depth becomes plain borders.
+  static ThemeData light({bool highContrast = false}) => _build(
+    Brightness.light,
+    playerColorsLight,
+    StatusColors.light,
+    AppPalette.light,
+    highContrast: highContrast,
+  );
 
-  static ThemeData dark() =>
-      _build(Brightness.dark, playerColorsDark, StatusColors.dark, AppPalette.dark);
+  static ThemeData dark({bool highContrast = false}) => _build(
+    Brightness.dark,
+    playerColorsDark,
+    StatusColors.dark,
+    AppPalette.dark,
+    highContrast: highContrast,
+  );
 
   /// The brief's type scale: light display figures, regular headings, 14 body, 11 captions.
   static TextTheme _textTheme(AppPalette p) {
@@ -147,20 +159,28 @@ abstract final class AppTheme {
     Brightness brightness,
     PlayerColors players,
     StatusColors status,
-    AppPalette p,
-  ) {
+    AppPalette p, {
+    bool highContrast = false,
+  }) {
     final scheme = _scheme(brightness, p, status);
-    const pill = StadiumBorder();
+    final base = brightness == Brightness.dark ? TactileTokens.dark : TactileTokens.light;
+    final t = highContrast ? base.asFlat(p.ink.withValues(alpha: 0.6)) : base;
+    // Depth level 3, floating: menus, dialogs, sheets and toasts. Opaque, largest shadow.
+    final floatShadow = highContrast ? Colors.transparent : t.shade;
+    final floatShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: highContrast ? t.rim : t.rim.withValues(alpha: 0.6)),
+    );
     final control = RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md));
-    final cardEdge = p.hairline == null ? BorderSide.none : BorderSide(color: p.hairline!);
-    // Buttons are pills: black primary, grey tonal secondary, outlined and text as ghosts.
-    // Padding stays Material's, which shrinks at large text sizes so buttons still fit.
-    const button = ButtonStyle(
-      minimumSize: WidgetStatePropertyAll(Size(64, kMinTouchTarget)),
-      shape: WidgetStatePropertyAll(pill),
-      textStyle: WidgetStatePropertyAll(
-        TextStyle(fontFamily: fontFamily, fontSize: 14, fontWeight: FontWeight.w500),
-      ),
+    // Every button is tactile (shared/widgets/tactile.dart): raised at rest, lifted on hover,
+    // sunk while pressed. Padding stays Material's, which shrinks at large text sizes.
+    const label = WidgetStatePropertyAll(
+      TextStyle(fontFamily: fontFamily, fontSize: 14, fontWeight: FontWeight.w600),
+    );
+    const size = WidgetStatePropertyAll(Size(64, kMinTouchTarget));
+    Color disabledInk(Color c) => c.withValues(alpha: 0.45);
+    WidgetStateProperty<Color> ink(Color c) => WidgetStateProperty.resolveWith(
+      (s) => s.contains(WidgetState.disabled) ? disabledInk(c) : c,
     );
     final noBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(Radii.md),
@@ -175,6 +195,7 @@ abstract final class AppTheme {
         status,
         p,
         brightness == Brightness.dark ? AnalysisColors.dark : AnalysisColors.light,
+        t,
       ],
       visualDensity: VisualDensity.adaptivePlatformDensity,
       scaffoldBackgroundColor: p.page,
@@ -193,105 +214,187 @@ abstract final class AppTheme {
       // White cards on the canvas, no hard border (a 6% hairline in dark mode).
       cardTheme: CardThemeData(
         margin: EdgeInsets.zero,
-        elevation: 0,
-        color: p.surface,
+        elevation: 2,
+        shadowColor: t.shade,
+        color: t.raisedBottom,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.lg),
-          side: cardEdge,
+          side: BorderSide(color: t.rim),
         ),
       ),
-      filledButtonTheme: const FilledButtonThemeData(style: button),
+      filledButtonTheme: FilledButtonThemeData(
+        style: tactileButtonStyle(
+          TactileButtonKind.primary,
+        ).copyWith(minimumSize: size, textStyle: label, foregroundColor: ink(t.onPrimary)),
+      ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: button.copyWith(
-          side: WidgetStatePropertyAll(BorderSide(color: p.text3.withValues(alpha: 0.4))),
-          foregroundColor: WidgetStatePropertyAll(p.ink),
-        ),
+        style: tactileButtonStyle(
+          TactileButtonKind.secondary,
+        ).copyWith(minimumSize: size, textStyle: label, foregroundColor: ink(p.ink)),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: button.copyWith(foregroundColor: WidgetStatePropertyAll(p.ink)),
+        style: tactileButtonStyle(TactileButtonKind.ghost).copyWith(
+          minimumSize: size,
+          textStyle: label,
+          foregroundColor: ink(brightness == Brightness.dark ? p.info : t.primaryDeep),
+        ),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size.square(kMinTouchTarget)),
-          shape: WidgetStatePropertyAll(control),
+        style: tactileButtonStyle(TactileButtonKind.secondary).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size.square(kMinTouchTarget - 4)),
+          foregroundColor: ink(p.text2),
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
-        style: ButtonStyle(
+        style: tactileSegmentStyle().copyWith(
           minimumSize: const WidgetStatePropertyAll(Size(48, kMinTouchTarget)),
-          shape: const WidgetStatePropertyAll(pill),
-          side: WidgetStatePropertyAll(BorderSide(color: p.surface2)),
-          backgroundColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? p.ink : p.surface2,
-          ),
+          textStyle: label,
           foregroundColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? p.onInk : p.ink,
+            (s) => s.contains(WidgetState.selected) ? p.ink : p.text3,
           ),
+          iconColor: WidgetStatePropertyAll(t.primary),
+          // The segmented button does not pass a background builder down to its segments,
+          // so the tray and the raised chosen segment are drawn with plain state colours.
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? t.raisedTop : t.recess,
+          ),
+          side: WidgetStatePropertyAll(BorderSide(color: t.shade.withValues(alpha: 0.35))),
         ),
       ),
       switchTheme: SwitchThemeData(
         trackColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? p.ink : p.surface2,
+          (s) => s.contains(WidgetState.selected) ? t.primary : t.recess,
         ),
         thumbColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? p.onInk : p.text3,
+          (s) => s.contains(WidgetState.selected) ? t.onPrimary : t.raisedTop,
         ),
-        trackOutlineColor: WidgetStatePropertyAll(p.text3.withValues(alpha: 0.4)),
+        trackOutlineColor: WidgetStatePropertyAll(buttonEdgeColor(brightness, p, t)),
       ),
+      // Chips are options pressed into the surface; the chosen one pops up as a blue key.
       chipTheme: ChipThemeData(
         side: BorderSide.none,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.sm)),
-        backgroundColor: p.surface2,
-        selectedColor: p.ink,
-        checkmarkColor: p.onInk,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: t.recess,
+        elevation: 2,
+        pressElevation: 0,
+        shadowColor: Colors.transparent,
+        selectedShadowColor: t.primary.withValues(alpha: 0.6),
+        selectedColor: t.primary,
+        checkmarkColor: t.onPrimary,
         disabledColor: p.surface2.withValues(alpha: 0.5),
         // The chip resolves a WidgetStateColor in its label style per state.
         labelStyle: TextStyle(
           fontFamily: fontFamily,
           fontSize: 13,
           color: WidgetStateColor.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? p.onInk : p.ink,
+            (s) => s.contains(WidgetState.selected) ? t.onPrimary : p.ink,
           ),
+        ),
+      ),
+      // Checkboxes and radios sit in small wells and light up blue when chosen.
+      checkboxTheme: CheckboxThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        side: WidgetStateBorderSide.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? BorderSide(color: t.primaryDeep)
+              : BorderSide(color: t.shade, width: 1.5),
+        ),
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? t.primary : t.recess,
+        ),
+        checkColor: WidgetStatePropertyAll(t.onPrimary),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? t.primary : p.text3,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: p.surface2,
+        fillColor: t.recess,
         border: noBorder,
         enabledBorder: noBorder,
-        focusedBorder: noBorder.copyWith(borderSide: BorderSide(color: p.ink, width: 2)),
+        focusedBorder: noBorder.copyWith(borderSide: BorderSide(color: t.primary, width: 2)),
       ),
       listTileTheme: ListTileThemeData(shape: control),
+      // An expanded section is pushed in: it sinks into a well while open.
+      expansionTileTheme: ExpansionTileThemeData(
+        backgroundColor: t.recess,
+        collapsedBackgroundColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: highContrast ? t.rim : t.primary.withValues(alpha: 0.35)),
+        ),
+        collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        iconColor: t.primary,
+        textColor: p.ink,
+        expansionAnimationStyle: const AnimationStyle(
+          duration: Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        ),
+      ),
       dialogTheme: DialogThemeData(
-        backgroundColor: p.surface,
+        backgroundColor: t.raisedTop,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
+        elevation: 24,
+        shadowColor: floatShadow,
+        shape: floatShape,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: p.surface,
+        color: t.raisedTop,
         surfaceTintColor: Colors.transparent,
-        shape: control,
+        elevation: 12,
+        shadowColor: floatShadow,
+        shape: floatShape,
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(t.raisedTop),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(12),
+          shadowColor: WidgetStatePropertyAll(floatShadow),
+          shape: WidgetStatePropertyAll(floatShape),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: t.raisedTop,
+        surfaceTintColor: Colors.transparent,
+        elevation: 16,
+        shadowColor: floatShadow,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
       ),
       tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(color: p.ink, borderRadius: BorderRadius.circular(Radii.sm)),
+        waitDuration: const Duration(milliseconds: 350),
+        decoration: BoxDecoration(
+          color: p.ink,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          boxShadow: highContrast
+              ? null
+              : [BoxShadow(color: t.shade, blurRadius: 12, offset: const Offset(0, 5))],
+        ),
         textStyle: TextStyle(fontFamily: fontFamily, fontSize: 12, color: p.onInk),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: p.ink,
+        elevation: 10,
         contentTextStyle: TextStyle(fontFamily: fontFamily, fontSize: 14, color: p.onInk),
         actionTextColor: p.onInk,
         shape: control,
       ),
       // Phones: the bottom tab bar, with the active tab as an ink pill.
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: p.surface,
+        backgroundColor: t.chassisBottom,
+        elevation: 3,
+        shadowColor: t.shade,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: p.ink,
+        indicatorColor: t.primary,
         indicatorShape: const StadiumBorder(),
         iconTheme: WidgetStateProperty.resolveWith(
-          (s) => IconThemeData(color: s.contains(WidgetState.selected) ? p.onInk : p.text2),
+          (s) => IconThemeData(color: s.contains(WidgetState.selected) ? t.onPrimary : p.text2),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (s) => TextStyle(
@@ -304,11 +407,15 @@ abstract final class AppTheme {
       ),
       // Top tabs: pills, the active one filled with ink.
       tabBarTheme: TabBarThemeData(
-        indicator: BoxDecoration(color: p.ink, borderRadius: BorderRadius.circular(Radii.pill)),
+        indicator: BoxDecoration(
+          gradient: raisedGradient(t),
+          borderRadius: BorderRadius.circular(Radii.pill),
+          boxShadow: chipShadows(t),
+        ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerHeight: 0,
-        labelColor: p.onInk,
-        unselectedLabelColor: p.text2,
+        labelColor: p.ink,
+        unselectedLabelColor: p.text3,
         splashBorderRadius: BorderRadius.circular(Radii.pill),
         labelStyle: const TextStyle(
           fontFamily: fontFamily,
@@ -325,3 +432,7 @@ abstract final class AppTheme {
     );
   }
 }
+
+/// The thin edge of neutral controls such as the switch track.
+Color buttonEdgeColor(Brightness b, AppPalette p, TactileTokens t) =>
+    b == Brightness.dark ? t.rim : p.ink.withValues(alpha: 0.13);

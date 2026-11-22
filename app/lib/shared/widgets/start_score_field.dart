@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/tokens.dart';
+import 'tactile.dart';
 
 typedef StartScore = ({int near, int far});
 
@@ -65,7 +66,7 @@ class _StartScoreFieldState extends State<StartScoreField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SwitchListTile(
+        TactileSwitchTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Game already under way'),
           subtitle: const Text('Start the scoreboard from the score when recording began'),

@@ -14,6 +14,7 @@ import '../../shared/widgets/page_scaffold.dart';
 import '../results/widgets/session_summary.dart';
 import '../coach/source_chips.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/tactile.dart';
 
 class ChatState {
   const ChatState({this.messages = const [], this.streaming, this.busy = false, this.error});
@@ -170,7 +171,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final limit = health?.chatMaxMessages ?? 0;
     final atLimit = limit > 0 && state.questions >= limit;
     final theme = Theme.of(context);
-    final p = AppPalette.of(context);
     final gutter = Breakpoints.gutter(Breakpoints.of(context));
 
     return Scaffold(
@@ -254,10 +254,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 Spacing.xs,
                               ),
                               decoration: BoxDecoration(
-                                color: p.surface,
+                                gradient: raisedGradient(TactileTokens.of(context)),
                                 borderRadius: BorderRadius.circular(Radii.xl),
-                                border: Border.all(color: p.hairline ?? p.surface2),
-                                boxShadow: p.cardShadow,
+                                border: Border.all(color: TactileTokens.of(context).rim),
+                                boxShadow: raisedShadows(TactileTokens.of(context)),
                               ),
                               child: Row(
                                 children: [

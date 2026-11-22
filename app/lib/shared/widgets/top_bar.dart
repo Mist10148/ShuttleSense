@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
+import 'tactile.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
@@ -26,10 +27,10 @@ class TopBar extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        compact ? Spacing.lg : Spacing.sm,
-        Spacing.sm,
+        compact ? Spacing.lg : Spacing.md,
         compact ? Spacing.sm : Spacing.lg,
-        Spacing.sm,
+        compact ? Spacing.sm : Spacing.xxl,
+        compact ? Spacing.sm : Spacing.xs,
       ),
       child: Row(
         children: [
@@ -48,11 +49,13 @@ class TopBar extends StatelessWidget {
             ),
           ] else ...[
             const Spacer(),
-            const SizedBox(width: 280, child: _SearchField()),
-            const SizedBox(width: Spacing.sm),
+            const SizedBox(width: 300, child: _SearchField()),
+            const SizedBox(width: Spacing.lg),
           ],
+          // Three separate controls, one height, even gaps: the search slot, the bell key and
+          // the server status plate.
           const _NotificationsButton(),
-          const SizedBox(width: Spacing.xs),
+          SizedBox(width: compact ? Spacing.xs : Spacing.md),
           _ServerStatus(compact: compact),
         ],
       ),
@@ -66,17 +69,31 @@ class _SearchField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return TextField(
-      textInputAction: TextInputAction.search,
-      decoration: const InputDecoration(
-        prefixIcon: Icon(Icons.search),
-        hintText: 'Search analyses',
-        isDense: true,
+    // A slot sunk into the chassis.
+    return Recess(
+      radius: Radii.pill,
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        height: 44,
+        child: TextField(
+          textInputAction: TextInputAction.search,
+          textAlignVertical: TextAlignVertical.center,
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search, size: 20),
+            hintText: 'Search analyses',
+            isDense: true,
+            contentPadding: EdgeInsets.only(right: Spacing.lg),
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+          ),
+          onSubmitted: (v) {
+            ref.read(historyQueryProvider.notifier).state = v.trim();
+            context.go(Routes.history);
+          },
+        ),
       ),
-      onSubmitted: (v) {
-        ref.read(historyQueryProvider.notifier).state = v.trim();
-        context.go(Routes.history);
-      },
     );
   }
 }
@@ -104,6 +121,10 @@ class _NotificationsButton extends ConsumerWidget {
           ),
       ],
       builder: (context, menu, _) => IconButton(
+        style: tactileButtonStyle(TactileButtonKind.secondary, radius: 22).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size.square(44)),
+          fixedSize: const WidgetStatePropertyAll(Size.square(44)),
+        ),
         tooltip: running == 0 ? 'Notifications' : 'Notifications: $running running',
         onPressed: () => menu.isOpen ? menu.close() : menu.open(),
         icon: Badge(
@@ -160,7 +181,7 @@ class _ServerStatus extends ConsumerWidget {
             widthFactor: 1,
             child: compact
                 ? _Dot(tone: tone, label: 'Server $label')
-                : StatusPill(label: label, tone: tone),
+                : _StatusPlate(label: label, tone: tone),
           ),
         ),
       ),
@@ -189,6 +210,41 @@ class _Dot extends StatelessWidget {
         width: 12,
         height: 12,
         decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+      ),
+    );
+  }
+}
+
+/// The server status on the wide top bar: a raised plate the height of the search slot,
+/// with a status light and the word.
+class _StatusPlate extends StatelessWidget {
+  const _StatusPlate({required this.label, required this.tone});
+
+  final String label;
+  final PillTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final status = StatusColors.of(context);
+    final light = switch (tone) {
+      PillTone.good => status.inCall,
+      PillTone.bad => status.outCall,
+      _ => p.text3,
+    };
+    return Raised(
+      radius: Radii.pill,
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Led(color: light, size: 8, glow: tone != PillTone.neutral),
+            const SizedBox(width: Spacing.sm),
+            Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: p.ink)),
+          ],
+        ),
       ),
     );
   }
