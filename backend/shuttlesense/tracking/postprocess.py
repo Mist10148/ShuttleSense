@@ -56,16 +56,23 @@ def _configured_precision() -> dict[str, Any]:
 _OFFLINE: contextvars.ContextVar[bool] = contextvars.ContextVar("offline_tracking", default=False)
 
 
+_IMAGE_HEIGHT: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "image_height", default=None
+)
+
+
 @contextlib.contextmanager
-def offline_tracking() -> Iterator[None]:
+def offline_tracking(height: int | None = None) -> Iterator[None]:
     """Mark rectify calls inside as a whole uploaded clip (the tracking stage), where the
     flight fitting runs. Live and Watch windows call rectify every tick and leave it off
     unless stages.tracking.precision.trajectory_live is set."""
     token = _OFFLINE.set(True)
+    height_token = _IMAGE_HEIGHT.set(height)
     try:
         yield
     finally:
         _OFFLINE.reset(token)
+        _IMAGE_HEIGHT.reset(height_token)
 
 
 def precision_settings(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -275,7 +282,7 @@ def remove_outliers(
     n = len(visible)
     row_scale = None
     if depth_aware and n:
-        height = frame_height or infer_frame_height(xy, visible, outlier_px)
+        height = frame_height or _IMAGE_HEIGHT.get() or infer_frame_height(xy, visible, outlier_px)
         far, near = float(settings["depth_far_scale"]), float(settings["depth_near_scale"])
         row_scale = depth_scale(np.nan_to_num(xy[:, 1]), height, far, near)
     if max_burst > 0:
@@ -318,10 +325,11 @@ def rectify(
     """
     cfg = precision_settings(settings)
     xy = np.asarray(xy, dtype=float)
-    height = frame_height or infer_frame_height(xy, visible, outlier_px)
+    height = frame_height or _IMAGE_HEIGHT.get() or infer_frame_height(xy, visible, outlier_px)
     kept = remove_outliers(
         xy, visible, outlier_px, frame_height=height, depth_aware=bool(cfg["depth_aware"])
     )
+    original_xy = xy
     fitted = np.zeros(len(kept), dtype=bool)
     fit_flights = cfg["trajectory"] and (_OFFLINE.get() or cfg.get("trajectory_live", False))
     if fit_flights and kept.sum() >= 3:
@@ -330,6 +338,27 @@ def rectify(
         refined = refine_track(xy, kept, settings=cfg, frame_height=height)
         xy, kept, fitted = refined.xy, refined.kept, refined.filled
     filled_xy, filled = interpolate_gaps(xy, ((kept > 0) | fitted).astype(int), max_gap)
+    if _OFFLINE.get():
+        # InpaintNet deliberately skips gaps at the top border. The fallback curve
+        # must also respect an upward exit and downward re-entry at that border.
+        measured = np.flatnonzero(visible)
+        edges = np.flatnonzero(np.diff(measured) > 1)
+        for edge in edges:
+            left, right = measured[edge : edge + 2]
+            # The first reappearing blob may cover only a few pixels. Look one
+            # frame farther when available so a subpixel wobble cannot hide the descent.
+            before, after = left, right
+            for _ in range(2):
+                if before > 0 and visible[before - 1]:
+                    before -= 1
+                if after + 1 < len(visible) and visible[after + 1]:
+                    after += 1
+            y = original_xy[:, 1]
+            exits = y[left] < 0.05 * height and y[left] < y[before]
+            enters = y[right] < 0.05 * height and y[right] < y[after]
+            gap = slice(left + 1, right)
+            if (exits and enters) or np.any(filled[gap] & (filled_xy[gap, 1] < 0)):
+                filled[gap] = 0
     source = ["net" if kept[i] else ("interp" if filled[i] else "") for i in range(len(kept))]
     return filled_xy, filled, source
 

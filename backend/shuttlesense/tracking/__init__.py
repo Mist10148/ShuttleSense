@@ -17,7 +17,7 @@ def run(record, ctx):
     directly and keep their per-tick cost."""
     from shuttlesense.tracking.postprocess import offline_tracking
 
-    with offline_tracking():
+    with offline_tracking(record.height):
         return _tracknet_run(record, ctx)
 
 

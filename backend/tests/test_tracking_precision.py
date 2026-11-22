@@ -31,6 +31,15 @@ def _offline():
         yield
 
 
+def test_top_edge_lift_stays_missing_until_reentry() -> None:
+    xy = np.array([[40, 26], [45, 12], [0, 0], [0, 0], [60, 11], [65, 25]])
+    _, visible, source = rectify(
+        xy, np.array([1, 1, 0, 0, 1, 1]), frame_height=720, max_gap=8, outlier_px=80
+    )
+    assert visible.tolist() == [1, 1, 0, 0, 1, 1]
+    assert source[2:4] == ["", ""]
+
+
 def test_live_windows_skip_the_flight_fitting_by_default() -> None:
     t = np.arange(40, dtype=float)
     xy = np.stack([100 + 5 * t, 300 - 8 * t + 0.2 * t**2], axis=1)
