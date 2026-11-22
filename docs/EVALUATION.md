@@ -97,6 +97,34 @@ timing during rallies.
 - Where hit detection fails: shuttle out of frame, occlusion by the player, net shots with little direction change. The stroke models were trained on annotated hit frames; a detected hit a few frames off is covered only by the ±2 to ±4 frame shift used in training.
 - Broadcast vs phone gap: camera height and angle, motion blur, frame rate. A clip at another frame rate is now sampled over the same one-second span the models were trained on, which has a unit test but no accuracy measurement.
 
+### Court placement spot check (Nov 22)
+
+Manually labeled visible shoe contact points and singles court lines on a development clip and
+a separate held-out broadcast clip. Re-ran the existing player tracker with the labeled court
+corners, then compared the old and new floor-position calculations on the same detections and
+homography. The development clip needed correctly ordered corner taps before the comparison.
+Errors below use the same available frames for both methods.
+
+| Clip and side | Labeled frames | Missing before / after | Median before → after (m) | 90th percentile before → after (m) |
+| --- | ---: | ---: | ---: | ---: |
+| Development singles, near | 5 | 0 / 0 | 0.105 → 0.105 | 0.122 → 0.122 |
+| Development singles, far | 5 | 0 / 0 | 0.550 → 0.549 | 0.603 → 0.592 |
+| Held-out singles, near | 9 | 1 / 1 | 0.169 → 0.128 | 0.467 → 0.410 |
+| Held-out singles, far | 8 | 2 / 2 | 0.176 → 0.178 | 0.413 → 0.407 |
+
+The near-side median and 90th percentile both improved on the held-out clip. The far-side
+median was effectively flat at the precision of the hand labels. The sample is too small for
+an overall accuracy claim.
+
+In the local doubles clip, the camera crops the near baseline, so the check compared foot
+points in source pixels using the same pose detections. Near-side median / 90th-percentile
+errors were 10.8 / 18.1 px before and 11.2 / 18.1 px after, with one of six labeled points
+unmatched in both versions. Far-side errors were 5.7 / 13.8 px in both versions, with all
+six points matched. Doubles accuracy in court meters remains unmeasured.
+
+Reanalyze saved uploads to refresh player coordinates. A video re-render refreshes the
+shuttle trail using the existing tracking data.
+
 ## 6. Threats to validity
 
 - ShuttleSet is elite broadcast footage from elevated cameras. Team clips differ in angle, players and lighting.
