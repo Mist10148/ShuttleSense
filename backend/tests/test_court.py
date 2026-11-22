@@ -9,6 +9,13 @@ from shuttlesense.court import compute_homography, court_corners_m, image_to_cou
 CORNERS = [[200.0, 650.0], [1080.0, 650.0], [880.0, 200.0], [400.0, 200.0]]
 
 
+def test_upload_accepts_either_direction_from_near_left() -> None:
+    from shuttlesense.court.homography import upload_corners
+
+    assert upload_corners(CORNERS) == CORNERS
+    assert upload_corners([CORNERS[i] for i in (0, 3, 2, 1)]) == CORNERS
+
+
 def test_corners_map_to_court_corners() -> None:
     h = compute_homography(CORNERS)
     mapped = image_to_court(h, np.array(CORNERS))

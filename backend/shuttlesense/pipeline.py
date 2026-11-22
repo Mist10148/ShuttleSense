@@ -145,7 +145,9 @@ def run_pipeline(
     """
     config = dict(config or {})
     if court_corners_px:
-        config["court_corners_px"] = [list(c) for c in court_corners_px]
+        from shuttlesense.court.homography import upload_corners
+
+        config["court_corners_px"] = upload_corners(court_corners_px)
     disabled = [n for n, opts in config.get("stages", {}).items() if not opts.get("enabled", True)]
 
     record = ClipRecord(

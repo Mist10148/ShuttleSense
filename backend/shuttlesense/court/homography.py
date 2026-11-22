@@ -36,6 +36,17 @@ def validate_corners(corners: Sequence[Sequence[float]]) -> None:
         raise ValueError("court corners must form a convex quadrilateral in the documented order")
 
 
+def upload_corners(corners: Sequence[Sequence[float]]) -> list[list[float]]:
+    """Keep the tapped near-left anchor and follow the baseline first in image space."""
+    validate_corners(corners)
+    points = [list(p) for p in corners]
+    first, second, _, last = np.asarray(points)
+    a, b = second - first, last - first
+    if a[0] * b[1] - a[1] * b[0] > 0:
+        return [points[0], points[3], points[2], points[1]]
+    return points
+
+
 def compute_homography(
     corners_px: Sequence[Sequence[float]], size: Point = COURT_SIZE_M
 ) -> np.ndarray:
