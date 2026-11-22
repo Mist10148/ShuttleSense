@@ -85,7 +85,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.connect, builder: (context, state) => const ConnectScreen()),
       GoRoute(path: Routes.styleguide, builder: (context, state) => const StyleguideScreen()),
-      GoRoute(path: Routes.coach, builder: (context, state) => const CoachScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [
@@ -140,6 +139,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(path: Routes.history, builder: (context, state) => const HistoryScreen()),
+              // The general coach opens from History, inside the app frame like every page.
+              GoRoute(path: Routes.coach, builder: (context, state) => const CoachScreen()),
             ],
           ),
           StatefulShellBranch(
