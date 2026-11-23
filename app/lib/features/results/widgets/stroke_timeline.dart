@@ -4,7 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
-import '../../../shared/widgets/tactile.dart';
+import '../../../ui/depth.dart';
 
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
@@ -80,7 +80,9 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
           padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, Spacing.sm),
           child: Row(
             children: [
-              Tray(
+              InsetBox(
+                radius: 14,
+                padding: const EdgeInsets.all(Spacing.xs),
                 child: Row(
                   spacing: Spacing.xs,
                   children: [
