@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
+import '../../../shared/widgets/tactile.dart';
 import '../../../ui/depth.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
@@ -71,7 +73,15 @@ class CourtMaxHeight extends InheritedWidget {
 /// Upright, the court is as wide as the card when that fits, else as tall as the room
 /// allows. Where the room is short and wide (the tab under the video on a phone) an upright
 /// court would be a sliver, so it is laid on its side when that draws it larger.
-(Size, bool) courtViewLayout(double maxWidth, double maxHeight, {required bool doubles}) {
+///
+/// With [preferSide] the court lies on its side whenever there is room for it (the court
+/// card: a wide picture reads better there than a tall, cropped-looking one).
+(Size, bool) courtViewLayout(
+  double maxWidth,
+  double maxHeight, {
+  required bool doubles,
+  bool preferSide = false,
+}) {
   final aspect = courtViewAspect(doubles: doubles); // short side / long side
   final room = maxHeight - _kCardChrome;
   Size fit(double shortMax, double longMax) {
@@ -84,6 +94,7 @@ class CourtMaxHeight extends InheritedWidget {
   final upright = fit(maxWidth, room);
   // On its side the long side runs across the card, which bounds it without a minimum.
   final across = fit(room < 0 ? 0 : room, maxWidth).flipped;
+  if (preferSide && across.width > 0 && across.height > 0) return (across, true);
   return across.width * across.height > upright.width * upright.height
       ? (across, true)
       : (upright, false);
@@ -122,6 +133,11 @@ class CourtMinimap extends StatefulWidget {
 /// What the court card shows besides the players.
 enum CourtView { positions, heatmap, rallyPath, landings }
 
+/// Which part of the court a [CourtPainter] draws. The card stacks a [base] layer (the mat,
+/// heatmap and lines, repainted only when they change) under a [live] one (players, shuttle,
+/// marks), so playback does not redraw, or re-blur, the still part every frame.
+enum CourtLayer { all, base, live }
+
 const _kViewLabels = {
   CourtView.positions: 'Live',
   CourtView.heatmap: 'Heatmap',
@@ -129,8 +145,76 @@ const _kViewLabels = {
   CourtView.landings: 'Landings',
 };
 
-class _CourtMinimapState extends State<CourtMinimap> {
+/// The court mat and its run-off, light and dark: a deep green so white lines, the player
+/// discs (white-rimmed) and the shuttle trail all stand out.
+const _kMat = (Color(0xFF2B7A57), Color(0xFF22664A));
+const _kMatDark = (Color(0xFF235A43), Color(0xFF1B4736));
+
+class _CourtMinimapState extends State<CourtMinimap> with SingleTickerProviderStateMixin {
   var _view = CourtView.positions;
+
+  /// Players glide to each new frame instead of jumping. Every glide starts where the dots
+  /// are drawn at that moment, so the frequent updates of playback chain into one steady
+  /// movement rather than snapping back to the last frame and shaking.
+  late final AnimationController _motion;
+  Map<String, CourtPoint> _start = const {};
+  Map<String, CourtPoint> _target = const {};
+
+  Map<String, CourtPoint> _positionsAt(int frameIndex) {
+    final f = widget.record.frame(frameIndex);
+    return {'near': ?f?.nearPos, 'far': ?f?.farPos, 'near2': ?f?.near2Pos, 'far2': ?f?.far2Pos};
+  }
+
+  /// Where each dot is drawn right now.
+  Map<String, CourtPoint> _drawn() {
+    final t = _motion.value;
+    return {
+      for (final MapEntry(key: who, value: to) in _target.entries)
+        who: switch (_start[who]) {
+          final from? when t < 1 => (
+            x: from.x + (to.x - from.x) * t,
+            y: from.y + (to.y - from.y) * t,
+          ),
+          _ => to,
+        },
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _motion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+      value: 1,
+    );
+    _target = _positionsAt(widget.frameIndex);
+  }
+
+  @override
+  void didUpdateWidget(CourtMinimap old) {
+    super.didUpdateWidget(old);
+    if (old.frameIndex == widget.frameIndex && old.record == widget.record) return;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final next = _positionsAt(widget.frameIndex);
+    // A seek far away is a cut, not a movement.
+    if (!reduce && (widget.frameIndex - old.frameIndex).abs() <= 20) {
+      _start = _drawn();
+      _target = next;
+      _motion.forward(from: 0);
+    } else {
+      _start = const {};
+      _target = next;
+      _motion.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
   HeatGrid? _heat;
   (Object, int, int)? _heatKey;
 
@@ -157,110 +241,168 @@ class _CourtMinimapState extends State<CourtMinimap> {
     final calibrated = record.courtCorners != null;
     final doubles = widget.doubles ?? record.isDoubles;
     final heat = calibrated && _view == CourtView.heatmap ? _heatGrid() : null;
-    return SectionCard(
-      title: 'Court',
-      child: calibrated
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // One line that scrolls sideways on a narrow card, so the card keeps one
-                // height and the court the room it was given.
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: InsetBox(
-                    radius: 14,
-                    padding: const EdgeInsets.all(Spacing.xs),
-                    child: Row(
-                      spacing: Spacing.xs,
-                      children: [
-                        for (final MapEntry(key: view, value: label) in _kViewLabels.entries)
-                          ChoiceChip(
-                            label: Text(label),
-                            showCheckmark: false,
-                            visualDensity: VisualDensity.compact,
-                            tooltip: switch (view) {
-                              CourtView.positions => 'Players and the shuttle now',
-                              CourtView.heatmap =>
-                                doubles
-                                    ? 'Show time spent by each pair during play'
-                                    : 'Show time spent by each player during play',
-                              CourtView.rallyPath =>
-                                'Where each stroke of this rally was played, in order',
-                              CourtView.landings => 'Every landing called in or out in the clip',
-                            },
-                            selected: _view == view,
-                            onSelected: (_) => setState(() => _view = view),
-                          ),
-                      ],
+    return LayoutBuilder(
+      builder: (context, card) {
+        // Beside the title when the card is wide enough, else on its own line under it.
+        final besideTitle = card.maxWidth >= 360;
+        final views = DepthSegmented<CourtView>(
+          compact: true,
+          segments: [
+            for (final MapEntry(key: view, value: label) in _kViewLabels.entries)
+              ButtonSegment(
+                value: view,
+                label: Text(label),
+                tooltip: switch (view) {
+                  CourtView.positions => 'Players and the shuttle now',
+                  CourtView.heatmap =>
+                    doubles
+                        ? 'Show time spent by each pair during play'
+                        : 'Show time spent by each player during play',
+                  CourtView.rallyPath => 'Where each stroke of this rally was played, in order',
+                  CourtView.landings => 'Every landing called in or out in the clip',
+                },
+              ),
+          ],
+          selected: {_view},
+          onSelectionChanged: (v) => setState(() => _view = v.first),
+        );
+        return SectionCard(
+          title: 'Court',
+          // Tighter than other cards: the court is the content, so the frame stays thin.
+          padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md + 2, Spacing.lg, Spacing.md),
+          // Beside the title it gets what is left of the row and shrinks a little if it must,
+          // so it never pushes past the card.
+          trailing: calibrated && besideTitle
+              // The header row aligns to the top; the 48 dp tap height is centred on the
+              // title's line instead of hanging below it.
+              ? SizedBox(
+                  width: card.maxWidth - 132,
+                  height: 28,
+                  child: OverflowBox(
+                    maxHeight: kMinTouchTarget,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: views,
                     ),
                   ),
-                ),
-                const SizedBox(height: Spacing.md),
-                Semantics(
-                  label: [
-                    minimapLabel(record, frameIndex, doubles: doubles),
-                    if (widget.reviewCall case final call?)
-                      'Highlighted landing for rally ${call.rallyIndex + 1}.',
-                    ?heat?.describe(),
-                  ].join(' '),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // The whole court has to be on screen at once: the layout says how tall
-                      // the card may be, else most of the window is assumed.
-                      final room =
-                          CourtMaxHeight.maybeOf(context) ??
-                          MediaQuery.sizeOf(context).height * 0.7;
-                      final (size, onSide) = courtViewLayout(
-                        constraints.maxWidth,
-                        room,
-                        doubles: doubles,
-                      );
-                      final scheme = Theme.of(context).colorScheme;
-                      return Center(
-                        child: SizedBox.fromSize(
-                          size: size,
-                          // Nothing is painted outside the picture (heat cells and marks used
-                          // to spill over the card and the panels around it).
-                          child: ClipRect(
-                            child: CustomPaint(
-                              painter: CourtPainter.fromRecord(
-                                record,
-                                frameIndex,
-                                lines: scheme.outline,
-                                // A grey run-off band around a slightly darker court, so the
-                                // court reads as a shape on the white card.
-                                surface: Color.alphaBlend(
-                                  scheme.outline.withValues(alpha: 0.12),
-                                  scheme.surfaceContainerHighest,
+                )
+              : null,
+          child: calibrated
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!besideTitle)
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: views,
+                        ),
+                      ),
+                    const SizedBox(height: Spacing.md),
+                    Semantics(
+                      label: [
+                        minimapLabel(record, frameIndex, doubles: doubles),
+                        if (widget.reviewCall case final call?)
+                          'Highlighted landing for rally ${call.rallyIndex + 1}.',
+                        ?heat?.describe(),
+                      ].join(' '),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          // The whole court has to be on screen at once: the layout says how tall
+                          // the card may be, else most of the window is assumed.
+                          final room =
+                              CourtMaxHeight.maybeOf(context) ??
+                              MediaQuery.sizeOf(context).height * 0.7;
+                          // The court sits in a recessed screen; 12 dp of it is the screen's rim.
+                          final (size, onSide) = courtViewLayout(
+                            constraints.maxWidth - 12,
+                            room - 12,
+                            doubles: doubles,
+                            preferSide: true,
+                          );
+                          final dark = Theme.of(context).brightness == Brightness.dark;
+                          final (mat, runOff) = dark ? _kMatDark : _kMat;
+                          final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+                          return Center(
+                            child: InsetBox(
+                              radius: 14,
+                              padding: const EdgeInsets.all(6),
+                              child: SizedBox.fromSize(
+                                size: size,
+                                // Switching view crossfades; nothing is painted outside the picture.
+                                child: AnimatedSwitcher(
+                                  duration: reduce
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 220),
+                                  layoutBuilder: (current, previous) => Stack(
+                                    fit: StackFit.expand,
+                                    children: [...previous, ?current],
+                                  ),
+                                  child: ClipRRect(
+                                    key: ValueKey(_view),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        for (final layer in [CourtLayer.base, CourtLayer.live])
+                                          RepaintBoundary(
+                                            child: CustomPaint(
+                                              key: layer == CourtLayer.live
+                                                  ? const Key('court-picture')
+                                                  : null,
+                                              painter: CourtPainter.fromRecord(
+                                                layer: layer,
+                                                from: layer == CourtLayer.live ? _start : null,
+                                                motion: layer == CourtLayer.live ? _motion : null,
+                                                record,
+                                                frameIndex,
+                                                lines: Colors.white.withValues(alpha: 0.85),
+                                                surface: mat,
+                                                runOff: runOff,
+                                                mat: true,
+                                                players: PlayerColors.of(context),
+                                                status: StatusColors.of(context),
+                                                heat: heat,
+                                                reviewLanding: widget.reviewCall?.landing,
+                                                live: widget.live,
+                                                rallyStart: widget.rallyStart,
+                                                doubles: doubles,
+                                                onSide: onSide,
+                                                rallyPath: _view == CourtView.rallyPath,
+                                                allLandings: _view == CourtView.landings,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                runOff: scheme.surfaceContainerHighest,
-                                players: PlayerColors.of(context),
-                                status: StatusColors.of(context),
-                                heat: heat,
-                                reviewLanding: widget.reviewCall?.landing,
-                                live: widget.live,
-                                rallyStart: widget.rallyStart,
-                                doubles: doubles,
-                                onSide: onSide,
-                                rallyPath: _view == CourtView.rallyPath,
-                                allLandings: _view == CourtView.landings,
                               ),
                             ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                          );
+                        },
+                      ),
+                    ),
+                    // A small key under the court, one line where it fits.
+                    Padding(
+                      padding: const EdgeInsets.only(top: Spacing.sm),
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(fontSize: 12, color: AppPalette.of(context).text2),
+                        child: heat != null ? HeatLegend(heat: heat) : const ShuttleSpeedLegend(),
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  record.mode == 'live'
+                      ? 'Calibrate the court before going live to see player and shuttle positions.'
+                      : 'Calibrate the court when uploading to see player and shuttle positions.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (heat != null) HeatLegend(heat: heat) else const ShuttleSpeedLegend(),
-              ],
-            )
-          : Text(
-              record.mode == 'live'
-                  ? 'Calibrate the court before going live to see player and shuttle positions.'
-                  : 'Calibrate the court when uploading to see player and shuttle positions.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+        );
+      },
     );
   }
 }
@@ -518,7 +660,12 @@ class CourtPainter extends CustomPainter {
     this.doubles = false,
     this.onSide = false,
     this.rallyPath = false,
-  }) : runOff = runOff ?? surface;
+    this.mat = false,
+    this.from,
+    this.motion,
+    this.layer = CourtLayer.all,
+  }) : runOff = runOff ?? surface,
+       super(repaint: motion);
 
   /// Collects the current frame, the trail and the hitters' positions in this rally.
   factory CourtPainter.fromRecord(
@@ -537,6 +684,10 @@ class CourtPainter extends CustomPainter {
     bool onSide = false,
     bool rallyPath = false,
     bool allLandings = false,
+    bool mat = false,
+    Map<String, CourtPoint>? from,
+    Animation<double>? motion,
+    CourtLayer layer = CourtLayer.all,
   }) {
     // Worked out once: on a long singles record isDoubles scans every frame.
     final isDoubles = doubles ?? record.isDoubles;
@@ -605,6 +756,10 @@ class CourtPainter extends CustomPainter {
       doubles: isDoubles,
       onSide: onSide,
       rallyPath: rallyPath,
+      mat: mat,
+      from: from,
+      motion: motion,
+      layer: layer,
     );
   }
 
@@ -638,6 +793,18 @@ class CourtPainter extends CustomPainter {
 
   /// The rally's strokes joined in order and numbered (the Rally path view).
   final bool rallyPath;
+
+  /// Drawn as a court mat: a soft light in the middle, a net with a shadow, rimmed player
+  /// discs with a glow, and the heatmap as soft blobs.
+  final bool mat;
+
+  /// Where each player ('near', 'far', 'near2', 'far2') was drawn when [frame] arrived;
+  /// they glide from there to [frame] as [motion] runs 0 to 1.
+  final Map<String, CourtPoint>? from;
+  final Animation<double>? motion;
+
+  /// The part this painter draws (all of it by default).
+  final CourtLayer layer;
 
   @override
   void paint(Canvas canvas, Size box) {
@@ -676,154 +843,244 @@ class CourtPainter extends CustomPainter {
     );
     final left = toCanvas((x: 0, y: 0)).dx, right = toCanvas((x: kCourtWidthM, y: 0)).dx;
 
-    canvas.drawRect(Offset.zero & size, Paint()..color = runOff);
-    canvas.drawRect(court, Paint()..color = surface);
-    final h = heat;
-    if (h != null) {
-      for (final (shade, color) in [(h.nearShade, players.near), (h.farShade, players.far)]) {
-        for (var i = 0; i < shade.length; i++) {
-          // Below this a cell only holds what spread over from a neighbour's edge.
-          if (shade[i] < 0.04) continue;
-          final o = HeatGrid.cellOrigin(i);
-          canvas.drawRect(
-            toCanvas((x: o.x, y: o.y + kHeatCellM)) & Size(kHeatCellM * sx, kHeatCellM * sy),
-            Paint()..color = color.withValues(alpha: heatAlpha(shade[i])),
-          );
+    // The still part: the mat, the heatmap and the lines.
+    if (layer != CourtLayer.live) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = runOff);
+      canvas.drawRect(
+        court,
+        Paint()
+          ..color = surface
+          ..shader = mat
+              ? RadialGradient(
+                  colors: [Color.lerp(surface, Colors.white, 0.08)!, surface],
+                ).createShader(court.inflate(court.shortestSide * 0.2))
+              : null,
+      );
+      final h = heat;
+      // On the mat the cells are blurred together into soft blobs.
+      if (h != null && mat) {
+        final sigma = kHeatCellM * math.min(sx, sy) * 0.9;
+        canvas.saveLayer(
+          Offset.zero & size,
+          Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+        );
+      }
+      if (h != null) {
+        for (final (shade, color) in [(h.nearShade, players.near), (h.farShade, players.far)]) {
+          for (var i = 0; i < shade.length; i++) {
+            // Below this a cell only holds what spread over from a neighbour's edge.
+            if (shade[i] < 0.04) continue;
+            final o = HeatGrid.cellOrigin(i);
+            canvas.drawRect(
+              toCanvas((x: o.x, y: o.y + kHeatCellM)) & Size(kHeatCellM * sx, kHeatCellM * sy),
+              Paint()..color = color.withValues(alpha: heatAlpha(shade[i])),
+            );
+          }
         }
+        if (mat) canvas.restore();
       }
-    }
-    final line = Paint()
-      ..color = lines
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawRect(court, line);
-    if (doubles) {
-      // Singles sidelines inside the doubles outline, and the doubles long service lines.
-      canvas.drawLine(Offset(left, court.top), Offset(left, court.bottom), line);
-      canvas.drawLine(Offset(right, court.top), Offset(right, court.bottom), line);
-      for (final y in [
-        court.top + kDoublesLongServiceM * sy,
-        court.bottom - kDoublesLongServiceM * sy,
-      ]) {
-        canvas.drawLine(Offset(court.left, y), Offset(court.right, y), line);
-      }
-    }
-    final netY = court.center.dy;
-    canvas.drawLine(Offset(court.left, netY), Offset(court.right, netY), line..strokeWidth = 2.5);
-    line.strokeWidth = 1;
-    for (final dy in [-kShortServiceFromNetM * sy, kShortServiceFromNetM * sy]) {
-      canvas.drawLine(Offset(court.left, netY + dy), Offset(court.right, netY + dy), line);
-    }
-    final centre = (left + right) / 2;
-    canvas.drawLine(
-      Offset(centre, court.top),
-      Offset(centre, netY - kShortServiceFromNetM * sy),
-      line,
-    );
-    canvas.drawLine(
-      Offset(centre, netY + kShortServiceFromNetM * sy),
-      Offset(centre, court.bottom),
-      line,
-    );
-
-    for (var i = 0; i < landings.length; i++) {
-      final (p, isIn, review) = landings[i];
-      final color = status.forCall(isIn: isIn, review: review);
-      final latest = i == landings.length - 1;
-      canvas.drawCircle(
-        mark(p),
-        latest ? 6 : 4,
-        Paint()
-          ..color = color.withValues(alpha: latest ? 1 : 0.6)
-          ..style = latest ? PaintingStyle.fill : PaintingStyle.stroke
-          ..strokeWidth = 2,
-      );
-    }
-    if (rallyPath && hitMarks.isNotEmpty) {
-      final points = [for (final (_, p) in hitMarks) mark(p)];
-      final path = Path()..moveTo(points.first.dx, points.first.dy);
-      for (final o in points.skip(1)) {
-        path.lineTo(o.dx, o.dy);
-      }
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = lines
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-      for (final (i, (who, _)) in hitMarks.indexed) {
-        final o = points[i];
-        final c = players.forPlayer(who);
-        canvas.drawCircle(o, 10, Paint()..color = c);
-        // On a court lying on its side the number is turned back, so it reads upright.
-        canvas.save();
-        canvas.translate(o.dx, o.dy);
-        if (onSide) canvas.rotate(-math.pi / 2);
-        final label = TextPainter(
-          text: TextSpan(
-            text: '${i + 1}',
-            style: TextStyle(color: onColor(c), fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
-        canvas.restore();
-      }
-    }
-    for (final (who, p) in rallyPath ? const <(String, CourtPoint)>[] : hitMarks) {
-      final c = players.forPlayer(who);
-      final cross = Paint()
-        ..color = c
+      final line = Paint()
+        ..color = lines
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
-      final o = playerMark(p);
-      if (o == null) continue;
-      canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
-      canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
+      canvas.drawRect(court, line);
+      if (doubles) {
+        // Singles sidelines inside the doubles outline, and the doubles long service lines.
+        canvas.drawLine(Offset(left, court.top), Offset(left, court.bottom), line);
+        canvas.drawLine(Offset(right, court.top), Offset(right, court.bottom), line);
+        for (final y in [
+          court.top + kDoublesLongServiceM * sy,
+          court.bottom - kDoublesLongServiceM * sy,
+        ]) {
+          canvas.drawLine(Offset(court.left, y), Offset(court.right, y), line);
+        }
+      }
+      final netY = court.center.dy;
+      if (mat) {
+        final overhang = court.width * 0.03;
+        canvas
+          ..drawLine(
+            Offset(court.left - overhang, netY + 2.5),
+            Offset(court.right + overhang, netY + 2.5),
+            Paint()
+              ..color = Colors.black.withValues(alpha: 0.22)
+              ..strokeWidth = 3,
+          )
+          ..drawLine(
+            Offset(court.left - overhang, netY),
+            Offset(court.right + overhang, netY),
+            Paint()
+              ..color = Colors.white.withValues(alpha: 0.95)
+              ..strokeWidth = 3.5
+              ..strokeCap = StrokeCap.round,
+          );
+      } else {
+        canvas.drawLine(
+          Offset(court.left, netY),
+          Offset(court.right, netY),
+          line..strokeWidth = 2.5,
+        );
+      }
+      line.strokeWidth = 1;
+      for (final dy in [-kShortServiceFromNetM * sy, kShortServiceFromNetM * sy]) {
+        canvas.drawLine(Offset(court.left, netY + dy), Offset(court.right, netY + dy), line);
+      }
+      final centre = (left + right) / 2;
+      canvas.drawLine(
+        Offset(centre, court.top),
+        Offset(centre, netY - kShortServiceFromNetM * sy),
+        line,
+      );
+      canvas.drawLine(
+        Offset(centre, netY + kShortServiceFromNetM * sy),
+        Offset(centre, court.bottom),
+        line,
+      );
     }
-    final f = frame;
-    for (final (p, color) in [(f?.nearPos, players.near), (f?.farPos, players.far)]) {
-      final o = p == null ? null : playerMark(p);
-      if (o != null) canvas.drawCircle(o, 7, Paint()..color = color);
-    }
-    // Doubles partners: their own colour, with a ring so they differ by shape too.
-    for (final (p, color) in [(f?.near2Pos, players.near2), (f?.far2Pos, players.far2)]) {
-      final o = p == null ? null : playerMark(p);
-      if (o == null) continue;
-      canvas.drawCircle(o, 6, Paint()..color = color);
-      canvas.drawCircle(
-        o,
-        8,
-        Paint()
-          ..color = color
+    // The moving part: landings, marks, players and the shuttle.
+    if (layer != CourtLayer.base) {
+      for (var i = 0; i < landings.length; i++) {
+        final (p, isIn, review) = landings[i];
+        final color = status.forCall(isIn: isIn, review: review);
+        final latest = i == landings.length - 1;
+        canvas.drawCircle(
+          mark(p),
+          latest ? 6 : 4,
+          Paint()
+            ..color = color.withValues(alpha: latest ? 1 : 0.6)
+            ..style = latest ? PaintingStyle.fill : PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+      }
+      if (rallyPath && hitMarks.isNotEmpty) {
+        final points = [for (final (_, p) in hitMarks) mark(p)];
+        final path = Path()..moveTo(points.first.dx, points.first.dy);
+        for (final o in points.skip(1)) {
+          path.lineTo(o.dx, o.dy);
+        }
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = lines
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+        for (final (i, (who, _)) in hitMarks.indexed) {
+          final o = points[i];
+          final c = players.forPlayer(who);
+          canvas.drawCircle(o, 10, Paint()..color = c);
+          // On a court lying on its side the number is turned back, so it reads upright.
+          canvas.save();
+          canvas.translate(o.dx, o.dy);
+          if (onSide) canvas.rotate(-math.pi / 2);
+          final label = TextPainter(
+            text: TextSpan(
+              text: '${i + 1}',
+              style: TextStyle(color: onColor(c), fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
+          canvas.restore();
+        }
+      }
+      for (final (who, p) in rallyPath ? const <(String, CourtPoint)>[] : hitMarks) {
+        final c = players.forPlayer(who);
+        final cross = Paint()
+          ..color = c
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
+          ..strokeWidth = 1.5;
+        final o = playerMark(p);
+        if (o == null) continue;
+        canvas.drawLine(o - const Offset(4, 4), o + const Offset(4, 4), cross);
+        canvas.drawLine(o - const Offset(4, -4), o + const Offset(4, -4), cross);
+      }
+      final f = frame;
+      final before = from ?? const <String, CourtPoint>{};
+      // Even speed, so back-to-back glides join without a stop between them.
+      final t = motion?.value ?? 1;
+      // Where a player is drawn: on the way from the previous frame to this one.
+      CourtPoint? glide(CourtPoint? now, CourtPoint? then) => now == null || then == null || t >= 1
+          ? now
+          : (x: then.x + (now.x - then.x) * t, y: then.y + (now.y - then.y) * t);
+      void disc(Offset o, Color color, double r) {
+        if (!mat) {
+          canvas.drawCircle(o, r, Paint()..color = color);
+          return;
+        }
+        canvas
+          ..drawCircle(
+            o,
+            r + 3,
+            Paint()
+              ..color = Colors.black.withValues(alpha: 0.28)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+          )
+          ..drawCircle(o, r + 5, Paint()..color = color.withValues(alpha: 0.28))
+          ..drawCircle(o, r, Paint()..color = color)
+          ..drawCircle(
+            o,
+            r,
+            Paint()
+              ..color = Colors.white
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2,
+          );
+      }
+
+      for (final (p, color) in [
+        (glide(f?.nearPos, before['near']), players.near),
+        (glide(f?.farPos, before['far']), players.far),
+      ]) {
+        final o = p == null ? null : playerMark(p);
+        if (o != null) disc(o, color, 7);
+      }
+      // Doubles partners: their own colour, with a ring so they differ by shape too.
+      for (final (p, color) in [
+        (glide(f?.near2Pos, before['near2']), players.near2),
+        (glide(f?.far2Pos, before['far2']), players.far2),
+      ]) {
+        final o = p == null ? null : playerMark(p);
+        if (o == null) continue;
+        if (mat) {
+          disc(o, color, 6);
+          continue;
+        }
+        canvas.drawCircle(o, 6, Paint()..color = color);
+        canvas.drawCircle(
+          o,
+          8,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+      }
+      if (reviewLanding case final landing?) {
+        // An outside landing stays visible at the edge of the run-off.
+        final o = mark(landing);
+        canvas.drawCircle(o, 9, Paint()..color = surface);
+        canvas.drawCircle(o, 6, Paint()..color = status.uncertain);
+        canvas.drawCircle(
+          o,
+          9,
+          Paint()
+            ..color = lines
+            ..strokeWidth = 2
+            ..style = PaintingStyle.stroke,
+        );
+      }
+      paintShuttleTrail(
+        canvas,
+        [
+          for (final (_, point, placed, speed, connected) in trail)
+            (point: mark(point), speed: speed, approximate: !placed, connected: connected),
+        ],
+        hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
+        ageAt: (i) => (frameIndex - trail[i].$1) / kTrailLength,
+        halo: mat,
       );
     }
-    if (reviewLanding case final landing?) {
-      // An outside landing stays visible at the edge of the run-off.
-      final o = mark(landing);
-      canvas.drawCircle(o, 9, Paint()..color = surface);
-      canvas.drawCircle(o, 6, Paint()..color = status.uncertain);
-      canvas.drawCircle(
-        o,
-        9,
-        Paint()
-          ..color = lines
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke,
-      );
-    }
-    paintShuttleTrail(
-      canvas,
-      [
-        for (final (_, point, placed, speed, connected) in trail)
-          (point: mark(point), speed: speed, approximate: !placed, connected: connected),
-      ],
-      hasCurrent: trail.isNotEmpty && trail.last.$1 == frameIndex,
-      ageAt: (i) => (frameIndex - trail[i].$1) / kTrailLength,
-    );
     canvas.restore();
   }
 
@@ -831,7 +1088,19 @@ class CourtPainter extends CustomPainter {
   /// The trail and the marks are compared by content: in a live session the frame index can
   /// stay put while a new hit or a corrected position arrives.
   @override
-  bool shouldRepaint(CourtPainter old) =>
+  bool shouldRepaint(CourtPainter old) => layer == CourtLayer.base
+      ? old.layer != layer ||
+            old.lines != lines ||
+            old.surface != surface ||
+            old.runOff != runOff ||
+            old.heat != heat ||
+            old.doubles != doubles ||
+            old.onSide != onSide ||
+            old.mat != mat
+      : _liveChanged(old);
+
+  bool _liveChanged(CourtPainter old) =>
+      old.layer != layer ||
       old.frameIndex != frameIndex ||
       old.reviewLanding != reviewLanding ||
       old.frame != frame ||
@@ -844,6 +1113,9 @@ class CourtPainter extends CustomPainter {
       old.doubles != doubles ||
       old.onSide != onSide ||
       old.rallyPath != rallyPath ||
+      old.mat != mat ||
+      old.from != from ||
+      old.motion != motion ||
       !listEquals(old.trail, trail) ||
       !listEquals(old.hitMarks, hitMarks) ||
       !listEquals(old.landings, landings);

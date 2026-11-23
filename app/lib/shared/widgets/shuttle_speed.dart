@@ -17,6 +17,7 @@ void paintShuttleTrail(
   List<ShuttleTrailSample> samples, {
   required bool hasCurrent,
   double Function(int index)? ageAt,
+  bool halo = false,
 }) {
   if (samples.isEmpty) return;
   final head = samples.last.point;
@@ -31,8 +32,20 @@ void paintShuttleTrail(
     );
   }
   final paint = Paint()
-    ..strokeWidth = 1.5
+    ..strokeWidth = halo ? 2.5 : 1.5
     ..strokeCap = StrokeCap.round;
+  // On a coloured court a dark edge under the trail keeps every speed colour readable.
+  if (halo) {
+    final edge = Paint()
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    for (var i = 1; i < samples.length; i++) {
+      if (!samples[i].connected) continue;
+      final age = ageAt?.call(i) ?? (samples.length - 1 - i) / samples.length;
+      edge.color = Colors.black.withValues(alpha: 0.3 * (1 - age));
+      canvas.drawLine(samples[i - 1].point, samples[i].point, edge);
+    }
+  }
   for (var i = 1; i < samples.length; i++) {
     final sample = samples[i];
     if (!sample.connected) continue;
