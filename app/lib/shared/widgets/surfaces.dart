@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import '../../ui/depth.dart';
 import 'tactile.dart';
 
 /// The page canvas: a base colour with three soft glows (lavender, peach, mint in light mode;
@@ -146,7 +147,6 @@ class _AppCardState extends State<AppCard> {
 
   @override
   Widget build(BuildContext context) {
-    final p = AppPalette.of(context);
     final t = TactileTokens.of(context);
     final theme = Theme.of(context);
     final still = MediaQuery.disableAnimationsOf(context);
@@ -173,15 +173,8 @@ class _AppCardState extends State<AppCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (widget.icon != null) ...[
-                  Recess(
-                    radius: 10,
-                    padding: EdgeInsets.zero,
-                    depth: 2.5,
-                    child: SizedBox.square(
-                      dimension: 36,
-                      child: Icon(widget.icon, size: 18, color: p.info),
-                    ),
-                  ),
+                  // The header icon sits in a recessed well (lib/ui/depth.dart).
+                  IconWell(icon: widget.icon!, size: 36, iconSize: 18),
                   const SizedBox(width: Spacing.md),
                 ],
                 Expanded(
