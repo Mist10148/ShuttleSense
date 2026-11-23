@@ -204,12 +204,34 @@ def run_practice(
     )
 
 
-def save_watch_practice(record, setup, unobserved, source_frames, out_dir, tracking_available):
+def save_watch_practice(
+    record,
+    setup,
+    unobserved,
+    source_frames,
+    out_dir,
+    tracking_available,
+    selected_slot="near",
+    doubles=False,
+):
     """Persist Watch's finalized selected-player record for the practice report API."""
     observations = []
     events = []
+
+    def selected_hit(hit):
+        if selected_slot is None:
+            return False
+        if doubles:
+            from shuttlesense.schema import slot_attr
+
+            return hit.hitter is not None and slot_attr(hit.hitter) == selected_slot
+        return hit.player == selected_slot
+
+    def selected_player(frame):
+        return getattr(frame.players, selected_slot) if selected_slot else None
+
     for index, hit in enumerate(record.hits):
-        if hit.player != "near" or hit.frame in unobserved:
+        if not selected_hit(hit) or hit.frame in unobserved:
             continue
         event = {
             "id": f"auto-{index}",
@@ -225,7 +247,7 @@ def save_watch_practice(record, setup, unobserved, source_frames, out_dir, track
         if hit.stroke in ("clear", "smash", "drop"):
             observations.append(
                 assess_attempt(
-                    record.frames[hit.frame].players.near,
+                    selected_player(record.frames[hit.frame]),
                     hit.stroke,
                     setup.arm,
                     hit.time_s,
@@ -237,7 +259,12 @@ def save_watch_practice(record, setup, unobserved, source_frames, out_dir, track
         if frame >= len(record.frames):
             continue
         observations.append(
-            assess_attempt(record.frames[frame].players.near, setup.stroke, setup.arm, seconds)
+            assess_attempt(
+                selected_player(record.frames[frame]) if frame not in unobserved else None,
+                setup.stroke,
+                setup.arm,
+                seconds,
+            )
         )
         events.append(
             {
@@ -261,7 +288,7 @@ def save_watch_practice(record, setup, unobserved, source_frames, out_dir, track
             "value": item.value,
         }
         for hit in record.hits
-        if hit.player == "near" and hit.frame not in unobserved
+        if selected_hit(hit) and hit.frame not in unobserved
         for item in hit.feedback
     ]
     atomic_write_text(out_dir / "practice_frames.json", record.model_dump_json())
@@ -270,6 +297,7 @@ def save_watch_practice(record, setup, unobserved, source_frames, out_dir, track
         json.dumps(
             {
                 "setup": setup.model_dump(),
+                "selected_slot": selected_slot,
                 "fps": record.fps,
                 "stopped_early": len(record.frames) < source_frames,
                 "processed_frames": len(record.frames),
@@ -278,6 +306,7 @@ def save_watch_practice(record, setup, unobserved, source_frames, out_dir, track
                 "events": sorted(events, key=lambda event: event["time_s"]),
                 "analysis_notes": notes,
                 "unobserved_frames": len(unobserved),
+                "unobserved_indices": sorted(unobserved),
                 "shuttle_tracking_available": tracking_available,
             }
         ),

@@ -275,7 +275,7 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
     from threading import Event
 
     import shuttlesense.render as render_module
-    from shuttlesense.schema import Player, Shuttle
+    from shuttlesense.schema import Player, Players, Shuttle
     from shuttlesense.stream import perception as perception_module
 
     app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
@@ -299,9 +299,9 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
         def _shuttle(self, frame):
             return Shuttle()
 
-        def detect(self, frame):
+        def _players(self, frame):
             self.calls += 1
-            return [] if self.calls == 2 else [person]
+            return Players(near=None if self.calls in (2, 3) else person)
 
     with TestClient(app) as client:
         manager = app.state.live
@@ -329,6 +329,7 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
                     "video_id": video["id"],
                     "mode": "practice",
                     "playback": "complete",
+                    "corners": [[20, 80], [140, 80], [110, 10], [50, 10]],
                     "practice_setup": {
                         "video_id": video["id"],
                         "selected_bbox": [2, 2, 40, 60],
@@ -340,9 +341,12 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
             )
             started = ws.receive_json()
             assert started["type"] == "started", started
-            for i in range(3):
+            for i in range(4):
                 ws.send_json({"type": "next"})
-                assert ws.receive_json()["index"] == i
+                response = ws.receive_json()
+                assert response["index"] == i
+                frame = next(event for event in response["events"] if event["type"] == "frame")
+                assert bool(frame["display_players"]) == (i in (0, 3))
             ws.send_json({"type": "stop"})
             saved = ws.receive_json()
             assert saved["job_id"] == started["job_id"]
@@ -360,7 +364,7 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
         assert job["mode"] == "practice"
         result = client.get(f"/practice/sessions/{saved['job_id']}/result")
         assert result.status_code == 200, result.text
-        assert result.json()["processed_frames"] == 3
+        assert result.json()["processed_frames"] == 4
         assert result.json()["stopped_early"] is True
-        assert result.json()["unobserved_frames"] == 1
+        assert result.json()["unobserved_frames"] == 2
         assert result.json()["observations"][0]["observations"][0]["status"] == "unavailable"

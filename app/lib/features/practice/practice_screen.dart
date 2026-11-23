@@ -17,6 +17,8 @@ import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
 import '../watch/watch_screen.dart' show formatWatchElapsed, watchFrameDelay, WatchOverlay;
 import '../mode/mode_screen.dart';
+import '../calibration/calibration_screen.dart' show Corner, CornerCanvas;
+import '../watch/court_geometry.dart' show fullToSingles, singlesToFull, FullCourtPreview;
 
 class PracticeScreen extends ConsumerStatefulWidget {
   const PracticeScreen({super.key, this.jobId, this.channelFactory});
@@ -32,7 +34,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   List<List<double>> candidates = [];
   List<double>? selected;
   int selectionFrame = 0;
-  String stroke = 'clear', arm = 'right';
+  String stroke = 'clear', arm = 'right', courtType = 'singles';
+  final List<Corner> courtCorners = [];
+  bool detectingCourt = false;
+  String? courtMessage;
   String? error;
   bool busy = false;
   final attempts = TextEditingController();
@@ -96,6 +101,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         job = null;
         result = null;
         selectionFrame = 0;
+        courtCorners.clear();
+        courtMessage = null;
       });
       await findPlayers();
     } catch (e) {
@@ -126,10 +133,46 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
+  Future<void> detectCourt() async {
+    final info = video;
+    if (info == null || detectingCourt) return;
+    setState(() {
+      detectingCourt = true;
+      courtMessage = null;
+    });
+    try {
+      final singles = await ref
+          .read(apiClientProvider)
+          .suggestCourtCorners(info.id, selectionFrame);
+      final full = singles == null ? null : singlesToFull(singles);
+      if (!mounted || video?.id != info.id) return;
+      setState(() {
+        if (full == null ||
+            full.any((c) => c.x < 0 || c.y < 0 || c.x > info.width || c.y > info.height)) {
+          courtMessage = 'Could not find the court. Mark the four corners manually.';
+        } else {
+          courtCorners
+            ..clear()
+            ..addAll(full);
+          courtMessage = 'Check the suggested corners and drag them to adjust.';
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => courtMessage = 'Could not find the court: $e');
+    } finally {
+      if (mounted) setState(() => detectingCourt = false);
+    }
+  }
+
   Future<void> start() async {
     final times = attempts.text.trim().isEmpty
         ? <double?>[]
         : attempts.text.split(',').map((s) => double.tryParse(s.trim())).toList();
+    final singlesCorners = fullToSingles(courtCorners);
+    if (singlesCorners == null) {
+      setState(() => error = 'Mark the four court corners to use Watch player tracking.');
+      return;
+    }
     if (selected == null || times.any((v) => v == null || !v.isFinite)) {
       setState(() => error = 'Select a player and enter valid attempt times in seconds.');
       return;
@@ -140,7 +183,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     });
     try {
       final health = await ref.read(apiClientProvider).health();
-      if (!health.practiceWatch) {
+      if (!health.practiceCourtWatch) {
         throw Exception(
           'This backend needs to be updated and restarted to support AI Coach playback.',
         );
@@ -180,7 +223,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         jsonEncode({
           'type': 'start',
           'video_id': video!.id,
-          'court': 'singles',
+          'court': courtType,
+          'corners': [
+            for (final c in singlesCorners) [c.x, c.y],
+          ],
           'playback': 'complete',
           'mode': 'practice',
           'practice_setup': {
@@ -539,6 +585,57 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           if (candidates.isEmpty && !busy)
             const Text('No player detected. Choose another frame or check the models.'),
           if (job == null) ...[
+            const SizedBox(height: Spacing.lg),
+            AppCard(
+              title: 'Court calibration',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Mark the four outer court corners: near left, near right, far right, far left. AI Coach uses Watch player tracking.',
+                  ),
+                  DropdownButton<String>(
+                    value: courtType,
+                    items: const [
+                      DropdownMenuItem(value: 'singles', child: Text('Singles')),
+                      DropdownMenuItem(value: 'doubles', child: Text('Doubles')),
+                    ],
+                    onChanged: busy ? null : (value) => setState(() => courtType = value!),
+                  ),
+                  OutlinedButton(
+                    onPressed: busy || detectingCourt ? null : detectCourt,
+                    child: Text(detectingCourt ? 'Finding court...' : 'Find court automatically'),
+                  ),
+                  if (courtMessage != null) Text(courtMessage!),
+                  SizedBox(
+                    height: 320,
+                    child: CornerCanvas(
+                      image: NetworkImage(
+                        ref.read(apiClientProvider).frameUrl(info.id, selectionFrame),
+                      ),
+                      width: info.width,
+                      height: info.height,
+                      corners: courtCorners,
+                      overlayPainter: fullToSingles(courtCorners) == null
+                          ? null
+                          : (scale) => FullCourtPreview(courtCorners, scale),
+                      onTap: (c) {
+                        if (!busy && courtCorners.length < 4) setState(() => courtCorners.add(c));
+                      },
+                      onMove: (i, c) {
+                        if (!busy) setState(() => courtCorners[i] = c);
+                      },
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: courtCorners.isEmpty
+                        ? null
+                        : () => setState(() => courtCorners.clear()),
+                    child: const Text('Clear corners'),
+                  ),
+                ],
+              ),
+            ),
             DropdownButton<String>(
               value: stroke,
               items: [
@@ -564,7 +661,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               ),
             ),
             FilledButton(
-              onPressed: busy || selected == null ? null : start,
+              onPressed:
+                  busy || detectingCourt || selected == null || fullToSingles(courtCorners) == null
+                  ? null
+                  : start,
               child: const Text('Confirm and analyze'),
             ),
           ] else
@@ -608,9 +708,14 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$watchStatus ? ${((watchFrame + 1) / watchFps).toStringAsFixed(1)} s / ${(watchTotal / watchFps).toStringAsFixed(1)} s',
+                  '$watchStatus - ${((watchFrame + 1) / watchFps).toStringAsFixed(1)} s / ${(watchTotal / watchFps).toStringAsFixed(1)} s',
                 ),
                 Text('Elapsed: ${formatWatchElapsed(watchClock.elapsed)} (includes pauses)'),
+                if (watchFrameData['players'] is Map &&
+                    watchFrameData['selected_visible'] == false &&
+                    info != null &&
+                    watchFrame / watchFps >= selectionFrame / info.fps)
+                  const Text('Selected player uncertain or not visible; this frame is excluded.'),
               ],
             ),
           ),
@@ -730,6 +835,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           ),
         ],
         if (result != null) ...[
+          if (result!.containsKey('selected_slot') && result!['selected_slot'] == null)
+            const Text(
+              'Watch could not match your selection to a player. Check the court corners and select a clearly visible frame.',
+            ),
           if (result!['stopped_early'] == true)
             const Text(
               'This session was stopped early; the video and report cover the analyzed portion.',

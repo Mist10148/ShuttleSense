@@ -278,11 +278,11 @@ class LiveSession:
         scale = float(self.live["scales"][self.level])
         shuttle, players = self._perceive(frame, index, scale)
         self._last_players = players
-        if index in getattr(self.perception, "unobserved", set()):
-            self.analyzer._unobserved.add(index)
         perception = getattr(self.perception, "perception", self.perception)
         tracker = getattr(perception, "tracker", None)
-        hold_safe = getattr(tracker, "view_valid", True)
+        hold_safe = getattr(self.perception, "player_hold_safe", None)
+        if hold_safe is None:
+            hold_safe = getattr(tracker, "view_valid", True)
         # The analyzer may fail either before or after it adds the frame (for
         # example during a downstream tick). Record exactly the frames it committed.
         try:

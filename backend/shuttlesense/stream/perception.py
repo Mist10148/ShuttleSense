@@ -307,16 +307,16 @@ class ModelPerception:
 
 
 class SelectedPracticePerception:
-    """Watch perception with one explicitly selected player and no court requirement."""
+    """Use Watch's court tracker; bind the chosen box to one locked Watch slot."""
 
     def __init__(self, perception, bbox, selection_frame):
-        from shuttlesense.practice.evidence import SelectedPlayerTracker
-
         self.perception = perception
         self.available = perception.available
-        self.tracker = SelectedPlayerTracker(tuple(bbox))
+        self.selected_bbox = tuple(bbox)
         self.selection_frame = selection_frame
+        self.selected_slot = None
         self.unobserved = set()
+        self.player_hold_safe = False
 
     def __call__(self, frame, index):
         return self._shuttle(frame), self.players_for_frame(frame, index)
@@ -325,20 +325,34 @@ class SelectedPracticePerception:
         return self.perception._shuttle(frame)
 
     def players_for_frame(self, frame, index):
-        from shuttlesense.schema import Players
+        from shuttlesense.practice.evidence import _iou
 
-        player = None
-        if index >= self.selection_frame and self.perception.detect is not None:
-            people = [
-                p
-                for p in self.perception.detect(frame)
-                if p.score >= self.perception.min_person_score
-            ]
-            self.tracker.lost = False
-            player = self.tracker.update(people)
-        if player is None:
+        players = self.perception._players(frame)
+        # Give Watch time to confirm its slot without binding a stale selection later.
+        if self.selection_frame <= index <= self.selection_frame + 8 and self.selected_slot is None:
+            matches = sorted(
+                (
+                    (_iou(self.selected_bbox, player.bbox), slot)
+                    for slot in ("near", "far", "near_2", "far_2")
+                    if (player := getattr(players, slot)) is not None
+                ),
+                reverse=True,
+            )
+            if (
+                matches
+                and matches[0][0] >= 0.35
+                and (len(matches) == 1 or matches[0][0] - matches[1][0] >= 0.15)
+            ):
+                self.selected_slot = matches[0][1]
+        selected = (
+            getattr(players, self.selected_slot)
+            if self.selected_slot is not None and index >= self.selection_frame
+            else None
+        )
+        self.player_hold_safe = selected is not None
+        if selected is None:
             self.unobserved.add(index)
-        return Players(near=player)
+        return players
 
     def close(self):
         close = getattr(self.perception, "close", None)

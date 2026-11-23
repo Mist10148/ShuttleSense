@@ -71,11 +71,15 @@ void main() {
     await tester.ensureVisible(image);
     await tester.pump();
     await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
+    await tester.ensureVisible(find.text('Find court automatically'));
+    await tester.tap(find.text('Find court automatically'));
+    await tester.pump();
     await tester.ensureVisible(find.text('Confirm and analyze'));
     await tester.pump();
     await tester.tap(find.text('Confirm and analyze'));
     await tester.pump();
     expect(socket.outgoing.messages.first['mode'], 'practice');
+    expect(socket.outgoing.messages.first['corners'], hasLength(4));
     socket.send({'type': 'started', 'fps': 25, 'frames': 10, 'width': 1280, 'height': 720});
     await tester.pump();
     expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
@@ -88,10 +92,16 @@ void main() {
       'jpeg':
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmXQAAAAASUVORK5CYII=',
       'events': [
-        {'type': 'frame', 'frame': 0},
+        {
+          'type': 'frame',
+          'frame': 0,
+          'players': {'near': null},
+          'selected_visible': false,
+        },
       ],
     });
     await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('Selected player uncertain'), findsOneWidget);
     expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
     await tester.tap(find.text('Play'));
     await tester.pump();
@@ -163,7 +173,15 @@ class _PracticeWatchApi extends FakeApiClient {
     stages: [],
     practiceVideo: true,
     practiceWatch: true,
+    practiceCourtWatch: true,
   );
+  @override
+  Future<List<({double x, double y})>?> suggestCourtCorners(String videoId, int frame) async => [
+    (x: 250.0, y: 600.0),
+    (x: 1030.0, y: 600.0),
+    (x: 850.0, y: 100.0),
+    (x: 430.0, y: 100.0),
+  ];
   @override
   Future<Map<String, dynamic>> practicePlayers(String videoId, int frame) async => {
     'candidates': [

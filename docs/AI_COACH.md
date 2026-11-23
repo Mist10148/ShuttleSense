@@ -1,6 +1,6 @@
 # AI Coach: recorded single-player practice
 
-AI Coach analyzes a recorded practice clip without court calibration. Version 1 supports a user-selected player, racket arm, and overhead clear, smash or drop. It can process shadow swings without a shuttle. It uses selected-player detection and 2D pose. When shuttle tracking is available, it also proposes hit events and uses the match-trained CNN with the Watch evidence guard; predictions are estimates and require review. Shadow practice can still use manually marked attempts.
+AI Coach analyzes a recorded clip using the same calibrated player tracker as Watch & Analyze. Version 1 supports a user-selected player, racket arm, and overhead clear, smash or drop. It can process shadow swings without a shuttle. It uses selected-player detection and 2D pose. When shuttle tracking is available, it also proposes hit events and uses the match-trained CNN with the Watch evidence guard; predictions are estimates and require review. Shadow practice can still use manually marked attempts.
 
 ## Setup and workflow
 
@@ -8,7 +8,7 @@ Start or restart the updated real backend and Windows or web app as described in
 
 1. Open AI Coach, select an MP4/MOV/AVI clip, and use the frame slider to inspect the recording.
 2. Optionally mark attempt frames with the button, or enter their times in seconds separated by commas; leave them empty to review automatically detected candidates after analysis. Choose a selection frame at or before the first attempt, then click the target player's box.
-3. Choose clear, smash or drop and the racket arm, then confirm and start Watch-style analysis of every normalized frame. The same Watch frame pacing and configured parallel-perception setting apply. Tracking continues through missing or ambiguous detections; those frames are excluded from player analysis. A unique overlapping detection may be reacquired, but identity after an occlusion is not guaranteed.
+3. Choose singles or doubles, find or mark the court corners, and choose clear, smash or drop and the racket arm; then confirm and start Watch-style analysis of every normalized frame. The same Watch frame pacing and configured parallel-perception setting apply. Watch assigns stable court player slots. The selected box is matched to one confirmed slot; if no unique match is available, that frame is excluded from the coaching report. Identity can still be uncertain during an occlusion.
 4. During processing, the preview shows the latest analyzed frame and elapsed time includes pauses. Pause stops requests after the current frame; Play resumes. Stop and save finishes the frames already analyzed, then renders and saves that portion.
 5. After the video is rendered with the shared Watch renderer, the coaching report is generated from the saved analysis. The report includes available timestamped technique feedback and pose observations. Tap a report entry to seek to its moment in the video.
 6. Open the completed session from History. Review, confirm, correct, add or remove candidate events and save them to update the report. Automatic labels are estimates.

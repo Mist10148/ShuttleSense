@@ -139,6 +139,8 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         watch_match_type=not settings.fake_pipeline,
         practice_video=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
         practice_watch=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
+        practice_court_watch=not settings.fake_pipeline
+        and "pose" in request.app.state.available_stages,
     )
 
 

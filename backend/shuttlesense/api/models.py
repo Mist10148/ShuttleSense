@@ -47,6 +47,7 @@ class Health(BaseModel):
     watch_background: bool = True
     practice_video: bool = False
     practice_watch: bool = False
+    practice_court_watch: bool = False
 
 
 class MatchTypeRequest(BaseModel):

@@ -145,32 +145,41 @@ def test_closing_one_session_does_not_close_another():
 
 
 def test_parallel_selected_player_preserves_gaps_and_identity():
-    from shuttlesense.schema import Player, Shuttle
+    import numpy as np
+
+    from shuttlesense.schema import Player, Players, Shuttle
     from shuttlesense.stream.perception import SelectedPracticePerception
 
     class Models:
         available = {"tracking": True, "pose": True}
         min_person_score = 0.4
         barrier = Barrier(2, timeout=2)
+        calls = 0
 
         def _shuttle(self, frame):
             self.barrier.wait()
             return Shuttle()
 
-        def detect(self, frame):
+        def _players(self, frame):
             self.barrier.wait()
-            return [Player(bbox=frame, score=0.9)]
+            self.calls += 1
+            return Players(
+                near=None if self.calls in (2, 3) else Player(bbox=(0, 0, 10, 20), score=0.9)
+            )
 
     selected = SelectedPracticePerception(Models(), (0, 0, 10, 20), 0)
     parallel = ParallelWatchPerception(selected)
+    frame = np.full((40, 40, 3), (0, 0, 255), dtype=np.uint8)
     try:
-        _, players = parallel((0, 0, 10, 20), 0)
+        _, players = parallel(frame, 0)
         assert players.near is not None
-        _, players = parallel((40, 0, 10, 20), 1)
-        assert players.near is None
-        assert parallel.unobserved == {1}
-        _, players = parallel((0, 0, 10, 20), 2)
+        assert parallel.player_hold_safe is True
+        for index in (1, 2):
+            _, players = parallel(frame, index)
+            assert players.near is None
+            assert parallel.player_hold_safe is False
+        _, players = parallel(frame, 3)
         assert players.near is not None
-        assert parallel.unobserved == {1}
+        assert parallel.unobserved == {1, 2}
     finally:
         parallel.close()

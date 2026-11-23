@@ -284,7 +284,12 @@ def update_events(job_id: str, body: PracticeEvents, request: Request, storage: 
             events.append(entry)
             valid_automatic = entry["source"] == "automatic" and entry["model"] == "cnn"
             if (event.confirmed or valid_automatic) and event.stroke in ("clear", "smash", "drop"):
-                player = record.frames[frame].players.near
+                slot = data.get("selected_slot", "near")
+                player = (
+                    getattr(record.frames[frame].players, slot)
+                    if slot and frame not in data.get("unobserved_indices", [])
+                    else None
+                )
                 observations.append(
                     assess_attempt(
                         player,

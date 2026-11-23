@@ -107,6 +107,8 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             practice_setup = PracticeSetup.model_validate(start.get("practice_setup"))
             if practice_setup.video_id != video_id or playback != "complete" or manager.fake:
                 raise ValueError("invalid or unavailable practice session")
+            if corners is None:
+                raise ValueError("court calibration is required for AI Coach player tracking")
             PracticeAnalyzer(practice_setup, meta.fps, meta.num_frames)
             x, y, w, h = practice_setup.selected_bbox
             if x < 0 or y < 0 or x + w > meta.width or y + h > meta.height:
@@ -130,10 +132,6 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             session.practice_setup = practice_setup
             session.practice_source_frames = len(reader)
             session.analyzer.record.mode = "practice"
-            session.analyzer.config = deepcopy(session.analyzer.config)
-            session.analyzer.config.setdefault("stages", {}).setdefault("strokes", {})[
-                "context"
-            ] = {"enabled": False}
         if playback == "complete" and not manager.fake:
             from shuttlesense.stream.watch_parallel import (
                 ParallelWatchPerception,
@@ -248,6 +246,20 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
             packet = HEADER.pack(index, index * 1000.0 / reader.fps) + data
             processing_start = time.perf_counter()
             events = await asyncio.to_thread(_frames, session, [(packet, time.monotonic())])
+            if practice_setup is not None:
+                selected = session.perception
+                while not hasattr(selected, "selected_slot"):
+                    selected = selected.perception
+                for event in events:
+                    if event.get("type") == "frame":
+                        event["selected_slot"] = selected.selected_slot
+                        event["selected_visible"] = index not in selected.unobserved
+                        boxes = event.get("display_players") or {}
+                        event["display_players"] = (
+                            {selected.selected_slot: boxes[selected.selected_slot]}
+                            if selected.selected_slot in boxes and index not in selected.unobserved
+                            else {}
+                        )
             frame_processing_s = time.perf_counter() - processing_start
             perception_s += frame_processing_s
             processed += 1
@@ -541,6 +553,9 @@ class LiveManager:
         if hasattr(session, "practice_setup"):
             from shuttlesense.practice.runner import save_watch_practice
 
+            selected = session.perception
+            while not hasattr(selected, "selected_slot"):
+                selected = selected.perception
             save_watch_practice(
                 record,
                 session.practice_setup,
@@ -548,6 +563,8 @@ class LiveManager:
                 session.practice_source_frames,
                 job_dir,
                 session.perception.available.get("tracking", False),
+                selected.selected_slot,
+                session.request.court == "doubles",
             )
         self.state.jobs.add(job)
         if not record.frames:
@@ -578,6 +595,34 @@ class LiveManager:
                     jobs._update(job.id, progress=0.9 + 0.099 * min(max(value, 0), 1))
                     last_progress = now
 
+            if getattr(job, "mode", None) == "practice":
+                from shuttlesense.schema import Players, slot_attr
+
+                data = json.loads(
+                    (self.storage.job_dir(job.id) / "practice.json").read_text(encoding="utf-8")
+                )
+                slot = data.get("selected_slot")
+                unobserved = set(data.get("unobserved_indices", []))
+                # Keep the Watch record intact for analysis; focus only the display copy.
+                record = record.model_copy(deep=True)
+                for frame in record.frames:
+                    player = (
+                        getattr(frame.players, slot)
+                        if slot and frame.frame not in unobserved
+                        else None
+                    )
+                    frame.players = Players(**({slot: player} if slot else {}))
+                    frame.player_hold_safe = player is not None
+                record.hits = [
+                    hit
+                    for hit in record.hits
+                    if slot
+                    and hit.frame not in unobserved
+                    and (
+                        (job.court == "doubles" and hit.hitter and slot_attr(hit.hitter) == slot)
+                        or (job.court != "doubles" and hit.player == slot)
+                    )
+                ]
             render_video(record, reader, self.storage.job_dir(job.id) / "annotated.mp4",
                          overlays=job.overlays, config=jobs.config,
                          progress=on_progress)  # fmt: skip

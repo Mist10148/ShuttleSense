@@ -28,6 +28,10 @@ class ParallelWatchPerception:
     def unobserved(self):
         return getattr(self.perception, "unobserved", set())
 
+    @property
+    def player_hold_safe(self):
+        return getattr(self.perception, "player_hold_safe", None)
+
     def close(self):
         self.pool.shutdown(wait=True)
         close = getattr(self.perception, "close", None)
