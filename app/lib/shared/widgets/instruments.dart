@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../ui/depth.dart';
-import 'tactile.dart';
 
 /// An analog dial for one estimated speed: a half-circle scale from 0 to [max], a lit arc up
 /// to [value], a needle, and the number in the middle. Drawn on an inset screen.
@@ -140,8 +139,9 @@ class _DialPainter extends CustomPainter {
       old.hub != hub;
 }
 
-/// One channel of a mixing-desk fader bank: a sunken track filled to [fraction] with a knob
-/// on top, and a label under it. Read-only: it shows a share, it is not a control.
+/// One stroke type's share as a level meter: a recessed column filled from the bottom to
+/// [fraction], with the name and the count under it. It reads as a gauge, not a control:
+/// there is no knob to drag.
 class Fader extends StatelessWidget {
   const Fader({
     super.key,
@@ -162,64 +162,37 @@ class Fader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = TactileTokens.of(context);
     final text = Theme.of(context).textTheme;
     final f = fraction.clamp(0.0, 1.0);
-    const trackWidth = 12.0;
-    const knobHeight = 22.0;
+    const width = 28.0;
     return Semantics(
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 48,
+          InsetBox(
+            width: width,
             height: height,
-            child: Stack(
+            radius: 10,
+            padding: const EdgeInsets.all(4),
+            child: Align(
               alignment: Alignment.bottomCenter,
-              clipBehavior: Clip.none,
-              children: [
-                Recess(
-                  radius: Radii.pill,
-                  padding: EdgeInsets.zero,
-                  depth: 2,
-                  child: SizedBox(
-                    width: trackWidth,
-                    height: height,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: FractionallySizedBox(
-                        heightFactor: f,
-                        widthFactor: 1,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(Radii.pill),
-                          ),
-                        ),
-                      ),
+              child: FractionallySizedBox(
+                widthFactor: 1,
+                // A sliver stays visible for the smallest shares.
+                heightFactor: f == 0 ? 0 : f.clamp(0.06, 1.0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(7),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color.lerp(color, Colors.white, 0.25)!, color],
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: (height - knobHeight) * f,
-                  child: Container(
-                    width: 40,
-                    height: knobHeight,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      gradient: raisedGradient(t),
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: t.rim),
-                      boxShadow: [
-                        BoxShadow(color: t.shade, blurRadius: 6, offset: const Offset(0, 3)),
-                      ],
-                    ),
-                    child: Container(width: 22, height: 2, color: color),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: Spacing.sm),
