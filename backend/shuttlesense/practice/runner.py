@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import itertools
 import json
 import logging
 from collections.abc import Callable
@@ -51,6 +52,7 @@ def run_practice(
     progress: Callable[[float], None],
     check_cancelled: Callable[[], None],
     preview: Callable[[int, str], None] | None = None,
+    control: Callable[[], bool] = lambda: False,
 ) -> None:
     reader = FrameReader(source, target_height=0, max_fps=0)
     analyzer = PracticeAnalyzer(setup, reader.fps, len(reader))
@@ -66,9 +68,15 @@ def run_practice(
         num_frames=len(reader),
     )
     unobserved: set[int] = set()
+    from shuttlesense.render.overlays import RenderState, draw_frame
+    from shuttlesense.render.style import scale_for
+
+    preview_state = RenderState(config=config, scale=scale_for(reader.height))
     minimum = pose.get("min_person_score", 0.4)
     for index, frame in reader:
         check_cancelled()
+        if control() and index > setup.selection_frame:
+            break
         shuttle = Shuttle()
         if tracker is not None:
             try:
@@ -96,17 +104,22 @@ def run_practice(
         else:
             record.frames.append(Frame(frame=index, shuttle=shuttle, players=Players(near=player)))
         if preview is not None and index % 6 == 0:
-            image = frame
+            image = draw_frame(
+                frame.copy(), record, index, ("trail", "pose", "boxes"), preview_state
+            )
             if frame.shape[1] > 960:
                 scale = 960 / frame.shape[1]
-                image = cv2.resize(frame, (960, max(1, round(frame.shape[0] * scale))))
+                image = cv2.resize(image, (960, max(1, round(frame.shape[0] * scale))))
             ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 75])
             if ok:
                 preview(index, base64.b64encode(jpeg).decode("ascii"))
         if index % 15 == 0:
             progress(0.75 * (index + 1) / len(reader))
-    if analyzer.next_frame != len(reader):
+    processed_frames = len(record.frames)
+    stopped_early = processed_frames < len(reader)
+    if not stopped_early and analyzer.next_frame != len(reader):
         raise RuntimeError("Video ended before all practice frames were analyzed")
+    record.num_frames = processed_frames
     from shuttlesense.practice.auto import analyze_strokes
 
     events = analyze_strokes(record, config, device, unobserved)
@@ -146,11 +159,12 @@ def run_practice(
 
     def render_progress(value: float) -> None:
         check_cancelled()
+        control()
         progress(0.75 + 0.25 * value)
 
     render_video(
         record,
-        FrameReader(source, target_height=0, max_fps=0),
+        itertools.islice(FrameReader(source, target_height=0, max_fps=0), processed_frames),
         out_dir / "annotated.mp4",
         overlays=("trail", "pose", "boxes", "hits", "strokes", "speed"),
         config=config,
@@ -177,6 +191,8 @@ def run_practice(
             {
                 "setup": setup.model_dump(),
                 "fps": reader.fps,
+                "stopped_early": stopped_early,
+                "processed_frames": processed_frames,
                 "observations": [a.model_dump() for a in analyzer.observations],
                 "automatic_events": events,
                 "analysis_notes": analysis_notes,

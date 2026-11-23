@@ -10,6 +10,9 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../data/models/video_info.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/surfaces.dart';
+import '../../core/theme/tokens.dart';
+import '../watch/watch_screen.dart' show formatWatchElapsed;
 import '../mode/mode_screen.dart';
 
 class PracticeScreen extends ConsumerStatefulWidget {
@@ -34,6 +37,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   VideoController? videoController;
   bool eventsDirty = false;
   bool loadingReport = false;
+  bool controlBusy = false;
 
   @override
   void initState() {
@@ -220,6 +224,23 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
+  Future<void> controlAnalysis(String action) async {
+    final id = job?['id'] as String?;
+    if (id == null || controlBusy) return;
+    setState(() {
+      controlBusy = true;
+      error = null;
+    });
+    try {
+      await ref.read(apiClientProvider).controlPractice(id, action);
+      await loadJob(id);
+    } catch (e) {
+      if (mounted) setState(() => error = 'Could not update analysis: $e');
+    } finally {
+      if (mounted) setState(() => controlBusy = false);
+    }
+  }
+
   Future<void> saveEvents() async {
     if (result == null || job == null) return;
     setState(() {
@@ -383,25 +404,88 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               child: const Text('Resume with selected player'),
             ),
         ],
-        if (busy || status == 'queued' || status == 'running') ...[
-          const SizedBox(height: 16),
-          const LinearProgressIndicator(),
-          Text(
-            status == 'done'
-                ? 'Updating coaching report…'
-                : status == 'queued' || status == 'running'
-                ? 'Analyzing and rendering: ${((job?['progress'] as num? ?? 0) * 100).round()}%'
-                : 'Preparing video and player selection…',
-          ),
-          if (job?['preview'] is Map && (job!['preview'] as Map)['jpeg'] is String) ...[
-            Text('Latest analyzed frame: ${(job!['preview'] as Map)['frame']}'),
-            Image.memory(
-              base64Decode((job!['preview'] as Map)['jpeg'] as String),
-              gaplessPlayback: true,
-              height: 220,
-              fit: BoxFit.contain,
+        if (status == 'queued' || status == 'running') ...[
+          const SizedBox(height: Spacing.lg),
+          if (job?['preview'] is Map && (job!['preview'] as Map)['jpeg'] is String)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(Radii.lg),
+              child: AspectRatio(
+                aspectRatio: info!.aspectRatio,
+                child: Image.memory(
+                  base64Decode((job!['preview'] as Map)['jpeg'] as String),
+                  gaplessPlayback: true,
+                  fit: BoxFit.fill,
+                ),
+              ),
             ),
-          ],
+          const SizedBox(height: Spacing.lg),
+          Builder(
+            builder: (context) {
+              final control = job?['control'] as Map? ?? const {};
+              final paused = control['paused'] == true;
+              final stopping = control['stopping'] == true;
+              final rendering = job?['current_stage'] == 'render';
+              final frame = ((job?['preview'] as Map?)?['frame'] as num?)?.toInt();
+              final started = DateTime.tryParse(job?['started_at'] as String? ?? '');
+              final elapsed = started == null ? Duration.zero : DateTime.now().difference(started);
+              final progress = ((job?['progress'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0);
+              final label = status == 'queued'
+                  ? 'Waiting in queue'
+                  : stopping
+                  ? 'Saving session?'
+                  : paused
+                  ? 'Paused'
+                  : rendering
+                  ? 'Rendering video?'
+                  : 'Catching up?';
+              return AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: Spacing.xs,
+                  children: [
+                    Text(
+                      '$label${frame == null ? '' : ' ? ${(frame / info!.fps).toStringAsFixed(1)} s / ${(info.numFrames / info.fps).toStringAsFixed(1)} s'}',
+                    ),
+                    Text(
+                      'Elapsed: ${formatWatchElapsed(elapsed.isNegative ? Duration.zero : elapsed)} (includes pauses)',
+                    ),
+                    LinearProgressIndicator(value: status == 'queued' ? null : progress),
+                    Text('${(progress * 100).round()}% ? ${rendering ? 'Rendering' : 'Analyzing'}'),
+                    const Text('The preview shows the latest analyzed frame.'),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: Spacing.lg),
+          if (status == 'running')
+            Builder(
+              builder: (context) {
+                final control = job?['control'] as Map? ?? const {};
+                final paused = control['paused'] == true;
+                final stopping = control['stopping'] == true;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton(
+                      onPressed: controlBusy || stopping
+                          ? null
+                          : () => controlAnalysis(paused ? 'resume' : 'pause'),
+                      child: Text(paused ? 'Play' : 'Pause'),
+                    ),
+                    OutlinedButton(
+                      onPressed: controlBusy || stopping ? null : () => controlAnalysis('stop'),
+                      child: const Text('Stop and save'),
+                    ),
+                  ],
+                );
+              },
+            ),
+        ] else if (busy && status != 'done') ...[
+          const SizedBox(height: Spacing.lg),
+          const LinearProgressIndicator(),
+          const Text('Preparing video and player selection?'),
         ],
         if (status == 'failed') Text('Analysis failed: ${job?['error']}'),
         if (status == 'done' && loadingReport) ...[
@@ -421,6 +505,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           ),
         ],
         if (result != null) ...[
+          if (result!['stopped_early'] == true)
+            const Text(
+              'This session was stopped early; the video and report cover the analyzed portion.',
+            ),
           const SizedBox(height: 16),
           Text('Review stroke events', style: Theme.of(context).textTheme.titleLarge),
           const Text(
@@ -498,7 +586,9 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           if (eventsDirty) const Text('Unsaved event changes are not included in the report.'),
           const SizedBox(height: 16),
           if ((result!['unobserved_frames'] as num? ?? 0) > 0)
-            const Text('The selected player was not confidently tracked in some frames; those moments are excluded from player analysis.'),
+            const Text(
+              'The selected player was not confidently tracked in some frames; those moments are excluded from player analysis.',
+            ),
           Text('Coaching report', style: Theme.of(context).textTheme.titleLarge),
           Text('${(result!['report'] as Map)['summary']}'),
           Text('Generated by: ${(result!['report'] as Map)['generated_by']}'),

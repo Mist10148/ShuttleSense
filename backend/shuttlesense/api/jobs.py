@@ -56,6 +56,7 @@ class JobManager:
         self.pipeline = pipeline
         self._jobs: dict[str, Job] = {j.id: j for j in storage.load_jobs()}
         self._practice_previews: dict[str, dict] = {}
+        self._practice_controls: dict[str, dict[str, bool]] = {}
         self._cancelled: set[str] = set()
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
@@ -334,6 +335,39 @@ class JobManager:
         self._queue.put(job_id)
         return self.get(job_id)
 
+    def practice_control(self, job_id: str, action: str) -> dict:
+        """Request a cooperative pause, resume, or partial save for an active practice job."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.mode != "practice":
+                raise KeyError(job_id)
+            if job.status != "running":
+                raise JobBusy(job_id)
+            state = self._practice_controls.setdefault(job_id, {"paused": False, "stopping": False})
+            if state["stopping"]:
+                raise JobBusy(job_id)
+            if action == "pause":
+                state["paused"] = True
+            elif action == "resume":
+                state["paused"] = False
+            elif action == "stop":
+                state.update(paused=False, stopping=True)
+            return dict(state)
+
+    def practice_control_state(self, job_id: str) -> dict:
+        with self._lock:
+            return dict(self._practice_controls.get(job_id, {"paused": False, "stopping": False}))
+
+    def check_practice_control(self, job_id: str) -> bool:
+        import time
+
+        while True:
+            self.check_cancelled(job_id)
+            state = self.practice_control_state(job_id)
+            if not state["paused"]:
+                return state["stopping"]
+            time.sleep(0.1)
+
     def practice_preview(self, job_id: str) -> dict | None:
         with self._lock:
             return self._practice_previews.get(job_id)
@@ -426,9 +460,12 @@ class JobManager:
                         job.practice_gaps,
                         self.config,
                         self.device,
-                        lambda p: self._update(job_id, current_stage="practice", progress=p),
+                        lambda p: self._update(
+                            job_id, current_stage="render" if p >= 0.75 else "practice", progress=p
+                        ),
                         lambda: self.check_cancelled(job_id),
                         lambda frame, jpeg: self.set_practice_preview(job_id, frame, jpeg),
+                        lambda: self.check_practice_control(job_id),
                     )
                 elif job.mode == "live" and self.has_outputs(job_id):
                     self._rerender_live(job, source, out_dir)
@@ -473,6 +510,7 @@ class JobManager:
             if job.mode == "practice":
                 with self._lock:
                     self._practice_previews.pop(job_id, None)
+                    self._practice_controls.pop(job_id, None)
             # DELETE /videos while this job ran: the source was open, so finish the delete.
             if self.storage.video_deleted(job.video_id):
                 self.storage.delete_video(job.video_id)

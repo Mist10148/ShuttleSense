@@ -166,6 +166,9 @@ class ApiClient {
     )).data!,
   );
 
+  Future<Json> controlPractice(String id, String action) =>
+      _call(() async => (await _dio.post<Json>('/practice/sessions/$id/control/$action')).data!);
+
   Future<Json> practiceResult(String id) => _call(
     () async => (await _dio.get<Json>(
       '/practice/sessions/$id/result',

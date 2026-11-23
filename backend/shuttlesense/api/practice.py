@@ -149,7 +149,20 @@ def practice_session(job_id: str, request: Request):
     return {
         **job.model_dump(mode="json"),
         "preview": request.app.state.jobs.practice_preview(job_id),
+        "control": request.app.state.jobs.practice_control_state(job_id),
     }
+
+
+@router.post("/sessions/{job_id}/control/{action}")
+def control_practice(job_id: str, action: Literal["pause", "resume", "stop"], request: Request):
+    from shuttlesense.api.jobs import JobBusy
+
+    try:
+        return request.app.state.jobs.practice_control(job_id, action)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail="session cannot be controlled now") from exc
 
 
 @router.get("/sessions/{job_id}/result")

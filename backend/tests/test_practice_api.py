@@ -192,3 +192,65 @@ def test_completed_auto_event_produces_coach_evidence_without_manual_marks(
         assert saved.status_code == 200
         refreshed = client.get(f"/practice/sessions/{job_id}/result").json()
         assert refreshed["report"]["evidence"][0]["provenance"] == "automatic"
+
+
+def test_practice_pause_resume_and_stop_saves_processed_video(tmp_path, tiny_video, monkeypatch):
+    import threading
+    import time
+
+    import cv2
+    from fastapi.testclient import TestClient
+
+    from shuttlesense.api.main import create_app
+    from shuttlesense.api.settings import Settings
+
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+    person = Player(bbox=(2, 2, 40, 60), score=0.9)
+
+    def detect(frame):
+        calls.append(1)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(5)
+        return [person]
+
+    monkeypatch.setattr("shuttlesense.practice.runner.load_detector", lambda *args: detect)
+    monkeypatch.setattr("shuttlesense.practice.runner.build_shuttle_tracker", lambda *args: None)
+    with TestClient(
+        create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", coach_provider="off"))
+    ) as client:
+        with tiny_video.open("rb") as f:
+            video_id = client.post("/videos", files={"file": ("clip.mp4", f, "video/mp4")}).json()[
+                "id"
+            ]
+        job_id = client.post(
+            "/practice/sessions",
+            json={
+                "video_id": video_id,
+                "stroke": "clear",
+                "arm": "right",
+                "selected_bbox": [2, 2, 40, 60],
+            },
+        ).json()["id"]
+        assert entered.wait(5)
+        assert client.post(f"/practice/sessions/{job_id}/control/pause").status_code == 200
+        release.set()
+        time.sleep(0.3)
+        assert len(calls) == 1
+        assert client.get(f"/practice/sessions/{job_id}").json()["control"]["paused"] is True
+        assert client.post(f"/practice/sessions/{job_id}/control/resume").status_code == 200
+        assert client.post(f"/practice/sessions/{job_id}/control/stop").status_code == 200
+        for _ in range(200):
+            job = client.get(f"/practice/sessions/{job_id}").json()
+            if job["status"] in ("done", "failed"):
+                break
+            time.sleep(0.05)
+        assert job["status"] == "done", job
+        result = client.get(f"/practice/sessions/{job_id}/result").json()
+        assert result["stopped_early"] is True
+        assert 1 <= result["processed_frames"] < 10
+        cap = cv2.VideoCapture(str(tmp_path / "storage" / "jobs" / job_id / "annotated.mp4"))
+        assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == result["processed_frames"]
+        cap.release()
