@@ -179,7 +179,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             ),
           if (others.isNotEmpty)
             ExpansionTile(
-              tilePadding: EdgeInsets.zero,
+              tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.md),
               title: Text('More player notes (${others.length})'),
               children: [for (final note in others) _noteTile(note)],
             ),

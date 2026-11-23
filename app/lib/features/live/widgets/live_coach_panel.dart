@@ -180,8 +180,8 @@ class LiveCoachPanel extends StatelessWidget {
           ],
           if (state.rallies.isNotEmpty)
             ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: Spacing.sm),
+              tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+              childrenPadding: const EdgeInsets.fromLTRB(Spacing.md, 0, Spacing.md, Spacing.md),
               expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
               title: const Text('Recent completed rallies'),
               children: [
