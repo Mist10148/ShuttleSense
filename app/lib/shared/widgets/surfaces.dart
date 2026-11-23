@@ -347,7 +347,7 @@ class PastelActionCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            IconChip(icon: icon, background: enabled ? color : p.surface2, size: 44),
+            IconWell(icon: icon, size: 44, iconSize: 22),
             const Spacer(),
             if (badge != null)
               Flexible(
