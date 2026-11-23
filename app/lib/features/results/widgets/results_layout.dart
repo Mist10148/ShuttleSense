@@ -61,7 +61,7 @@ class ResultsLayout extends StatelessWidget {
   final Widget? players;
 
   /// Height the court card is given in the right column: enough for the court on its side.
-  static const double courtCardHeight = 400;
+  static const double courtCardHeight = 440;
 
   @override
   Widget build(BuildContext context) {
@@ -78,8 +78,8 @@ class ResultsLayout extends StatelessWidget {
     );
   }
 
-  /// Width of the right column: 30% of the window, 360 to 440 dp.
-  static double sidePanelWidth(double width) => (width * 0.3).clamp(360.0, 440.0);
+  /// Width of the right column: a third of the window, 380 to 500 dp (a wider court).
+  static double sidePanelWidth(double width) => (width * 0.33).clamp(380.0, 500.0);
 
   Widget get _smallShot => compactShot ?? shot ?? const SizedBox.shrink();
 
@@ -212,8 +212,8 @@ class ResultsLayout extends StatelessWidget {
   /// section as tall as it needs. The right column (shot, court, players) scrolls on its own.
   Widget _expanded(BuildContext context, BoxConstraints box) {
     final side = sidePanelWidth(box.maxWidth);
-    // The video takes up to half the height, so the tabs start in view under it.
-    final videoMax = math.max(160.0, box.maxHeight * 0.5);
+    // The video takes up to 58% of the height; the tab row still starts in view under it.
+    final videoMax = math.max(160.0, box.maxHeight * 0.58);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
