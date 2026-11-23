@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ui/depth.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/api_client.dart';
 import '../../data/models/clip_record.dart';
@@ -42,10 +43,12 @@ class CoachReportCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final report = ref.watch(coachReportProvider(jobId));
     final busy = report.isLoading;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: Spacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.md),
+    // A recessed panel inside the Coach tab, not a raised card on a raised card.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+      child: InsetBox(
+        radius: 16,
+        padding: const EdgeInsets.all(Spacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

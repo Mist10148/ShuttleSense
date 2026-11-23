@@ -46,7 +46,7 @@ void main() {
 
   testWidgets('player filter hides the other side', (tester) async {
     await pumpTimeline(tester);
-    await tester.tap(find.text('Far'));
+    await tester.tap(find.text('Far').first); // the filter, above the rows' player tags
     await tester.pumpAndSettle();
     expect(find.text('Clear'), findsOneWidget);
     expect(find.text('Smash'), findsNothing);

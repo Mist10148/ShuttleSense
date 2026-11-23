@@ -37,7 +37,8 @@ class SummaryChart extends StatelessWidget {
       return v == null ? '–' : '${v.round()} km/h';
     }
 
-    return SectionCard(
+    // Inside the Stats tab's panel: a titled block, not a card of its own.
+    return SectionBlock(
       title: 'Strokes by player',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

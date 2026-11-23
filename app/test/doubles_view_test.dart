@@ -69,9 +69,7 @@ void main() {
   testWidgets('the minimap draws a doubles court', (tester) async {
     await pump(tester, CourtMinimap(record: doublesRecord(), frameIndex: 10));
     // The picture is the doubles court plus the run-off band around it.
-    final box = tester.getSize(
-      find.descendant(of: find.byType(CourtMinimap), matching: find.byType(CustomPaint)).last,
-    );
+    final box = tester.getSize(find.byKey(const Key('court-picture')));
     expect(
       box.shortestSide / box.longestSide,
       closeTo((5.18 + 0.92 + 2 * kRunOffM) / (13.40 + 2 * kRunOffM), 1e-3),
@@ -89,9 +87,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('N1'), findsOneWidget);
-    expect(find.text('F1'), findsOneWidget);
-    expect(find.text('N2'), findsOneWidget);
+    expect(find.text('Near 1'), findsOneWidget);
+    expect(find.text('Far 1'), findsOneWidget);
+    expect(find.text('Near 2'), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('^Near 2 player, Smash')), findsOneWidget);
   });
 

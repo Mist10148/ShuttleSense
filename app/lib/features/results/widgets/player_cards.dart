@@ -73,7 +73,7 @@ class PlayerMovement {
   }
 }
 
-/// One card per player: distance moved, running speed now and the top running speed so far.
+/// A block per player: distance moved, running speed now and the top running speed so far.
 class PlayerCards extends StatelessWidget {
   const PlayerCards({super.key, required this.record, required this.frameIndex});
 
@@ -95,16 +95,20 @@ class PlayerCards extends StatelessWidget {
       movement: PlayerMovement.of(record, p.$1),
       index: i,
     );
+    // Two blocks per row: near and far (singles), partners side by side (doubles).
     return Column(
       children: [
         for (var row = 0; row < players.length; row += 2) ...[
           if (row > 0) const SizedBox(height: Spacing.md),
-          Row(
-            children: [
-              Expanded(child: card(players[row])),
-              const SizedBox(width: Spacing.md),
-              Expanded(child: card(players[row + 1])),
-            ],
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: card(players[row])),
+                const SizedBox(width: Spacing.md),
+                Expanded(child: card(players[row + 1])),
+              ],
+            ),
           ),
         ],
       ],
@@ -130,30 +134,52 @@ class _Card extends StatelessWidget {
     final p = AppPalette.of(context);
     final muted = Theme.of(context).textTheme.bodySmall?.copyWith(color: p.text3, fontSize: 11);
     final speed = movement.speed[index];
-    // The unit stays small beside the number, so a figure never wraps onto two lines.
+    // The unit stays small beside the number, and a figure that is too wide for its column
+    // scales down: nothing wraps onto a second line or spills out of the card.
     Widget figure(String label, String value, String unit) => Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: muted, maxLines: 1),
-          Text.rich(
-            TextSpan(
-              text: value,
-              children: [
-                if (value != '–' && unit.isNotEmpty)
-                  TextSpan(
-                    text: ' $unit',
-                    style: TextStyle(fontSize: 11, color: p.text3, letterSpacing: 0),
-                  ),
-              ],
+          // Short words, the unit beside the number: nothing to wrap in a narrow block.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(label, style: muted, maxLines: 1, softWrap: false),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text.rich(
+              TextSpan(
+                text: value,
+                children: [
+                  if (value != '–' && unit.isNotEmpty)
+                    TextSpan(
+                      text: ' $unit',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: p.text3,
+                        letterSpacing: 0,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              softWrap: false,
+              style: kFigureStyle.copyWith(color: p.ink, fontSize: 17),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: kFigureStyle.copyWith(color: p.ink, fontSize: 17),
           ),
         ],
       ),
+    );
+    // A hairline between the figures, so each reads as its own number.
+    final divider = Container(
+      width: 1,
+      height: 28,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      color: p.hairline ?? p.surface2,
     );
     return Semantics(
       label:
@@ -168,8 +194,10 @@ class _Card extends StatelessWidget {
           border: Border.all(color: TactileTokens.of(context).rim),
           boxShadow: raisedShadows(TactileTokens.of(context), depth: 0.7),
         ),
+        // A block per player: the name over the three figures.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
               children: [
@@ -179,15 +207,25 @@ class _Card extends StatelessWidget {
                   decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: Spacing.sm),
-                Text(name, style: Theme.of(context).textTheme.titleSmall),
+                Flexible(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: Spacing.sm),
             Row(
               children: [
                 figure('Moved', movement.distance[index].toStringAsFixed(1), 'm'),
-                figure('Run, km/h', speed == null ? '–' : speed.toStringAsFixed(1), ''),
-                figure('Top, km/h', movement.top[index].toStringAsFixed(1), ''),
+                divider,
+                figure('Run', speed == null ? '–' : speed.toStringAsFixed(1), 'km/h'),
+                divider,
+                figure('Top', movement.top[index].toStringAsFixed(1), 'km/h'),
               ],
             ),
           ],
