@@ -147,13 +147,18 @@ class _RecentAnalyses extends StatelessWidget {
     subtitle: 'Newest first',
     onExpand: () => context.go(Routes.history),
     padding: const EdgeInsets.fromLTRB(Spacing.xl, Spacing.xl, Spacing.md, Spacing.md),
-    child: Column(
-      children: [
-        for (final (i, job) in jobs.indexed) ...[
-          if (i > 0) const SizedBox(height: Spacing.sm),
-          _RecentRow(job: job),
+    // A recessed box behind the rows, so the list sits in the card rather than on it.
+    child: InsetBox(
+      radius: 16,
+      padding: const EdgeInsets.all(Spacing.sm),
+      child: Column(
+        children: [
+          for (final (i, job) in jobs.indexed) ...[
+            if (i > 0) const SizedBox(height: Spacing.sm),
+            _RecentRow(job: job),
+          ],
         ],
-      ],
+      ),
     ),
   );
 }
