@@ -16,15 +16,65 @@ import '../../ui/depth.dart';
 /// How many analyses the notifications menu lists.
 const _kRecentJobs = 6;
 
+/// On a wide window the top bar floats over the top-right corner of the page, so the page's
+/// title row shares its line instead of starting under an empty band. [width] is how much of
+/// that line, from the right edge, the bar takes; a page header keeps clear of it.
+class TopBarReserve extends InheritedNotifier<ValueNotifier<Size>> {
+  const TopBarReserve({
+    super.key,
+    required ValueNotifier<Size> size,
+    required this.shared,
+    required super.child,
+  }) : super(notifier: size);
+
+  /// Whether the page on screen puts its title on the bar's line (Results only); other
+  /// pages start under the bar and their headers keep their full width.
+  final bool shared;
+
+  /// The floating bar's size while the page shares its line, else null.
+  static Size? maybeOf(BuildContext context) {
+    final reserve = context.dependOnInheritedWidgetOfExactType<TopBarReserve>();
+    return reserve != null && reserve.shared ? reserve.notifier?.value : null;
+  }
+
+  @override
+  bool updateShouldNotify(TopBarReserve oldWidget) =>
+      oldWidget.shared != shared || super.updateShouldNotify(oldWidget);
+}
+
 /// The bar above every page in the shell: search, analysis notifications and the server
 /// status. On a phone the search collapses to an icon and the brand shows on the left.
 class TopBar extends StatelessWidget {
-  const TopBar({super.key, required this.compact});
+  const TopBar({super.key, required this.compact, this.size});
 
   final bool compact;
 
+  /// Kept up to date with the bar's laid-out size (the floating bar on a wide window).
+  final ValueNotifier<Size>? size;
+
   @override
   Widget build(BuildContext context) {
+    final bar = _bar(context);
+    final notify = size;
+    if (notify == null) return bar;
+    // Measured after each frame it is built in (its status label changes its width).
+    return Builder(
+      builder: (context) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _report(context, notify));
+        return bar;
+      },
+    );
+  }
+
+  static void _report(BuildContext context, ValueNotifier<Size> notify) {
+    if (!context.mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return;
+    final s = box.size;
+    if (s != notify.value) notify.value = s;
+  }
+
+  Widget _bar(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -34,6 +84,7 @@ class TopBar extends StatelessWidget {
         compact ? Spacing.sm : Spacing.xs,
       ),
       child: Row(
+        mainAxisSize: compact ? MainAxisSize.max : MainAxisSize.min,
         children: [
           if (compact) ...[
             IconChip(
@@ -49,7 +100,6 @@ class TopBar extends StatelessWidget {
               icon: const Icon(Icons.search),
             ),
           ] else ...[
-            const Spacer(),
             const SizedBox(width: 300, child: _SearchField()),
             const SizedBox(width: Spacing.lg),
           ],
