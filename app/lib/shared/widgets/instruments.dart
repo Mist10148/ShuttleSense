@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import '../../ui/depth.dart';
 import 'tactile.dart';
 
 /// An analog dial for one estimated speed: a half-circle scale from 0 to [max], a lit arc up
@@ -31,7 +32,8 @@ class SpeedDial extends StatelessWidget {
     return Semantics(
       label: '$label: ${value.round()} $unit',
       excludeSemantics: true,
-      child: InsetScreen(
+      // The dial sits in a recessed box (lib/ui/depth.dart).
+      child: InsetBox(
         radius: Radii.lg,
         padding: const EdgeInsets.fromLTRB(Spacing.md, Spacing.md, Spacing.md, Spacing.sm),
         child: SizedBox(
