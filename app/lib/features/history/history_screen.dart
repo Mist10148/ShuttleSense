@@ -13,6 +13,7 @@ import '../../shared/widgets/status_pill.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../results/results_screen.dart';
 import '../../core/theme/tokens.dart';
+import '../../ui/depth.dart';
 
 /// Jobs deleted in this session. They are hidden at once, before the refreshed list
 /// arrives, so a swiped-away tile is never built again (Dismissible requires that).
@@ -193,13 +194,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     children: [
       SizedBox(
         width: 280,
-        child: TextField(
-          controller: _search,
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'Search by file name',
+        child: InsetBox(
+          radius: Radii.md,
+          child: TextField(
+            controller: _search,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search by file name',
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+            ),
+            onChanged: (v) => ref.read(historyQueryProvider.notifier).state = v,
           ),
-          onChanged: (v) => ref.read(historyQueryProvider.notifier).state = v,
         ),
       ),
       SegmentedButton<_ModeFilter>(
