@@ -10,6 +10,7 @@ import '../../data/models/health.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
+import '../../ui/depth.dart';
 
 /// Checks a server before it is saved; replaced in widget tests.
 typedef HealthCheck = Future<Health> Function(ServerConfig config);
@@ -188,17 +189,23 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _url,
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Server address',
-                  hintText: 'http://192.168.1.20:8000',
-                  prefixIcon: Icon(Icons.dns_outlined),
+              InsetBox(
+                radius: Radii.md,
+                child: TextField(
+                  controller: _url,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Server address',
+                    hintText: 'http://192.168.1.20:8000',
+                    prefixIcon: Icon(Icons.dns_outlined),
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _connect(),
                 ),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _connect(),
               ),
               if (recent.isNotEmpty) ...[
                 const SizedBox(height: Spacing.sm),
@@ -224,15 +231,21 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                 ),
               ],
               const SizedBox(height: Spacing.md),
-              TextField(
-                controller: _token,
-                obscureText: true,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Access token (if the server has one)',
-                  prefixIcon: Icon(Icons.key_outlined),
+              InsetBox(
+                radius: Radii.md,
+                child: TextField(
+                  controller: _token,
+                  obscureText: true,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Access token (if the server has one)',
+                    prefixIcon: Icon(Icons.key_outlined),
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                  ),
+                  onSubmitted: (_) => _connect(),
                 ),
-                onSubmitted: (_) => _connect(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: Spacing.md),

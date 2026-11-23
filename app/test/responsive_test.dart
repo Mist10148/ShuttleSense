@@ -8,6 +8,7 @@ import 'package:shuttlesense_app/core/responsive/adaptive_shell.dart';
 import 'package:shuttlesense_app/core/responsive/breakpoints.dart';
 import 'package:shuttlesense_app/features/history/history_screen.dart';
 import 'package:shuttlesense_app/features/results/widgets/results_layout.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 
 /// Phone portrait, tablet, laptop (docs/ARCHITECTURE.md §4).
 const phone = Size(360, 780);
@@ -103,6 +104,7 @@ void main() {
       setSize(tester, size);
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.light(),
           home: Scaffold(
             body: ResultsLayout(
               video: const AspectRatio(

@@ -301,6 +301,7 @@ void main() {
     ]);
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: SingleChildScrollView(child: CourtMinimap(record: record, frameIndex: 1)),
         ),
@@ -326,12 +327,18 @@ void main() {
   testWidgets('a job without a video says so instead of showing a player (T4.6)', (tester) async {
     setSize(tester, phone);
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: VideoPanel(controller: null, available: false))),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: VideoPanel(controller: null, available: false)),
+      ),
     );
     expect(find.text('Annotated video not available'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: VideoPanel(controller: null, available: null))),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: VideoPanel(controller: null, available: null)),
+      ),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Annotated video not available'), findsNothing);

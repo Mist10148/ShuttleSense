@@ -174,8 +174,9 @@ void main() {
 
   testWidgets('reduced motion keeps the burst still', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: MediaQuery(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const MediaQuery(
           data: MediaQueryData(disableAnimations: true),
           child: HitBurstLayer(events: [HitBurstEvent(id: 1, who: 'near')]),
         ),

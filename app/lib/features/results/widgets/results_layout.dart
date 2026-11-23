@@ -6,6 +6,7 @@ import '../../../core/responsive/breakpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import 'court_minimap.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../ui/depth.dart';
 
 /// Arranges the results screen (docs/ARCHITECTURE.md §4).
 ///
@@ -114,10 +115,9 @@ class ResultsLayout extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(Spacing.sm, Spacing.sm, Spacing.sm, 0),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Recess(
+                child: InsetBox(
                   radius: Radii.pill,
                   padding: EdgeInsets.zero,
-                  depth: 3,
                   child: Padding(
                     padding: const EdgeInsets.all(3),
                     child: TabBar(

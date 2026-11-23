@@ -13,6 +13,7 @@ import 'package:shuttlesense_app/features/upload/upload_screen.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 
 Health health([List<String>? strokeModels = const ['cnn', 'lstm', 'rf']]) => Health(
   version: '0.1.0',
@@ -178,6 +179,7 @@ void main() {
     expect(record.strokeModel, 'lstm');
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: SingleChildScrollView(
             child: SummaryChart(summary: record.summary, strokeModel: record.strokeModel),
@@ -188,6 +190,7 @@ void main() {
     expect(find.text('Strokes named by the LSTM model'), findsOneWidget);
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: SingleChildScrollView(child: SummaryChart(summary: record.summary)),
         ),

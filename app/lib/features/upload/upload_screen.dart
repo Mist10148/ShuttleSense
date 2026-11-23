@@ -21,6 +21,7 @@ import '../../shared/widgets/stroke_model_field.dart';
 import 'upload_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../ui/depth.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -444,19 +445,24 @@ class _OverlayPicker extends StatelessWidget {
             style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: Spacing.xs),
-          Wrap(
-            spacing: Spacing.sm,
-            runSpacing: Spacing.sm,
-            children: [
-              for (final name in names)
-                _OverlayChip(
-                  name: name,
-                  label: kOverlays[name]!,
-                  selected: options.overlays.contains(name),
-                  reason: reasons[name],
-                  onSelected: (on) => notifier.toggleOverlay(name, on),
-                ),
-            ],
+          // Each group of options sits in its own recessed well (lib/ui/depth.dart).
+          InsetBox(
+            radius: 14,
+            padding: const EdgeInsets.all(Spacing.xs + 2),
+            child: Wrap(
+              spacing: Spacing.sm,
+              runSpacing: Spacing.sm,
+              children: [
+                for (final name in names)
+                  _OverlayChip(
+                    name: name,
+                    label: kOverlays[name]!,
+                    selected: options.overlays.contains(name),
+                    reason: reasons[name],
+                    onSelected: (on) => notifier.toggleOverlay(name, on),
+                  ),
+              ],
+            ),
           ),
         ],
         if (blocked.isNotEmpty) HelperText('Unavailable: ${blocked.join('; ')}.'),

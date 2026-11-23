@@ -11,6 +11,7 @@ import '../../features/history/history_screen.dart';
 import '../../features/results/results_screen.dart';
 import 'status_pill.dart';
 import 'surfaces.dart';
+import '../../ui/depth.dart';
 
 /// How many analyses the notifications menu lists.
 const _kRecentJobs = 6;
@@ -70,7 +71,7 @@ class _SearchField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // A slot sunk into the chassis.
-    return Recess(
+    return InsetBox(
       radius: Radii.pill,
       padding: EdgeInsets.zero,
       child: SizedBox(

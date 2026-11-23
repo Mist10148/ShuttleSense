@@ -6,6 +6,7 @@ import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
 import 'package:shuttlesense_app/shared/widgets/courtside_tools.dart';
 import 'fakes/fake_live.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'live_test.dart' show pumpLive, startWithoutCourt, events;
 
 class TestStopwatch extends Stopwatch {
@@ -91,6 +92,7 @@ void main() {
     final actions = <String>[];
     final elapsed = TestStopwatch();
     Widget view() => MaterialApp(
+      theme: AppTheme.light(),
       home: Scaffold(
         body: IntervalPanel(interval: clock, onAction: actions.add, elapsedClock: elapsed),
       ),
@@ -144,6 +146,7 @@ void main() {
     });
     final moments = <Moment>[];
     Widget view({required bool available}) => MaterialApp(
+      theme: AppTheme.light(),
       home: Scaffold(
         body: DecisionHistory(record: record, onSeek: available ? moments.add : null),
       ),
@@ -292,6 +295,7 @@ void main() {
       'duration_s': 60,
     }, age: age);
     Widget view() => MaterialApp(
+      theme: AppTheme.light(),
       home: Scaffold(
         body: IntervalPanel(interval: clock, onAction: (_) {}),
       ),

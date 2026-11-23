@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/widgets/tactile.dart';
+import '../../ui/depth.dart';
 import 'tokens.dart';
 
 export 'tokens.dart';
@@ -196,6 +197,7 @@ abstract final class AppTheme {
         p,
         brightness == Brightness.dark ? AnalysisColors.dark : AnalysisColors.light,
         t,
+        brightness == Brightness.dark ? DepthTheme.dark : DepthTheme.light,
       ],
       visualDensity: VisualDensity.adaptivePlatformDensity,
       scaffoldBackgroundColor: p.page,

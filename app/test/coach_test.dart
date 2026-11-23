@@ -40,6 +40,7 @@ LineCall call({bool uncertain = true, String? override, String called = 'out'}) 
 );
 
 Widget host(Widget child) => MaterialApp(
+  theme: AppTheme.light(),
   home: Scaffold(body: SingleChildScrollView(child: child)),
 );
 
@@ -250,6 +251,7 @@ void main() {
         setSize(tester, size);
         await tester.pumpWidget(
           MaterialApp(
+            theme: AppTheme.light(),
             home: Scaffold(
               body: ResultsLayout(
                 video: const AspectRatio(
