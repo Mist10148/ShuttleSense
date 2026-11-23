@@ -16,6 +16,7 @@ import '../../shared/widgets/surfaces.dart';
 import '../../shared/widgets/tactile.dart';
 import '../history/history_screen.dart';
 import '../mode/mode_screen.dart';
+import '../../ui/depth.dart';
 import '../results/results_screen.dart' show hasResults;
 import '../results/widgets/stroke_timeline.dart' show formatClock;
 
@@ -233,7 +234,7 @@ class _LatestAnalysis extends ConsumerWidget {
           )
         : total == 0
         ? Text('No strokes were named in this analysis.', style: text.bodySmall)
-        : Recess(
+        : InsetBox(
             radius: Radii.lg,
             padding: const EdgeInsets.fromLTRB(Spacing.md, Spacing.lg, Spacing.md, Spacing.md),
             child: Wrap(
