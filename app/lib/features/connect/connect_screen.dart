@@ -7,7 +7,6 @@ import '../../core/config/server_config.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
 import '../../data/models/health.dart';
-import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/depth.dart';
@@ -160,116 +159,200 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     final mixed =
         kIsWeb &&
         ServerConfig.isMixedContent(Uri.base.scheme, ServerConfig.normalizeUrl(_url.text));
-    return PageScaffold(
-      title: 'Connect to server',
-      maxWidth: 480,
-      actions: [
-        IconButton(tooltip: 'Help', icon: const Icon(Icons.help_outline), onPressed: _showHelp),
-      ],
-      children: [
-        // The app badge, as in the top bar.
-        Center(
-          child: IconChip(
-            icon: Icons.sports_tennis,
-            size: 64,
-            background: AppPalette.of(context).lavender,
+    final p = AppPalette.of(context);
+    final text = theme.textTheme;
+    Widget note(String message, {required Color color, required IconData icon}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm + 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: Spacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: text.bodySmall?.copyWith(color: color),
+              semanticsLabel: 'Error: $message',
+            ),
           ),
-        ),
-        const SizedBox(height: Spacing.md),
-        Text('ShuttleSense', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
-        const SizedBox(height: Spacing.sm),
-        Text(
-          'Enter the address of the ShuttleSense backend: the laptop on your Wi-Fi '
-          '(for example http://192.168.1.20:8000) or the Colab tunnel URL.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: AppPalette.of(context).text2),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: Spacing.xl),
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              InsetBox(
-                radius: Radii.md,
-                child: TextField(
-                  controller: _url,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Server address',
-                    hintText: 'http://192.168.1.20:8000',
-                    prefixIcon: Icon(Icons.dns_outlined),
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _connect(),
-                ),
+        ],
+      ),
+    );
+
+    final card = AppCard(
+      padding: const EdgeInsets.all(Spacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InsetBox(
+            radius: Radii.md,
+            child: TextField(
+              controller: _url,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Server address',
+                hintText: 'http://192.168.1.20:8000',
+                prefixIcon: Icon(Icons.dns_outlined),
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
               ),
-              if (recent.isNotEmpty) ...[
-                const SizedBox(height: Spacing.sm),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    for (final url in recent)
-                      ActionChip(
-                        avatar: const Icon(Icons.history, size: 16),
-                        label: Text(url),
-                        onPressed: () => setState(() => _url.text = url),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _connect(),
+            ),
+          ),
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: Spacing.sm + 2),
+            Wrap(
+              spacing: Spacing.sm,
+              runSpacing: Spacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Recent', style: text.bodySmall?.copyWith(color: p.text3)),
+                for (final url in recent)
+                  ActionChip(
+                    avatar: const Icon(Icons.history, size: 16),
+                    label: Text(url),
+                    onPressed: () => setState(() => _url.text = url),
+                  ),
+              ],
+            ),
+          ],
+          if (mixed) ...[
+            const SizedBox(height: Spacing.sm),
+            note(
+              'This page is served over https, so the browser blocks plain http servers. '
+              'Use the https tunnel address instead.',
+              color: theme.colorScheme.error,
+              icon: Icons.lock_outline,
+            ),
+          ],
+          const SizedBox(height: Spacing.lg),
+          InsetBox(
+            radius: Radii.md,
+            child: TextField(
+              controller: _token,
+              obscureText: true,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Access token (if the server has one)',
+                prefixIcon: Icon(Icons.key_outlined),
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+              ),
+              onSubmitted: (_) => _connect(),
+            ),
+          ),
+          if (_error case final error?) ...[
+            const SizedBox(height: Spacing.md),
+            note(error, color: theme.colorScheme.error, icon: Icons.error_outline),
+          ],
+          const SizedBox(height: Spacing.xl),
+          SizedBox(
+            height: 52,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _connect,
+              icon: _busy
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.link),
+              label: const Text('Connect'),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // One centred column: the brand, the card and where to find the address.
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(
+                        child: IconWell(icon: Icons.sports_tennis, size: 64, iconSize: 30),
                       ),
-                  ],
-                ),
-              ],
-              if (mixed) ...[
-                const SizedBox(height: Spacing.sm),
-                Text(
-                  'This page is served over https, so the browser blocks plain http servers. '
-                  'Use the https tunnel address instead.',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: Spacing.md),
-              InsetBox(
-                radius: Radii.md,
-                child: TextField(
-                  controller: _token,
-                  obscureText: true,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Access token (if the server has one)',
-                    prefixIcon: Icon(Icons.key_outlined),
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
+                      const SizedBox(height: Spacing.lg),
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          'Connect to server',
+                          textAlign: TextAlign.center,
+                          style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(height: Spacing.xs),
+                      Text(
+                        'Link ShuttleSense to the computer that runs the analysis.',
+                        textAlign: TextAlign.center,
+                        style: text.bodyMedium?.copyWith(color: p.text2),
+                      ),
+                      const SizedBox(height: Spacing.xl),
+                      card,
+                      const SizedBox(height: Spacing.lg),
+                      // Where the address comes from, in two short lines.
+                      for (final (icon, where, what) in const [
+                        (Icons.wifi, 'Same Wi-Fi', "the laptop's address, port 8000"),
+                        (Icons.cloud_outlined, 'Colab', 'the https tunnel address it prints'),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            children: [
+                              Icon(icon, size: 16, color: p.text3),
+                              const SizedBox(width: Spacing.sm),
+                              Flexible(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '$where: ',
+                                        style: TextStyle(
+                                          color: p.text2,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      TextSpan(text: what),
+                                    ],
+                                  ),
+                                  style: text.bodySmall?.copyWith(color: p.text3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: Spacing.sm),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _showHelp,
+                          icon: const Icon(Icons.help_outline, size: 18),
+                          label: const Text('How to find the address'),
+                        ),
+                      ),
+                    ],
                   ),
-                  onSubmitted: (_) => _connect(),
                 ),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: Spacing.md),
-                Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
-                  semanticsLabel: 'Error: $_error',
-                ),
-              ],
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _busy ? null : _connect,
-                icon: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.link),
-                label: const Text('Connect'),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
