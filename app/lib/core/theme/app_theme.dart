@@ -256,12 +256,19 @@ abstract final class AppTheme {
             (s) => s.contains(WidgetState.selected) ? p.ink : p.text3,
           ),
           iconColor: WidgetStatePropertyAll(t.primary),
-          // The segmented button does not pass a background builder down to its segments,
-          // so the tray and the raised chosen segment are drawn with plain state colours.
+          // Segments sit in a recessed SegmentTray: the chosen one is a raised light face with
+          // a soft shadow, the others are flat text on the tray.
           backgroundColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? t.raisedTop : t.recess,
+            (s) => s.contains(WidgetState.selected) ? t.raisedTop : Colors.transparent,
           ),
-          side: WidgetStatePropertyAll(BorderSide(color: t.shade.withValues(alpha: 0.35))),
+          elevation: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? 3 : 0,
+          ),
+          shadowColor: WidgetStatePropertyAll(t.shade),
+          side: const WidgetStatePropertyAll(BorderSide.none),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
       ),
       switchTheme: SwitchThemeData(
@@ -277,10 +284,11 @@ abstract final class AppTheme {
       chipTheme: ChipThemeData(
         side: BorderSide.none,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: t.recess,
+        // Options are small raised keys (light face, short shadow); the chosen ones turn blue.
+        backgroundColor: t.raisedTop,
         elevation: 2,
         pressElevation: 0,
-        shadowColor: Colors.transparent,
+        shadowColor: t.shade,
         selectedShadowColor: t.primary.withValues(alpha: 0.6),
         selectedColor: t.primary,
         checkmarkColor: t.onPrimary,
@@ -329,6 +337,8 @@ abstract final class AppTheme {
           side: BorderSide(color: highContrast ? t.rim : t.primary.withValues(alpha: 0.35)),
         ),
         collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+        childrenPadding: const EdgeInsets.fromLTRB(Spacing.md, 0, Spacing.md, Spacing.md),
         iconColor: t.primary,
         textColor: p.ink,
         expansionAnimationStyle: const AnimationStyle(
