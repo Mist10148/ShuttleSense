@@ -14,6 +14,7 @@ import '../../shared/widgets/surfaces.dart';
 import '../results/results_screen.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/depth.dart';
+import '../../shared/widgets/tactile.dart';
 
 /// Jobs deleted in this session. They are hidden at once, before the refreshed list
 /// arrives, so a swiped-away tile is never built again (Dismissible requires that).
@@ -198,9 +199,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           radius: Radii.md,
           child: TextField(
             controller: _search,
+            textAlignVertical: TextAlignVertical.center,
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
+              prefixIconConstraints: BoxConstraints(minWidth: 48, minHeight: 48),
               hintText: 'Search by file name',
+              isDense: true,
+              contentPadding: EdgeInsets.fromLTRB(0, 14, Spacing.lg, 14),
               filled: false,
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
@@ -209,15 +214,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ),
         ),
       ),
-      SegmentedButton<_ModeFilter>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: _ModeFilter.all, label: Text('All')),
-          ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
-          ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
-        ],
-        selected: {_mode},
-        onSelectionChanged: (s) => setState(() => _mode = s.first),
+      SegmentTray(
+        child: SegmentedButton<_ModeFilter>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: _ModeFilter.all, label: Text('All')),
+            ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
+            ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
+          ],
+          selected: {_mode},
+          onSelectionChanged: (s) => setState(() => _mode = s.first),
+        ),
       ),
       TextButton.icon(
         onPressed: () => setState(() => _newestFirst = !_newestFirst),

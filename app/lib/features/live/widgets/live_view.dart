@@ -17,6 +17,7 @@ import '../../results/widgets/status_strip.dart';
 import '../../results/widgets/stroke_timeline.dart';
 import '../live_controller.dart';
 import '../live_screen.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// The running live session: camera, calls, scoreboard and coach panel (moved out of
 /// live_screen.dart so each file stays readable).
@@ -161,18 +162,20 @@ class _LiveViewState extends ConsumerState<LiveView> {
       onSwapEnds: _coach || !changeEnds ? null : controller.swapEnds,
     );
     final controls = [
-      SegmentedButton<bool>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: false, icon: Icon(Icons.sports), label: Text('Referee')),
-          ButtonSegment(
-            value: true,
-            icon: Icon(Icons.record_voice_over_outlined),
-            label: Text('Coach'),
-          ),
-        ],
-        selected: {_coach},
-        onSelectionChanged: (roles) => setState(() => _coach = roles.first),
+      SegmentTray(
+        child: SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: false, icon: Icon(Icons.sports), label: Text('Referee')),
+            ButtonSegment(
+              value: true,
+              icon: Icon(Icons.record_voice_over_outlined),
+              label: Text('Coach'),
+            ),
+          ],
+          selected: {_coach},
+          onSelectionChanged: (roles) => setState(() => _coach = roles.first),
+        ),
       ),
       StatusStrip(
         rallyState: state.rallyState,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../core/theme/tokens.dart';
+import 'tactile.dart';
 
 /// One line on what each model is (D28, D37). The CNN is the default, so it is the one marked
 /// recommended.
@@ -68,13 +69,15 @@ class StrokeModelField extends StatelessWidget {
             runSpacing: 4,
             children: [
               Text('Stroke model', style: theme.textTheme.labelLarge),
-              SegmentedButton<String>(
-                segments: [
-                  for (final MapEntry(key: model, value: label) in kStrokeModels.entries)
-                    ButtonSegment(value: model, label: Text(label), enabled: available(model)),
-                ],
-                selected: {shown},
-                onSelectionChanged: (s) => onChanged(s.first),
+              SegmentTray(
+                child: SegmentedButton<String>(
+                  segments: [
+                    for (final MapEntry(key: model, value: label) in kStrokeModels.entries)
+                      ButtonSegment(value: model, label: Text(label), enabled: available(model)),
+                  ],
+                  selected: {shown},
+                  onSelectionChanged: (s) => onChanged(s.first),
+                ),
               ),
             ],
           ),

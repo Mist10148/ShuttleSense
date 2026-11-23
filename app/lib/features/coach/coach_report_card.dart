@@ -138,7 +138,7 @@ class _ReportBody extends StatelessWidget {
           Text('Drills', style: heading),
           for (final d in report.drills)
             ExpansionTile(
-              tilePadding: EdgeInsets.zero,
+              tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.md),
               title: Text(d.name),
               subtitle: Text(d.purpose),
               children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import '../../ui/depth.dart';
 
 /// The depth scale. One light source (top left), four levels, every surface composes from it:
 /// - [Depth.recessed] (0): fields, wells, tracks, trays. Inner shade top left, lip of light
@@ -123,18 +124,20 @@ class TactileButtonSurface extends StatelessWidget {
     } else {
       switch (kind) {
         case TactileButtonKind.primary:
-          // A modern solid key: a smooth face that deepens a little towards the bottom, a
-          // soft blue-tinted shadow under it, and (painted below) a hairline of light along
-          // the top edge only. No gloss band, no outline.
+          // A pressable blue key: a face lit from the top that deepens towards the bottom,
+          // a bevel (light top edge, dark bottom edge, painted below) and a soft coloured
+          // shadow that grows on hover.
           decoration = BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
+              stops: const [0, 0.55, 1],
               colors: pressed
-                  ? [t.primaryDeep, t.primaryDeep]
+                  ? [t.primaryDeep, t.primaryDeep, t.primaryDeep]
                   : [
-                      Color.lerp(t.primary, Colors.white, hovered ? 0.07 : 0.03)!,
-                      Color.lerp(t.primary, t.primaryDeep, 0.55)!,
+                      Color.lerp(t.primary, Colors.white, hovered ? 0.08 : 0.04)!,
+                      t.primary,
+                      t.primaryDeep,
                     ],
             ),
             borderRadius: shape,
@@ -148,28 +151,45 @@ class TactileButtonSurface extends StatelessWidget {
                   ]
                 : [
                     BoxShadow(
-                      color: t.primaryDeep.withValues(alpha: hovered ? 0.38 : 0.28),
+                      color: t.primaryDeep.withValues(alpha: hovered ? 0.45 : 0.35),
                       blurRadius: hovered ? 20 : 14,
-                      offset: Offset(0, hovered ? 8 : 5),
+                      offset: Offset(0, hovered ? 8 : 6),
                     ),
                     BoxShadow(
-                      color: t.primaryDeep.withValues(alpha: 0.25),
+                      color: t.primaryDeep.withValues(alpha: 0.3),
                       blurRadius: 2,
                       offset: const Offset(0, 1),
                     ),
                   ],
           );
         case TactileButtonKind.secondary:
+          // A light key that stands clear of the card: a top-lit face, a fine edge and a
+          // short drop shadow, so it does not melt into the surface behind it.
+          final dark = Theme.of(context).brightness == Brightness.dark;
+          final edge = t.flat
+              ? t.rim
+              : (dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFF112D4E).withValues(alpha: 0.14));
           decoration = BoxDecoration(
-            gradient: pressed ? null : convexGradient(t),
+            gradient: pressed ? null : raisedGradient(t),
             color: pressed ? t.recess : null,
             borderRadius: shape,
-            border: Border.all(
-              color: hovered
-                  ? t.primary.withValues(alpha: 0.35)
-                  : (t.flat ? t.rim : Colors.transparent),
-            ),
-            boxShadow: pressed ? null : chipShadows(t, hovered: hovered),
+            border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.45) : edge),
+            boxShadow: pressed
+                ? null
+                : [
+                    BoxShadow(
+                      color: t.shade,
+                      blurRadius: hovered ? 14 : 8,
+                      offset: Offset(0, hovered ? 6 : 3),
+                    ),
+                    BoxShadow(
+                      color: t.highlight.withValues(alpha: t.highlight.a * 0.8),
+                      blurRadius: 6,
+                      offset: const Offset(-2, -2),
+                    ),
+                  ],
           );
         case TactileButtonKind.ghost:
           decoration = BoxDecoration(
@@ -1105,12 +1125,29 @@ class _TopLightPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white.withValues(alpha: 0.28), Colors.white.withValues(alpha: 0)],
-          stops: const [0, 0.4],
+          colors: [
+            Colors.white.withValues(alpha: 0.4),
+            Colors.white.withValues(alpha: 0),
+            Colors.black.withValues(alpha: 0),
+            Colors.black.withValues(alpha: 0.22),
+          ],
+          stops: const [0, 0.4, 0.7, 1],
         ).createShader(rect),
     );
   }
 
   @override
   bool shouldRepaint(_TopLightPainter old) => old.radius != radius;
+}
+
+/// A recessed tray that holds a row of segments (a segmented control): the options sit in
+/// the tray and the chosen one is a raised face inside it.
+class SegmentTray extends StatelessWidget {
+  const SegmentTray({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      InsetBox(radius: 14, padding: const EdgeInsets.all(4), child: child);
 }
