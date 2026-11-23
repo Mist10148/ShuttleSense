@@ -232,23 +232,27 @@ class _AppCardState extends State<AppCard> {
     // Ripples of the card and of list tiles inside it paint on this layer, above the fill.
     body = Material(type: MaterialType.transparency, child: body);
 
-    return AnimatedContainer(
-      duration: still ? Duration.zero : Motion.fast,
-      curve: Motion.curve,
-      transform: Matrix4.translationValues(0, lifted ? -3 : 0, 0),
-      decoration: BoxDecoration(
-        gradient: widget.color == null ? convexGradient(t) : raisedGradient(t, widget.color),
-        borderRadius: shape,
-        border: edge,
-        boxShadow: [...raisedShadows(t, depth: lifted ? 1.3 : 1)],
-      ),
-      child: CustomPaint(
-        foregroundPainter: BevelPainter(
-          radius: Radii.lg,
-          light: bevelColors(context).$1,
-          dark: bevelColors(context).$2,
+    // Its own layer: the hover lift and its shadow animate without redrawing the rest of
+    // the page (the mouse crosses cards while scrolling). Looks exactly the same.
+    return RepaintBoundary(
+      child: AnimatedContainer(
+        duration: still ? Duration.zero : Motion.fast,
+        curve: Motion.curve,
+        transform: Matrix4.translationValues(0, lifted ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          gradient: widget.color == null ? convexGradient(t) : raisedGradient(t, widget.color),
+          borderRadius: shape,
+          border: edge,
+          boxShadow: [...raisedShadows(t, depth: lifted ? 1.3 : 1)],
         ),
-        child: body,
+        child: CustomPaint(
+          foregroundPainter: BevelPainter(
+            radius: Radii.lg,
+            light: bevelColors(context).$1,
+            dark: bevelColors(context).$2,
+          ),
+          child: body,
+        ),
       ),
     );
   }
