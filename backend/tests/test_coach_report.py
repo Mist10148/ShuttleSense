@@ -88,7 +88,8 @@ def test_model_failure_falls_back_to_rules() -> None:
 
 
 def _client(tmp_path: Path, provider) -> TestClient:
-    settings = Settings(storage_dir=tmp_path / "s", device="cpu", fake_pipeline=True)
+    settings = Settings(storage_dir=tmp_path / "s", device="cpu", fake_pipeline=True,
+                        coach_provider="off")
     return TestClient(create_app(settings, coach_provider=provider))
 
 

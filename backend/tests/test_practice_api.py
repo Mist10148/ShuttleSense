@@ -254,3 +254,120 @@ def test_practice_pause_resume_and_stop_saves_processed_video(tmp_path, tiny_vid
         cap = cv2.VideoCapture(str(tmp_path / "storage" / "jobs" / job_id / "annotated.mp4"))
         assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == result["processed_frames"]
         cap.release()
+
+
+def test_analysis_is_immediate_and_edited_events_invalidate_stale_notes(tmp_path):
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from shuttlesense.api.main import create_app
+    from shuttlesense.api.models import Job
+    from shuttlesense.api.settings import Settings
+    from shuttlesense.practice.evidence import assess_attempt
+    from shuttlesense.practice.report import ReportChoice
+    from shuttlesense.schema import ClipRecord, Frame, Players
+
+    class Provider:
+        name = "gemini"
+        calls = 0
+
+        async def generate_json(self, system, prompt, schema):
+            self.calls += 1
+            return ReportChoice(evidence_ids=["attempt-1-observation-1"])
+
+    points = [(0.0, 0.0, 0.0)] * 17
+    for i, point in {0: (5, 4, 0.9), 6: (5, 8, 0.9), 8: (6, 6, 0.9), 10: (7, 3, 0.9)}.items():
+        points[i] = point
+    player = Player(bbox=(0, 0, 10, 20), keypoints=points, score=0.9)
+    event = {
+        "id": "auto-0",
+        "frame": 1,
+        "time_s": 0.1,
+        "stroke": "clear",
+        "confidence": 0.8,
+        "source": "automatic",
+        "confirmed": False,
+        "model": "cnn",
+    }
+    data = {
+        "setup": {"arm": "right"},
+        "fps": 10,
+        "processed_frames": 2,
+        "observations": [
+            assess_attempt(player, "clear", "right", 0.1, provenance="automatic").model_dump()
+        ],
+        "events": [event],
+        "automatic_events": [event],
+        "analysis_notes": [
+            {
+                "event_id": "auto-0",
+                "time_s": 0.1,
+                "stroke": "clear",
+                "rule": "elbow_extension",
+                "passed": False,
+                "tip": "Review reach",
+                "value": 1,
+            }
+        ],
+    }
+    record = ClipRecord(
+        clip_id="x",
+        mode="practice",
+        fps=10,
+        width=100,
+        height=80,
+        num_frames=2,
+        frames=[Frame(frame=i, players=Players(near=player)) for i in range(2)],
+    )
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", coach_provider="off"))
+    with TestClient(app) as client:
+        job_id = "a" * 12
+        app.state.jobs.add(Job(id=job_id, video_id="b" * 12, mode="practice", status="done"))
+        folder = app.state.storage.job_dir(job_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "practice.json").write_text(json.dumps(data), encoding="utf8")
+        assert client.get(f"/practice/sessions/{job_id}/report").status_code == 409
+        (folder / "annotated.mp4").write_bytes(b"rendered")
+        (folder / "practice_frames.json").write_text(record.model_dump_json(), encoding="utf8")
+        provider = Provider()
+        app.state.coach_provider = provider
+        analysis = client.get(f"/practice/sessions/{job_id}/analysis")
+        assert analysis.status_code == 200
+        assert analysis.json()["rules_report"]["generated_by"] == "rules"
+        assert analysis.json()["rules_report"]["evidence"]
+        assert provider.calls == 0
+        assert client.get(f"/practice/sessions/{job_id}/report").json()["generated_by"] == "gemini"
+        assert client.get(f"/practice/sessions/{job_id}/report").status_code == 200
+        assert provider.calls == 1
+        assert client.post(f"/practice/sessions/{job_id}/report").status_code == 200
+        assert provider.calls == 2
+        corrected = {**event, "stroke": "smash", "confirmed": True}
+        updated = client.put(f"/practice/sessions/{job_id}/events", json={"events": [corrected]})
+        assert updated.status_code == 200 and updated.json()["analysis_notes"] == []
+        report = client.get(f"/practice/sessions/{job_id}/report").json()
+        assert all(item["stroke"] == "smash" for item in report["evidence"])
+        assert provider.calls == 3
+        updated = client.put(f"/practice/sessions/{job_id}/events", json={"events": []})
+        assert updated.status_code == 200 and updated.json()["analysis_notes"] == []
+        report = client.get(f"/practice/sessions/{job_id}/report").json()
+        assert report["evidence"] == [] and provider.calls == 3
+        data["unobserved_indices"] = [1]
+        (folder / "practice.json").write_text(json.dumps(data), encoding="utf8")
+        report = client.get(f"/practice/sessions/{job_id}/report").json()
+        assert report["evidence"] == [] and provider.calls == 3
+
+
+def test_old_notes_do_not_reappear_after_prior_event_edits():
+    event = {"id": "auto-1", "source": "automatic", "stroke": "smash", "time_s": 1.0, "frame": 10}
+    data = {
+        "fps": 10,
+        "automatic_events": [event],
+        "events": [],
+        "analysis_notes": [{"time_s": 1.0, "stroke": "smash", "rule": "test"}],
+    }
+    assert practice._current_analysis_notes(data) == []
+    data["events"] = [event]
+    assert len(practice._current_analysis_notes(data)) == 1
+    data["automatic_events"].append({**event, "id": "auto-2"})
+    assert practice._current_analysis_notes(data) == []

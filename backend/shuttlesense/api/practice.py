@@ -165,61 +165,176 @@ def control_practice(job_id: str, action: Literal["pause", "resume", "stop"], re
         raise HTTPException(status_code=409, detail="session cannot be controlled now") from exc
 
 
-@router.get("/sessions/{job_id}/result")
-async def practice_result(job_id: str, request: Request, storage: StorageDep):
-    import json
+def _current_analysis_notes(data: dict) -> list[dict]:
+    """Keep only feedback whose original automatic event is still present and unchanged."""
+    fps = float(data.get("fps") or 0)
+    originals = {e.get("id"): e for e in data.get("automatic_events", []) if e.get("id")}
+    retained = {}
+    for event in data.get("events", []):
+        original = originals.get(event.get("id"))
+        if (
+            original
+            and event.get("source") == "automatic"
+            and event.get("stroke") == original.get("stroke")
+            and abs(float(event.get("time_s", -1)) - float(original.get("time_s", -2))) < 1e-6
+        ):
+            retained[event["id"]] = event
 
-    from shuttlesense.atomic import atomic_write_text
-    from shuttlesense.practice.evidence import AttemptEvidence
-    from shuttlesense.practice.report import PracticeReport, create_practice_report
+    def keep(note):
+        note_id = note.get("event_id")
+        if note_id:
+            event = retained.get(note_id)
+            return (
+                event is not None
+                and note.get("stroke") == event.get("stroke")
+                and note.get("time_s") is not None
+                and abs(float(note["time_s"]) - float(event.get("time_s", -1))) < 1e-6
+            )
+        if fps <= 0 or note.get("time_s") is None:
+            return False
+        matches = [
+            e
+            for e in originals.values()
+            if e.get("frame") is not None
+            and round(float(note["time_s"]) * fps) == e["frame"]
+            and note.get("stroke") == e.get("stroke")
+        ]
+        return len(matches) == 1 and matches[0].get("id") in retained
+
+    return [note for note in data.get("analysis_notes", []) if keep(note)]
+
+
+def _completed_practice(job_id: str, request: Request, storage):
+    import json
 
     job = request.app.state.jobs.get(job_id)
     if job is None or job.mode != "practice":
         raise HTTPException(status_code=404, detail="session not found")
     if job.status != "done":
         raise HTTPException(status_code=409, detail="session is not complete")
+    if not storage.output_path(job_id, "video").exists():
+        raise HTTPException(status_code=409, detail="rendered video is not available")
     path = storage.output_path(job_id, "practice")
     if not path.exists():
         raise HTTPException(status_code=404, detail="practice result not found")
+    before = path.stat().st_mtime_ns
     data = json.loads(path.read_text(encoding="utf-8"))
-    mtime = path.stat().st_mtime_ns
-    cache_path = storage.job_dir(job_id) / "practice_report.json"
-    provider = request.app.state.coach_provider
-    try:
-        cached = json.loads(cache_path.read_text(encoding="utf-8"))
-        report = PracticeReport.model_validate(cached["report"])
-        if (
-            cached.get("version") == 3
-            and cached["source_mtime_ns"] == mtime
-            and not (provider is not None and report.generated_by == "rules" and report.evidence)
-        ):
-            return {**data, "report": report.model_dump()}
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    observations = [AttemptEvidence.model_validate(a) for a in data["observations"]]
-    report = await create_practice_report(
-        observations,
-        provider,
-        request.app.state.coach.retriever,
-        data.get("events", []),
-        data.get("analysis_notes", []),
+    after = path.stat().st_mtime_ns
+    if before != after:
+        raise HTTPException(status_code=409, detail="analysis changed; retry")
+    return path, data, after
+
+
+def _practice_report_inputs(data):
+    from shuttlesense.practice.evidence import AttemptEvidence
+
+    excluded = set(data.get("unobserved_indices", []))
+    fps = float(data.get("fps") or 0)
+    frame_count = data.get("processed_frames")
+
+    def visible_time(item):
+        seconds = item.get("time_s")
+        if not isinstance(seconds, (int, float)) or seconds < 0:
+            return False
+        if not fps:
+            return True
+        frame = round(seconds * fps)
+        return frame not in excluded and (frame_count is None or frame < frame_count)
+
+    observations = [
+        AttemptEvidence.model_validate(a)
+        for a in data.get("observations", [])
+        if visible_time({"time_s": a.get("moment_s")})
+    ]
+    events = [event for event in data.get("events", []) if visible_time(event)]
+    notes = [note for note in _current_analysis_notes(data) if visible_time(note)]
+    context = {
+        "processed_frames": data.get("processed_frames"),
+        "fps": data.get("fps"),
+        "unobserved_frames": data.get("unobserved_frames", 0),
+        "stopped_early": data.get("stopped_early", False),
+    }
+    return observations, events, notes, context
+
+
+@router.get("/sessions/{job_id}/analysis")
+async def practice_analysis(job_id: str, request: Request, storage: StorageDep):
+    from shuttlesense.practice.report import create_practice_report
+
+    _, data, _ = _completed_practice(job_id, request, storage)
+    observations, events, notes, context = _practice_report_inputs(data)
+    rules = await create_practice_report(
+        observations, events=events, analysis_notes=notes, session_context=context
     )
-    # A failed provider call can be retried, and deleted/changed jobs must not be recreated.
-    jobs = request.app.state.jobs
-    with jobs.job_lock(job_id):
-        current = jobs.get(job_id)
-        if (
-            current is not None
-            and current.status == "done"
-            and path.exists()
-            and path.stat().st_mtime_ns == mtime
-            and not (provider is not None and report.generated_by == "rules" and report.evidence)
-        ):
+    return {**data, "rules_report": rules.model_dump()}
+
+
+async def _practice_report(job_id: str, request: Request, storage, refresh: bool = False):
+    import asyncio
+    import json
+
+    from shuttlesense.atomic import atomic_write_text
+    from shuttlesense.practice.report import PracticeReport, create_practice_report
+
+    state = request.app.state
+    if not hasattr(state, "practice_report_locks"):
+        state.practice_report_locks = {}
+    lock = state.practice_report_locks.setdefault(job_id, asyncio.Lock())
+    async with lock:
+        path, data, mtime = _completed_practice(job_id, request, storage)
+        cache_path = storage.job_dir(job_id) / "practice_report.json"
+        provider = state.coach_provider
+        if not refresh:
+            try:
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                report = PracticeReport.model_validate(cached["report"])
+                if cached.get("version") == 8 and cached["source_mtime_ns"] == mtime:
+                    return report.model_dump(), mtime
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+        observations, visible_events, visible_notes, context = _practice_report_inputs(data)
+        report = await create_practice_report(
+            observations, provider, state.coach.retriever, visible_events, visible_notes, context
+        )
+        jobs = state.jobs
+        with jobs.job_lock(job_id):
+            current = jobs.get(job_id)
+            if current is None or current.status != "done" or not path.exists():
+                raise HTTPException(status_code=404, detail="session no longer available")
+            if path.stat().st_mtime_ns != mtime:
+                raise HTTPException(status_code=409, detail="analysis changed; retry the report")
             atomic_write_text(
                 cache_path,
-                json.dumps({"version": 3, "source_mtime_ns": mtime, "report": report.model_dump()}),
+                json.dumps(
+                    {
+                        "version": 8,
+                        "source_mtime_ns": mtime,
+                        "report": report.model_dump(),
+                    }
+                ),
             )
-    return {**data, "report": report.model_dump()}
+        return report.model_dump(), mtime
+
+
+@router.get("/sessions/{job_id}/report")
+async def practice_report(job_id: str, request: Request, storage: StorageDep):
+    report, _ = await _practice_report(job_id, request, storage)
+    return report
+
+
+@router.post("/sessions/{job_id}/report")
+async def refresh_practice_report(job_id: str, request: Request, storage: StorageDep):
+    report, _ = await _practice_report(job_id, request, storage, refresh=True)
+    return report
+
+
+@router.get("/sessions/{job_id}/result")
+async def practice_result(job_id: str, request: Request, storage: StorageDep):
+    report, version = await _practice_report(job_id, request, storage)
+    _, data, current_version = _completed_practice(job_id, request, storage)
+    if current_version != version:
+        raise HTTPException(status_code=409, detail="analysis changed; retry the report")
+    return {**data, "report": report}
 
 
 class PracticeEvent(BaseModel):
@@ -303,6 +418,7 @@ def update_events(job_id: str, body: PracticeEvents, request: Request, storage: 
                 )
         data["events"] = events
         data["observations"] = observations
+        data["analysis_notes"] = _current_analysis_notes(data)
         atomic_write_text(path, json.dumps(data))
         (storage.job_dir(job_id) / "practice_report.json").unlink(missing_ok=True)
         return data

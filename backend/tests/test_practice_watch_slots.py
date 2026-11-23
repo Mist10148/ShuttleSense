@@ -112,20 +112,25 @@ def test_selected_slot_uses_actual_watch_court_tracker():
     from shuttlesense.schema import COURT_SIZE_M
 
     homography = compute_homography([[212, 650], [1068, 650], [880, 210], [400, 210]])
+
     def at(x, y):
         px, py = court_to_image(homography, np.array([[x, y]]))[0]
-        points = [(0., 0., 0.)] * 15 + [(float(px), float(py), .9)] * 2
-        return Player(bbox=(float(px)-30, float(py)-150, 60, 150), keypoints=points, score=.9)
+        points = [(0.0, 0.0, 0.0)] * 15 + [(float(px), float(py), 0.9)] * 2
+        return Player(bbox=(float(px) - 30, float(py) - 150, 60, 150), keypoints=points, score=0.9)
+
     near, far = at(2, 3), at(2, 10)
     frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
     class Watch:
         available = {}
         tracker = CourtPlayerTracker({}, "singles", COURT_SIZE_M)
         calls = 0
+
         def _players(self, image):
             self.calls += 1
             people = [near, far] if self.calls <= 3 else [far]
             return self.tracker.update(people, frame_height=720, homography=homography, frame=image)
+
     core = Watch()
     adapter = SelectedPracticePerception(core, near.bbox, 0)
     assert adapter.players_for_frame(frame, 0).near is None
@@ -134,3 +139,42 @@ def test_selected_slot_uses_actual_watch_court_tracker():
     assert adapter.selected_slot == "near"
     assert adapter.players_for_frame(frame, 3).near is None
     assert adapter.selected_slot == "near" and 3 in adapter.unobserved
+
+
+def test_selected_second_player_uses_doubles_watch_slot():
+    import numpy as np
+
+    from shuttlesense.court import compute_homography, court_to_image
+    from shuttlesense.pose.player_tracker import CourtPlayerTracker
+    from shuttlesense.schema import COURT_SIZE_M
+
+    homography = compute_homography([[212, 650], [1068, 650], [880, 210], [400, 210]])
+
+    def person(x):
+        px, py = court_to_image(homography, np.array([[x, 3.0]]))[0]
+        points = [(0.0, 0.0, 0.0)] * 15 + [(float(px), float(py), 0.9)] * 2
+        return Player(bbox=(float(px) - 30, float(py) - 150, 60, 150), keypoints=points, score=0.9)
+
+    first, selected = person(1), person(4)
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    class Watch:
+        available = {}
+
+        def __init__(self, court):
+            self.tracker = CourtPlayerTracker({}, court, COURT_SIZE_M)
+            self.tracker.watch_outside_tracking = True
+
+        def _players(self, image):
+            return self.tracker.update(
+                [first, selected], frame_height=720, homography=homography, frame=image
+            )
+
+    singles = SelectedPracticePerception(Watch("singles"), selected.bbox, 0)
+    doubles = SelectedPracticePerception(Watch("doubles"), selected.bbox, 0)
+    for i in range(10):
+        singles.players_for_frame(frame, i)
+        doubles.players_for_frame(frame, i)
+    assert singles.selected_slot is None
+    assert doubles.selected_slot == "near_2"
+    assert 9 not in doubles.unobserved

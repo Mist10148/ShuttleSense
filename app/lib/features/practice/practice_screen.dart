@@ -17,6 +17,7 @@ import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
 import '../watch/watch_screen.dart' show formatWatchElapsed, watchFrameDelay, WatchOverlay;
 import '../mode/mode_screen.dart';
+import 'coach_guide_panel.dart';
 import '../calibration/calibration_screen.dart' show Corner, CornerCanvas;
 import '../watch/court_geometry.dart' show fullToSingles, singlesToFull, FullCourtPreview;
 
@@ -30,13 +31,16 @@ class PracticeScreen extends ConsumerStatefulWidget {
 
 class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   VideoInfo? video;
-  Map<String, dynamic>? job, result;
+  Map<String, dynamic>? job, result, guide;
+  String? guideError;
+  int guideRevision = 0;
   List<List<double>> candidates = [];
   List<double>? selected;
   int selectionFrame = 0;
-  String stroke = 'clear', arm = 'right', courtType = 'singles';
+  String stroke = 'clear', arm = 'right';
+  String? courtType, formatSuggestion, formatDetail;
   final List<Corner> courtCorners = [];
-  bool detectingCourt = false;
+  bool detectingCourt = false, suggestingFormat = false;
   String? courtMessage;
   String? error;
   bool busy = false;
@@ -100,9 +104,15 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         video = info;
         job = null;
         result = null;
+        guide = null;
+        guideError = null;
+        guideRevision++;
         selectionFrame = 0;
         courtCorners.clear();
         courtMessage = null;
+        courtType = null;
+        formatSuggestion = null;
+        formatDetail = null;
       });
       await findPlayers();
     } catch (e) {
@@ -154,6 +164,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           courtCorners
             ..clear()
             ..addAll(full);
+          formatSuggestion = null;
+          formatDetail = null;
           courtMessage = 'Check the suggested corners and drag them to adjust.';
         }
       });
@@ -164,11 +176,38 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
+  Future<void> suggestFormat() async {
+    final info = video;
+    final corners = fullToSingles(courtCorners);
+    if (info == null || corners == null || suggestingFormat) return;
+    setState(() {
+      suggestingFormat = true;
+      formatSuggestion = null;
+      formatDetail = null;
+    });
+    try {
+      final response = await ref.read(apiClientProvider).suggestMatchType(info.id, corners);
+      if (!mounted || video?.id != info.id) return;
+      setState(() {
+        formatSuggestion = response['suggestion'] as String?;
+        formatDetail = response['detail'] as String?;
+      });
+    } catch (e) {
+      if (mounted) setState(() => formatDetail = 'Could not suggest a format: $e');
+    } finally {
+      if (mounted) setState(() => suggestingFormat = false);
+    }
+  }
+
   Future<void> start() async {
     final times = attempts.text.trim().isEmpty
         ? <double?>[]
         : attempts.text.split(',').map((s) => double.tryParse(s.trim())).toList();
     final singlesCorners = fullToSingles(courtCorners);
+    if (courtType == null) {
+      setState(() => error = 'Choose singles or doubles to match the video.');
+      return;
+    }
     if (singlesCorners == null) {
       setState(() => error = 'Mark the four court corners to use Watch player tracking.');
       return;
@@ -223,7 +262,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         jsonEncode({
           'type': 'start',
           'video_id': video!.id,
-          'court': courtType,
+          'court': courtType!,
           'corners': [
             for (final c in singlesCorners) [c.x, c.y],
           ],
@@ -366,43 +405,52 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         setState(() => selectionFrame = data['practice_selection_frame'] as int);
         await findPlayers();
       } else if (status == 'done' && result == null) {
+        final api = ref.read(apiClientProvider);
+        final response = await api.practiceAnalysis(id);
+        response.putIfAbsent('events', () => <dynamic>[]);
+        if (!mounted) return;
         setState(() {
-          loadingReport = true;
+          result = response;
           error = null;
         });
+        unawaited(loadGuide(id));
+        final p = Player();
+        final vc = VideoController(p);
         try {
-          final response = await ref.read(apiClientProvider).practiceResult(id);
-          response.putIfAbsent('events', () => <dynamic>[]);
-          if (!mounted) return;
-          setState(() => result = response);
-          final p = Player();
-          final vc = VideoController(p);
-          try {
-            await p.open(
-              Media(
-                ref.read(apiClientProvider).practiceVideoUrl(id),
-                httpHeaders: ref.read(apiClientProvider).authHeaders,
-              ),
-              play: false,
-            );
-            if (!mounted) {
-              await p.dispose();
-              return;
-            }
-            setState(() {
-              player = p;
-              videoController = vc;
-            });
-          } catch (e) {
+          await p.open(Media(api.practiceVideoUrl(id), httpHeaders: api.authHeaders), play: false);
+          if (!mounted) {
             await p.dispose();
-            if (mounted) setState(() => error = 'Rendered video could not be opened: $e');
+            return;
           }
-        } finally {
-          if (mounted) setState(() => loadingReport = false);
+          setState(() {
+            player = p;
+            videoController = vc;
+          });
+        } catch (e) {
+          await p.dispose();
+          if (mounted) setState(() => error = 'Rendered video could not be opened: $e');
         }
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
+    }
+  }
+
+  Future<void> loadGuide(String id, {bool refresh = false}) async {
+    final revision = ++guideRevision;
+    if (mounted) {
+      setState(() {
+        loadingReport = true;
+        guideError = null;
+      });
+    }
+    try {
+      final report = await ref.read(apiClientProvider).practiceGuide(id, refresh: refresh);
+      if (mounted && revision == guideRevision) setState(() => guide = report);
+    } catch (e) {
+      if (mounted && revision == guideRevision) setState(() => guideError = '$e');
+    } finally {
+      if (mounted && revision == guideRevision) setState(() => loadingReport = false);
     }
   }
 
@@ -464,12 +512,14 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       final api = ref.read(apiClientProvider);
       final id = job!['id'] as String;
       await api.savePracticeEvents(id, result!['events'] as List);
-      final updated = await api.practiceResult(id);
+      final updated = await api.practiceAnalysis(id);
       if (mounted) {
         setState(() {
           result = updated;
           eventsDirty = false;
+          guide = null;
         });
+        unawaited(loadGuide(id));
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
@@ -485,6 +535,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     final selecting = info != null && !watchActive && (job == null || status == 'needs_selection');
     return PageScaffold(
       title: 'AI Coach',
+      maxWidth: result == null ? 900 : 1200,
       actions: const [ChangeModeButton()],
       children: [
         const Text(
@@ -594,19 +645,38 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   const Text(
                     'Mark the four outer court corners: near left, near right, far right, far left. AI Coach uses Watch player tracking.',
                   ),
+                  const Text(
+                    'Choose the format played in the video. Doubles tracks both players on each side.',
+                  ),
                   DropdownButton<String>(
                     value: courtType,
+                    hint: const Text('Choose singles or doubles'),
                     items: const [
                       DropdownMenuItem(value: 'singles', child: Text('Singles')),
                       DropdownMenuItem(value: 'doubles', child: Text('Doubles')),
                     ],
-                    onChanged: busy ? null : (value) => setState(() => courtType = value!),
+                    onChanged: busy || suggestingFormat
+                        ? null
+                        : (value) => setState(() => courtType = value),
                   ),
                   OutlinedButton(
                     onPressed: busy || detectingCourt ? null : detectCourt,
                     child: Text(detectingCourt ? 'Finding court...' : 'Find court automatically'),
                   ),
                   if (courtMessage != null) Text(courtMessage!),
+                  OutlinedButton(
+                    onPressed:
+                        busy ||
+                            detectingCourt ||
+                            suggestingFormat ||
+                            fullToSingles(courtCorners) == null
+                        ? null
+                        : suggestFormat,
+                    child: Text(suggestingFormat ? 'Checking video...' : 'Suggest match format'),
+                  ),
+                  if (formatSuggestion != null)
+                    Text('Suggested: $formatSuggestion. Choose and confirm the format above.'),
+                  if (formatDetail != null) Text(formatDetail!),
                   SizedBox(
                     height: 320,
                     child: CornerCanvas(
@@ -620,17 +690,33 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                           ? null
                           : (scale) => FullCourtPreview(courtCorners, scale),
                       onTap: (c) {
-                        if (!busy && courtCorners.length < 4) setState(() => courtCorners.add(c));
+                        if (!busy && !suggestingFormat && courtCorners.length < 4) {
+                          setState(() {
+                            courtCorners.add(c);
+                            formatSuggestion = null;
+                            formatDetail = null;
+                          });
+                        }
                       },
                       onMove: (i, c) {
-                        if (!busy) setState(() => courtCorners[i] = c);
+                        if (!busy && !suggestingFormat) {
+                          setState(() {
+                            courtCorners[i] = c;
+                            formatSuggestion = null;
+                            formatDetail = null;
+                          });
+                        }
                       },
                     ),
                   ),
                   TextButton(
-                    onPressed: courtCorners.isEmpty
+                    onPressed: courtCorners.isEmpty || suggestingFormat
                         ? null
-                        : () => setState(() => courtCorners.clear()),
+                        : () => setState(() {
+                            courtCorners.clear();
+                            formatSuggestion = null;
+                            formatDetail = null;
+                          }),
                     child: const Text('Clear corners'),
                   ),
                 ],
@@ -662,7 +748,12 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             ),
             FilledButton(
               onPressed:
-                  busy || detectingCourt || selected == null || fullToSingles(courtCorners) == null
+                  busy ||
+                      detectingCourt ||
+                      suggestingFormat ||
+                      courtType == null ||
+                      selected == null ||
+                      fullToSingles(courtCorners) == null
                   ? null
                   : start,
               child: const Text('Confirm and analyze'),
@@ -711,7 +802,12 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   '$watchStatus - ${((watchFrame + 1) / watchFps).toStringAsFixed(1)} s / ${(watchTotal / watchFps).toStringAsFixed(1)} s',
                 ),
                 Text('Elapsed: ${formatWatchElapsed(watchClock.elapsed)} (includes pauses)'),
-                if (watchFrameData['players'] is Map &&
+                if (watchFrameData['selection_failed'] == true)
+                  const Text(
+                    'Selected player could not be matched. Stop and save, then check singles or doubles and the court corners.',
+                  ),
+                if (watchFrameData['selection_failed'] != true &&
+                    watchFrameData['players'] is Map &&
                     watchFrameData['selected_visible'] == false &&
                     info != null &&
                     watchFrame / watchFps >= selectionFrame / info.fps)
@@ -818,20 +914,51 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           const Text('Preparing video and player selection...'),
         ],
         if (status == 'failed') Text('Analysis failed: ${job?['error']}'),
-        if (status == 'done' && loadingReport) ...[
-          const LinearProgressIndicator(),
-          const Text('Analysis and rendering complete. Loading AI Coach…'),
-        ],
-        if (status == 'done' && result == null && !loadingReport && error != null)
+        if (status == 'done' && result == null && error != null)
           OutlinedButton(
             onPressed: () => loadJob(job!['id'] as String),
-            child: const Text('Retry coaching report'),
+            child: const Text('Retry analysis'),
           ),
-        if (videoController != null) ...[
-          const SizedBox(height: 16),
-          AspectRatio(
-            aspectRatio: info!.aspectRatio,
-            child: Video(controller: videoController!),
+        if (result != null) ...[
+          const SizedBox(height: Spacing.lg),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final videoView = videoController == null
+                  ? const AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Center(child: Text('Opening rendered video...')),
+                    )
+                  : AspectRatio(
+                      aspectRatio: info!.aspectRatio,
+                      child: Video(controller: videoController!),
+                    );
+              final panel = CoachGuidePanel(
+                report: guide,
+                loading: loadingReport,
+                error: guideError,
+                stale: eventsDirty,
+                onRetry: () => loadGuide(job!['id'] as String, refresh: true),
+                onSeek: (seconds) => player?.seek(Duration(milliseconds: (seconds * 1000).round())),
+              );
+              if (constraints.maxWidth >= 850) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: videoView),
+                    const SizedBox(width: Spacing.lg),
+                    Expanded(flex: 2, child: panel),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  videoView,
+                  const SizedBox(height: Spacing.lg),
+                  panel,
+                ],
+              );
+            },
           ),
         ],
         if (result != null) ...[
@@ -923,50 +1050,46 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             const Text(
               'The selected player was not confidently tracked in some frames; those moments are excluded from player analysis.',
             ),
-          Text('Coaching report', style: Theme.of(context).textTheme.titleLarge),
-          Text('${(result!['report'] as Map)['summary']}'),
-          Text('Generated by: ${(result!['report'] as Map)['generated_by']}'),
-          Text('${(result!['report'] as Map)['limitation']}'),
-          if ((result!['report'] as Map)['ai_overall_guidance'] != null)
-            Text('AI guidance: ${(result!['report'] as Map)['ai_overall_guidance']}'),
-          for (final item in (((result!['report'] as Map)['ai_moment_guidance'] as List?) ?? []))
-            ListTile(
-              title: Text('AI guidance: ${item['text']}'),
-              subtitle: Text(
-                '${item['time_s']} s · knowledge: ${(item['knowledge_ids'] as List).join(', ')} · review against the evidence',
-              ),
-              onTap: () =>
-                  player?.seek(Duration(milliseconds: ((item['time_s'] as num) * 1000).round())),
-            ),
-          for (final item in ((result!['report'] as Map)['evidence'] as List))
-            ListTile(
-              title: Text('${item['description']} ${item['value']} ${item['unit'] ?? ''}'),
-              subtitle: Text('${item['moment_s']} s'),
-              onTap: () =>
-                  player?.seek(Duration(milliseconds: ((item['moment_s'] as num) * 1000).round())),
-            ),
-          for (final item in ((result!['report'] as Map)['guidance'] as List))
-            ListTile(
-              title: Text('${item['text']}'),
-              subtitle: Text('${item['source']}'),
-              onTap: (item['moments'] as List).isEmpty
-                  ? null
-                  : () => player?.seek(
-                      Duration(
-                        milliseconds: (((item['moments'] as List).first as num) * 1000).round(),
-                      ),
-                    ),
-            ),
-          for (final attempt in (result!['observations'] as List))
-            for (final observation in (attempt['observations'] as List))
-              if (observation['status'] == 'unavailable')
-                ListTile(
-                  title: Text('Unavailable: ${observation['description']}'),
-                  subtitle: Text('${observation['moment_s']} s'),
-                  onTap: () => player?.seek(
-                    Duration(milliseconds: ((observation['moment_s'] as num) * 1000).round()),
-                  ),
+          if (result!['rules_report'] is Map) ...[
+            const SizedBox(height: 16),
+            Text('Coaching report', style: Theme.of(context).textTheme.titleLarge),
+            const Text('Rules-based guidance'),
+            Text('${(result!['rules_report'] as Map)['summary'] ?? ''}'),
+            for (final item in (((result!['rules_report'] as Map)['evidence'] as List?) ?? []))
+              ListTile(
+                title: Text(
+                  '${item['description']}${item['value'] == null ? '' : ' ${item['value']} ${item['unit'] ?? ''}'}',
                 ),
+                subtitle: Text('${item['moment_s']} s'),
+                onTap: item['moment_s'] is num
+                    ? () => player?.seek(
+                        Duration(milliseconds: ((item['moment_s'] as num) * 1000).round()),
+                      )
+                    : null,
+              ),
+            for (final item in (((result!['rules_report'] as Map)['guidance'] as List?) ?? []))
+              ListTile(
+                title: Text('${item['text']}'),
+                subtitle: Text('${item['source']}'),
+                onTap: (item['moments'] as List? ?? []).isEmpty
+                    ? null
+                    : () => player?.seek(
+                        Duration(
+                          milliseconds: (((item['moments'] as List).first as num) * 1000).round(),
+                        ),
+                      ),
+              ),
+            for (final attempt in ((result!['observations'] as List?) ?? []))
+              for (final observation in ((attempt['observations'] as List?) ?? []))
+                if (observation['status'] == 'unavailable')
+                  ListTile(
+                    title: Text('Unavailable: ${observation['description']}'),
+                    subtitle: Text('${observation['moment_s']} s'),
+                    onTap: () => player?.seek(
+                      Duration(milliseconds: ((observation['moment_s'] as num) * 1000).round()),
+                    ),
+                  ),
+          ],
         ],
         if (error != null)
           Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),

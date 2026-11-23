@@ -212,7 +212,13 @@ def test_fake_provider_is_deterministic() -> None:
     assert close > far
 
 
-def test_provider_choice_follows_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_choice_follows_keys(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from shuttlesense.api import settings as settings_module
+
+    monkeypatch.setattr(settings_module, "BACKEND_DIR", tmp_path)
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env")
+    monkeypatch.delenv("SHUTTLESENSE_GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("SHUTTLESENSE_ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert Settings().active_provider is None and Settings().chat_key is None

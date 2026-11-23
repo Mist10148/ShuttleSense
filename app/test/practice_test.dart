@@ -8,6 +8,7 @@ import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/practice/practice_screen.dart';
+import 'package:shuttlesense_app/features/practice/coach_guide_panel.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_file_picker.dart';
@@ -76,9 +77,36 @@ void main() {
     await tester.pump();
     await tester.ensureVisible(find.text('Confirm and analyze'));
     await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Confirm and analyze'))
+          .onPressed,
+      isNull,
+    );
+    await tester.ensureVisible(find.text('Suggest match format'));
+    await tester.tap(find.text('Suggest match format'));
+    await tester.pump();
+    expect(find.textContaining('Suggested: doubles'), findsOneWidget);
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Choose singles or doubles')),
+      alignment: 0.5,
+    );
+    await tester.pump();
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Choose singles or doubles'),
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Doubles').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Confirm and analyze'));
+    await tester.pump();
     await tester.tap(find.text('Confirm and analyze'));
     await tester.pump();
     expect(socket.outgoing.messages.first['mode'], 'practice');
+    expect(socket.outgoing.messages.first['court'], 'doubles');
     expect(socket.outgoing.messages.first['corners'], hasLength(4));
     socket.send({'type': 'started', 'fps': 25, 'frames': 10, 'width': 1280, 'height': 720});
     await tester.pump();
@@ -103,14 +131,64 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.textContaining('Selected player uncertain'), findsOneWidget);
     expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
+    await tester.ensureVisible(find.text('Play'));
+    await tester.pump();
     await tester.tap(find.text('Play'));
     await tester.pump();
     expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(2));
+    await tester.ensureVisible(find.text('Stop and save'));
+    await tester.pump();
     await tester.tap(find.text('Stop and save'));
     await tester.pump();
     expect(socket.outgoing.messages.last['type'], 'stop');
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('analysis remains visible while the guide is loading', (tester) async {
+    final api = _SlowGuide();
+    await pumpScreen(
+      tester,
+      const PracticeScreen(jobId: 'job1'),
+      size: laptop,
+      api: api,
+      settle: false,
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Review stroke events'), findsOneWidget);
+    expect(find.text('Rules-based guidance'), findsOneWidget);
+    expect(find.text('Rules tip'), findsOneWidget);
+    expect(find.text('Preparing your coaching summary...'), findsOneWidget);
+    api.pending.complete({'ai_overall_guidance': 'Coaching ready', 'generated_by': 'gemini'});
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Coaching ready'), findsOneWidget);
+  });
+
+  for (final size in [laptop, phone]) {
+    testWidgets('coaching panel follows video responsively at $size', (tester) async {
+      final api = _SlowGuide();
+      await pumpScreen(
+        tester,
+        const PracticeScreen(jobId: 'job1'),
+        size: size,
+        api: api,
+        settle: false,
+      );
+      await tester.pump();
+      await tester.pump();
+      final video = tester.getTopLeft(find.text('Opening rendered video...'));
+      final panel = tester.getTopLeft(find.byType(CoachGuidePanel));
+      if (size == laptop) {
+        expect(panel.dx, greaterThan(video.dx));
+      } else {
+        expect(panel.dy, greaterThan(video.dy));
+      }
+      api.pending.complete({'summary': 'Ready', 'generated_by': 'rules'});
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('completed analysis offers retry when the coaching report fails', (tester) async {
     await pumpScreen(
@@ -119,7 +197,7 @@ void main() {
       size: laptop,
       api: _ReportFails(),
     );
-    expect(find.text('Retry coaching report'), findsOneWidget);
+    expect(find.text('Retry coaching guide'), findsOneWidget);
     expect(find.textContaining('report unavailable'), findsOneWidget);
   });
 }
@@ -134,7 +212,18 @@ class _ReportFails extends FakeApiClient {
   };
 
   @override
-  Future<Map<String, dynamic>> practiceResult(String id) async =>
+  Future<Map<String, dynamic>> practiceAnalysis(String id) async => {
+    'events': <dynamic>[],
+    'rules_report': {
+      'summary': 'Rule summary',
+      'guidance': [
+        {'text': 'Rules tip', 'source': 'Rules', 'moments': <num>[]},
+      ],
+      'evidence': <dynamic>[],
+    },
+  };
+  @override
+  Future<Map<String, dynamic>> practiceGuide(String id, {bool refresh = false}) async =>
       throw Exception('report unavailable');
 }
 
@@ -183,6 +272,11 @@ class _PracticeWatchApi extends FakeApiClient {
     (x: 430.0, y: 100.0),
   ];
   @override
+  Future<Map<String, dynamic>> suggestMatchType(
+    String videoId,
+    List<({double x, double y})> corners,
+  ) async => {'suggestion': 'doubles', 'detail': 'Review the suggestion.'};
+  @override
   Future<Map<String, dynamic>> practicePlayers(String videoId, int frame) async => {
     'candidates': [
       {
@@ -210,4 +304,10 @@ class _PracticeSocket extends Fake implements WebSocketChannel {
   @override
   Future<void> get ready async {}
   void send(Map<String, dynamic> message) => incoming.add(jsonEncode(message));
+}
+
+class _SlowGuide extends _ReportFails {
+  final pending = Completer<Map<String, dynamic>>();
+  @override
+  Future<Map<String, dynamic>> practiceGuide(String id, {bool refresh = false}) => pending.future;
 }

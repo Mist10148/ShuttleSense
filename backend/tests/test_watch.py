@@ -328,6 +328,7 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
                     "type": "start",
                     "video_id": video["id"],
                     "mode": "practice",
+                    "court": "singles",
                     "playback": "complete",
                     "corners": [[20, 80], [140, 80], [110, 10], [50, 10]],
                     "practice_setup": {
@@ -368,3 +369,63 @@ def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
         assert result.json()["stopped_early"] is True
         assert result.json()["unobserved_frames"] == 2
         assert result.json()["observations"][0]["observations"][0]["status"] == "unavailable"
+
+
+def test_practice_warns_when_selected_player_has_no_watch_slot(tmp_path, tiny_video, monkeypatch):
+    from shuttlesense.schema import Player, Players, Shuttle
+    from shuttlesense.stream import perception as perception_module
+
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
+
+    class Models:
+        available = {"tracking": False, "pose": True}
+
+        def _shuttle(self, frame):
+            return Shuttle()
+
+        def _players(self, frame):
+            return Players(near=Player(bbox=(0, 0, 20, 40), score=0.9))
+
+    with TestClient(app) as client:
+        manager = app.state.live
+        original = manager._session
+
+        def session(*args, **kwargs):
+            manager.fake = True
+            try:
+                result = original(*args, **kwargs)
+            finally:
+                manager.fake = False
+            result.perception = Models()
+            return result
+
+        monkeypatch.setattr(manager, "_session", session)
+        monkeypatch.setattr(perception_module, "enable_watch_player_continuity", lambda _: None)
+        manager.fake = False
+        with tiny_video.open("rb") as f:
+            video = client.post("/videos", files={"file": ("clip.mp4", f, "video/mp4")}).json()
+        with client.websocket_connect("/watch") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "mode": "practice",
+                    "court": "singles",
+                    "video_id": video["id"],
+                    "corners": [[20, 80], [140, 80], [110, 10], [50, 10]],
+                    "practice_setup": {
+                        "video_id": video["id"],
+                        "stroke": "clear",
+                        "arm": "right",
+                        "selected_bbox": [100, 10, 20, 40],
+                    },
+                }
+            )
+            assert ws.receive_json()["type"] == "started"
+            for i in range(10):
+                ws.send_json({"type": "next"})
+                response = ws.receive_json()
+                frame = next(event for event in response["events"] if event["type"] == "frame")
+                assert frame["selected_visible"] is False
+                assert frame["selection_failed"] == (i == 9)
+            ws.send_json({"type": "stop"})
+            assert ws.receive_json()["type"] == "saved"

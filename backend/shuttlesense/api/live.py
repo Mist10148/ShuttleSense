@@ -109,6 +109,8 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 raise ValueError("invalid or unavailable practice session")
             if corners is None:
                 raise ValueError("court calibration is required for AI Coach player tracking")
+            if start.get("court") not in ("singles", "doubles"):
+                raise ValueError("choose singles or doubles for the recorded match")
             PracticeAnalyzer(practice_setup, meta.fps, meta.num_frames)
             x, y, w, h = practice_setup.selected_bbox
             if x < 0 or y < 0 or x + w > meta.width or y + h > meta.height:
@@ -254,6 +256,9 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                     if event.get("type") == "frame":
                         event["selected_slot"] = selected.selected_slot
                         event["selected_visible"] = index not in selected.unobserved
+                        event["selection_failed"] = (
+                            selected.selected_slot is None and index > selected.selection_frame + 8
+                        )
                         boxes = event.get("display_players") or {}
                         event["display_players"] = (
                             {selected.selected_slot: boxes[selected.selected_slot]}

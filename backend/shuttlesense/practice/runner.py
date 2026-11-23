@@ -280,6 +280,7 @@ def save_watch_practice(
         )
     notes = [
         {
+            "event_id": f"auto-{index}",
             "time_s": hit.time_s,
             "stroke": hit.stroke,
             "rule": item.rule,
@@ -287,7 +288,7 @@ def save_watch_practice(
             "tip": item.tip,
             "value": item.value,
         }
-        for hit in record.hits
+        for index, hit in enumerate(record.hits)
         if selected_hit(hit) and hit.frame not in unobserved
         for item in hit.feedback
     ]

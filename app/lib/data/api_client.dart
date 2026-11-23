@@ -169,6 +169,18 @@ class ApiClient {
   Future<Json> controlPractice(String id, String action) =>
       _call(() async => (await _dio.post<Json>('/practice/sessions/$id/control/$action')).data!);
 
+  Future<Json> practiceAnalysis(String id) =>
+      _call(() async => (await _dio.get<Json>('/practice/sessions/$id/analysis')).data!);
+
+  Future<Json> practiceGuide(String id, {bool refresh = false}) => _call(() async {
+    final path = '/practice/sessions/$id/report';
+    final options = Options(receiveTimeout: const Duration(minutes: 5));
+    return (refresh
+            ? await _dio.post<Json>(path, options: options)
+            : await _dio.get<Json>(path, options: options))
+        .data!;
+  });
+
   Future<Json> practiceResult(String id) => _call(
     () async => (await _dio.get<Json>(
       '/practice/sessions/$id/result',
