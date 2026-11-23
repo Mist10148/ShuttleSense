@@ -156,6 +156,7 @@ void main() {
     authRequired: false,
     stages: const [],
     watchVideo: enabled,
+    practiceVideo: enabled,
   );
 
   testWidgets('watch mode is available only when the backend advertises it', (tester) async {
@@ -171,6 +172,11 @@ void main() {
       find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(PastelActionCard)),
     );
     expect(disabled.onTap, isNull);
+    final coach = tester.widget<PastelActionCard>(
+      find.ancestor(of: find.text('AI Coach'), matching: find.byType(PastelActionCard)),
+    );
+    expect(coach.onTap, isNull);
+    expect(coach.description, contains('Requires a backend'));
     await tester.pumpWidget(const SizedBox());
     await pumpScreen(
       tester,
@@ -182,6 +188,10 @@ void main() {
       find.ancestor(of: find.text('Watch & Analyze'), matching: find.byType(PastelActionCard)),
     );
     expect(enabled.onTap, isNotNull);
+    final enabledCoach = tester.widget<PastelActionCard>(
+      find.ancestor(of: find.text('AI Coach'), matching: find.byType(PastelActionCard)),
+    );
+    expect(enabledCoach.onTap, isNotNull);
     debugDefaultTargetPlatformOverride = null;
   });
 

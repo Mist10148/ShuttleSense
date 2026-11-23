@@ -137,6 +137,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         chat_available=request.app.state.coach.provider is not None,
         chat_max_messages=settings.chat_max_messages,
         watch_match_type=not settings.fake_pipeline,
+        practice_video=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
     )
 
 

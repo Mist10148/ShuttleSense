@@ -212,7 +212,8 @@
             "default": "upload",
             "enum": [
               "upload",
-              "live"
+              "live",
+              "practice"
             ],
             "title": "Mode",
             "type": "string"
@@ -962,6 +963,11 @@
             "title": "Device",
             "type": "string"
           },
+          "practice_video": {
+            "default": false,
+            "title": "Practice Video",
+            "type": "boolean"
+          },
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
@@ -1363,7 +1369,8 @@
             "default": "upload",
             "enum": [
               "upload",
-              "live"
+              "live",
+              "practice"
             ],
             "title": "Mode",
             "type": "string"
@@ -1377,6 +1384,69 @@
             },
             "title": "Overlays",
             "type": "array"
+          },
+          "practice_gaps": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Practice Gaps",
+            "type": "array"
+          },
+          "practice_selection_frame": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Selection Frame"
+          },
+          "practice_selections": {
+            "additionalProperties": {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Practice Selections",
+            "type": "object"
+          },
+          "practice_setup": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Setup"
           },
           "progress": {
             "default": 0.0,
@@ -1443,6 +1513,7 @@
             "enum": [
               "queued",
               "running",
+              "needs_selection",
               "done",
               "failed",
               "cancelled"
@@ -1683,6 +1754,11 @@
           "hits_csv": {
             "default": false,
             "title": "Hits Csv",
+            "type": "boolean"
+          },
+          "practice": {
+            "default": false,
+            "title": "Practice",
             "type": "boolean"
           },
           "rallies_csv": {
@@ -2011,6 +2087,76 @@
         "title": "Player",
         "type": "object"
       },
+      "PlayerCandidate": {
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bbox",
+          "score"
+        ],
+        "title": "PlayerCandidate",
+        "type": "object"
+      },
+      "PlayerCandidates": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "integer"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "video_id",
+          "frame",
+          "width",
+          "height",
+          "candidates"
+        ],
+        "title": "PlayerCandidates",
+        "type": "object"
+      },
       "PlayerSummary": {
         "properties": {
           "hits": {
@@ -2110,6 +2256,102 @@
         "title": "Position",
         "type": "object"
       },
+      "PracticeEvent": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "const": "cnn",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "source": {
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stroke": {
+            "anyOf": [
+              {
+                "enum": [
+                  "clear",
+                  "smash",
+                  "drop",
+                  "net_shot",
+                  "lift",
+                  "serve"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stroke"
+          },
+          "time_s": {
+            "minimum": 0.0,
+            "title": "Time S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "time_s",
+          "source"
+        ],
+        "title": "PracticeEvent",
+        "type": "object"
+      },
+      "PracticeEvents": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeEvent"
+            },
+            "maxItems": 500,
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "PracticeEvents",
+        "type": "object"
+      },
       "PracticeGoal": {
         "properties": {
           "completed": {
@@ -2183,6 +2425,73 @@
           "text"
         ],
         "title": "PracticeGoal",
+        "type": "object"
+      },
+      "PracticeSetup": {
+        "properties": {
+          "arm": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Arm",
+            "type": "string"
+          },
+          "attempt_seconds": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 100,
+            "title": "Attempt Seconds",
+            "type": "array"
+          },
+          "selected_bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Selected Bbox",
+            "type": "array"
+          },
+          "selection_frame": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Selection Frame",
+            "type": "integer"
+          },
+          "stroke": {
+            "enum": [
+              "clear",
+              "smash",
+              "drop"
+            ],
+            "title": "Stroke",
+            "type": "string"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_id",
+          "stroke",
+          "arm",
+          "selected_bbox"
+        ],
+        "title": "PracticeSetup",
         "type": "object"
       },
       "Rally": {
@@ -2891,6 +3200,41 @@
           "rallies"
         ],
         "title": "ScoreUpdate",
+        "type": "object"
+      },
+      "Selection": {
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "frame": {
+            "minimum": 0.0,
+            "title": "Frame",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "frame",
+          "bbox"
+        ],
+        "title": "Selection",
         "type": "object"
       },
       "SessionNote": {
@@ -4615,6 +4959,372 @@
           }
         },
         "summary": "Get Annotated Video"
+      }
+    },
+    "/practice/sessions": {
+      "post": {
+        "operationId": "start_practice_practice_sessions_post",
+        "parameters": [
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeSetup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Practice"
+      }
+    },
+    "/practice/sessions/{job_id}": {
+      "get": {
+        "operationId": "practice_session_practice_sessions__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Session"
+      }
+    },
+    "/practice/sessions/{job_id}/events": {
+      "put": {
+        "description": "Save confirmed or corrected moments and invalidate the cached report.",
+        "operationId": "update_events_practice_sessions__job_id__events_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeEvents"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Events"
+      }
+    },
+    "/practice/sessions/{job_id}/result": {
+      "get": {
+        "operationId": "practice_result_practice_sessions__job_id__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Result"
+      }
+    },
+    "/practice/sessions/{job_id}/selection": {
+      "post": {
+        "operationId": "resume_practice_practice_sessions__job_id__selection_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Selection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Practice"
+      }
+    },
+    "/practice/videos/{video_id}/players": {
+      "get": {
+        "description": "Find selectable people on a source frame, without court-specific tracking.",
+        "operationId": "practice_candidates_practice_videos__video_id__players_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "frame",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Frame",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerCandidates"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Candidates"
       }
     },
     "/videos": {

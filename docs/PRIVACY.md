@@ -40,3 +40,8 @@ Personal practice goals, completion flags, referee decisions and timestamps are 
 with the session on the configured backend and included in its JSON exports. They
 follow the existing job deletion lifecycle. No accounts, new cloud service or additional
 chat payload is introduced by these tools. Goals are not medical or measured progress advice.
+
+
+## Single-player AI Coach
+
+Recorded practice videos and rendered outputs remain on the configured backend. When a provider is enabled, the practice report sends structured pose observations and bounded guidance options, not video or image frames; without a provider it uses a labeled rules-based report. Deleting the job removes its practice data and cached report. See [AI Coach setup](AI_COACH.md).

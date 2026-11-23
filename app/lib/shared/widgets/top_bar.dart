@@ -168,8 +168,13 @@ class _NotificationsButton extends ConsumerWidget {
         for (final job in jobs.take(_kRecentJobs))
           MenuItemButton(
             leadingIcon: Icon(_icon(job.status)),
-            onPressed: () =>
-                context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+            onPressed: () => context.go(
+              job.mode == 'practice'
+                  ? Routes.practice(job.id)
+                  : hasResults(job)
+                  ? Routes.results(job.id)
+                  : Routes.job(job.id),
+            ),
             child: Text(_describe(job)),
           ),
       ],
@@ -193,6 +198,7 @@ class _NotificationsButton extends ConsumerWidget {
     JobStatus.done => Icons.check_circle_outline,
     JobStatus.failed => Icons.error_outline,
     JobStatus.cancelled => Icons.cancel_outlined,
+    JobStatus.needsSelection => Icons.person_search,
     JobStatus.queued || JobStatus.running => Icons.hourglass_top,
   };
 
@@ -204,6 +210,7 @@ class _NotificationsButton extends ConsumerWidget {
       JobStatus.cancelled => '$kind cancelled',
       JobStatus.queued => '$kind queued',
       JobStatus.running => '$kind running · ${(job.progress * 100).round()}%',
+      JobStatus.needsSelection => '$kind needs player selection',
     };
   }
 }

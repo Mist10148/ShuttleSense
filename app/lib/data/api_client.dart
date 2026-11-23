@@ -145,6 +145,41 @@ class ApiClient {
 
   String sourceVideoUrl(String videoId) => urlWithToken('/videos/$videoId/source');
 
+  Future<Json> practicePlayers(String videoId, int frame) => _call(
+    () async => (await _dio.get<Json>(
+      '/practice/videos/$videoId/players',
+      queryParameters: {'frame': frame},
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    )).data!,
+  );
+
+  Future<Json> startPractice(Json setup) =>
+      _call(() async => (await _dio.post<Json>('/practice/sessions', data: setup)).data!);
+
+  Future<Json> practiceStatus(String id) =>
+      _call(() async => (await _dio.get<Json>('/practice/sessions/$id')).data!);
+
+  Future<Json> resumePractice(String id, int frame, List<double> bbox) => _call(
+    () async => (await _dio.post<Json>(
+      '/practice/sessions/$id/selection',
+      data: {'frame': frame, 'bbox': bbox},
+    )).data!,
+  );
+
+  Future<Json> practiceResult(String id) => _call(
+    () async => (await _dio.get<Json>(
+      '/practice/sessions/$id/result',
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    )).data!,
+  );
+
+  Future<Json> savePracticeEvents(String id, List<dynamic> events) => _call(
+    () async =>
+        (await _dio.put<Json>('/practice/sessions/$id/events', data: {'events': events})).data!,
+  );
+
+  String practiceVideoUrl(String id) => urlWithToken('/jobs/$id/video');
+
   Future<Json> startBackgroundWatch({
     required String videoId,
     required String court,

@@ -288,6 +288,7 @@ class _Header extends ConsumerWidget {
     final text = switch (job.status) {
       JobStatus.queued => 'Waiting in queue (position ${(job.queuePosition ?? 0) + 1})',
       JobStatus.running => 'Running: ${kStageLabels[job.currentStage] ?? job.currentStage ?? ''}',
+      JobStatus.needsSelection => 'Waiting for player selection',
       JobStatus.done => 'Done',
       JobStatus.failed => 'Failed',
       JobStatus.cancelled => 'Cancelled',

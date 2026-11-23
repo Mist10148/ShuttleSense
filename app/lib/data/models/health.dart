@@ -16,6 +16,7 @@ class Health {
     this.watchMatchType = false,
     this.watchRealtime = false,
     this.watchBackground = false,
+    this.practiceVideo = false,
   });
 
   final String status;
@@ -36,6 +37,7 @@ class Health {
   final bool watchMatchType;
   final bool watchRealtime;
   final bool watchBackground;
+  final bool practiceVideo;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
@@ -80,5 +82,6 @@ class Health {
     watchMatchType: j['watch_match_type'] == true,
     watchRealtime: j['watch_realtime'] == true,
     watchBackground: j['watch_background'] == true,
+    practiceVideo: j['practice_video'] == true,
   );
 }

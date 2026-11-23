@@ -12,6 +12,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/live/live_screen.dart';
 import '../../features/mode/mode_screen.dart';
 import '../../features/processing/processing_screen.dart';
+import '../../features/practice/practice_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/styleguide/styleguide_screen.dart';
@@ -41,6 +42,7 @@ abstract final class Routes {
   static String job(String jobId) => '/jobs/$jobId';
   static String results(String jobId) => '/jobs/$jobId/results';
   static String chat(String jobId) => '/jobs/$jobId/results/chat';
+  static String practice(String jobId) => '/practice/$jobId';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -101,6 +103,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => Consumer(
                   builder: (context, ref, _) => switch (ref.watch(appModeProvider)) {
                     AppMode.watch => const WatchScreen(),
+                    AppMode.practice => const PracticeScreen(),
                     AppMode.live when ref.watch(liveAvailableProvider) => const LiveScreen(),
                     _ => const UploadScreen(),
                   },
@@ -108,6 +111,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   // The mode chooser is the Analyze tab's landing view, inside the rail.
                   GoRoute(path: 'mode', builder: (context, state) => const ModeScreen()),
+                  GoRoute(
+                    path: 'practice/:jobId',
+                    builder: (context, state) =>
+                        PracticeScreen(jobId: state.pathParameters['jobId']!),
+                  ),
                   GoRoute(
                     path: 'videos/:videoId/calibrate',
                     builder: (context, state) =>

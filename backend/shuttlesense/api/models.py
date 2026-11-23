@@ -22,7 +22,7 @@ from shuttlesense.schema import (
     StrokeModel,
 )
 
-JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
+JobStatus = Literal["queued", "running", "needs_selection", "done", "failed", "cancelled"]
 StageStatus = Literal["pending", "running", "done", "skipped", "failed"]
 
 
@@ -45,6 +45,7 @@ class Health(BaseModel):
     watch_match_type: bool = True
     watch_realtime: bool = True
     watch_background: bool = True
+    practice_video: bool = False
 
 
 class MatchTypeRequest(BaseModel):
@@ -228,6 +229,7 @@ class JobOutputs(BaseModel):
     summary: bool = False
     hits_csv: bool = False
     rallies_csv: bool = False
+    practice: bool = False
 
 
 class Job(BaseModel):
@@ -264,3 +266,7 @@ class Job(BaseModel):
     watch_analysis_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
     watch_target_s: float | None = Field(default=None, exclude_if=lambda v: v is None)
     watch_focused_analysis: bool = False
+    practice_setup: dict | None = None
+    practice_selections: dict[int, tuple[float, float, float, float]] = Field(default_factory=dict)
+    practice_gaps: list[tuple[int, int]] = Field(default_factory=list)
+    practice_selection_frame: int | None = None

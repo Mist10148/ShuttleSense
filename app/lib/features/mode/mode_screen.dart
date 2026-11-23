@@ -24,8 +24,7 @@ class ModeScreen extends StatelessWidget {
   );
 }
 
-/// The three ways to analyze as pastel cards: Upload clip (lavender), Go live (sky), Watch &
-/// Analyze (mint). [detailed] adds the longer description and what each one needs (the mode
+/// Analysis choices and the planned single-player coach. [detailed] adds explanations
 /// chooser); without it each card has one line (Home). Picking one saves it and opens Analyze.
 class ModeChoices extends ConsumerWidget {
   const ModeChoices({super.key, this.detailed = false});
@@ -94,6 +93,17 @@ class ModeChoices extends ConsumerWidget {
               : null,
           badge: lastUsed(AppMode.watch, available: watchOn),
           onTap: watchOn ? () => pick(AppMode.watch) : null,
+        ),
+        PastelActionCard(
+          color: p.lavender,
+          icon: Icons.sports_tennis,
+          title: 'AI Coach',
+          description: health?.practiceVideo == true
+              ? 'Review a player’s recorded practice with pose and coaching.'
+              : 'Requires a backend with practice analysis and pose models.',
+          footnote: detailed ? 'You need a recorded video of your practice.' : null,
+          badge: lastUsed(AppMode.practice, available: health?.practiceVideo == true),
+          onTap: health?.practiceVideo == true ? () => pick(AppMode.practice) : null,
         ),
       ],
     );

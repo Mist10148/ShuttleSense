@@ -55,6 +55,7 @@ class JobManager:
         self.device = device
         self.pipeline = pipeline
         self._jobs: dict[str, Job] = {j.id: j for j in storage.load_jobs()}
+        self._practice_previews: dict[str, dict] = {}
         self._cancelled: set[str] = set()
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
@@ -212,6 +213,7 @@ class JobManager:
                     job.status = "cancelled"
                     job.finished_at = utcnow()
                 del self._jobs[job_id]
+                self._practice_previews.pop(job_id, None)
                 self._enqueued.pop(job_id, None)
             self.storage.delete_job(job_id)
             # Whoever still waits for this lock re-checks the job under it and finds it gone.
@@ -305,6 +307,42 @@ class JobManager:
             self.storage.save_job(job)
         return job
 
+    def resume_practice(
+        self, job_id: str, frame: int, bbox: tuple[float, float, float, float]
+    ) -> Job:
+        """Requeue a paused practice job after selecting a player on the stopped frame."""
+        from shuttlesense.practice.pipeline import validate_bbox
+
+        validate_bbox(bbox)
+        with self.job_lock(job_id), self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+            if job.mode != "practice" or job.status != "needs_selection":
+                raise JobBusy(job_id)
+            if job.practice_selection_frame is None or frame < job.practice_selection_frame:
+                raise ValueError("selection must be at or after the stopped frame")
+            if frame > job.practice_selection_frame:
+                job.practice_gaps.append((job.practice_selection_frame, frame))
+            job.practice_selections[frame] = bbox
+            job.practice_selection_frame = None
+            job.status = "queued"
+            job.progress = 0.0
+            job.error = None
+            self.storage.save_job(job)
+            self._enqueued[job_id] = next(self._ticket)
+        self._queue.put(job_id)
+        return self.get(job_id)
+
+    def practice_preview(self, job_id: str) -> dict | None:
+        with self._lock:
+            return self._practice_previews.get(job_id)
+
+    def set_practice_preview(self, job_id: str, frame: int, image: str) -> None:
+        with self._lock:
+            if job_id in self._jobs:
+                self._practice_previews[job_id] = {"frame": frame, "jpeg": image}
+
     def finish_outside(self, job_id: str, *, error: str | None = None) -> None:
         """Mark a job registered with add() done (or failed) once its outputs are written."""
         outputs = self._outputs_on_disk(job_id)
@@ -376,7 +414,23 @@ class JobManager:
         out_dir = self.storage.job_dir(job_id)
         try:
             with self.gpu:
-                if job.mode == "live" and self.has_outputs(job_id):
+                if job.mode == "practice":
+                    from shuttlesense.practice.pipeline import PracticeSetup
+                    from shuttlesense.practice.runner import run_practice
+
+                    run_practice(
+                        source,
+                        out_dir,
+                        PracticeSetup.model_validate(job.practice_setup),
+                        job.practice_selections,
+                        job.practice_gaps,
+                        self.config,
+                        self.device,
+                        lambda p: self._update(job_id, current_stage="practice", progress=p),
+                        lambda: self.check_cancelled(job_id),
+                        lambda frame, jpeg: self.set_practice_preview(job_id, frame, jpeg),
+                    )
+                elif job.mode == "live" and self.has_outputs(job_id):
                     self._rerender_live(job, source, out_dir)
                 else:
                     self.pipeline(
@@ -394,6 +448,19 @@ class JobManager:
             self.storage.delete_job(job_id)
             return
         except Exception as exc:  # report any stage failure to the client
+            from shuttlesense.practice.runner import SelectionNeeded
+
+            if isinstance(exc, SelectionNeeded):
+                with self._lock:
+                    self._practice_previews.pop(job_id, None)
+                self._update(
+                    job_id,
+                    status="needs_selection",
+                    practice_selection_frame=exc.frame,
+                    current_stage=None,
+                    error=None,
+                )
+                return
             log.exception("job %s failed", job_id)
             error = str(exc) or type(exc).__name__
             with self._lock:
@@ -403,6 +470,9 @@ class JobManager:
             self._update(job_id, status="failed", error=error, finished_at=utcnow())
             return
         finally:
+            if job.mode == "practice":
+                with self._lock:
+                    self._practice_previews.pop(job_id, None)
             # DELETE /videos while this job ran: the source was open, so finish the delete.
             if self.storage.video_deleted(job.video_id):
                 self.storage.delete_video(job.video_id)

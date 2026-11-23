@@ -101,6 +101,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(visited, ['/jobs/live1/results']);
   });
+
+  testWidgets('History opens a paused AI Coach session for reselection', (tester) async {
+    final json = jobJson(id: 'practice1', status: 'needs_selection')..['mode'] = 'practice';
+    final visited = await pumpScreen(
+      tester,
+      const HistoryScreen(),
+      api: FakeApiClient(jobs: [Job.fromJson(json)]),
+    );
+    expect(find.text('Select player'), findsOneWidget);
+    await tester.tap(find.text('rally01.mp4'));
+    await tester.pumpAndSettle();
+    expect(visited, ['/practice/practice1']);
+  });
 }
 
 class _DeleteFails extends FakeApiClient {

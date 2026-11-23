@@ -160,6 +160,9 @@ def create_app(
     from shuttlesense.api.watch_background import router as watch_background_router
 
     app.include_router(watch_background_router)
+    from shuttlesense.api.practice import router as practice_router
+
+    app.include_router(practice_router)
     return app
 
 

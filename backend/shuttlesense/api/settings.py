@@ -13,7 +13,9 @@ from shuttlesense.config import BACKEND_DIR, DEFAULT_CONFIG
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SHUTTLESENSE_")
+    model_config = SettingsConfigDict(
+        env_prefix="SHUTTLESENSE_", env_file=BACKEND_DIR / ".env", extra="ignore"
+    )
 
     storage_dir: Path = BACKEND_DIR / "storage"
     token: str | None = None
@@ -44,17 +46,27 @@ class Settings(BaseSettings):
     def claude_key(self) -> str | None:
         import os
 
+        if os.environ.get("SHUTTLESENSE_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"):
+            return os.environ.get("SHUTTLESENSE_ANTHROPIC_API_KEY") or os.environ.get(
+                "ANTHROPIC_API_KEY"
+            )
         if self.anthropic_api_key is not None:
             return self.anthropic_api_key.get_secret_value() or None
-        return os.environ.get("ANTHROPIC_API_KEY") or None
+        from dotenv import dotenv_values
+
+        return dotenv_values(BACKEND_DIR / ".env").get("ANTHROPIC_API_KEY") or None
 
     @property
     def gemini_key(self) -> str | None:
         import os
 
+        if os.environ.get("SHUTTLESENSE_GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+            return os.environ.get("SHUTTLESENSE_GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if self.gemini_api_key is not None:
             return self.gemini_api_key.get_secret_value() or None
-        return os.environ.get("GEMINI_API_KEY") or None
+        from dotenv import dotenv_values
+
+        return dotenv_values(BACKEND_DIR / ".env").get("GEMINI_API_KEY") or None
 
     @property
     def active_provider(self) -> Literal["gemini", "claude"] | None:

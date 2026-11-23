@@ -5,6 +5,7 @@ import 'match_setup.dart';
 enum JobStatus {
   queued,
   running,
+  needsSelection,
   done,
   failed,
   cancelled;
@@ -12,7 +13,9 @@ enum JobStatus {
   bool get isFinished => this == done || this == failed || this == cancelled;
 
   /// Unknown values (a newer server) count as running, so polling carries on.
-  static JobStatus parse(String value) => values.asNameMap()[value] ?? JobStatus.running;
+  static JobStatus parse(String value) => value == 'needs_selection'
+      ? JobStatus.needsSelection
+      : values.asNameMap()[value] ?? JobStatus.running;
 }
 
 class StageState {

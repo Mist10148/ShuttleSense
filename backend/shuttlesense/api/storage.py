@@ -24,6 +24,7 @@ OUTPUT_FILES = {
     "summary": "summary.json",
     "hits_csv": "hits.csv",
     "rallies_csv": "rallies.csv",
+    "practice": "practice.json",
 }
 
 

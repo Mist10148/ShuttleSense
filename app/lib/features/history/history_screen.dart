@@ -305,6 +305,10 @@ class _JobTile extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: Spacing.xs),
           semanticLabel: title,
           onTap: () {
+            if (job.mode == 'practice') {
+              context.go(Routes.practice(job.id));
+              return;
+            }
             if (job.status == JobStatus.done && !hasResults(job)) {
               // Finished, but its record is gone (e.g. the server's storage was wiped).
               ScaffoldMessenger.of(context).showSnackBar(
@@ -343,7 +347,11 @@ class _JobTile extends ConsumerWidget {
                 children: [
                   jobStatusPill(job),
                   Text(
-                    '${job.isLive ? 'Live' : 'Upload'} · '
+                    '${job.mode == 'practice'
+                        ? 'AI Coach'
+                        : job.isLive
+                        ? 'Live'
+                        : 'Upload'} · '
                     '${job.court == 'doubles' ? 'Doubles' : 'Singles'} · $when'
                     '${job.status == JobStatus.running && job.currentStage != null ? ' · ${job.currentStage} ${(job.progress * 100).round()}%' : ''}'
                     ' · ${job.id}',
@@ -380,6 +388,7 @@ StatusPill jobStatusPill(Job job) => switch (job.status) {
   JobStatus.cancelled => const StatusPill(label: 'Cancelled'),
   JobStatus.queued => const StatusPill(label: 'Queued', tone: PillTone.warning),
   JobStatus.running => const StatusPill(label: 'Processing', tone: PillTone.info),
+  JobStatus.needsSelection => const StatusPill(label: 'Select player', tone: PillTone.warning),
 };
 
 class _DeleteDialog extends StatefulWidget {

@@ -29,6 +29,7 @@ IMPORT_NAMES = {
     "pyyaml": "yaml",
     "python-multipart": "python_multipart",
     "pydantic-settings": "pydantic_settings",
+    "google-genai": "google.genai",
 }
 OPTIONAL_ML = ("torch", "onnxruntime", "rtmlib", "scipy")
 

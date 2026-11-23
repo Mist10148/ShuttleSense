@@ -172,21 +172,32 @@ class _RecentRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = AppPalette.of(context);
     final name = ref.watch(videoProvider(job.videoId)).valueOrNull?.filename;
-    final running = !job.status.isFinished;
+    final running = !job.status.isFinished && job.status != JobStatus.needsSelection;
     final title = name ?? (job.isLive ? 'Live session' : 'Analysis');
     // The same card History uses for its rows, so the hover is identical: the whole row
     // lifts and gets a blue outline under the pointer.
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: Spacing.xs, vertical: 2),
       semanticLabel: title,
-      onTap: () => context.go(hasResults(job) ? Routes.results(job.id) : Routes.job(job.id)),
+      onTap: () => context.go(
+        job.mode == 'practice'
+            ? Routes.practice(job.id)
+            : hasResults(job)
+            ? Routes.results(job.id)
+            : Routes.job(job.id),
+      ),
       child: ListRow(
         leading: IconChip(
           icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined,
           background: job.isLive ? p.sky : p.lavender,
         ),
         title: title,
-        subtitle: '${job.isLive ? 'Live' : 'Upload'} · ${formatJobDate(job.createdAt)}',
+        subtitle:
+            '${job.mode == 'practice'
+                ? 'AI Coach'
+                : job.isLive
+                ? 'Live'
+                : 'Upload'} · ${formatJobDate(job.createdAt)}',
         trailing: running
             ? SizedBox(
                 width: 88,
