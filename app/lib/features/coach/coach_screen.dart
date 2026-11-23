@@ -10,6 +10,7 @@ import '../../data/repositories/analysis_repository.dart';
 import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
 import 'source_chips.dart';
+import '../../ui/depth.dart';
 
 /// One turn of the general coach conversation, with the knowledge it cited.
 class CoachTurn {
@@ -223,17 +224,23 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: TextField(
-                              controller: _input,
-                              enabled: !state.busy,
-                              maxLength: 1000,
-                              minLines: 1,
-                              maxLines: 4,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _send(),
-                              decoration: const InputDecoration(
-                                labelText: 'Your question',
-                                counterText: '',
+                            child: InsetBox(
+                              radius: Radii.md,
+                              child: TextField(
+                                controller: _input,
+                                enabled: !state.busy,
+                                maxLength: 1000,
+                                minLines: 1,
+                                maxLines: 4,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _send(),
+                                decoration: const InputDecoration(
+                                  labelText: 'Your question',
+                                  counterText: '',
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                ),
                               ),
                             ),
                           ),

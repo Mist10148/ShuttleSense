@@ -15,6 +15,7 @@ import '../results/widgets/session_summary.dart';
 import '../coach/source_chips.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../ui/depth.dart';
 
 class ChatState {
   const ChatState({this.messages = const [], this.streaming, this.busy = false, this.error});
@@ -262,25 +263,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               child: Row(
                                 children: [
                                   Expanded(
-                                    child: TextField(
-                                      controller: _input,
-                                      enabled: !state.busy && !atLimit,
-                                      maxLength: 1000,
-                                      minLines: 1,
-                                      maxLines: 4,
-                                      textInputAction: TextInputAction.send,
-                                      onSubmitted: (_) => _send(),
-                                      decoration: InputDecoration(
-                                        hintText: atLimit
-                                            ? 'Question limit for this session reached'
-                                            : 'Your question',
-                                        // The count is shown under the bar instead.
-                                        counterText: '',
-                                        filled: false,
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        disabledBorder: InputBorder.none,
+                                    child: InsetBox(
+                                      radius: Radii.md,
+                                      padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+                                      child: TextField(
+                                        controller: _input,
+                                        enabled: !state.busy && !atLimit,
+                                        maxLength: 1000,
+                                        minLines: 1,
+                                        maxLines: 4,
+                                        textInputAction: TextInputAction.send,
+                                        onSubmitted: (_) => _send(),
+                                        decoration: InputDecoration(
+                                          hintText: atLimit
+                                              ? 'Question limit for this session reached'
+                                              : 'Your question',
+                                          // The count is shown under the bar instead.
+                                          counterText: '',
+                                          filled: false,
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          disabledBorder: InputBorder.none,
+                                        ),
                                       ),
                                     ),
                                   ),
