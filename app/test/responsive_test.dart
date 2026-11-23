@@ -158,10 +158,10 @@ void main() {
       expect(video.width, greaterThan(400));
     });
 
-    test('the right column stays between 360 and 440 dp', () {
-      expect(ResultsLayout.sidePanelWidth(800), 360);
-      expect(ResultsLayout.sidePanelWidth(1280), 384);
-      expect(ResultsLayout.sidePanelWidth(1920), 440);
+    test('the right column stays between 380 and 500 dp', () {
+      expect(ResultsLayout.sidePanelWidth(800), 380);
+      expect(ResultsLayout.sidePanelWidth(1280), closeTo(422.4, 0.01));
+      expect(ResultsLayout.sidePanelWidth(1920), 500);
     });
   });
 }
