@@ -81,9 +81,11 @@ class _SearchField extends ConsumerWidget {
           textAlignVertical: TextAlignVertical.center,
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search, size: 20),
+            // The icon box matches the slot height, so the text centres in it.
+            prefixIconConstraints: BoxConstraints(minWidth: 44, minHeight: 44),
             hintText: 'Search analyses',
             isDense: true,
-            contentPadding: EdgeInsets.only(right: Spacing.lg),
+            contentPadding: EdgeInsets.fromLTRB(0, 12, Spacing.lg, 12),
             filled: false,
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
