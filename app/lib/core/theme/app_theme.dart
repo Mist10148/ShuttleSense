@@ -281,15 +281,25 @@ abstract final class AppTheme {
         trackOutlineColor: WidgetStatePropertyAll(buttonEdgeColor(brightness, p, t)),
       ),
       // Chips are options pressed into the surface; the chosen one pops up as a blue key.
+      // Pages fade and slide a little forward instead of jumping, on every platform.
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          for (final platform in TargetPlatform.values)
+            platform: const FadeForwardsPageTransitionsBuilder(),
+        },
+      ),
       chipTheme: ChipThemeData(
-        side: BorderSide.none,
+        // Options are flat light faces with a fine edge (they usually sit in a recessed tray,
+        // so a shadow of their own would double up); the chosen ones turn blue.
+        side: WidgetStateBorderSide.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? BorderSide.none : BorderSide(color: t.rim),
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        // Options are small raised keys (light face, short shadow); the chosen ones turn blue.
         backgroundColor: t.raisedTop,
-        elevation: 2,
+        elevation: 0,
         pressElevation: 0,
-        shadowColor: t.shade,
-        selectedShadowColor: t.primary.withValues(alpha: 0.6),
+        shadowColor: Colors.transparent,
+        selectedShadowColor: Colors.transparent,
         selectedColor: t.primary,
         checkmarkColor: t.onPrimary,
         disabledColor: p.surface2.withValues(alpha: 0.5),
@@ -419,20 +429,28 @@ abstract final class AppTheme {
       ),
       // Top tabs: pills, the active one filled with ink.
       tabBarTheme: TabBarThemeData(
+        // The same raised thumb as the segmented options (DepthSegmented).
         indicator: BoxDecoration(
           gradient: raisedGradient(t),
-          borderRadius: BorderRadius.circular(Radii.pill),
-          boxShadow: chipShadows(t),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: t.rim, width: 0.6),
+          boxShadow: [
+            BoxShadow(
+              color: t.shade.withValues(alpha: t.shade.a * 0.5),
+              blurRadius: 4,
+              offset: const Offset(0, 1.5),
+            ),
+          ],
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerHeight: 0,
         labelColor: p.ink,
         unselectedLabelColor: p.text3,
-        splashBorderRadius: BorderRadius.circular(Radii.pill),
+        splashBorderRadius: BorderRadius.circular(10),
         labelStyle: const TextStyle(
           fontFamily: fontFamily,
           fontSize: 14,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
         unselectedLabelStyle: const TextStyle(fontFamily: fontFamily, fontSize: 14),
       ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode.dart';
+import 'shared/widgets/smooth_scroll.dart';
 
 class ShuttleSenseApp extends ConsumerWidget {
   const ShuttleSenseApp({super.key});
@@ -13,6 +14,7 @@ class ShuttleSenseApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'ShuttleSense',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       highContrastTheme: AppTheme.light(highContrast: true),
