@@ -94,16 +94,46 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
                 "fps": reader.fps,
                 "width": reader.width,
                 "height": reader.height,
+                **({"stroke_model": "cnn"} if start.get("mode") == "practice" else {}),
             }
         )
         playback = start.get("playback", "complete")
         if playback not in ("complete", "realtime"):
             raise ValueError("playback must be complete or realtime")
+        practice_setup = None
+        if start.get("mode") == "practice":
+            from shuttlesense.practice.pipeline import PracticeAnalyzer, PracticeSetup
+
+            practice_setup = PracticeSetup.model_validate(start.get("practice_setup"))
+            if practice_setup.video_id != video_id or playback != "complete" or manager.fake:
+                raise ValueError("invalid or unavailable practice session")
+            PracticeAnalyzer(practice_setup, meta.fps, meta.num_frames)
+            x, y, w, h = practice_setup.selected_bbox
+            if x < 0 or y < 0 or x + w > meta.width or y + h > meta.height:
+                raise ValueError("selection box is outside the video")
         entry = await asyncio.to_thread(manager.create, request)
         session = entry.session
         from shuttlesense.stream.perception import enable_watch_player_continuity
 
         enable_watch_player_continuity(session.perception)
+        if practice_setup is not None:
+            from shuttlesense.stream.perception import SelectedPracticePerception
+
+            sx, sy = session.width / meta.width, session.height / meta.height
+            x, y, w, h = practice_setup.selected_bbox
+            selection_frame = min(
+                len(reader) - 1, round(practice_setup.selection_frame / meta.fps * reader.fps)
+            )
+            session.perception = SelectedPracticePerception(
+                session.perception, (x * sx, y * sy, w * sx, h * sy), selection_frame
+            )
+            session.practice_setup = practice_setup
+            session.practice_source_frames = len(reader)
+            session.analyzer.record.mode = "practice"
+            session.analyzer.config = deepcopy(session.analyzer.config)
+            session.analyzer.config.setdefault("stages", {}).setdefault("strokes", {})[
+                "context"
+            ] = {"enabled": False}
         if playback == "complete" and not manager.fake:
             from shuttlesense.stream.watch_parallel import (
                 ParallelWatchPerception,
@@ -498,11 +528,27 @@ class LiveManager:
             overlays=list(OVERLAYS),
             watch_focused_analysis=existing_job.watch_focused_analysis if existing_job else False,
         )  # fmt: skip
+        if hasattr(session, "practice_setup"):
+            job.mode = "practice"
+            job.referee = False
+            job.practice_setup = session.practice_setup.model_dump()
+            job.overlays = ["trail", "pose", "boxes", "hits", "strokes", "speed"]
         job_dir = self.storage.job_dir(job_id)
         job_dir.mkdir(parents=True, exist_ok=True)
         save_overrides(job_dir, session.analyzer.overrides)
         save_corrections(job_dir, session.analyzer.corrections)
         write_exports(record, job_dir)
+        if hasattr(session, "practice_setup"):
+            from shuttlesense.practice.runner import save_watch_practice
+
+            save_watch_practice(
+                record,
+                session.practice_setup,
+                session.perception.unobserved,
+                session.practice_source_frames,
+                job_dir,
+                session.perception.available.get("tracking", False),
+            )
         self.state.jobs.add(job)
         if not record.frames:
             self.state.jobs.finish_outside(

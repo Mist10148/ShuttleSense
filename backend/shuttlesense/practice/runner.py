@@ -202,3 +202,83 @@ def run_practice(
             }
         ),
     )
+
+
+def save_watch_practice(record, setup, unobserved, source_frames, out_dir, tracking_available):
+    """Persist Watch's finalized selected-player record for the practice report API."""
+    observations = []
+    events = []
+    for index, hit in enumerate(record.hits):
+        if hit.player != "near" or hit.frame in unobserved:
+            continue
+        event = {
+            "id": f"auto-{index}",
+            "frame": hit.frame,
+            "time_s": hit.time_s,
+            "stroke": hit.stroke,
+            "confidence": hit.confidence,
+            "source": "automatic",
+            "confirmed": False,
+            "model": "cnn" if hit.stroke else None,
+        }
+        events.append(event)
+        if hit.stroke in ("clear", "smash", "drop"):
+            observations.append(
+                assess_attempt(
+                    record.frames[hit.frame].players.near,
+                    hit.stroke,
+                    setup.arm,
+                    hit.time_s,
+                    provenance="automatic",
+                )
+            )
+    for index, seconds in enumerate(setup.attempt_seconds):
+        frame = round(seconds * record.fps)
+        if frame >= len(record.frames):
+            continue
+        observations.append(
+            assess_attempt(record.frames[frame].players.near, setup.stroke, setup.arm, seconds)
+        )
+        events.append(
+            {
+                "id": f"manual-{index}",
+                "frame": frame,
+                "time_s": seconds,
+                "stroke": setup.stroke,
+                "confidence": None,
+                "source": "manual",
+                "confirmed": True,
+                "model": None,
+            }
+        )
+    notes = [
+        {
+            "time_s": hit.time_s,
+            "stroke": hit.stroke,
+            "rule": item.rule,
+            "passed": item.passed,
+            "tip": item.tip,
+            "value": item.value,
+        }
+        for hit in record.hits
+        if hit.player == "near" and hit.frame not in unobserved
+        for item in hit.feedback
+    ]
+    atomic_write_text(out_dir / "practice_frames.json", record.model_dump_json())
+    atomic_write_text(
+        out_dir / "practice.json",
+        json.dumps(
+            {
+                "setup": setup.model_dump(),
+                "fps": record.fps,
+                "stopped_early": len(record.frames) < source_frames,
+                "processed_frames": len(record.frames),
+                "observations": [a.model_dump() for a in observations],
+                "automatic_events": [e for e in events if e["source"] == "automatic"],
+                "events": sorted(events, key=lambda event: event["time_s"]),
+                "analysis_notes": notes,
+                "unobserved_frames": len(unobserved),
+                "shuttle_tracking_available": tracking_available,
+            }
+        ),
+    )

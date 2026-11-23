@@ -17,6 +17,7 @@ class Health {
     this.watchRealtime = false,
     this.watchBackground = false,
     this.practiceVideo = false,
+    this.practiceWatch = false,
   });
 
   final String status;
@@ -38,6 +39,7 @@ class Health {
   final bool watchRealtime;
   final bool watchBackground;
   final bool practiceVideo;
+  final bool practiceWatch;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
@@ -83,5 +85,6 @@ class Health {
     watchRealtime: j['watch_realtime'] == true,
     watchBackground: j['watch_background'] == true,
     practiceVideo: j['practice_video'] == true,
+    practiceWatch: j['practice_watch'] == true,
   );
 }

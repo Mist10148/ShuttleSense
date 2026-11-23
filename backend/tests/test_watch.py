@@ -265,3 +265,102 @@ def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, m
     assert all(a <= b for a, b in zip(values, values[1:], strict=False))
     assert jobs.check_cancelled.call_count == 4
     jobs.finish_outside.assert_called_once_with("job")
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_watch_practice_partial_session_uses_selected_player_and_saves_report(
+    tmp_path, tiny_video, monkeypatch, parallel
+):
+    import time
+    from threading import Event
+
+    import shuttlesense.render as render_module
+    from shuttlesense.schema import Player, Shuttle
+    from shuttlesense.stream import perception as perception_module
+
+    app = create_app(Settings(storage_dir=tmp_path / "storage", device="cpu", fake_pipeline=True))
+    person = Player(bbox=(2, 2, 40, 60), score=0.9)
+    render_started, render_release = Event(), Event()
+    original_render = render_module.render_video
+
+    def delayed_render(*args, **kwargs):
+        render_started.set()
+        if not render_release.wait(5):
+            raise TimeoutError("test did not release render")
+        return original_render(*args, **kwargs)
+
+    monkeypatch.setattr(render_module, "render_video", delayed_render)
+
+    class Models:
+        available = {"tracking": False, "pose": True}
+        min_person_score = 0.4
+        calls = 0
+
+        def _shuttle(self, frame):
+            return Shuttle()
+
+        def detect(self, frame):
+            self.calls += 1
+            return [] if self.calls == 2 else [person]
+
+    with TestClient(app) as client:
+        manager = app.state.live
+        original = manager._session
+
+        def session(*args, **kwargs):
+            manager.fake = True
+            try:
+                result = original(*args, **kwargs)
+            finally:
+                manager.fake = False
+            result.perception = Models()
+            return result
+
+        monkeypatch.setattr(manager, "_session", session)
+        monkeypatch.setattr(perception_module, "enable_watch_player_continuity", lambda _: None)
+        manager.fake = False
+        app.state.jobs.config.setdefault("watch", {})["frame_parallel_perception"] = parallel
+        with tiny_video.open("rb") as f:
+            video = client.post("/videos", files={"file": ("clip.mp4", f, "video/mp4")}).json()
+        with client.websocket_connect("/watch") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "video_id": video["id"],
+                    "mode": "practice",
+                    "playback": "complete",
+                    "practice_setup": {
+                        "video_id": video["id"],
+                        "selected_bbox": [2, 2, 40, 60],
+                        "stroke": "clear",
+                        "arm": "right",
+                        "attempt_seconds": [0.04],
+                    },
+                }
+            )
+            started = ws.receive_json()
+            assert started["type"] == "started", started
+            for i in range(3):
+                ws.send_json({"type": "next"})
+                assert ws.receive_json()["index"] == i
+            ws.send_json({"type": "stop"})
+            saved = ws.receive_json()
+            assert saved["job_id"] == started["job_id"]
+        try:
+            assert render_started.wait(5)
+            assert client.get(f"/practice/sessions/{saved['job_id']}/result").status_code == 409
+        finally:
+            render_release.set()
+        for _ in range(100):
+            job = client.get(f"/jobs/{saved['job_id']}").json()
+            if job["status"] in ("done", "failed"):
+                break
+            time.sleep(0.05)
+        assert job["status"] == "done", job
+        assert job["mode"] == "practice"
+        result = client.get(f"/practice/sessions/{saved['job_id']}/result")
+        assert result.status_code == 200, result.text
+        assert result.json()["processed_frames"] == 3
+        assert result.json()["stopped_early"] is True
+        assert result.json()["unobserved_frames"] == 1
+        assert result.json()["observations"][0]["observations"][0]["status"] == "unavailable"

@@ -16,8 +16,20 @@ class ParallelWatchPerception:
 
     def __call__(self, frame, index):
         shuttle = self.pool.submit(self.perception._shuttle, frame)
-        players = self.pool.submit(self.perception._players, frame)
+        selected = getattr(self.perception, "players_for_frame", None)
+        players = (
+            self.pool.submit(selected, frame, index)
+            if selected
+            else self.pool.submit(self.perception._players, frame)
+        )
         return shuttle.result(), players.result()
+
+    @property
+    def unobserved(self):
+        return getattr(self.perception, "unobserved", set())
 
     def close(self):
         self.pool.shutdown(wait=True)
+        close = getattr(self.perception, "close", None)
+        if close:
+            close()

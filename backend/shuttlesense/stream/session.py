@@ -278,6 +278,8 @@ class LiveSession:
         scale = float(self.live["scales"][self.level])
         shuttle, players = self._perceive(frame, index, scale)
         self._last_players = players
+        if index in getattr(self.perception, "unobserved", set()):
+            self.analyzer._unobserved.add(index)
         perception = getattr(self.perception, "perception", self.perception)
         tracker = getattr(perception, "tracker", None)
         hold_safe = getattr(tracker, "view_valid", True)

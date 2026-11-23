@@ -130,6 +130,12 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  test('frame pacing subtracts processing time and never waits below zero', () {
+    expect(watchFrameDelay(25, const Duration(milliseconds: 10)), const Duration(milliseconds: 30));
+    expect(watchFrameDelay(25, const Duration(milliseconds: 40)), Duration.zero);
+    expect(watchFrameDelay(25, const Duration(milliseconds: 100)), Duration.zero);
+  });
+
   test('watch elapsed time is a wall-clock duration with hours', () {
     expect(formatWatchElapsed(Duration.zero), '00:00:00');
     expect(formatWatchElapsed(const Duration(minutes: 2, seconds: 9)), '00:02:09');

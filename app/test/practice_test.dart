@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/practice/practice_screen.dart';
 
 import 'fakes/fake_api_client.dart';
+import 'fakes/fake_file_picker.dart';
 import 'helpers.dart';
 
 void main() {
@@ -45,6 +52,53 @@ void main() {
     await tester.pump();
     expect(api.actions, ['pause', 'resume', 'stop']);
     expect(find.textContaining('Saving session'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('practice Watch pauses and saves without sending extra frames', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    final socket = _PracticeSocket();
+    addTearDown(socket.incoming.close);
+    await pumpScreen(
+      tester,
+      PracticeScreen(channelFactory: (_) => socket),
+      size: laptop,
+      api: _PracticeWatchApi(),
+    );
+    await tester.tap(find.text('Choose practice video'));
+    await tester.pumpAndSettle();
+    final image = find.byType(Image).first;
+    await tester.ensureVisible(image);
+    await tester.pump();
+    await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
+    await tester.ensureVisible(find.text('Confirm and analyze'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm and analyze'));
+    await tester.pump();
+    expect(socket.outgoing.messages.first['mode'], 'practice');
+    socket.send({'type': 'started', 'fps': 25, 'frames': 10, 'width': 1280, 'height': 720});
+    await tester.pump();
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
+    await tester.ensureVisible(find.text('Pause'));
+    await tester.tap(find.text('Pause'));
+    await tester.pump();
+    socket.send({
+      'type': 'video_frame',
+      'index': 0,
+      'jpeg':
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmXQAAAAASUVORK5CYII=',
+      'events': [
+        {'type': 'frame', 'frame': 0},
+      ],
+    });
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(1));
+    await tester.tap(find.text('Play'));
+    await tester.pump();
+    expect(socket.outgoing.messages.where((m) => m['type'] == 'next'), hasLength(2));
+    await tester.tap(find.text('Stop and save'));
+    await tester.pump();
+    expect(socket.outgoing.messages.last['type'], 'stop');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -97,4 +151,45 @@ class _RunningPractice extends FakeApiClient {
     stopping = action == 'stop';
     return {'paused': paused, 'stopping': stopping};
   }
+}
+
+class _PracticeWatchApi extends FakeApiClient {
+  @override
+  Future<Health> health() async => const Health(
+    version: '1',
+    schemaVersion: '1',
+    device: 'cpu',
+    authRequired: false,
+    stages: [],
+    practiceVideo: true,
+    practiceWatch: true,
+  );
+  @override
+  Future<Map<String, dynamic>> practicePlayers(String videoId, int frame) async => {
+    'candidates': [
+      {
+        'bbox': [0, 0, 700, 650],
+      },
+    ],
+  };
+}
+
+class _PracticeSink extends Fake implements WebSocketSink {
+  final messages = <Map<String, dynamic>>[];
+  @override
+  void add(dynamic data) => messages.add(jsonDecode(data as String) as Map<String, dynamic>);
+  @override
+  Future<void> close([int? closeCode, String? closeReason]) async {}
+}
+
+class _PracticeSocket extends Fake implements WebSocketChannel {
+  final incoming = StreamController<dynamic>.broadcast(sync: true);
+  final outgoing = _PracticeSink();
+  @override
+  Stream<dynamic> get stream => incoming.stream;
+  @override
+  WebSocketSink get sink => outgoing;
+  @override
+  Future<void> get ready async {}
+  void send(Map<String, dynamic> message) => incoming.add(jsonEncode(message));
 }

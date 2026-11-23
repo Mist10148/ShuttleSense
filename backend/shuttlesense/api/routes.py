@@ -138,6 +138,7 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         chat_max_messages=settings.chat_max_messages,
         watch_match_type=not settings.fake_pipeline,
         practice_video=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
+        practice_watch=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
     )
 
 

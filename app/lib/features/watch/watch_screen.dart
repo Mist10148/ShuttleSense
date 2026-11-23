@@ -79,6 +79,12 @@ String formatWatchElapsed(Duration elapsed) {
   return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remaining.toString().padLeft(2, '0')}';
 }
 
+/// Wait only for the part of the video frame interval not spent analyzing it.
+Duration watchFrameDelay(double fps, Duration processing) {
+  final remaining = (1000000 / fps).round() - processing.inMicroseconds;
+  return Duration(microseconds: remaining > 0 ? remaining : 0);
+}
+
 String? formatWatchAcceleration(Object? value) {
   if (value is! Map || value['models'] is! Map) return null;
   final models = value['models'] as Map;
@@ -698,8 +704,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           if (realTime) {
             next();
           } else {
-            final remaining = (1000000 / fps).round() - frameClock.elapsedMicroseconds;
-            timer = Timer(Duration(microseconds: remaining > 0 ? remaining : 0), next);
+            timer = Timer(watchFrameDelay(fps, frameClock.elapsed), next);
           }
         }
       case 'saved':
@@ -1052,7 +1057,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                             250)
                       IgnorePointer(
                         child: CustomPaint(
-                          painter: _WatchOverlay(frameData, frameWidth, frameHeight),
+                          painter: WatchOverlay(frameData, frameWidth, frameHeight),
                         ),
                       ),
                     HitBurstLayer.watch(
@@ -1093,7 +1098,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                               return child;
                             },
                     ),
-                    CustomPaint(painter: _WatchOverlay(frameData, frameWidth, frameHeight)),
+                    CustomPaint(painter: WatchOverlay(frameData, frameWidth, frameHeight)),
                     HitBurstLayer.watch(
                       hits: watchHits,
                       frame: frameData,
@@ -1223,8 +1228,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   }
 }
 
-class _WatchOverlay extends CustomPainter {
-  _WatchOverlay(this.frame, this.width, this.height);
+class WatchOverlay extends CustomPainter {
+  WatchOverlay(this.frame, this.width, this.height);
   final Map<String, dynamic>? frame;
   final int width, height;
   @override
@@ -1268,5 +1273,5 @@ class _WatchOverlay extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WatchOverlay old) => old.frame != frame;
+  bool shouldRepaint(covariant WatchOverlay old) => old.frame != frame;
 }

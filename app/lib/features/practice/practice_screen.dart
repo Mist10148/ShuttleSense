@@ -1,23 +1,27 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../data/api_client.dart';
 import '../../data/models/video_info.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../../core/theme/tokens.dart';
-import '../watch/watch_screen.dart' show formatWatchElapsed;
+import '../watch/watch_screen.dart' show formatWatchElapsed, watchFrameDelay, WatchOverlay;
 import '../mode/mode_screen.dart';
 
 class PracticeScreen extends ConsumerStatefulWidget {
-  const PracticeScreen({super.key, this.jobId});
+  const PracticeScreen({super.key, this.jobId, this.channelFactory});
   final String? jobId;
+  final WebSocketChannel Function(Uri)? channelFactory;
   @override
   ConsumerState<PracticeScreen> createState() => _PracticeScreenState();
 }
@@ -38,6 +42,17 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   bool eventsDirty = false;
   bool loadingReport = false;
   bool controlBusy = false;
+  WebSocketChannel? watchSocket;
+  StreamSubscription? watchSubscription;
+  Timer? watchTimer, watchClockTimer;
+  final watchClock = Stopwatch();
+  final frameClock = Stopwatch();
+  bool watchActive = false, watchPlaying = false, watchWaiting = false, watchStopping = false;
+  int watchFrame = -1, watchTotal = 0;
+  double watchFps = 30, watchWidth = 1, watchHeight = 1;
+  Map<String, dynamic> watchFrameData = {};
+  List<int>? watchImage;
+  String watchStatus = 'Connecting...';
 
   @override
   void initState() {
@@ -48,6 +63,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   @override
   void dispose() {
     timer?.cancel();
+    watchTimer?.cancel();
+    watchClockTimer?.cancel();
+    if (watchActive && !watchStopping) watchSocket?.sink.add(jsonEncode({'type': 'stop'}));
+    unawaited(watchSubscription?.cancel());
+    unawaited(watchSocket?.sink.close());
     attempts.dispose();
     player?.dispose();
     super.dispose();
@@ -119,20 +139,161 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       error = null;
     });
     try {
-      final data = await ref.read(apiClientProvider).startPractice({
-        'video_id': video!.id,
-        'stroke': stroke,
-        'arm': arm,
-        'attempt_seconds': times,
-        'selection_frame': selectionFrame,
-        'selected_bbox': selected,
+      final health = await ref.read(apiClientProvider).health();
+      if (!health.practiceWatch) {
+        throw Exception(
+          'This backend needs to be updated and restarted to support AI Coach playback.',
+        );
+      }
+      final base = ref.read(apiClientProvider).liveUri();
+      final uri = base.replace(path: base.path.replaceFirst(RegExp(r'/live$'), '/watch'));
+      final channel = widget.channelFactory?.call(uri) ?? WebSocketChannel.connect(uri);
+      watchSocket = channel;
+      await channel.ready;
+      if (!mounted) {
+        await channel.sink.close();
+        return;
+      }
+      setState(() {
+        watchActive = true;
+        watchPlaying = true;
+        watchStopping = false;
+        watchStatus = 'Connecting...';
       });
-      if (mounted) await loadJob(data['id'] as String);
+      watchClock
+        ..reset()
+        ..start();
+      watchClockTimer?.cancel();
+      watchClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted && watchActive) setState(() {});
+      });
+      watchSubscription = channel.stream.listen(
+        onWatchMessage,
+        onError: (Object e) => watchFailure('Connection lost: $e'),
+        onDone: () {
+          if (mounted && watchActive) {
+            watchFailure('Connection lost. Check History for the saved portion.');
+          }
+        },
+      );
+      channel.sink.add(
+        jsonEncode({
+          'type': 'start',
+          'video_id': video!.id,
+          'court': 'singles',
+          'playback': 'complete',
+          'mode': 'practice',
+          'practice_setup': {
+            'video_id': video!.id,
+            'stroke': stroke,
+            'arm': arm,
+            'attempt_seconds': times,
+            'selection_frame': selectionFrame,
+            'selected_bbox': selected,
+          },
+        }),
+      );
     } catch (e) {
       if (mounted) setState(() => error = '$e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  void requestWatchFrame() {
+    if (!mounted || !watchActive || !watchPlaying || watchWaiting || watchStopping) return;
+    setState(() {
+      watchWaiting = true;
+      watchStatus = 'Catching up...';
+    });
+    frameClock
+      ..reset()
+      ..start();
+    watchSocket?.sink.add(jsonEncode({'type': 'next'}));
+  }
+
+  void onWatchMessage(dynamic raw) {
+    if (!mounted || raw is! String) return;
+    final msg = jsonDecode(raw) as Map<String, dynamic>;
+    switch (msg['type']) {
+      case 'started':
+        setState(() {
+          watchFps = (msg['fps'] as num).toDouble();
+          watchWidth = (msg['width'] as num).toDouble();
+          watchHeight = (msg['height'] as num).toDouble();
+          watchTotal = msg['frames'] as int;
+        });
+        requestWatchFrame();
+      case 'video_frame':
+        frameClock.stop();
+        setState(() {
+          watchImage = base64Decode(msg['jpeg'] as String);
+          watchFrame = msg['index'] as int;
+          watchWaiting = false;
+          watchStatus = watchStopping
+              ? 'Saving...'
+              : watchPlaying
+              ? 'Playing'
+              : 'Paused';
+          for (final event in (msg['events'] as List)) {
+            if (event is Map<String, dynamic> && event['type'] == 'frame') watchFrameData = event;
+          }
+        });
+        if (watchPlaying && !watchStopping) {
+          watchTimer = Timer(watchFrameDelay(watchFps, frameClock.elapsed), requestWatchFrame);
+        }
+      case 'saved':
+        final id = msg['job_id'] as String?;
+        watchClock.stop();
+        watchClockTimer?.cancel();
+        setState(() {
+          watchActive = false;
+          watchPlaying = false;
+        });
+        ref.invalidate(jobsListProvider);
+        if (id == null) {
+          setState(() => error = 'No frames were analyzed, so no session was saved.');
+        } else {
+          video = null;
+          unawaited(loadJob(id));
+        }
+      case 'error':
+        watchFailure((msg['detail'] ?? 'Video analysis failed').toString());
+    }
+  }
+
+  void watchFailure(String message) {
+    watchTimer?.cancel();
+    watchClock.stop();
+    watchClockTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        watchActive = false;
+        error = message;
+      });
+    }
+  }
+
+  void toggleWatch() {
+    setState(() {
+      watchPlaying = !watchPlaying;
+      watchStatus = watchPlaying ? 'Playing' : 'Paused';
+    });
+    if (watchPlaying) requestWatchFrame();
+  }
+
+  void stopWatch() {
+    if (watchFrame < 0 && !watchWaiting) {
+      setState(() => error = 'No frames have been analyzed yet.');
+      return;
+    }
+    watchTimer?.cancel();
+    setState(() {
+      watchStopping = true;
+      watchPlaying = false;
+      watchStatus = 'Saving...';
+    });
+    watchSocket?.sink.add(jsonEncode({'type': 'stop'}));
   }
 
   Future<void> loadJob(String id) async {
@@ -235,7 +396,13 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       await ref.read(apiClientProvider).controlPractice(id, action);
       await loadJob(id);
     } catch (e) {
-      if (mounted) setState(() => error = 'Could not update analysis: $e');
+      if (mounted) {
+        setState(
+          () => error = e is ApiException && e.statusCode == 404
+              ? 'This session or its control endpoint is unavailable. Update and restart the backend, then check History.'
+              : 'Could not update analysis: $e',
+        );
+      }
     } finally {
       if (mounted) setState(() => controlBusy = false);
     }
@@ -269,7 +436,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   Widget build(BuildContext context) {
     final info = video;
     final status = job?['status'] as String?;
-    final selecting = info != null && (job == null || status == 'needs_selection');
+    final selecting = info != null && !watchActive && (job == null || status == 'needs_selection');
     return PageScaffold(
       title: 'AI Coach',
       actions: const [ChangeModeButton()],
@@ -343,6 +510,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                     Image.network(
                       ref.read(apiClientProvider).frameUrl(info.id, selectionFrame, maxWidth: 3840),
                       fit: BoxFit.fill,
+                      errorBuilder: (context, error, stack) =>
+                          const Center(child: Text('Could not load the selection frame.')),
                     ),
                     for (final box in candidates)
                       Positioned(
@@ -404,6 +573,62 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               child: const Text('Resume with selected player'),
             ),
         ],
+        if (watchActive) ...[
+          const SizedBox(height: Spacing.lg),
+          if (watchImage != null)
+            AppCard(
+              padding: const EdgeInsets.all(Spacing.md),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.md),
+                child: AspectRatio(
+                  aspectRatio: watchWidth / watchHeight,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.memory(
+                        Uint8List.fromList(watchImage!),
+                        gaplessPlayback: true,
+                        fit: BoxFit.fill,
+                      ),
+                      CustomPaint(
+                        painter: WatchOverlay(
+                          watchFrameData,
+                          watchWidth.round(),
+                          watchHeight.round(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: Spacing.lg),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$watchStatus ? ${((watchFrame + 1) / watchFps).toStringAsFixed(1)} s / ${(watchTotal / watchFps).toStringAsFixed(1)} s',
+                ),
+                Text('Elapsed: ${formatWatchElapsed(watchClock.elapsed)} (includes pauses)'),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton(
+                onPressed: watchStopping ? null : toggleWatch,
+                child: Text(watchPlaying ? 'Pause' : 'Play'),
+              ),
+              OutlinedButton(
+                onPressed: watchStopping ? null : stopWatch,
+                child: const Text('Stop and save'),
+              ),
+            ],
+          ),
+        ],
         if (status == 'queued' || status == 'running') ...[
           const SizedBox(height: Spacing.lg),
           if (job?['preview'] is Map && (job!['preview'] as Map)['jpeg'] is String)
@@ -436,21 +661,21 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   : paused
                   ? 'Paused'
                   : rendering
-                  ? 'Rendering video?'
-                  : 'Catching up?';
+                  ? 'Rendering video...'
+                  : 'Catching up...';
               return AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: Spacing.xs,
                   children: [
                     Text(
-                      '$label${frame == null ? '' : ' ? ${(frame / info!.fps).toStringAsFixed(1)} s / ${(info.numFrames / info.fps).toStringAsFixed(1)} s'}',
+                      '$label${frame == null ? '' : ' - ${(frame / info!.fps).toStringAsFixed(1)} s / ${(info.numFrames / info.fps).toStringAsFixed(1)} s'}',
                     ),
                     Text(
                       'Elapsed: ${formatWatchElapsed(elapsed.isNegative ? Duration.zero : elapsed)} (includes pauses)',
                     ),
                     LinearProgressIndicator(value: status == 'queued' ? null : progress),
-                    Text('${(progress * 100).round()}% ? ${rendering ? 'Rendering' : 'Analyzing'}'),
+                    Text('${(progress * 100).round()}% - ${rendering ? 'Rendering' : 'Analyzing'}'),
                     const Text('The preview shows the latest analyzed frame.'),
                   ],
                 ),
@@ -485,7 +710,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         ] else if (busy && status != 'done') ...[
           const SizedBox(height: Spacing.lg),
           const LinearProgressIndicator(),
-          const Text('Preparing video and player selection?'),
+          const Text('Preparing video and player selection...'),
         ],
         if (status == 'failed') Text('Analysis failed: ${job?['error']}'),
         if (status == 'done' && loadingReport) ...[

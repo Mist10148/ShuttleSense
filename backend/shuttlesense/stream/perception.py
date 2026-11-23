@@ -306,6 +306,46 @@ class ModelPerception:
         return result
 
 
+class SelectedPracticePerception:
+    """Watch perception with one explicitly selected player and no court requirement."""
+
+    def __init__(self, perception, bbox, selection_frame):
+        from shuttlesense.practice.evidence import SelectedPlayerTracker
+
+        self.perception = perception
+        self.available = perception.available
+        self.tracker = SelectedPlayerTracker(tuple(bbox))
+        self.selection_frame = selection_frame
+        self.unobserved = set()
+
+    def __call__(self, frame, index):
+        return self._shuttle(frame), self.players_for_frame(frame, index)
+
+    def _shuttle(self, frame):
+        return self.perception._shuttle(frame)
+
+    def players_for_frame(self, frame, index):
+        from shuttlesense.schema import Players
+
+        player = None
+        if index >= self.selection_frame and self.perception.detect is not None:
+            people = [
+                p
+                for p in self.perception.detect(frame)
+                if p.score >= self.perception.min_person_score
+            ]
+            self.tracker.lost = False
+            player = self.tracker.update(people)
+        if player is None:
+            self.unobserved.add(index)
+        return Players(near=player)
+
+    def close(self):
+        close = getattr(self.perception, "close", None)
+        if close:
+            close()
+
+
 class ReplayPerception:
     """Shuttle and players read from a record instead of a camera (fake mode, tests).
 

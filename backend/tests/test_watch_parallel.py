@@ -142,3 +142,35 @@ def test_closing_one_session_does_not_close_another():
     finally:
         first.close()
         second.close()
+
+
+def test_parallel_selected_player_preserves_gaps_and_identity():
+    from shuttlesense.schema import Player, Shuttle
+    from shuttlesense.stream.perception import SelectedPracticePerception
+
+    class Models:
+        available = {"tracking": True, "pose": True}
+        min_person_score = 0.4
+        barrier = Barrier(2, timeout=2)
+
+        def _shuttle(self, frame):
+            self.barrier.wait()
+            return Shuttle()
+
+        def detect(self, frame):
+            self.barrier.wait()
+            return [Player(bbox=frame, score=0.9)]
+
+    selected = SelectedPracticePerception(Models(), (0, 0, 10, 20), 0)
+    parallel = ParallelWatchPerception(selected)
+    try:
+        _, players = parallel((0, 0, 10, 20), 0)
+        assert players.near is not None
+        _, players = parallel((40, 0, 10, 20), 1)
+        assert players.near is None
+        assert parallel.unobserved == {1}
+        _, players = parallel((0, 0, 10, 20), 2)
+        assert players.near is not None
+        assert parallel.unobserved == {1}
+    finally:
+        parallel.close()
