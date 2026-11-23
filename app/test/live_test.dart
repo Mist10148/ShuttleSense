@@ -20,6 +20,7 @@ import 'package:shuttlesense_app/features/results/widgets/status_strip.dart';
 import 'fakes/fake_api_client.dart';
 import 'fakes/fake_live.dart';
 import 'helpers.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 
 class DelayedCaptureSource extends FakeFrameSource {
   final pending = Completer<void>();
@@ -1297,8 +1298,9 @@ void main() {
 
   testWidgets('every speed in the status strip says it is estimated', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: StatusStrip(speedKmh: 182, peakSpeedKmh: 241, strokeCount: 3)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: StatusStrip(speedKmh: 182, peakSpeedKmh: 241, strokeCount: 3)),
       ),
     );
     expect(find.textContaining('182 km/h (est.)'), findsOneWidget);

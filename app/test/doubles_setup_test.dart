@@ -10,6 +10,7 @@ import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/job.dart';
 import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/shared/widgets/match_setup_field.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 
 /// Answers every request with a job and keeps the request bodies.
 class _CapturingAdapter implements HttpClientAdapter {
@@ -88,6 +89,7 @@ void main() {
     var value = const MatchSetup(court: 'doubles');
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => SingleChildScrollView(
@@ -145,6 +147,7 @@ void main() {
 
   testWidgets('the start score names pairs in doubles', (tester) async {
     Widget field(bool doubles) => MaterialApp(
+      theme: AppTheme.light(),
       home: Scaffold(
         body: StartScoreField(value: (near: 3, far: 2), doubles: doubles, onChanged: (_) {}),
       ),
@@ -183,6 +186,7 @@ void main() {
   ) async {
     var value = const MatchSetup(bestOf: 3);
     Widget form({required bool show}) => MaterialApp(
+      theme: AppTheme.light(),
       home: Scaffold(
         body: StatefulBuilder(
           builder: (context, setState) => SingleChildScrollView(

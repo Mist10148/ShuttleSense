@@ -184,6 +184,7 @@ void main() {
     final target = FakeTarget()..playing = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: PlaybackShortcuts(
             target: target,
@@ -207,6 +208,7 @@ void main() {
     var pressed = 0;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: PlaybackShortcuts(
             target: target,
