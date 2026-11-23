@@ -68,7 +68,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
           alignment: WrapAlignment.spaceBetween,
           children: [
             Semantics(header: true, child: Text('Styleguide', style: text.headlineLarge)),
-            SegmentedButton<Brightness>(
+            DepthSegmented<Brightness>(
               segments: const [
                 ButtonSegment(value: Brightness.light, label: Text('Light')),
                 ButtonSegment(value: Brightness.dark, label: Text('Dark')),
@@ -221,7 +221,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
   Widget _controls() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SegmentedButton<String>(
+      DepthSegmented<String>(
         segments: const [
           ButtonSegment(value: 'singles', label: Text('Singles')),
           ButtonSegment(value: 'doubles', label: Text('Doubles')),

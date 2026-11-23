@@ -69,15 +69,13 @@ class StrokeModelField extends StatelessWidget {
             runSpacing: 4,
             children: [
               Text('Stroke model', style: theme.textTheme.labelLarge),
-              SegmentTray(
-                child: SegmentedButton<String>(
-                  segments: [
-                    for (final MapEntry(key: model, value: label) in kStrokeModels.entries)
-                      ButtonSegment(value: model, label: Text(label), enabled: available(model)),
-                  ],
-                  selected: {shown},
-                  onSelectionChanged: (s) => onChanged(s.first),
-                ),
+              DepthSegmented<String>(
+                segments: [
+                  for (final MapEntry(key: model, value: label) in kStrokeModels.entries)
+                    ButtonSegment(value: model, label: Text(label), enabled: available(model)),
+                ],
+                selected: {shown},
+                onSelectionChanged: (s) => onChanged(s.first),
               ),
             ],
           ),

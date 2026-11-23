@@ -214,17 +214,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ),
         ),
       ),
-      SegmentTray(
-        child: SegmentedButton<_ModeFilter>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: _ModeFilter.all, label: Text('All')),
-            ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
-            ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
-          ],
-          selected: {_mode},
-          onSelectionChanged: (s) => setState(() => _mode = s.first),
-        ),
+      DepthSegmented<_ModeFilter>(
+        segments: const [
+          ButtonSegment(value: _ModeFilter.all, label: Text('All')),
+          ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
+          ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
+        ],
+        selected: {_mode},
+        onSelectionChanged: (s) => setState(() => _mode = s.first),
       ),
       TextButton.icon(
         onPressed: () => setState(() => _newestFirst = !_newestFirst),

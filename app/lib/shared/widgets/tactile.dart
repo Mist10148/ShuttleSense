@@ -1151,3 +1151,196 @@ class SegmentTray extends StatelessWidget {
   Widget build(BuildContext context) =>
       InsetBox(radius: 14, padding: const EdgeInsets.all(4), child: child);
 }
+
+/// A single-choice segmented control in the depth style: a recessed tray with equal-width
+/// options and one raised thumb that slides to the chosen option. It takes the same
+/// [ButtonSegment]s, [selected] set and [onSelectionChanged] callback as [SegmentedButton].
+///
+/// With [emptySelectionAllowed], [selected] may be empty and the thumb fades out. A null
+/// [onSelectionChanged] disables every option.
+class DepthSegmented<T> extends StatelessWidget {
+  const DepthSegmented({
+    super.key,
+    required this.segments,
+    required this.selected,
+    this.onSelectionChanged,
+    this.emptySelectionAllowed = false,
+    this.compact = false,
+  });
+
+  final List<ButtonSegment<T>> segments;
+  final Set<T> selected;
+  final ValueChanged<Set<T>>? onSelectionChanged;
+  final bool emptySelectionAllowed;
+
+  /// Smaller text and padding for tight rows.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TactileTokens.of(context);
+    final p = AppPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final index = segments.indexWhere((s) => selected.contains(s.value));
+    final n = segments.length;
+    final duration = reduce ? Duration.zero : const Duration(milliseconds: 200);
+    // Every option keeps a full 48 dp tap target; the tray drawn around them is slimmer
+    // (44 dp, or 38 dp compact), centred in that height, like the design.
+    final trayInset = compact ? 5.0 : 2.0;
+    const rim = 4.0;
+    final thumb = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: raisedGradient(t),
+        borderRadius: BorderRadius.circular(compact ? 9 : 10),
+        border: Border.all(color: t.rim, width: 0.6),
+        boxShadow: [
+          BoxShadow(
+            color: t.shade.withValues(alpha: t.shade.a * 0.5),
+            blurRadius: 4,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+    );
+    return IntrinsicWidth(
+      child: SizedBox(
+        height: kMinTouchTarget,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              top: trayInset,
+              bottom: trayInset,
+              child: InsetBox(
+                radius: compact ? 13 : 14,
+                padding: EdgeInsets.zero,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            // The raised thumb under the chosen option.
+            Positioned.fill(
+              top: trayInset + rim,
+              bottom: trayInset + rim,
+              left: rim,
+              right: rim,
+              child: AnimatedOpacity(
+                duration: duration,
+                opacity: index < 0 ? 0 : 1,
+                child: AnimatedAlign(
+                  duration: duration,
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment(n <= 1 ? 0 : -1 + 2 * (index < 0 ? 0 : index) / (n - 1), 0),
+                  child: FractionallySizedBox(widthFactor: 1 / n, heightFactor: 1, child: thumb),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: rim),
+              child: Row(
+                children: [
+                  for (final (i, s) in segments.indexed)
+                    Expanded(
+                      child: _DepthSegment(
+                        segment: s,
+                        chosen: i == index,
+                        compact: compact,
+                        onTap: onSelectionChanged == null || !s.enabled
+                            ? null
+                            : () {
+                                if (i == index) {
+                                  if (emptySelectionAllowed) onSelectionChanged!(<T>{});
+                                  return;
+                                }
+                                onSelectionChanged!({s.value});
+                              },
+                        style: text.labelLarge?.copyWith(
+                          fontSize: compact ? 13 : 14,
+                          fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                          color: i == index ? p.ink : p.text3,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DepthSegment<T> extends StatelessWidget {
+  const _DepthSegment({
+    required this.segment,
+    required this.chosen,
+    required this.compact,
+    required this.onTap,
+    required this.style,
+  });
+
+  final ButtonSegment<T> segment;
+  final bool chosen;
+  final bool compact;
+  final VoidCallback? onTap;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = style?.color;
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (segment.icon != null) ...[
+          IconTheme.merge(
+            data: IconThemeData(size: compact ? 16 : 18, color: color),
+            child: segment.icon!,
+          ),
+          if (segment.label != null) const SizedBox(width: 6),
+        ],
+        if (segment.label != null)
+          Flexible(
+            child: DefaultTextStyle.merge(
+              style: style,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              child: segment.label!,
+            ),
+          ),
+      ],
+    );
+    Widget child = Semantics(
+      button: true,
+      selected: chosen,
+      enabled: onTap != null,
+      inMutuallyExclusiveGroup: true,
+      child: Material(
+        type: MaterialType.transparency,
+        // No hover or press wash: it would fill the full tap target, taller than the tray.
+        // The thumb sliding over is the feedback.
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16),
+            child: Center(
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 160),
+                style: style ?? const TextStyle(),
+                child: content,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (onTap == null) child = Opacity(opacity: segment.enabled ? 0.5 : 0.4, child: child);
+    if (segment.tooltip != null) child = Tooltip(message: segment.tooltip, child: child);
+    return child;
+  }
+}

@@ -162,20 +162,17 @@ class _LiveViewState extends ConsumerState<LiveView> {
       onSwapEnds: _coach || !changeEnds ? null : controller.swapEnds,
     );
     final controls = [
-      SegmentTray(
-        child: SegmentedButton<bool>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: false, icon: Icon(Icons.sports), label: Text('Referee')),
-            ButtonSegment(
-              value: true,
-              icon: Icon(Icons.record_voice_over_outlined),
-              label: Text('Coach'),
-            ),
-          ],
-          selected: {_coach},
-          onSelectionChanged: (roles) => setState(() => _coach = roles.first),
-        ),
+      DepthSegmented<bool>(
+        segments: const [
+          ButtonSegment(value: false, icon: Icon(Icons.sports), label: Text('Referee')),
+          ButtonSegment(
+            value: true,
+            icon: Icon(Icons.record_voice_over_outlined),
+            label: Text('Coach'),
+          ),
+        ],
+        selected: {_coach},
+        onSelectionChanged: (roles) => setState(() => _coach = roles.first),
       ),
       StatusStrip(
         rallyState: state.rallyState,

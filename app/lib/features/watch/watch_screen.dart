@@ -825,17 +825,15 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: Spacing.sm,
               children: [
-                SegmentTray(
-                  child: SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: true, label: Text('Real time')),
-                      ButtonSegment(value: false, label: Text('Analyze every frame')),
-                    ],
-                    selected: {realTime},
-                    onSelectionChanged: scanning || detectingCourt
-                        ? null
-                        : (v) => setState(() => realTime = v.first),
-                  ),
+                DepthSegmented<bool>(
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('Real time')),
+                    ButtonSegment(value: false, label: Text('Analyze every frame')),
+                  ],
+                  selected: {realTime},
+                  onSelectionChanged: scanning || detectingCourt
+                      ? null
+                      : (v) => setState(() => realTime = v.first),
                 ),
                 Text(
                   realTime
@@ -870,22 +868,20 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: Spacing.sm,
               children: [
-                SegmentTray(
-                  child: SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('Choose manually')),
-                      ButtonSegment(value: true, label: Text('Suggest automatically')),
-                    ],
-                    selected: {autoMode},
-                    onSelectionChanged: scanning || detectingCourt
-                        ? null
-                        : (v) => setState(() {
-                            autoMode = v.first;
-                            matchType = null;
-                            suggestion = null;
-                            suggestionDetail = null;
-                          }),
-                  ),
+                DepthSegmented<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Choose manually')),
+                    ButtonSegment(value: true, label: Text('Suggest automatically')),
+                  ],
+                  selected: {autoMode},
+                  onSelectionChanged: scanning || detectingCourt
+                      ? null
+                      : (v) => setState(() {
+                          autoMode = v.first;
+                          matchType = null;
+                          suggestion = null;
+                          suggestionDetail = null;
+                        }),
                 ),
                 const Text('Confirm the match format:'),
                 Wrap(

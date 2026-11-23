@@ -217,8 +217,8 @@ void main() {
     expect(tester.widget<TactileSwitchTile>(faster).value, isTrue);
     expect(
       tester
-          .widget<SegmentedButton<bool>>(
-            find.ancestor(of: find.text('Real time'), matching: find.byType(SegmentedButton<bool>)),
+          .widget<DepthSegmented<bool>>(
+            find.ancestor(of: find.text('Real time'), matching: find.byType(DepthSegmented<bool>)),
           )
           .selected,
       {true},
