@@ -40,8 +40,7 @@ def test_candidate_detection_refuses_demo_mode():
     assert unavailable.value.status_code == 503
 
 
-@pytest.mark.parametrize("resume_frame", [1, 3])
-def test_practice_session_pause_resume_and_report(tmp_path, tiny_video, monkeypatch, resume_frame):
+def test_practice_session_continues_after_tracking_loss(tmp_path, tiny_video, monkeypatch):
     import time
 
     from fastapi.testclient import TestClient
@@ -77,7 +76,7 @@ def test_practice_session_pause_resume_and_report(tmp_path, tiny_video, monkeypa
                 "video_id": video_id,
                 "stroke": "clear",
                 "arm": "right",
-                "attempt_seconds": [0.08],
+                "attempt_seconds": [0.04],
                 "selection_frame": 0,
                 "selected_bbox": [2, 2, 40, 60],
             },
@@ -93,27 +92,15 @@ def test_practice_session_pause_resume_and_report(tmp_path, tiny_video, monkeypa
                 time.sleep(0.05)
             raise AssertionError("job timed out")
 
-        paused = wait({"needs_selection", "failed"})
-        assert paused["status"] == "needs_selection", paused
-        assert paused["practice_selection_frame"] == 1
-        resumed = client.post(
-            f"/practice/sessions/{job_id}/selection",
-            json={
-                "frame": resume_frame,
-                "bbox": [2, 2, 40, 60],
-            },
-        )
-        assert resumed.status_code == 202, resumed.text
         finished = wait({"done", "failed", "needs_selection"})
         assert finished["status"] == "done", finished
         result = client.get(f"/practice/sessions/{job_id}/result")
         assert result.status_code == 200, result.text
         assert result.json()["report"]["generated_by"] == "rules"
-        assert result.json()["observations"][0]["moment_s"] == 0.08
+        assert result.json()["observations"][0]["moment_s"] == 0.04
         statuses = [o["status"] for o in result.json()["observations"][0]["observations"]]
-        assert statuses == (
-            ["unavailable", "unavailable"] if resume_frame == 3 else ["observed", "observed"]
-        )
+        assert statuses == ["unavailable", "unavailable"]
+        assert result.json()["unobserved_frames"] == 1
         assert client.get(f"/jobs/{job_id}/video").status_code == 200
         events = result.json()["events"]
         updated = client.put(f"/practice/sessions/{job_id}/events", json={"events": events})

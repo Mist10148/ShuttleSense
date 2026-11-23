@@ -77,7 +77,11 @@ SYSTEM = (
 
 
 async def create_practice_report(
-    attempts: list[AttemptEvidence], provider=None, retriever=None, events: list[dict] | None = None
+    attempts: list[AttemptEvidence],
+    provider=None,
+    retriever=None,
+    events: list[dict] | None = None,
+    analysis_notes: list[dict] | None = None,
 ) -> PracticeReport:
     evidence = {}
     for i, attempt in enumerate(attempts):
@@ -90,6 +94,24 @@ async def create_practice_report(
                     "arm": attempt.arm,
                     **observation.model_dump(),
                 }
+    for i, note in enumerate(analysis_notes or []):
+        key = f"analysis-note-{i + 1}"
+        evidence[key] = {
+            "id": key,
+            "stroke": note.get("stroke"),
+            "arm": None,
+            "rule": note.get("rule"),
+            "moment_s": note["time_s"],
+            "status": "observed",
+            "value": note.get("value"),
+            "unit": None,
+            "description": (
+                "Analysis: "
+                + str(note.get("rule", "technique")).replace("_", " ")
+                + (" ? " + note["tip"] if note.get("tip") else " ? check passed")
+            ),
+            "provenance": "automatic",
+        }
     if not evidence:
         return PracticeReport(
             summary="Not enough visible pose evidence to assess the marked attempts."
@@ -176,7 +198,8 @@ async def create_practice_report(
         except Exception:
             log.warning("Practice report provider failed; using rules", exc_info=True)
     return PracticeReport(
-        summary=f"{len(attempts)} analysis moments; {len(evidence)} visible pose measurements.",
+        summary=(f"{len(attempts)} analyzed moments; "
+                 f"{len(evidence)} pose measurements and analysis notes."),
         evidence=[evidence[key] for key in selected],
         guidance=[
             {

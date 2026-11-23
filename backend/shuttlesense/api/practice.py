@@ -176,7 +176,7 @@ async def practice_result(job_id: str, request: Request, storage: StorageDep):
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
         report = PracticeReport.model_validate(cached["report"])
         if (
-            cached.get("version") == 2
+            cached.get("version") == 3
             and cached["source_mtime_ns"] == mtime
             and not (provider is not None and report.generated_by == "rules" and report.evidence)
         ):
@@ -185,7 +185,11 @@ async def practice_result(job_id: str, request: Request, storage: StorageDep):
         pass
     observations = [AttemptEvidence.model_validate(a) for a in data["observations"]]
     report = await create_practice_report(
-        observations, provider, request.app.state.coach.retriever, data.get("events", [])
+        observations,
+        provider,
+        request.app.state.coach.retriever,
+        data.get("events", []),
+        data.get("analysis_notes", []),
     )
     # A failed provider call can be retried, and deleted/changed jobs must not be recreated.
     jobs = request.app.state.jobs
@@ -200,7 +204,7 @@ async def practice_result(job_id: str, request: Request, storage: StorageDep):
         ):
             atomic_write_text(
                 cache_path,
-                json.dumps({"version": 2, "source_mtime_ns": mtime, "report": report.model_dump()}),
+                json.dumps({"version": 3, "source_mtime_ns": mtime, "report": report.model_dump()}),
             )
     return {**data, "report": report.model_dump()}
 
