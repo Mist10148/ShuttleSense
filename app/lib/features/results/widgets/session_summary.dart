@@ -93,7 +93,8 @@ class _SessionSummaryState extends State<SessionSummary> {
         if (goal.player case final String player when _matches(player)) goal,
     ];
     final generalGoals = record.practiceGoals.where((goal) => goal.player == null).toList();
-    return SectionCard(
+    // Inside the Coach tab's panel: a titled block, not a card of its own.
+    return SectionBlock(
       title: 'Coach',
       // One even rhythm: each section is its heading with its content, a fixed gap apart.
       child: Column(

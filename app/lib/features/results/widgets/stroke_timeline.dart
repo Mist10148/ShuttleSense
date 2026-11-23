@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/smooth_scroll.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
-import '../../../ui/depth.dart';
+import '../../../shared/widgets/tactile.dart';
 
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
@@ -18,12 +19,94 @@ Duration seekTarget(Hit hit) {
 /// Height of one timeline row, used to auto-scroll to the current hit.
 const double kTimelineRowHeight = 72;
 
+/// Which hits the timeline lists: one side (null: both) and one stroke class (null: all).
+typedef TimelineFilterValue = ({String? player, String? stroke});
+
+/// The timeline's filter, shared with [TimelineFilters] when those sit elsewhere (beside the
+/// section tabs on the results screen).
+class TimelineFilter extends ValueNotifier<TimelineFilterValue> {
+  TimelineFilter() : super((player: null, stroke: null));
+}
+
+/// Both / Near / Far as a sliding tray, and the stroke menu as a small key.
+class TimelineFilters extends StatelessWidget {
+  const TimelineFilters({super.key, required this.filter, required this.hits});
+
+  final TimelineFilter filter;
+  final List<Hit> hits;
+
+  @override
+  Widget build(BuildContext context) {
+    final strokes = {for (final h in hits) ?h.stroke};
+    return ValueListenableBuilder<TimelineFilterValue>(
+      valueListenable: filter,
+      builder: (context, f, _) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The same size as the section tabs beside it.
+          DepthSegmented<String?>(
+            segments: const [
+              ButtonSegment(value: null, label: Text('Both')),
+              ButtonSegment(value: 'near', label: Text('Near')),
+              ButtonSegment(value: 'far', label: Text('Far')),
+            ],
+            selected: {f.player},
+            onSelectionChanged: (v) => filter.value = (player: v.first, stroke: f.stroke),
+          ),
+          const SizedBox(width: Spacing.sm),
+          PopupMenuButton<String?>(
+            tooltip: 'Filter by stroke',
+            initialValue: f.stroke,
+            onSelected: (v) => filter.value = (player: f.player, stroke: v == '' ? null : v),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: '', child: Text('All strokes')),
+              for (final s in strokes) PopupMenuItem(value: s, child: Text(kStrokeLabels[s] ?? s)),
+            ],
+            child: IgnorePointer(
+              child: OutlinedButton(
+                // As tall as the trays beside it (44 dp).
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  fixedSize: const Size.fromHeight(44),
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.md + 2),
+                ),
+                onPressed: () {},
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(f.stroke == null ? 'All strokes' : kStrokeLabels[f.stroke] ?? f.stroke!),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.expand_more_rounded, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Column widths shared by the header and the rows.
+const double _kTimeCol = 64, _kPlayerCol = 92, _kSpeedCol = 120;
+
 /// C3 / FR-C3: one row per hit; tapping a row seeks the video, long-press shows details.
 class StrokeTimeline extends StatefulWidget {
-  const StrokeTimeline({super.key, required this.hits, this.currentHitId, required this.onSeek});
+  const StrokeTimeline({
+    super.key,
+    required this.hits,
+    this.currentHitId,
+    required this.onSeek,
+    this.filter,
+  });
 
   final List<Hit> hits;
   final int? currentHitId;
+
+  /// Given when the filters are shown elsewhere ([TimelineFilters]); otherwise the timeline
+  /// keeps its own and shows them above the rows.
+  final TimelineFilter? filter;
 
   /// Called with the tapped hit; a video seeks to [seekTarget], other views go to the hit.
   final ValueChanged<Hit> onSeek;
@@ -33,14 +116,19 @@ class StrokeTimeline extends StatefulWidget {
 }
 
 class _StrokeTimelineState extends State<StrokeTimeline> {
-  final _scroll = ScrollController();
-  String? _player; // near / far / null = both
-  String? _stroke; // a stroke class / null = all
+  final _scroll = SmoothScrollController();
+  TimelineFilter? _own;
+  TimelineFilter get _filter => widget.filter ?? (_own ??= TimelineFilter());
 
-  List<Hit> get _visible => [
-    for (final h in widget.hits)
-      if ((_player == null || h.player == _player) && (_stroke == null || h.stroke == _stroke)) h,
-  ];
+  List<Hit> get _visible {
+    final f = _filter.value;
+    return [
+      for (final h in widget.hits)
+        if ((f.player == null || h.player == f.player) &&
+            (f.stroke == null || h.stroke == f.stroke))
+          h,
+    ];
+  }
 
   @override
   void didUpdateWidget(StrokeTimeline old) {
@@ -58,6 +146,7 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
   @override
   void dispose() {
     _scroll.dispose();
+    _own?.dispose();
     super.dispose();
   }
 
@@ -70,64 +159,87 @@ class _StrokeTimelineState extends State<StrokeTimeline> {
         detail: 'Hits and strokes appear here once those pipeline stages are in place.',
       );
     }
-    final strokes = {for (final h in widget.hits) ?h.stroke};
-    final hits = _visible;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, Spacing.sm),
-          child: Row(
-            children: [
-              InsetBox(
-                radius: 14,
-                padding: const EdgeInsets.all(Spacing.xs),
-                child: Row(
-                  spacing: Spacing.xs,
-                  children: [
-                    for (final (value, label) in [(null, 'Both'), ('near', 'Near'), ('far', 'Far')])
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: _player == value,
-                        onSelected: (_) => setState(() => _player = value),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Spacing.sm),
-              PopupMenuButton<String?>(
-                tooltip: 'Filter by stroke',
-                initialValue: _stroke,
-                onSelected: (v) => setState(() => _stroke = v == '' ? null : v),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: '', child: Text('All strokes')),
-                  for (final s in strokes)
-                    PopupMenuItem(value: s, child: Text(kStrokeLabels[s] ?? s)),
-                ],
-                child: Chip(
-                  avatar: const Icon(Icons.filter_list, size: 16),
-                  label: Text(_stroke == null ? 'All strokes' : kStrokeLabels[_stroke] ?? _stroke!),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: hits.isEmpty
-              ? const MessageView(icon: Icons.filter_alt_off, message: 'No hits match the filter')
-              : ListView.builder(
-                  controller: _scroll,
-                  itemExtent: kTimelineRowHeight,
-                  itemCount: hits.length,
-                  itemBuilder: (context, i) => _HitRow(
-                    hit: hits[i],
-                    selected: hits[i].id == widget.currentHitId,
-                    onSeek: widget.onSeek,
+    return ValueListenableBuilder<TimelineFilterValue>(
+      valueListenable: _filter,
+      builder: (context, _, _) {
+        final hits = _visible;
+        final p = AppPalette.of(context);
+        final label = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: p.text3,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.9,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.filter == null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, 0),
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: TimelineFilters(filter: _filter, hits: widget.hits),
                   ),
                 ),
-        ),
-      ],
+              ),
+            // Column names over the rows.
+            ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.sm + Spacing.md + 3,
+                  Spacing.md,
+                  Spacing.sm + 48,
+                  Spacing.xs,
+                ),
+                child: LayoutBuilder(
+                  builder: (context, box) => Row(
+                    children: [
+                      SizedBox(
+                        width: _kTimeCol,
+                        child: _ColumnName('TIME', style: label),
+                      ),
+                      SizedBox(
+                        width: _kPlayerCol,
+                        child: _ColumnName('PLAYER', style: label),
+                      ),
+                      Expanded(child: _ColumnName('STROKE', style: label)),
+                      if (box.maxWidth + 48 >= 620)
+                        SizedBox(
+                          width: _kSpeedCol,
+                          child: _ColumnName('SPEED', style: label),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: hits.isEmpty
+                  ? const MessageView(
+                      icon: Icons.filter_alt_off,
+                      message: 'No hits match the filter',
+                    )
+                  // The rows' chevrons are flat icons, not the theme's raised keys.
+                  : Theme(
+                      data: Theme.of(
+                        context,
+                      ).copyWith(iconButtonTheme: const IconButtonThemeData()),
+                      child: ListView.builder(
+                        controller: _scroll,
+                        itemExtent: kTimelineRowHeight,
+                        itemCount: hits.length,
+                        itemBuilder: (context, i) => _HitRow(
+                          hit: hits[i],
+                          selected: hits[i].id == widget.currentHitId,
+                          onSeek: widget.onSeek,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -150,6 +262,7 @@ class _HitRow extends StatelessWidget {
     final colors = PlayerColors.of(context);
     final p = AppPalette.of(context);
     final a = AnalysisColors.of(context);
+    final t = TactileTokens.of(context);
     final text = Theme.of(context).textTheme;
     final stroke = kStrokeLabels[hit.stroke] ?? 'Unclassified';
     final player = playerLabel(hit.who);
@@ -178,51 +291,75 @@ class _HitRow extends StatelessWidget {
             onLongPress: () => showHitDetails(context, hit),
             child: Ink(
               decoration: BoxDecoration(
-                color: selected ? a.accent.withValues(alpha: 0.14) : null,
+                color: selected ? t.primary.withValues(alpha: 0.10) : null,
                 borderRadius: BorderRadius.circular(10),
-                border: selected ? Border.all(color: a.accentInk.withValues(alpha: 0.5)) : null,
               ),
               child: LayoutBuilder(
                 builder: (context, box) {
                   final wide = box.maxWidth >= 620;
+                  final c = colors.forPlayer(hit.who);
                   return Row(
                     children: [
+                      // The current stroke's row has an accent edge.
+                      Container(
+                        width: 3,
+                        decoration: BoxDecoration(
+                          color: selected ? t.primary : Colors.transparent,
+                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                        ),
+                      ),
                       const SizedBox(width: Spacing.md),
                       SizedBox(
-                        width: 58,
+                        width: _kTimeCol,
                         child: Text(
                           formatClock(hit.timeS),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
                           style: kFigureStyle.copyWith(
-                            fontSize: 18,
-                            color: selected ? a.accentInk : p.ink,
+                            fontSize: 15,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected ? p.ink : p.text2,
                           ),
                         ),
                       ),
                       SizedBox(
-                        width: 52,
+                        width: _kPlayerCol,
                         child: Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: AlignmentDirectional.centerStart,
                           child: Container(
-                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: colors.forPlayer(hit.who),
-                              borderRadius: BorderRadius.circular(13),
+                              color: c.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(7),
                             ),
-                            child: Text(
-                              textAlign: TextAlign.center,
-                              // N / F, or N1 / N2 / F1 / F2 for a doubles partner.
-                              player.replaceAll(RegExp('[a-z ]'), ''),
-                              style: TextStyle(
-                                color: onColor(colors.forPlayer(hit.who)),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    player,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Color.lerp(c, p.ink, 0.2),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: Spacing.md),
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -230,8 +367,10 @@ class _HitRow extends StatelessWidget {
                           children: [
                             Text(
                               hit.uncertain ? '$stroke ?' : stroke,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: text.titleSmall?.copyWith(
-                                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                               ),
                             ),
                             if (details.isNotEmpty)
@@ -239,38 +378,42 @@ class _HitRow extends StatelessWidget {
                                 details,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: text.bodySmall?.copyWith(color: p.text2, fontSize: 13),
+                                style: text.bodySmall?.copyWith(color: p.text3, fontSize: 12),
                               ),
                           ],
                         ),
                       ),
-                      if (wide && speed != null && speedColor != null) ...[
-                        const SizedBox(width: Spacing.md),
-                        ExcludeSemantics(
-                          child: Container(
-                            width: 64,
-                            height: 4,
-                            alignment: Alignment.centerLeft,
-                            decoration: BoxDecoration(
-                              color: a.track,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                            child: FractionallySizedBox(
-                              widthFactor: (speed / 300).clamp(0.04, 1.0),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: speedColor,
-                                  borderRadius: BorderRadius.circular(2),
+                      if (wide)
+                        SizedBox(
+                          width: _kSpeedCol,
+                          child: speed == null || speedColor == null
+                              ? const SizedBox.shrink()
+                              : ExcludeSemantics(
+                                  child: Container(
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: Spacing.md),
+                                    alignment: Alignment.centerLeft,
+                                    decoration: BoxDecoration(
+                                      color: a.track,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: FractionallySizedBox(
+                                      widthFactor: (speed / 300).clamp(0.04, 1.0),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: speedColor,
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
                         ),
-                      ],
                       IconButton(
                         tooltip: 'Details',
                         color: p.text3,
-                        icon: const Icon(Icons.chevron_right),
+                        iconSize: 20,
+                        icon: const Icon(Icons.chevron_right_rounded),
                         onPressed: () => showHitDetails(context, hit),
                       ),
                     ],
@@ -357,4 +500,16 @@ class _HitDetails extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A column name over the timeline: one line, cut short rather than wrapped.
+class _ColumnName extends StatelessWidget {
+  const _ColumnName(this.name, {this.style});
+
+  final String name;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(name, style: style, maxLines: 1, softWrap: false, overflow: TextOverflow.clip);
 }

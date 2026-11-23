@@ -65,18 +65,23 @@ List<ShotMark> shotMarks(
 }
 
 /// The clip as a track under the video: how far playback is, and every stroke and line call
-/// as a labelled mark. Tapping a mark plays that moment.
+/// as a labelled mark. Tapping a mark plays that moment; tapping or dragging along the track
+/// scrubs to that frame ([onScrub]).
 class ShotMarkerBar extends StatelessWidget {
   const ShotMarkerBar({
     super.key,
     required this.record,
     required this.frameIndex,
     required this.onSeek,
+    this.onScrub,
   });
 
   final ClipRecord record;
   final int frameIndex;
   final ValueChanged<Moment> onSeek;
+
+  /// Called with a frame index while the track is tapped or dragged.
+  final ValueChanged<int>? onScrub;
 
   static const double _labelHeight = 18;
   static const double height = 48;
@@ -85,6 +90,7 @@ class ShotMarkerBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = AnalysisColors.of(context);
     final p = AppPalette.of(context);
+    final t = TactileTokens.of(context);
     final marks = shotMarks(
       record,
       frameIndex,
@@ -100,6 +106,7 @@ class ShotMarkerBar extends StatelessWidget {
         builder: (context, box) {
           final w = box.maxWidth;
           double x(int frame) => (frame / last).clamp(0.0, 1.0) * w;
+          void scrub(double dx) => onScrub?.call(((dx / w).clamp(0.0, 1.0) * last).round());
           // Labels that would overlap the one before are left out; the current stroke's
           // label always shows.
           final shown = <ShotMark>{};
@@ -119,21 +126,42 @@ class ShotMarkerBar extends StatelessWidget {
               Positioned(
                 left: 0,
                 right: 0,
-                top: trackTop,
-                height: 4,
+                top: trackTop - 1,
+                height: 6,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: a.track, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(color: a.track, borderRadius: BorderRadius.circular(3)),
                 ),
               ),
+              // The played part, in the accent blue.
               Positioned(
                 left: 0,
                 width: progress * w,
-                top: trackTop,
-                height: 4,
+                top: trackTop - 1,
+                height: 6,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: p.ink, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: t.primary,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
+              // Tap or drag anywhere along the track to scrub; the marks on top keep their taps.
+              if (onScrub != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: trackTop - 16,
+                  height: 36,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: (d) => scrub(d.localPosition.dx),
+                      onHorizontalDragStart: (d) => scrub(d.localPosition.dx),
+                      onHorizontalDragUpdate: (d) => scrub(d.localPosition.dx),
+                    ),
+                  ),
+                ),
               for (final m in shown)
                 Positioned(
                   left: (x(m.frame) - 40).clamp(-8.0, w - 72),
@@ -175,6 +203,25 @@ class ShotMarkerBar extends StatelessWidget {
                     ),
                   ),
                 ),
+              // The playhead.
+              Positioned(
+                left: progress * w - 7,
+                top: trackTop - 5,
+                width: 14,
+                height: 14,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: t.raisedTop,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: t.primary, width: 3),
+                      boxShadow: [
+                        BoxShadow(color: t.shade, blurRadius: 4, offset: const Offset(0, 1)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           );
         },

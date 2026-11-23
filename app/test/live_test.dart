@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/shared/widgets/tactile.dart';
 import 'package:shuttlesense_app/core/device/screen_awake.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
@@ -792,7 +793,7 @@ void main() {
     final sockets = await pumpLive(tester, size: laptop);
     Future<void> pick(String label) async {
       final segment = find.descendant(
-        of: find.byWidgetPredicate((w) => w is SegmentedButton),
+        of: find.byWidgetPredicate((w) => w is DepthSegmented),
         matching: find.text(label),
       );
       await tester.ensureVisible(segment);

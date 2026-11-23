@@ -65,30 +65,26 @@ class MatchSetupField extends StatelessWidget {
       children: [
         row(
           'Match',
-          SegmentTray(
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 1, label: Text('1 game')),
-                ButtonSegment(value: 3, label: Text('Best of 3')),
-              ],
-              selected: {value.bestOf},
-              onSelectionChanged: (s) => onChanged(value.withBestOf(s.first)),
-            ),
+          DepthSegmented<int>(
+            segments: const [
+              ButtonSegment(value: 1, label: Text('1 game')),
+              ButtonSegment(value: 3, label: Text('Best of 3')),
+            ],
+            selected: {value.bestOf},
+            onSelectionChanged: (s) => onChanged(value.withBestOf(s.first)),
           ),
         ),
         row(
           'First server',
-          SegmentTray(
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: '', label: Text('Unknown')),
-                ButtonSegment(value: 'near', label: Text('Near')),
-                ButtonSegment(value: 'far', label: Text('Far')),
-              ],
-              selected: {server ?? ''},
-              onSelectionChanged: (s) =>
-                  onChanged(value.withFirstServer(s.first.isEmpty ? null : s.first)),
-            ),
+          DepthSegmented<String>(
+            segments: const [
+              ButtonSegment(value: '', label: Text('Unknown')),
+              ButtonSegment(value: 'near', label: Text('Near')),
+              ButtonSegment(value: 'far', label: Text('Far')),
+            ],
+            selected: {server ?? ''},
+            onSelectionChanged: (s) =>
+                onChanged(value.withFirstServer(s.first.isEmpty ? null : s.first)),
           ),
         ),
         if (showChangeEnds) ...[
@@ -112,15 +108,13 @@ class MatchSetupField extends StatelessWidget {
         if (showCourt)
           row(
             'Lines',
-            SegmentTray(
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'singles', label: Text('Singles')),
-                  ButtonSegment(value: 'doubles', label: Text('Doubles')),
-                ],
-                selected: {value.court},
-                onSelectionChanged: (s) => onChanged(value.withCourt(s.first)),
-              ),
+            DepthSegmented<String>(
+              segments: const [
+                ButtonSegment(value: 'singles', label: Text('Singles')),
+                ButtonSegment(value: 'doubles', label: Text('Doubles')),
+              ],
+              selected: {value.court},
+              onSelectionChanged: (s) => onChanged(value.withCourt(s.first)),
             ),
           ),
         if (showCourt && value.doubles && server != null) ...[

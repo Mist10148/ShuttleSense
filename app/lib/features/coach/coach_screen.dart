@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/api_client.dart';
@@ -111,7 +112,7 @@ class CoachScreen extends ConsumerStatefulWidget {
 
 class _CoachScreenState extends ConsumerState<CoachScreen> {
   final _input = TextEditingController();
-  final _scroll = ScrollController();
+  final _scroll = SmoothScrollController();
 
   @override
   void dispose() {

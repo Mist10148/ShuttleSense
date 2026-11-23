@@ -438,28 +438,25 @@ class _OverlayPicker extends StatelessWidget {
           children: [
             Expanded(child: Text('Overlays', style: theme.textTheme.labelLarge)),
             // All / None in a tray; the one in effect is raised.
-            SegmentTray(
-              child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                emptySelectionAllowed: true,
-                segments: const [
-                  ButtonSegment(value: 'all', label: Text('All')),
-                  ButtonSegment(value: 'none', label: Text('None')),
-                ],
-                selected: {
-                  if (options.overlays.length == kOverlays.length) 'all',
-                  if (options.overlays.isEmpty) 'none',
-                },
-                // Tapping All or None applies it; the raised segment shows which is in effect.
-                onSelectionChanged: (picked) {
-                  if (picked.contains('all') && options.overlays.length != kOverlays.length) {
-                    notifier.set(options.copyWith(overlays: kOverlays.keys.toSet()));
-                  } else if (picked.contains('none') && options.overlays.isNotEmpty) {
-                    notifier.set(options.copyWith(overlays: {}));
-                  }
-                },
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              ),
+            DepthSegmented<String>(
+              emptySelectionAllowed: true,
+              segments: const [
+                ButtonSegment(value: 'all', label: Text('All')),
+                ButtonSegment(value: 'none', label: Text('None')),
+              ],
+              selected: {
+                if (options.overlays.length == kOverlays.length) 'all',
+                if (options.overlays.isEmpty) 'none',
+              },
+              // Tapping All or None applies it; the raised segment shows which is in effect.
+              onSelectionChanged: (picked) {
+                if (picked.contains('all') && options.overlays.length != kOverlays.length) {
+                  notifier.set(options.copyWith(overlays: kOverlays.keys.toSet()));
+                } else if (picked.contains('none') && options.overlays.isNotEmpty) {
+                  notifier.set(options.copyWith(overlays: {}));
+                }
+              },
+              compact: true,
             ),
           ],
         ),

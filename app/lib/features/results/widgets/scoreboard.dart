@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../ui/depth.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/game_service_prompt.dart';
@@ -28,6 +29,7 @@ class Scoreboard extends StatelessWidget {
     this.busy = false,
     this.live = false,
     this.showHistory = true,
+    this.framed = true,
   });
 
   final ClipRecord record;
@@ -64,6 +66,9 @@ class Scoreboard extends StatelessWidget {
   /// A live session: the score is always the current one.
   final bool live;
   final bool showHistory;
+
+  /// In its own titled card; false inside a tab that already names it (Results).
+  final bool framed;
 
   /// Whether the playback position is past the last rally, where the match state (server,
   /// game point, ...) describes what is on screen.
@@ -121,178 +126,190 @@ class Scoreboard extends StatelessWidget {
         : atEnd
         ? total.gamesWon
         : seen(_gamesWonBefore(total, game));
-    return SectionCard(
-      title: 'Score and stats',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (score == null || total == null)
-            Text('Enable the referee layer to keep score.', style: theme.textTheme.bodySmall)
-          else ...[
-            if (total.bestOf > 1)
-              Text(
-                'Game $game of ${total.bestOf} · games ${won!.near}–${won.far}',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelLarge,
-              ),
-            // Finished games keep their final score once the board resets to 0–0.
-            if (total.games.isNotEmpty)
-              Text(
-                [
-                  for (var i = 0; i < total.games.length; i++)
-                    'G${total.firstGame + i} ${seen(total.games[i]).near}–${seen(total.games[i]).far}',
-                ].join(' · '),
-                key: const Key('game-scores'),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
-            if (swapped)
-              Text(
-                'Ends changed: Near and Far are the ends as they are now',
-                key: const Key('ends-changed'),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
-            Semantics(
-              label: [
-                'Score: near ${score.near}, far ${score.far}',
-                if (server != null)
-                  '${playerLabel(total.serverId ?? server)} serves from the '
-                      '${total.serviceCourt} court'
-                      '${total.receiverId == null ? '' : ' to ${playerLabel(total.receiverId!)}'}',
-              ].join('. '),
-              excludeSemantics: true,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    child: _Side(
-                      label: 'Near',
-                      points: score.near,
-                      color: colors.near,
-                      serving: server == 'near',
-                      large: live,
-                    ),
-                  ),
-                  Text(':', style: theme.textTheme.headlineMedium),
-                  Expanded(
-                    child: _Side(
-                      label: 'Far',
-                      points: score.far,
-                      color: colors.far,
-                      serving: server == 'far',
-                      large: live,
-                    ),
-                  ),
-                ],
-              ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (score == null || total == null)
+          Text('Enable the referee layer to keep score.', style: theme.textTheme.bodySmall)
+        else ...[
+          if (total.bestOf > 1)
+            Text(
+              'Game $game of ${total.bestOf} · games ${won!.near}–${won.far}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelLarge,
             ),
-            // Doubles: who serves and receives, named (Phase 9).
-            if (server != null && total.serverId != null && total.receiverId != null)
-              Text(
-                '${playerLabel(total.serverId!)} serves to ${playerLabel(total.receiverId!)}',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
-            if (atEnd) _MatchState(score: total),
-            // Doubles: the game winners chose their server; ask so the order can go on.
-            if (atEnd &&
-                onSetService != null &&
-                doubles &&
-                !total.matchOver &&
-                total.game >= 2 &&
-                total.server != null &&
-                total.serverId == null)
-              GameServicePrompt(
-                game: total.game,
-                servingSide: total.server!,
-                busy: busy,
-                onSet: onSetService!,
-              ),
-            if (onAward != null || onUndo != null) ...[
-              const SizedBox(height: Spacing.sm),
-              // One large button per side, in the side's colour, under its score.
-              if (onAward != null)
-                Row(
-                  children: [
-                    for (final side in ['near', 'far']) ...[
-                      if (side == 'far') const SizedBox(width: Spacing.sm),
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 56),
-                            backgroundColor: colors.forSide(side).withValues(alpha: 0.16),
-                            foregroundColor: theme.colorScheme.onSurface,
+          // Finished games keep their final score once the board resets to 0–0.
+          if (total.games.isNotEmpty)
+            Text(
+              [
+                for (var i = 0; i < total.games.length; i++)
+                  'G${total.firstGame + i} ${seen(total.games[i]).near}–${seen(total.games[i]).far}',
+              ].join(' · '),
+              key: const Key('game-scores'),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          if (swapped)
+            Text(
+              'Ends changed: Near and Far are the ends as they are now',
+              key: const Key('ends-changed'),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          Semantics(
+            label: [
+              'Score: near ${score.near}, far ${score.far}',
+              if (server != null)
+                '${playerLabel(total.serverId ?? server)} serves from the '
+                    '${total.serviceCourt} court'
+                    '${total.receiverId == null ? '' : ' to ${playerLabel(total.receiverId!)}'}',
+            ].join('. '),
+            excludeSemantics: true,
+            // Each side's score in its own recessed display, its point key right under it.
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final side in ['near', 'far']) ...[
+                  if (side == 'far') const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        InsetBox(
+                          radius: 16,
+                          padding: const EdgeInsets.symmetric(vertical: Spacing.md),
+                          child: _Side(
+                            label: side == 'near' ? 'Near' : 'Far',
+                            points: side == 'near' ? score.near : score.far,
+                            color: colors.forSide(side),
+                            serving: server == side,
+                            large: live,
                           ),
-                          onPressed: busy || total.matchOver ? null : () => onAward!(side),
-                          icon: Icon(Icons.add, size: 20, color: colors.forSide(side)),
-                          label: Text(side == 'near' ? 'Point Near' : 'Point Far'),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  TextButton.icon(
-                    // Undo also takes back a line-call override (D32), which is not in the
-                    // corrections list, so it stays available whenever there is one.
-                    onPressed:
-                        onUndo == null ||
-                            busy ||
-                            (total.corrections.isEmpty && !record.lineCalls.any((c) => c.reviewed))
-                        ? null
-                        : onUndo,
-                    icon: const Icon(Icons.undo, size: 18),
-                    label: const Text('Undo'),
+                        if (onAward != null) ...[
+                          const SizedBox(height: Spacing.sm),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                              foregroundColor: theme.colorScheme.onSurface,
+                            ),
+                            onPressed: busy || total.matchOver ? null : () => onAward!(side),
+                            icon: Icon(Icons.add_rounded, size: 20, color: colors.forSide(side)),
+                            label: Text(side == 'near' ? 'Point Near' : 'Point Far'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  if (onClearLast != null)
-                    TextButton(
-                      onPressed: busy ? null : onClearLast,
-                      child: const Text('Clear last winner'),
-                    ),
-                  if (onAwardReason != null ||
-                      onLet != null ||
-                      onConcede != null ||
-                      onSwapEnds != null)
-                    DecisionMenu(
-                      enabled: !busy,
-                      matchOver: total.matchOver,
-                      onAwardReason: onAwardReason,
-                      onLet: onLet,
-                      onConcede: onConcede,
-                      onSwapEnds: onSwapEnds,
-                    ),
                 ],
-              ),
-            ],
-            if (busy) const LinearProgressIndicator(),
-            if (showHistory) ...[
-              const SizedBox(height: Spacing.sm),
-              RallyHistory(
-                record: record,
-                frameIndex: frameIndex,
-                doubles: doubles,
-                onCorrect: busy ? null : onCorrect,
-              ),
-            ],
+              ],
+            ),
+          ),
+          // Doubles: who serves and receives, named (Phase 9).
+          if (server != null && total.serverId != null && total.receiverId != null)
+            Text(
+              '${playerLabel(total.serverId!)} serves to ${playerLabel(total.receiverId!)}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          if (atEnd) _MatchState(score: total),
+          // Doubles: the game winners chose their server; ask so the order can go on.
+          if (atEnd &&
+              onSetService != null &&
+              doubles &&
+              !total.matchOver &&
+              total.game >= 2 &&
+              total.server != null &&
+              total.serverId == null)
+            GameServicePrompt(
+              game: total.game,
+              servingSide: total.server!,
+              busy: busy,
+              onSet: onSetService!,
+            ),
+          if (onAward != null || onUndo != null) ...[
+            const SizedBox(height: Spacing.sm),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                TextButton.icon(
+                  // Undo also takes back a line-call override (D32), which is not in the
+                  // corrections list, so it stays available whenever there is one.
+                  onPressed:
+                      onUndo == null ||
+                          busy ||
+                          (total.corrections.isEmpty && !record.lineCalls.any((c) => c.reviewed))
+                      ? null
+                      : onUndo,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: const Text('Undo'),
+                ),
+                if (onClearLast != null)
+                  TextButton(
+                    onPressed: busy ? null : onClearLast,
+                    child: const Text('Clear last winner'),
+                  ),
+                if (onAwardReason != null ||
+                    onLet != null ||
+                    onConcede != null ||
+                    onSwapEnds != null)
+                  DecisionMenu(
+                    enabled: !busy,
+                    matchOver: total.matchOver,
+                    onAwardReason: onAwardReason,
+                    onLet: onLet,
+                    onConcede: onConcede,
+                    onSwapEnds: onSwapEnds,
+                  ),
+              ],
+            ),
           ],
-          if (summary != null && summary.strokeCounts.isNotEmpty) ...[
-            const Divider(height: 24),
-            for (final e in summary.strokeCounts.entries)
-              Row(
-                children: [
-                  Expanded(child: Text(kStrokeLabels[e.key] ?? e.key)),
-                  Text('${e.value}'),
-                ],
-              ),
+          if (busy) const LinearProgressIndicator(),
+          if (showHistory) ...[
+            const SizedBox(height: Spacing.sm),
+            RallyHistory(
+              record: record,
+              frameIndex: frameIndex,
+              doubles: doubles,
+              onCorrect: busy ? null : onCorrect,
+            ),
           ],
         ],
-      ),
+        if (summary != null && summary.strokeCounts.isNotEmpty) ...[
+          const SizedBox(height: Spacing.lg),
+          Text('Strokes', style: theme.textTheme.titleSmall),
+          const SizedBox(height: Spacing.sm),
+          // One small recessed slot per stroke: the name, then the count.
+          Wrap(
+            spacing: Spacing.sm,
+            runSpacing: Spacing.sm,
+            children: [
+              for (final e in summary.strokeCounts.entries)
+                InsetBox(
+                  radius: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        kStrokeLabels[e.key] ?? e.key,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppPalette.of(context).text2,
+                        ),
+                      ),
+                      const SizedBox(width: Spacing.sm),
+                      Text('${e.value}', style: kFigureStyle.copyWith(fontSize: 16)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
+    return framed ? SectionCard(title: 'Score and stats', child: content) : content;
   }
 }
 
@@ -547,7 +564,7 @@ class _Side extends StatelessWidget {
               ],
               Text(
                 label,
-                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                style: TextStyle(color: color, fontWeight: FontWeight.w600, letterSpacing: 0.3),
               ),
             ],
           ),

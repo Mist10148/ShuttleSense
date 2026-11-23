@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
@@ -125,7 +126,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
-  final _scroll = ScrollController();
+  final _scroll = SmoothScrollController();
 
   @override
   void dispose() {

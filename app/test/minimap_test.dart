@@ -253,10 +253,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Heatmap'));
       await tester.pump();
-      final court = find.descendant(
-        of: find.byType(CourtMinimap),
-        matching: find.byType(CustomPaint),
-      );
+      final court = find.byKey(const Key('court-picture'));
       final box = tester.getRect(court.last);
       final scroll = tester.getRect(
         // The Court section's own scroll (a laptop's page scrolls around it too).
@@ -268,7 +265,7 @@ void main() {
       expect(box.bottom, lessThanOrEqualTo(scroll.bottom));
       expect(box.shortestSide / box.longestSide, closeTo(courtViewAspect(doubles: false), 0.01));
       expect(box.longestSide, greaterThan(200));
-      expect(find.ancestor(of: court.last, matching: find.byType(ClipRect)), findsWidgets);
+      expect(find.ancestor(of: court.last, matching: find.byType(ClipRRect)), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   }

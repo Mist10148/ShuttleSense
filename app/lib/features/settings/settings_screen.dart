@@ -87,28 +87,26 @@ class SettingsScreen extends ConsumerWidget {
         SectionCard(
           title: 'Appearance',
           icon: Icons.palette_outlined,
-          child: SegmentTray(
-            child: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(
-                  value: ThemeMode.system,
-                  label: Text('System'),
-                  icon: Icon(Icons.brightness_auto),
-                ),
-                ButtonSegment(
-                  value: ThemeMode.light,
-                  label: Text('Light'),
-                  icon: Icon(Icons.light_mode),
-                ),
-                ButtonSegment(
-                  value: ThemeMode.dark,
-                  label: Text('Dark'),
-                  icon: Icon(Icons.dark_mode),
-                ),
-              ],
-              selected: {ref.watch(themeModeProvider)},
-              onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
-            ),
+          child: DepthSegmented<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.system,
+                label: Text('System'),
+                icon: Icon(Icons.brightness_auto),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                label: Text('Light'),
+                icon: Icon(Icons.light_mode),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                label: Text('Dark'),
+                icon: Icon(Icons.dark_mode),
+              ),
+            ],
+            selected: {ref.watch(themeModeProvider)},
+            onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
           ),
         ),
         const SizedBox(height: Spacing.lg),

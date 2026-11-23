@@ -36,6 +36,7 @@ import '../../shared/widgets/hit_burst.dart';
 import 'widgets/hit_anchor.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../ui/depth.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -67,7 +68,15 @@ class ResultsScreen extends ConsumerWidget {
 
     final j = job.valueOrNull;
     final filename = j == null ? null : ref.watch(videoProvider(j.videoId)).valueOrNull?.filename;
-    final below = [?filename, if (j != null) formatJobDate(j.createdAt)].join(' · ');
+    // The file is the title; what it is and when sits under it.
+    final below = [
+      'Results',
+      if (j != null) ...[
+        j.isLive ? 'Live' : 'Upload',
+        if (j.court.isNotEmpty) '${j.court[0].toUpperCase()}${j.court.substring(1)}',
+        formatJobDate(j.createdAt),
+      ],
+    ].join(' · ');
     final window = Breakpoints.of(context);
     final gutter = Breakpoints.gutter(window);
 
@@ -81,9 +90,9 @@ class ResultsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 PageHeader(
-                  title: 'Results',
+                  title: filename ?? 'Results',
                   dense: true,
-                  below: below.isEmpty ? null : below,
+                  below: below,
                   actions: _actions(context, ref, j, outputs),
                 ),
                 const SizedBox(height: Spacing.lg),
@@ -121,15 +130,25 @@ class ResultsScreen extends ConsumerWidget {
 
   List<Widget> _actions(BuildContext context, WidgetRef ref, Job? job, JobOutputs? outputs) => [
     if (job case final Job j)
-      IconButton(
-        tooltip: 'Change overlays',
-        icon: const Icon(Icons.layers_outlined),
-        onPressed: () => showRerenderSheet(context, ref, j),
+      Tooltip(
+        message: 'Change overlays',
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.layers_outlined, size: 18),
+          label: const Text('Overlays'),
+          onPressed: () => showRerenderSheet(context, ref, j),
+        ),
       ),
     PopupMenuButton<ExportFile>(
       tooltip: 'Download or share',
-      icon: const Icon(Icons.download),
       onSelected: (file) => _download(context, ref, file),
+      // A labelled key; the menu lists each file.
+      child: IgnorePointer(
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.download_rounded, size: 18),
+          label: const Text('Download'),
+          onPressed: () {},
+        ),
+      ),
       itemBuilder: (_) => [
         for (final file in ExportFile.values)
           PopupMenuItem(
@@ -179,7 +198,12 @@ class _StatsRow extends StatelessWidget {
             for (final tile in tiles)
               SizedBox(
                 width: width,
-                child: RaisedTile(padding: const EdgeInsets.all(Spacing.lg), child: tile),
+                // Recessed slots inside the tab's panel, not raised cards on a raised card.
+                child: InsetBox(
+                  radius: 14,
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
+                  child: tile,
+                ),
               ),
           ],
         );
@@ -188,31 +212,54 @@ class _StatsRow extends StatelessWidget {
   }
 }
 
-/// Under the video: the shot marks, the playback controls with the clock, and a line call
-/// waiting for review.
+/// Under the video: the shot marks (drag to scrub), the transport with the clock, the speed
+/// menu, and a line call waiting for review.
 class _StageControls extends StatelessWidget {
   const _StageControls({
     required this.record,
     required this.frameIndex,
     required this.fps,
-    required this.controls,
+    required this.target,
     required this.onSeek,
+    required this.onScrub,
+    required this.onPreviousShot,
+    required this.onNextShot,
     this.banner,
   });
 
   final ClipRecord record;
   final int frameIndex;
   final double fps;
-  final Widget? controls;
+
+  /// Null without a video to play.
+  final PlaybackTarget? target;
   final ValueChanged<Moment> onSeek;
+  final ValueChanged<int> onScrub;
+  final VoidCallback? onPreviousShot;
+  final VoidCallback? onNextShot;
   final Widget? banner;
 
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final total = record.numFrames > 0 ? record.numFrames / fps : null;
+    final clock = Text.rich(
+      TextSpan(
+        text: formatClock(frameIndex / fps),
+        children: [
+          if (total != null)
+            TextSpan(
+              text: ' / ${formatClock(total)}',
+              style: TextStyle(color: p.text3, fontWeight: FontWeight.w400),
+            ),
+        ],
+      ),
+      maxLines: 1,
+      softWrap: false,
+      style: kFigureStyle.copyWith(color: p.ink, fontSize: 16, fontWeight: FontWeight.w600),
+    );
     return Padding(
-      padding: const EdgeInsets.only(top: Spacing.sm),
+      padding: const EdgeInsets.only(top: Spacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -220,43 +267,55 @@ class _StageControls extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: raisedGradient(TactileTokens.of(context)),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: TactileTokens.of(context).rim),
-              boxShadow: raisedShadows(TactileTokens.of(context), depth: 0.7),
+              boxShadow: raisedShadows(TactileTokens.of(context), depth: 0.6),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.md, Spacing.xs),
+              padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.sm, Spacing.xs),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (record.hits.isNotEmpty || record.lineCalls.isNotEmpty)
-                    ShotMarkerBar(record: record, frameIndex: frameIndex, onSeek: onSeek),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: Spacing.md,
-                    children: [
-                      ?controls,
-                      Text.rich(
-                        TextSpan(
-                          text: formatClock(frameIndex / fps),
-                          children: [
-                            if (total != null)
-                              TextSpan(
-                                text: ' / ${formatClock(total)}',
-                                style: TextStyle(color: p.text3),
-                              ),
-                          ],
-                        ),
-                        style: kFigureStyle.copyWith(color: p.ink, fontSize: 19),
+                    Padding(
+                      padding: const EdgeInsets.only(right: Spacing.sm),
+                      child: ShotMarkerBar(
+                        record: record,
+                        frameIndex: frameIndex,
+                        onSeek: onSeek,
+                        onScrub: onScrub,
                       ),
-                    ],
-                  ),
+                    ),
+                  if (target case final t?)
+                    PlaybackControls(
+                      target: t,
+                      fps: fps,
+                      onPreviousShot: onPreviousShot,
+                      onNextShot: onNextShot,
+                      clock: clock,
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+                      child: Row(children: [clock]),
+                    ),
                 ],
               ),
             ),
           ),
-          ?banner,
+          // A line call waiting for review slides in under the bar and out once decided.
+          AnimatedSwitcher(
+            duration: MediaQuery.maybeDisableAnimationsOf(context) ?? false
+                ? Duration.zero
+                : const Duration(milliseconds: 240),
+            transitionBuilder: (child, animation) => SizeTransition(
+              sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              axisAlignment: -1,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: banner ?? const SizedBox.shrink(key: ValueKey('no-call')),
+          ),
         ],
       ),
     );
@@ -414,6 +473,9 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   bool _correcting = false;
   bool _opened = false;
 
+  /// The timeline's filters, shown in the section tab row.
+  final _timelineFilter = TimelineFilter();
+
   /// Current frame; the layout rebuilds when it changes, not on every position event.
   final ValueNotifier<int> _frameIndex = ValueNotifier(0);
   StreamSubscription<Duration>? _position;
@@ -537,6 +599,42 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
     }
   }
 
+  /// Scrubbing the shot bar: straight to [frame], with no lead-in.
+  void _scrub(int frame) {
+    final last = _record.numFrames == 0 ? 0 : _record.numFrames - 1;
+    final f = frame.clamp(0, last);
+    if (widget.videoAvailable == true) {
+      final fps = _record.fps == 0 ? 30.0 : _record.fps;
+      _player.seek(frameMid(f, fps));
+    } else {
+      _frameIndex.value = f;
+    }
+  }
+
+  /// Frames in the lead-in a seek to a stroke leaves before it.
+  int get _leadFrames {
+    final fps = _record.fps == 0 ? 30.0 : _record.fps;
+    return (kSeekLead.inMicroseconds * fps / Duration.microsecondsPerSecond).ceil();
+  }
+
+  /// J: the stroke before the playback position (or the start of the current one).
+  void _previousShot() {
+    final now = _frameIndex.value;
+    Hit? found;
+    for (final h in _record.hits) {
+      if (h.frame < now) found = h;
+    }
+    if (found != null) _seek(found);
+  }
+
+  /// L: the next stroke after the playback position.
+  void _nextShot() {
+    final now = _frameIndex.value + _leadFrames;
+    for (final h in _record.hits) {
+      if (h.frame > now) return _seek(h);
+    }
+  }
+
   /// F20: confirm or override a line call; the server re-scores and rebuilds the notes.
   Future<void> _decide(LineCall call, String decision) async {
     setState(() => _correcting = true);
@@ -566,6 +664,7 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
   void dispose() {
     _position?.cancel();
     _frameIndex.dispose();
+    _timelineFilter.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -588,9 +687,47 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
       summary: record.summary,
       strokeModel: record.strokeModel,
     ); // does not change with the frame
+    final hasHits = record.hits.isNotEmpty;
+    // Built once per record, not once per video frame: playback rebuilds the layout up to 30
+    // times a second, and these do not change with the frame.
+    final coach = SessionSummary(
+      record: record,
+      doubles: doublesJob,
+      videoAvailable: widget.videoAvailable == true,
+      onGoalChanged: record.atLeast(6)
+          ? (goal, done) async {
+              try {
+                await ref
+                    .read(apiClientProvider)
+                    .savePracticeGoal(widget.jobId, goal, completed: done);
+                ref.invalidate(recordProvider(widget.jobId));
+              } on Exception catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Could not save goal: $e')));
+                }
+              }
+            }
+          : null,
+      onSeek: _seekMoment,
+      chatAvailable: chatAvailable,
+      onAskCoach: () => context.go(Routes.chat(widget.jobId)),
+      report: CoachReportCard(
+        jobId: widget.jobId,
+        fps: fps,
+        onSeek: widget.videoAvailable == true ? _seekMoment : null,
+      ),
+    );
+    final decisions = DecisionHistory(
+      record: record,
+      onSeek: widget.videoAvailable == true ? _seekMoment : null,
+    );
     return PlaybackShortcuts(
       target: _target,
       fps: fps,
+      onPreviousShot: hasHits ? _previousShot : null,
+      onNextShot: hasHits ? _nextShot : null,
       child: ValueListenableBuilder<int>(
         valueListenable: _frameIndex,
         builder: (context, frameIndex, _) {
@@ -612,9 +749,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               frameIndex: frameIndex,
               fps: fps,
               onSeek: _seekMoment,
-              controls: widget.videoAvailable == true
-                  ? PlaybackControls(target: _target, fps: fps)
-                  : null,
+              onScrub: _scrub,
+              target: widget.videoAvailable == true ? _target : null,
+              onPreviousShot: hasHits ? _previousShot : null,
+              onNextShot: hasHits ? _nextShot : null,
               banner: call == null
                   ? null
                   : LineCallBanner(
@@ -638,11 +776,16 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
               hits: record.hits,
               currentHitId: currentHit?.id,
               onSeek: _seek,
+              filter: _timelineFilter,
             ),
+            timelineActions: record.hits.isEmpty
+                ? null
+                : TimelineFilters(filter: _timelineFilter, hits: record.hits),
             minimap: CourtMinimap(record: record, frameIndex: frameIndex),
             scoreboard: Column(
               children: [
                 Scoreboard(
+                  framed: false,
                   record: record,
                   frameIndex: frameIndex,
                   busy: _correcting,
@@ -656,41 +799,10 @@ class _ResultsBodyState extends ConsumerState<_ResultsBody> {
                   onConcede: courtside ? _concede : null,
                   onSwapEnds: (health?.supportsChangeEnds ?? false) ? _swapEnds : null,
                 ),
-                DecisionHistory(
-                  record: record,
-                  onSeek: widget.videoAvailable == true ? _seekMoment : null,
-                ),
+                decisions,
               ],
             ),
-            coach: SessionSummary(
-              record: record,
-              doubles: doublesJob,
-              videoAvailable: widget.videoAvailable == true,
-              onGoalChanged: record.atLeast(6)
-                  ? (goal, done) async {
-                      try {
-                        await ref
-                            .read(apiClientProvider)
-                            .savePracticeGoal(widget.jobId, goal, completed: done);
-                        ref.invalidate(recordProvider(widget.jobId));
-                      } on Exception catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text('Could not save goal: $e')));
-                        }
-                      }
-                    }
-                  : null,
-              onSeek: _seekMoment,
-              chatAvailable: chatAvailable,
-              onAskCoach: () => context.go(Routes.chat(widget.jobId)),
-              report: CoachReportCard(
-                jobId: widget.jobId,
-                fps: fps,
-                onSeek: widget.videoAvailable == true ? _seekMoment : null,
-              ),
-            ),
+            coach: coach,
           );
         },
       ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/tokens.dart';
+import 'smooth_scroll.dart';
+import 'top_bar.dart';
 
 /// Standard page: a scrollable column with responsive gutters and a max width. The title sits
 /// at the top of that column, aligned with the content, so every page starts the same way.
@@ -31,26 +33,29 @@ class PageScaffold extends StatelessWidget {
     final gutter = size.width >= 1600 ? Spacing.xxxl : Breakpoints.gutter(Breakpoints.of(context));
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            short ? Spacing.md : Spacing.xl,
-            gutter,
-            Spacing.xxl,
-          ),
-          children: [
-            MaxWidth(
-              maxWidth: maxWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  PageHeader(title: title, actions: actions, showBack: showBack),
-                  SizedBox(height: short ? Spacing.lg : Spacing.xl),
-                  ...children,
-                ],
-              ),
+        child: SmoothScroll(
+          builder: (context, controller) => ListView(
+            controller: controller,
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              short ? Spacing.md : Spacing.xl,
+              gutter,
+              Spacing.xxl,
             ),
-          ],
+            children: [
+              MaxWidth(
+                maxWidth: maxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PageHeader(title: title, actions: actions, showBack: showBack),
+                    SizedBox(height: short ? Spacing.lg : Spacing.xl),
+                    ...children,
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -93,7 +98,7 @@ class PageHeader extends StatelessWidget {
         : compact || MediaQuery.sizeOf(context).height < 900
         ? theme.textTheme.headlineLarge?.copyWith(fontSize: compact ? 32 : 38)
         : theme.textTheme.headlineLarge;
-    return LayoutBuilder(
+    final row = LayoutBuilder(
       builder: (context, box) => Row(
         children: [
           if (showBack && Navigator.of(context).canPop()) ...[
@@ -127,6 +132,47 @@ class PageHeader extends StatelessWidget {
             ),
         ],
       ),
+    );
+    final bar = TopBarReserve.maybeOf(context);
+    return bar == null ? row : _ClearOfTopBar(bar: bar, child: row);
+  }
+}
+
+/// Pads the header's right side so it ends where the floating top bar begins, when the two
+/// share a line. Measured after layout: the header only knows where it sits once laid out.
+class _ClearOfTopBar extends StatefulWidget {
+  const _ClearOfTopBar({required this.bar, required this.child});
+
+  final Size bar;
+  final Widget child;
+
+  @override
+  State<_ClearOfTopBar> createState() => _ClearOfTopBarState();
+}
+
+class _ClearOfTopBarState extends State<_ClearOfTopBar> {
+  double _inset = 0;
+
+  void _measure() {
+    if (!mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) return;
+    final topLeft = box.localToGlobal(Offset.zero);
+    final screen = MediaQuery.sizeOf(context).width;
+    final barLeft = screen - widget.bar.width;
+    // Only while the header is on the bar's line (not scrolled away under it).
+    final onLine = topLeft.dy < widget.bar.height + 8;
+    final right = topLeft.dx + box.size.width;
+    final inset = onLine ? (right - barLeft + Spacing.md).clamp(0.0, box.size.width / 2) : _inset;
+    if ((inset - _inset).abs() > 0.5) setState(() => _inset = inset);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    return Padding(
+      padding: EdgeInsets.only(right: _inset),
+      child: widget.child,
     );
   }
 }

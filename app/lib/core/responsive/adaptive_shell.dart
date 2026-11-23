@@ -28,10 +28,31 @@ const shellDestinations = [
 
 /// Phones: top bar, page, bottom tab bar. Tablets and laptops: one floating glass shell over
 /// the pastel canvas, holding the icon rail, the top bar and the page.
-class AdaptiveShell extends StatelessWidget {
+class AdaptiveShell extends StatefulWidget {
   const AdaptiveShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
+
+  @override
+  State<AdaptiveShell> createState() => _AdaptiveShellState();
+}
+
+class _AdaptiveShellState extends State<AdaptiveShell> {
+  /// The floating top bar's size, for the page headers that share its line.
+  /// Starts at the bar's usual height so pages do not jump before it is measured.
+  final _topBar = ValueNotifier(const Size(0, 64));
+
+  /// Only Results puts its title on the bar's line (its file name, then the bar).
+  static bool _sharesTopBarLine(BuildContext context) =>
+      GoRouterState.of(context).uri.path.endsWith('/results');
+
+  StatefulNavigationShell get navigationShell => widget.navigationShell;
+
+  @override
+  void dispose() {
+    _topBar.dispose();
+    super.dispose();
+  }
 
   void _select(int index) =>
       navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
@@ -77,19 +98,34 @@ class AdaptiveShell extends StatelessWidget {
                 children: [
                   IconRail(selectedIndex: navigationShell.currentIndex, onSelect: _select),
                   Expanded(
-                    child: Column(
+                    // The bar floats over the top-right corner. Results starts at the top
+                    // and its title row keeps clear of the bar (TopBarReserve); every other
+                    // page starts under the bar, as before.
+                    child: Stack(
                       children: [
-                        const TopBar(compact: false),
                         // Pages show the chassis through, so the rail's and top bar's shadows
                         // fall on one continuous surface instead of stopping at a page edge.
-                        Expanded(
+                        ValueListenableBuilder<Size>(
+                          valueListenable: _topBar,
+                          builder: (context, bar, child) => Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            top: _sharesTopBarLine(context) ? 0 : bar.height,
+                            child: child!,
+                          ),
                           child: Theme(
                             data: Theme.of(
                               context,
                             ).copyWith(scaffoldBackgroundColor: Colors.transparent),
-                            child: OfflineBanner(child: navigationShell),
+                            child: TopBarReserve(
+                              size: _topBar,
+                              shared: _sharesTopBarLine(context),
+                              child: OfflineBanner(child: navigationShell),
+                            ),
                           ),
                         ),
+                        Positioned(top: 0, right: 0, child: TopBar(compact: false, size: _topBar)),
                       ],
                     ),
                   ),

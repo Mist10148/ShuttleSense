@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shuttlesense_app/shared/widgets/tactile.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/data/models/clip_record.dart';
@@ -104,8 +105,8 @@ void main() {
   });
 
   group('upload screen', () {
-    SegmentedButton<String> field(WidgetTester tester) => tester.widget<SegmentedButton<String>>(
-      find.ancestor(of: find.text('Random Forest'), matching: find.byType(SegmentedButton<String>)),
+    DepthSegmented<String> field(WidgetTester tester) => tester.widget<DepthSegmented<String>>(
+      find.ancestor(of: find.text('Random Forest'), matching: find.byType(DepthSegmented<String>)),
     );
 
     /// The stroke model field sits under the "Advanced" disclosure on the upload screen.

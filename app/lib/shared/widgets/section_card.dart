@@ -10,7 +10,11 @@ class SectionCard extends StatelessWidget {
     required this.child,
     this.trailing,
     this.icon,
+    this.padding,
   });
+
+  /// Inner padding; the card's standard padding when null.
+  final EdgeInsetsGeometry? padding;
 
   final String title;
   final Widget child;
@@ -20,6 +24,35 @@ class SectionCard extends StatelessWidget {
   final IconData? icon;
 
   @override
-  Widget build(BuildContext context) =>
-      AppCard(title: title, icon: icon, actions: [?trailing], child: child);
+  Widget build(BuildContext context) => padding == null
+      ? AppCard(title: title, icon: icon, actions: [?trailing], child: child)
+      : AppCard(title: title, icon: icon, actions: [?trailing], padding: padding!, child: child);
+}
+
+/// A titled block with no card of its own, for content that already sits inside a panel
+/// (the Results tabs): a card there would be a box in a box.
+class SectionBlock extends StatelessWidget {
+  const SectionBlock({super.key, required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.2),
+        ),
+      ),
+      const SizedBox(height: 16),
+      child,
+    ],
+  );
 }
