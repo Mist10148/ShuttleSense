@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
-import '../../../shared/widgets/tactile.dart';
+import '../../../ui/depth.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
 const double kCourtWidthM = 5.18;
@@ -167,7 +167,9 @@ class _CourtMinimapState extends State<CourtMinimap> {
                 // height and the court the room it was given.
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: Tray(
+                  child: InsetBox(
+                    radius: 14,
+                    padding: const EdgeInsets.all(Spacing.xs),
                     child: Row(
                       spacing: Spacing.xs,
                       children: [
