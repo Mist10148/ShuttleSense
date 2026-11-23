@@ -6,7 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 import '../../../core/theme/tokens.dart';
-import '../../../shared/widgets/tactile.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Playback speeds offered for reviewing strokes.
 const kPlaybackRates = [0.25, 0.5, 1.0];
@@ -114,12 +114,32 @@ Future<void> stepFrame(PlaybackTarget target, double fps, int direction) async {
   await target.seek(next <= 0 ? Duration.zero : frameMid(next, fps));
 }
 
-/// Speed and frame-step buttons under the video (T4.6).
+/// The transport under the video (T4.6): previous shot, frame back, play, frame forward,
+/// next shot, then [clock]; [extras] and the speed menu sit at the right end. Flat icons on
+/// the bar instead of raised keys, so the row stays quiet; only Play is a small blue key.
 class PlaybackControls extends StatefulWidget {
-  const PlaybackControls({super.key, required this.target, required this.fps});
+  const PlaybackControls({
+    super.key,
+    required this.target,
+    required this.fps,
+    this.onPreviousShot,
+    this.onNextShot,
+    this.clock,
+    this.extras = const [],
+  });
 
   final PlaybackTarget target;
   final double fps;
+
+  /// Jump to the stroke before / after the playback position (J / L); hidden when null.
+  final VoidCallback? onPreviousShot;
+  final VoidCallback? onNextShot;
+
+  /// The time readout, right after the transport.
+  final Widget? clock;
+
+  /// Toggles shown before the speed menu (the player rings).
+  final List<Widget> extras;
 
   @override
   State<PlaybackControls> createState() => _PlaybackControlsState();
@@ -133,60 +153,184 @@ class _PlaybackControlsState extends State<PlaybackControls> {
     await widget.target.setRate(rate);
   }
 
+  static String _rateLabel(double r) => '${r == 1 ? '1' : r}×';
+
   @override
   Widget build(BuildContext context) {
-    // One sunken console: frame keys either side of the blue play key, then the speed.
-    return Tray(
-      padding: const EdgeInsets.all(Spacing.xs + 2),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          IconButton(
-            tooltip: 'Previous frame (Left arrow)',
-            icon: const Icon(Icons.skip_previous),
-            onPressed: () => stepFrame(widget.target, widget.fps, -1),
-          ),
-          StreamBuilder<bool>(
-            stream: widget.target.playingChanges,
-            initialData: widget.target.playing,
-            builder: (context, snapshot) {
-              final playing = snapshot.data ?? false;
-              return IconButton(
-                style: tactileButtonStyle(TactileButtonKind.primary).copyWith(
-                  foregroundColor: WidgetStatePropertyAll(TactileTokens.of(context).onPrimary),
-                  minimumSize: const WidgetStatePropertyAll(Size(56, kMinTouchTarget - 4)),
-                ),
-                tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                onPressed: widget.target.playOrPause,
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'Next frame (Right arrow)',
-            icon: const Icon(Icons.skip_next),
-            onPressed: () => stepFrame(widget.target, widget.fps, 1),
-          ),
-          SegmentedButton<double>(
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            segments: [
-              for (final r in kPlaybackRates)
-                ButtonSegment(value: r, label: Text('${r == 1 ? '1' : r}×'), tooltip: '$r× speed'),
+    final p = AppPalette.of(context);
+    final t = TactileTokens.of(context);
+    final flat = IconButton.styleFrom(
+      foregroundColor: p.text2,
+      iconSize: 22,
+      minimumSize: const Size.square(kMinTouchTarget),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+    final transport = <Widget>[
+      if (widget.onPreviousShot != null)
+        IconButton(
+          style: flat,
+          tooltip: 'Previous shot (J)',
+          icon: const Icon(Icons.skip_previous_rounded),
+          onPressed: widget.onPreviousShot,
+        ),
+      IconButton(
+        style: flat,
+        tooltip: 'Previous frame (Left arrow)',
+        icon: const Icon(Icons.chevron_left_rounded),
+        onPressed: () => stepFrame(widget.target, widget.fps, -1),
+      ),
+      StreamBuilder<bool>(
+        stream: widget.target.playingChanges,
+        initialData: widget.target.playing,
+        builder: (context, snapshot) {
+          final playing = snapshot.data ?? false;
+          return IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor: t.primary,
+              foregroundColor: t.onPrimary,
+              hoverColor: t.primaryDeep,
+              iconSize: 22,
+              // A 40 dp blue disc inside a full 48 dp tap target.
+              minimumSize: const Size.square(kMinTouchTarget),
+              padding: const EdgeInsets.all(4),
+              shape: const CircleBorder(side: BorderSide(color: Colors.transparent, width: 4)),
+              elevation: 1.5,
+              shadowColor: t.primary.withValues(alpha: 0.5),
+            ),
+            tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
+            icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            onPressed: widget.target.playOrPause,
+          );
+        },
+      ),
+      IconButton(
+        style: flat,
+        tooltip: 'Next frame (Right arrow)',
+        icon: const Icon(Icons.chevron_right_rounded),
+        onPressed: () => stepFrame(widget.target, widget.fps, 1),
+      ),
+      if (widget.onNextShot != null)
+        IconButton(
+          style: flat,
+          tooltip: 'Next shot (L)',
+          icon: const Icon(Icons.skip_next_rounded),
+          onPressed: widget.onNextShot,
+        ),
+    ];
+    final speed = PopupMenuButton<double>(
+      tooltip: 'Playback speed',
+      initialValue: _rate,
+      onSelected: _setRate,
+      itemBuilder: (_) => [
+        for (final r in kPlaybackRates)
+          PopupMenuItem(value: r, child: Text('${_rateLabel(r)}  speed')),
+      ],
+      child: FlatPill(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_rateLabel(_rate)),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more_rounded, size: 16),
+          ],
+        ),
+      ),
+    );
+    // The theme's raised icon keys are reset here: this row uses flat icons.
+    return Theme(
+      data: Theme.of(context).copyWith(iconButtonTheme: const IconButtonThemeData()),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final left = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...transport,
+              if (widget.clock != null) ...[const SizedBox(width: Spacing.md), widget.clock!],
             ],
-            selected: {_rate},
-            onSelectionChanged: (s) => _setRate(s.first),
-          ),
-        ],
+          );
+          final right = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...widget.extras,
+              const SizedBox(width: Spacing.xs),
+              speed,
+            ],
+          );
+          if (box.maxWidth.isFinite && box.maxWidth >= 560) {
+            return Row(children: [left, const Spacer(), right]);
+          }
+          return Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: Spacing.xs,
+            children: [left, right],
+          );
+        },
       ),
     );
   }
 }
 
+/// A flat text pill on the playback bar (speed menu, rings toggle): no raised face, a soft
+/// fill on hover and, for a toggle ([on] not null), a small dot that lights up when on.
+class FlatPill extends StatelessWidget {
+  const FlatPill({super.key, required this.child, this.onTap, this.on, this.tooltip});
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final bool? on;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kMinTouchTarget, minWidth: kMinTouchTarget),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.sm + 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (on != null) ...[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: on! ? StatusColors.of(context).inCall : p.text3.withValues(alpha: 0.4),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            DefaultTextStyle.merge(
+              style: TextStyle(color: p.text2, fontSize: 13, fontWeight: FontWeight.w500),
+              child: IconTheme.merge(
+                data: IconThemeData(color: p.text2),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (onTap == null) return content;
+    Widget pill = Semantics(
+      button: true,
+      toggled: on,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: content),
+      ),
+    );
+    if (tooltip != null) pill = Tooltip(message: tooltip, child: pill);
+    return pill;
+  }
+}
+
 /// Keyboard control for the whole results screen (T4.11): Space plays or pauses, the left
-/// and right arrows step one frame. Only while no control inside has focus: a focused
+/// and right arrows step one frame, J and L jump to the previous and next stroke. Only while no control inside has focus: a focused
 /// button, chip or list keeps Space and the arrows for itself.
 class PlaybackShortcuts extends StatelessWidget {
   const PlaybackShortcuts({
@@ -194,11 +338,17 @@ class PlaybackShortcuts extends StatelessWidget {
     required this.target,
     required this.fps,
     required this.child,
+    this.onPreviousShot,
+    this.onNextShot,
   });
 
   final PlaybackTarget target;
   final double fps;
   final Widget child;
+
+  /// J and L: the stroke before / after the playback position.
+  final VoidCallback? onPreviousShot;
+  final VoidCallback? onNextShot;
 
   @override
   Widget build(BuildContext context) {
@@ -210,6 +360,8 @@ class PlaybackShortcuts extends StatelessWidget {
           LogicalKeyboardKey.space when event is KeyDownEvent => target.playOrPause,
           LogicalKeyboardKey.arrowLeft => () => stepFrame(target, fps, -1),
           LogicalKeyboardKey.arrowRight => () => stepFrame(target, fps, 1),
+          LogicalKeyboardKey.keyJ when event is KeyDownEvent => onPreviousShot,
+          LogicalKeyboardKey.keyL when event is KeyDownEvent => onNextShot,
           _ => null,
         };
         if (action == null) return KeyEventResult.ignored;

@@ -194,7 +194,10 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('0.5×'));
+    await tester.tap(find.byTooltip('Playback speed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0.5×  speed'));
+    await tester.pumpAndSettle();
     expect(target.rates, [0.5]);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     expect(target.playing, isTrue);
