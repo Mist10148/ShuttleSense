@@ -228,8 +228,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   // No divider lines: the card already frames the section.
                   data: theme.copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: Spacing.sm),
+                    tilePadding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+                    childrenPadding: const EdgeInsets.fromLTRB(
+                      Spacing.md,
+                      0,
+                      Spacing.md,
+                      Spacing.md,
+                    ),
                     title: const Text('Advanced'),
                     subtitle: Text('Stroke model: ${model ?? 'server default'}'),
                     children: [
@@ -294,30 +299,34 @@ class VideoDropZone extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final text = Theme.of(context).textTheme;
-    return CustomPaint(
-      painter: _DashedBorderPainter(color: p.text3, radius: Radii.lg),
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.lg),
-        child: Column(
-          children: [
-            IconChip(icon: Icons.movie_outlined, background: p.lavender),
-            const SizedBox(height: Spacing.sm),
-            Text('Choose a rally video', style: text.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: Spacing.xs),
-            Text(
-              'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
-              'Best results from a phone on a tripod, elevated and behind the baseline.',
-              style: text.bodySmall?.copyWith(color: p.text2),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: Spacing.md),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: Spacing.sm,
-              runSpacing: Spacing.sm,
-              children: actions,
-            ),
-          ],
+    return InsetBox(
+      radius: Radii.lg + 6,
+      padding: const EdgeInsets.all(Spacing.sm + 2),
+      child: CustomPaint(
+        painter: _DashedBorderPainter(color: p.text3, radius: Radii.lg),
+        child: Padding(
+          padding: const EdgeInsets.all(Spacing.lg),
+          child: Column(
+            children: [
+              const IconWell(icon: Icons.movie_outlined, size: 44, iconSize: 22),
+              const SizedBox(height: Spacing.sm),
+              Text('Choose a rally video', style: text.titleMedium, textAlign: TextAlign.center),
+              const SizedBox(height: Spacing.xs),
+              Text(
+                'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
+                'Best results from a phone on a tripod, elevated and behind the baseline.',
+                style: text.bodySmall?.copyWith(color: p.text2),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Spacing.md),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: Spacing.sm,
+                runSpacing: Spacing.sm,
+                children: actions,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -428,13 +437,29 @@ class _OverlayPicker extends StatelessWidget {
         Row(
           children: [
             Expanded(child: Text('Overlays', style: theme.textTheme.labelLarge)),
-            TextButton(
-              onPressed: () => notifier.set(options.copyWith(overlays: kOverlays.keys.toSet())),
-              child: const Text('All'),
-            ),
-            TextButton(
-              onPressed: () => notifier.set(options.copyWith(overlays: {})),
-              child: const Text('None'),
+            // All / None in a tray; the one in effect is raised.
+            SegmentTray(
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                emptySelectionAllowed: true,
+                segments: const [
+                  ButtonSegment(value: 'all', label: Text('All')),
+                  ButtonSegment(value: 'none', label: Text('None')),
+                ],
+                selected: {
+                  if (options.overlays.length == kOverlays.length) 'all',
+                  if (options.overlays.isEmpty) 'none',
+                },
+                // Tapping All or None applies it; the raised segment shows which is in effect.
+                onSelectionChanged: (picked) {
+                  if (picked.contains('all') && options.overlays.length != kOverlays.length) {
+                    notifier.set(options.copyWith(overlays: kOverlays.keys.toSet()));
+                  } else if (picked.contains('none') && options.overlays.isNotEmpty) {
+                    notifier.set(options.copyWith(overlays: {}));
+                  }
+                },
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              ),
             ),
           ],
         ),
@@ -446,22 +471,25 @@ class _OverlayPicker extends StatelessWidget {
           ),
           const SizedBox(height: Spacing.xs),
           // Each group of options sits in its own recessed well (lib/ui/depth.dart).
-          InsetBox(
-            radius: 14,
-            padding: const EdgeInsets.all(Spacing.xs + 2),
-            child: Wrap(
-              spacing: Spacing.sm,
-              runSpacing: Spacing.sm,
-              children: [
-                for (final name in names)
-                  _OverlayChip(
-                    name: name,
-                    label: kOverlays[name]!,
-                    selected: options.overlays.contains(name),
-                    reason: reasons[name],
-                    onSelected: (on) => notifier.toggleOverlay(name, on),
-                  ),
-              ],
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: InsetBox(
+              radius: 14,
+              padding: const EdgeInsets.all(Spacing.xs + 2),
+              child: Wrap(
+                spacing: Spacing.sm,
+                runSpacing: Spacing.sm,
+                children: [
+                  for (final name in names)
+                    _OverlayChip(
+                      name: name,
+                      label: kOverlays[name]!,
+                      selected: options.overlays.contains(name),
+                      reason: reasons[name],
+                      onSelected: (on) => notifier.toggleOverlay(name, on),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
