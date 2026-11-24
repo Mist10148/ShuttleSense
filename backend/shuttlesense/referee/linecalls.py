@@ -246,4 +246,5 @@ def clear_override(record: ClipRecord, rally_index: int) -> None:
         rally.landing.in_court = call.call == "in"
         rally.landing.confidence = call.confidence
         hits = [h for h in record.hits if h.rally_index == rally.index]
-        rally.winner = rally_winner(rally.landing, hits[-1].player if hits else None, size[1] / 2)
+        last = hits[-1].player if hits else None
+        rally.winner = rally_winner(rally.landing, last, size[1] / 2, check_side=True)

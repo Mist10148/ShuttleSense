@@ -218,3 +218,13 @@ def test_a_shuttle_held_by_a_player_is_not_a_landing() -> None:
     assert held_by_player(record, 0, np.array([130.0, 260.0]))  # at hand height
     assert not held_by_player(record, 0, np.array([130.0, 390.0]))  # at the feet: on the floor
     assert not held_by_player(record, 0, np.array([400.0, 260.0]))  # away from the player
+
+
+def test_an_out_call_must_agree_with_the_half_it_landed_on() -> None:
+    long_far = Landing(x_m=2.0, y_m=14.2, in_court=False, confidence=0.9)
+    assert rally_winner(long_far, "near", 6.7, check_side=True) == "far"
+    # Out on the far half, but the last hit seen was far's: a hit was missed, nobody scores.
+    assert rally_winner(long_far, "far", 6.7, check_side=True) is None
+    assert rally_winner(long_far, "far", 6.7) == "near"  # a referee's own call still counts
+    wide_near = Landing(x_m=-0.8, y_m=3.0, in_court=False, confidence=0.9)
+    assert rally_winner(wide_near, "far", 6.7, check_side=True) == "near"

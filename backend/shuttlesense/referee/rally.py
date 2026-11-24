@@ -196,17 +196,27 @@ def landing_call(
 
 
 def rally_winner(
-    landing: Landing | None, last_hitter: PlayerSide | None, net_y: float
+    landing: Landing | None,
+    last_hitter: PlayerSide | None,
+    net_y: float,
+    *,
+    check_side: bool = False,
 ) -> PlayerSide | None:
     """In: the player on whose half it landed loses. Out: the last hitter loses.
 
     Uncertain calls (confidence < 0.5) award nobody; the user confirms them in the app.
+    With check_side (automated calls), an OUT must also agree with where it landed: a shot
+    out on one side's half was hit by the other side, so when the last detected hitter is
+    on the half it landed on (a missed hit, or a mishit) nobody is awarded (D33). A
+    referee's own call (override) skips this check.
     """
     if landing is None or landing.confidence < 0.5:
         return None
     if landing.in_court:
         return "far" if landing.y_m < net_y else "near"
     if last_hitter is None:
+        return None
+    if check_side and ("far" if landing.y_m >= net_y else "near") == last_hitter:
         return None
     return "far" if last_hitter == "near" else "near"
 
@@ -284,7 +294,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             )
         last = hits_in[-1].player if hits_in else None
         if size and seg.closed:
-            rally.winner = rally_winner(rally.landing, last, size[1] / 2)
+            rally.winner = rally_winner(rally.landing, last, size[1] / 2, check_side=True)
         rallies.append(rally)
 
     for f in record.frames:
