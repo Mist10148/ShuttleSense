@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — automatic scoring
+
+### Fixed
+
+- **Landings are found on HD video:** the rest rule tolerates tracker jitter (radius scaled to the frame height) and a missed detection or two, so points are awarded automatically instead of staying 0–0.
+- **No false points:** a static false detection, a shuttle held in a hand, a rest far off court, a landing on the net line, or an OUT call that disagrees with the last detected hitter no longer award a point; the rally waits for the user (D45).
+- **Doubles lines:** line calls always use the match's singles or doubles court.
+
 ## Unreleased — app redesign
 
 The Flutter app moves to a light, card-based look with pastel accents. It ships in six stacked pull requests.

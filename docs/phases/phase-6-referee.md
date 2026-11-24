@@ -38,6 +38,7 @@
   - end: shuttle invisible for `lost_frames_end` frames, or shuttle y-position stationary (< 3 px movement) for `stationary_frames_end` frames after the last hit.
 - [x] Fill `rallies[]` (index, start_frame, end_frame, stroke_count), `hits[].rally_index`, and `frames[].rally_state` (`in_play` inside a rally, `between_rallies` outside).
 - [x] Handle clips that start mid-rally (first rally has no serve) and end mid-rally (last rally open: `end_frame = num_frames - 1`, winner null).
+- [x] (Nov 25, D45) The rest rule uses a radius instead of a per-frame step: detections within `rest_radius_px` (6 px at 720p, scaled by the frame height) of where the shuttle settled, with up to two missed detections, so tracker jitter on HD footage no longer hides landings. A rest needs a flight into it (`min_approach_px` within `approach_frames`); a detection that never moved ends the rally without a landing.
 
 **Tests** (`tests/test_referee.py`): `test_two_rallies_separated_by_pause`, `test_rally_ends_when_shuttle_stationary`, `test_clip_starting_mid_rally`.
 
@@ -56,6 +57,7 @@
 - [x] In/out for singles: inside `0 ≤ x ≤ 5.18`, `0 ≤ y ≤ 13.40` (long service line for singles = baseline).
 - [x] Confidence from distance to the nearest line: `min(1, d / 0.3 m)`; below `in_out_margin_m` → mark `uncertain` (confidence < 0.5) and never auto-award without user confirmation in the app. (T8.3 replaces the fixed margin with an uncertainty band from homography and tracking error and adds `line_calls[]`.)
 - [x] Fill `rallies[].landing`.
+- [x] (Nov 25, D45) Guards against false points: a rest high in a player's box (held, not on the floor) gives no landing; a rest more than `max_out_m` (2 m, the BWF court surround) outside the lines, or an IN landing within the band of the net, is UNCERTAIN. Calls use the match's court (singles or doubles) from the job, not only `line_call.court`.
 
 **Tests.** `test_referee.py::test_inside_court_is_in`, `::test_close_to_line_is_uncertain`, `::test_landing_frame_is_after_last_hit`.
 
@@ -75,6 +77,7 @@
 - [x] Add `apply_rallies(rallies, start_score=(0, 0)) -> list[ScorePair]` that computes `score_after` for each rally and stops at `game_winner`.
 - [x] Optional starting score from the job request (`POST /jobs` field `start_score`, API change) for clips that start mid-game.
 - [x] Fill `rallies[].winner`, `score_after`, and `record.score`.
+- [x] (Nov 25, D45) An automated OUT must agree with the half it landed on: when the last detected hitter is on that half (a missed hit), nobody is awarded and the user decides. A referee's override is not checked.
 
 **Tests.** Existing `test_bwf_game_winner`; add `test_out_shot_loses_rally`, `test_in_shot_wins_rally`, `test_score_sequence`, `test_deuce_to_30`.
 

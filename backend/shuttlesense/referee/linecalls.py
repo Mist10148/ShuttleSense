@@ -38,7 +38,7 @@ DEFAULTS: dict[str, Any] = {
     "tracking_err_px": 4.0,  # TrackNetV3 is counted correct within 4 px
     "min_band_m": 0.05,
     # BWF asks for 2 m of clear floor around the court: a rest farther out than this is
-    # more likely a false detection (stands, boards) than a shuttle hit out (D33).
+    # more likely a false detection (stands, boards) than a shuttle hit out (D45).
     "max_out_m": 2.0,
 }
 
@@ -128,7 +128,7 @@ def implausible(
     band_m: float,
     cfg: dict[str, Any],
 ) -> bool:
-    """Whether a landing cannot be trusted to decide a rally, whatever its margin (D33).
+    """Whether a landing cannot be trusted to decide a rally, whatever its margin (D45).
 
     A rest far beyond the court surround is more likely a false detection than a shot, and
     an IN landing within the band of the net leaves the half (so the winner) unknown.

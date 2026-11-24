@@ -51,7 +51,7 @@ def _approached(
 
     A real landing follows a flight, so some detection in the approach_frames before the
     rest lies min_approach_px or more away. A detection that never moved (a logo, a line,
-    a shuttle lying off court the whole time) is not a landing (D33).
+    a shuttle lying off court the whole time) is not a landing (D45).
     """
     lookback = int(cfg.get("approach_frames", APPROACH_FRAMES))
     far = float(cfg.get("min_approach_px", MIN_APPROACH_PX))
@@ -207,7 +207,7 @@ def rally_winner(
     Uncertain calls (confidence < 0.5) award nobody; the user confirms them in the app.
     With check_side (automated calls), an OUT must also agree with where it landed: a shot
     out on one side's half was hit by the other side, so when the last detected hitter is
-    on the half it landed on (a missed hit, or a mishit) nobody is awarded (D33). A
+    on the half it landed on (a missed hit, or a mishit) nobody is awarded (D45). A
     referee's own call (override) skips this check.
     """
     if landing is None or landing.confidence < 0.5:
