@@ -26,6 +26,8 @@ import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../shared/widgets/helper_text.dart';
+import '../mode/mode_screen.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -804,9 +806,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     return PageScaffold(
       title: 'Watch & Analyze',
       maxWidth: 900,
-      actions: [
-        TextButton(onPressed: () => context.go(Routes.mode), child: const Text('Change mode')),
-      ],
+      actions: const [ChangeModeButton()],
       children: [
         if (health?.watchVideo != true)
           const Text('This backend does not support Watch & Analyze.')
@@ -889,18 +889,17 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                         }),
                 ),
                 const Text('Confirm the match format:'),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final format in ['singles', 'doubles'])
-                      ChoiceChip(
-                        label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
-                        selected: matchType == format,
-                        onSelected: scanning || detectingCourt
-                            ? null
-                            : (_) => setState(() => matchType = format),
-                      ),
+                DepthSegmented<String>(
+                  segments: const [
+                    ButtonSegment(value: 'singles', label: Text('Singles')),
+                    ButtonSegment(value: 'doubles', label: Text('Doubles')),
                   ],
+                  selected: {?matchType},
+                  emptySelectionAllowed: true,
+                  // Tapping the chosen format again keeps it (as the chips did).
+                  onSelectionChanged: scanning || detectingCourt
+                      ? null
+                      : (v) => setState(() => matchType = v.isEmpty ? matchType : v.first),
                 ),
               ],
             ),
@@ -1154,7 +1153,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
           const SizedBox(height: Spacing.lg),
           if (!stopping && started && error == null)
             Wrap(
-              spacing: 8,
+              spacing: Spacing.sm,
+              runSpacing: Spacing.sm,
               children: [
                 FilledButton(
                   onPressed: realTime && player == null
@@ -1221,8 +1221,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
               child: const Text('Try again'),
             ),
         ],
-        if (error != null)
-          Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        if (error != null) HelperText(error!, error: true),
       ],
     );
   }

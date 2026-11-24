@@ -130,7 +130,7 @@ class ResultsLayout extends StatelessWidget {
                 builder: (context, box) {
                   final tray = InsetBox(
                     radius: 14,
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(Spacing.xs),
                     child: TabBar(
                       isScrollable: true,
                       tabAlignment: TabAlignment.start,

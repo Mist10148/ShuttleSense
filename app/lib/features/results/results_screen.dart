@@ -108,7 +108,7 @@ class ResultsScreen extends ConsumerWidget {
                       detail: '$e',
                       action: FilledButton(
                         onPressed: () => ref.invalidate(recordProvider(jobId)),
-                        child: const Text('Retry'),
+                        child: const Text('Try again'),
                       ),
                     ),
                     data: (record) => _ResultsBody(

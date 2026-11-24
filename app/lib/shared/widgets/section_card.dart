@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/tokens.dart';
 import 'surfaces.dart';
 
 /// Titled card used for result panels (minimap, scoreboard, timeline, …).
@@ -51,7 +52,7 @@ class SectionBlock extends StatelessWidget {
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.2),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: Spacing.lg),
       child,
     ],
   );
