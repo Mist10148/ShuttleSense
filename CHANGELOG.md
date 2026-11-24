@@ -7,6 +7,7 @@
 - **Landings are found on HD video:** the rest rule tolerates tracker jitter (radius scaled to the frame height) and a missed detection or two, so points are awarded automatically instead of staying 0–0.
 - **No false points:** a static false detection, a shuttle held in a hand, a rest far off court, a landing on the net line, or an OUT call that disagrees with the last detected hitter no longer award a point; the rally waits for the user (D45).
 - **Doubles lines:** line calls always use the match's singles or doubles court.
+- **Shuttle lost as it lands:** when the tracker misses the shuttle as it falls and finds it again lying where it fell, that is the landing, so the rally scores in uploads, Live and Watch (D46).
 
 ## Unreleased — app redesign
 
