@@ -425,6 +425,8 @@ def test_watch_enables_cache_without_changing_live_defaults():
     model = ModelPerception.__new__(ModelPerception)
     model.tracker = SimpleNamespace(watch_outside_tracking=False)
     model.watch_preprocess_cache = False
+    model.detect = lambda frame: []
+    model.device = "cpu"
     enable_watch_player_continuity(model)
     assert model.watch_preprocess_cache
     assert model.tracker.watch_outside_tracking
@@ -441,6 +443,7 @@ def test_watch_experimental_pose_batch_is_session_local():
     original.with_batch = lambda size: lambda frame: ["batch", size]
     model = ModelPerception.__new__(ModelPerception)
     model.detect = original
+    model.device = "cpu"
     model.config = {"watch": {"pose_batch_size": 8}}
     enable_watch_player_continuity(model)
     assert model.detect(None) == ["batch", 8]

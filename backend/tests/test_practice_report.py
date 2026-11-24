@@ -223,6 +223,7 @@ def test_failed_provider_reports_clear_fallback_reason():
 
 def test_rate_limit_is_not_reported_as_a_missing_key(monkeypatch):
     from shuttlesense.coach.llm import ChatError
+
     monkeypatch.setattr("shuttlesense.practice.report.AI_RETRY_BASE_S", 0)
 
     class Limited:
@@ -237,15 +238,19 @@ def test_rate_limit_is_not_reported_as_a_missing_key(monkeypatch):
 
 def test_rate_limit_retries_once_and_recovers(monkeypatch):
     from shuttlesense.coach.llm import ChatError
+
     monkeypatch.setattr("shuttlesense.practice.report.AI_RETRY_BASE_S", 0)
+
     class TemporarilyLimited:
         name = "gemini"
         calls = 0
+
         async def generate_json(self, *args, **kwargs):
             self.calls += 1
             if self.calls == 1:
                 raise ChatError("rate limited", 429)
             return ReportChoice(evidence_ids=["attempt-1-observation-1"])
+
     provider = TemporarilyLimited()
     report = asyncio.run(create_practice_report([attempt()], provider))
     assert provider.calls == 2 and report.generated_by == "gemini"

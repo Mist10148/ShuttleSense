@@ -930,6 +930,60 @@
         "title": "GameServiceIn",
         "type": "object"
       },
+      "GeneralPracticeSetup": {
+        "properties": {
+          "analysis_kind": {
+            "const": "general",
+            "title": "Analysis Kind",
+            "type": "string"
+          },
+          "review_seconds": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 100,
+            "title": "Review Seconds",
+            "type": "array"
+          },
+          "selected_bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Selected Bbox",
+            "type": "array"
+          },
+          "selection_frame": {
+            "minimum": 0.0,
+            "title": "Selection Frame",
+            "type": "integer"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analysis_kind",
+          "video_id",
+          "selected_bbox",
+          "selection_frame"
+        ],
+        "title": "GeneralPracticeSetup",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -963,9 +1017,24 @@
             "title": "Device",
             "type": "string"
           },
+          "practice_court_watch": {
+            "default": false,
+            "title": "Practice Court Watch",
+            "type": "boolean"
+          },
+          "practice_general": {
+            "default": false,
+            "title": "Practice General",
+            "type": "boolean"
+          },
           "practice_video": {
             "default": false,
             "title": "Practice Video",
+            "type": "boolean"
+          },
+          "practice_watch": {
+            "default": false,
+            "title": "Practice Watch",
             "type": "boolean"
           },
           "schema_version": {
@@ -2256,6 +2325,35 @@
         "title": "Position",
         "type": "object"
       },
+      "PracticeChatRequest": {
+        "properties": {
+          "context_version": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Version",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "maxItems": 12,
+            "title": "History",
+            "type": "array"
+          },
+          "message": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "context_version"
+        ],
+        "title": "PracticeChatRequest",
+        "type": "object"
+      },
       "PracticeEvent": {
         "properties": {
           "confidence": {
@@ -2429,6 +2527,12 @@
       },
       "PracticeSetup": {
         "properties": {
+          "analysis_kind": {
+            "const": "stroke",
+            "default": "stroke",
+            "title": "Analysis Kind",
+            "type": "string"
+          },
           "arm": {
             "enum": [
               "left",
@@ -4988,7 +5092,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PracticeSetup"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GeneralPracticeSetup"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PracticeSetup"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },
@@ -5072,6 +5184,195 @@
         "summary": "Practice Session"
       }
     },
+    "/practice/sessions/{job_id}/analysis": {
+      "get": {
+        "operationId": "practice_analysis_practice_sessions__job_id__analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Analysis"
+      }
+    },
+    "/practice/sessions/{job_id}/chat": {
+      "post": {
+        "operationId": "practice_chat_practice_sessions__job_id__chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Chat"
+      }
+    },
+    "/practice/sessions/{job_id}/control/{action}": {
+      "post": {
+        "operationId": "control_practice_practice_sessions__job_id__control__action__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pause",
+                "resume",
+                "stop"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control Practice"
+      }
+    },
     "/practice/sessions/{job_id}/events": {
       "put": {
         "description": "Save confirmed or corrected moments and invalidate the cached report.",
@@ -5136,6 +5437,114 @@
           }
         },
         "summary": "Update Events"
+      }
+    },
+    "/practice/sessions/{job_id}/report": {
+      "get": {
+        "operationId": "practice_report_practice_sessions__job_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Practice Report"
+      },
+      "post": {
+        "operationId": "refresh_practice_report_practice_sessions__job_id__report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Alternative to the header for <video> tags",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Alternative to the header for <video> tags",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Practice Report"
       }
     },
     "/practice/sessions/{job_id}/result": {
@@ -5281,6 +5690,16 @@
               "minimum": 0,
               "title": "Frame",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "watch_grid",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Watch Grid",
+              "type": "boolean"
             }
           },
           {
