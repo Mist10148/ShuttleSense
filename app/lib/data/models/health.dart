@@ -19,6 +19,7 @@ class Health {
     this.practiceVideo = false,
     this.practiceWatch = false,
     this.practiceCourtWatch = false,
+    this.practiceGeneral = false,
   });
 
   final String status;
@@ -42,6 +43,7 @@ class Health {
   final bool practiceVideo;
   final bool practiceWatch;
   final bool practiceCourtWatch;
+  final bool practiceGeneral;
 
   /// The clip record version this app was built against (backend/shuttlesense/schema.py).
   /// Minor versions only add optional fields, so any 1.x backend works.
@@ -89,5 +91,6 @@ class Health {
     practiceVideo: j['practice_video'] == true,
     practiceWatch: j['practice_watch'] == true,
     practiceCourtWatch: j['practice_court_watch'] == true,
+    practiceGeneral: j['practice_general'] == true,
   );
 }

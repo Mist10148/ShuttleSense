@@ -115,12 +115,23 @@ class TactileButtonSurface extends StatelessWidget {
     final focused = states.contains(WidgetState.focused);
     final shape = BorderRadius.circular(radius);
 
+    final dark = Theme.of(context).brightness == Brightness.dark;
     BoxDecoration decoration;
     if (disabled) {
-      decoration = BoxDecoration(
-        color: kind == TactileButtonKind.ghost ? null : t.recess.withValues(alpha: 0.6),
-        borderRadius: shape,
-      );
+      decoration = switch (kind) {
+        // Still recognisably the main action, just not ready: a soft blue tint and edge.
+        TactileButtonKind.primary => BoxDecoration(
+          color: t.primary.withValues(alpha: dark ? 0.20 : 0.13),
+          borderRadius: shape,
+          border: Border.all(color: t.primary.withValues(alpha: dark ? 0.40 : 0.30)),
+        ),
+        // Sunk into the surface (an inner shadow is painted below), so it reads as "not now".
+        TactileButtonKind.secondary => BoxDecoration(
+          color: t.recess.withValues(alpha: dark ? 0.9 : 0.75),
+          borderRadius: shape,
+        ),
+        TactileButtonKind.ghost => BoxDecoration(borderRadius: shape),
+      };
     } else {
       switch (kind) {
         case TactileButtonKind.primary:
@@ -165,29 +176,38 @@ class TactileButtonSurface extends StatelessWidget {
         case TactileButtonKind.secondary:
           // A light key that stands clear of the card: a top-lit face, a fine edge and a
           // short drop shadow, so it does not melt into the surface behind it.
-          final dark = Theme.of(context).brightness == Brightness.dark;
+          // A clearer edge and a face a touch cooler than the card, so the key never
+          // melts into a white card.
           final edge = t.flat
               ? t.rim
               : (dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFF112D4E).withValues(alpha: 0.14));
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : const Color(0xFF112D4E).withValues(alpha: 0.22));
           decoration = BoxDecoration(
-            gradient: pressed ? null : raisedGradient(t),
+            gradient: pressed
+                ? null
+                : LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [t.raisedTop, Color.lerp(t.raisedBottom, t.recess, 0.35)!],
+                  ),
             color: pressed ? t.recess : null,
             borderRadius: shape,
-            border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.45) : edge),
+            border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.5) : edge),
+            // Light from above: a soft shadow straight down and a tight contact shadow, no
+            // glow on the far side (that read as a smudge around small keys).
             boxShadow: pressed
                 ? null
                 : [
                     BoxShadow(
-                      color: t.shade,
-                      blurRadius: hovered ? 14 : 8,
-                      offset: Offset(0, hovered ? 6 : 3),
+                      color: t.shade.withValues(alpha: t.shade.a * 0.75),
+                      blurRadius: hovered ? 14 : 9,
+                      offset: Offset(0, hovered ? 5 : 3),
                     ),
                     BoxShadow(
-                      color: t.highlight.withValues(alpha: t.highlight.a * 0.8),
-                      blurRadius: 6,
-                      offset: const Offset(-2, -2),
+                      color: t.shade.withValues(alpha: t.shade.a * 0.45),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
                     ),
                   ],
           );
@@ -202,34 +222,35 @@ class TactileButtonSurface extends StatelessWidget {
       decoration = decoration.copyWith(border: Border.all(color: t.primary, width: 2));
     }
 
-    final (bevelLight, bevelDark) = bevelColors(context);
     final raised = !disabled && !pressed && kind != TactileButtonKind.ghost;
-    Widget surface = AnimatedContainer(
+    // A pressed secondary button sinks: an inner shadow along its top-left edge. A disabled
+    // one stays sunk. The shadow sits on the face, under the label, so the text stays crisp.
+    final sunk =
+        (pressed && kind != TactileButtonKind.primary && !disabled) ||
+        (disabled && kind == TactileButtonKind.secondary);
+    final Widget surface = AnimatedContainer(
       duration: still ? Duration.zero : Duration(milliseconds: pressed ? 60 : 160),
       curve: const Cubic(0.2, 0.8, 0.2, 1),
       decoration: decoration,
       child: CustomPaint(
+        painter: sunk
+            ? InsetPainter(
+                radius: radius,
+                fill: const LinearGradient(colors: [Colors.transparent, Colors.transparent]),
+                shade: t.innerShade,
+                light: t.innerLight,
+                depth: 2.5,
+              )
+            : null,
+        // A thin lit top edge on raised keys (no dark lip on the light ones).
         foregroundPainter: raised
             ? (kind == TactileButtonKind.primary
                   ? _TopLightPainter(radius: radius)
-                  : BevelPainter(radius: radius, light: bevelLight, dark: bevelDark))
+                  : _TopLightPainter(radius: radius, top: dark ? 0.10 : 0.9, bottom: 0))
             : null,
         child: child,
       ),
     );
-    // A pressed secondary button sinks: an inner shadow along its top-left edge.
-    if (pressed && kind != TactileButtonKind.primary && !disabled) {
-      surface = CustomPaint(
-        foregroundPainter: InsetPainter(
-          radius: radius,
-          fill: const LinearGradient(colors: [Colors.transparent, Colors.transparent]),
-          shade: t.innerShade,
-          light: t.innerLight,
-          depth: 2.5,
-        ),
-        child: surface,
-      );
-    }
     return AnimatedContainer(
       duration: still ? Duration.zero : Duration(milliseconds: pressed ? 60 : 160),
       curve: const Cubic(0.2, 0.8, 0.2, 1),
@@ -1110,9 +1131,12 @@ class Tray extends StatelessWidget {
 
 /// A single hairline of light along the top edge of a key, fading out down the sides.
 class _TopLightPainter extends CustomPainter {
-  const _TopLightPainter({required this.radius});
+  const _TopLightPainter({required this.radius, this.top = 0.4, this.bottom = 0.22});
 
   final double radius;
+
+  /// Opacity of the white top edge and the dark bottom edge.
+  final double top, bottom;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1126,10 +1150,10 @@ class _TopLightPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.white.withValues(alpha: 0.4),
+            Colors.white.withValues(alpha: top),
             Colors.white.withValues(alpha: 0),
             Colors.black.withValues(alpha: 0),
-            Colors.black.withValues(alpha: 0.22),
+            Colors.black.withValues(alpha: bottom),
           ],
           stops: const [0, 0.4, 0.7, 1],
         ).createShader(rect),
@@ -1137,7 +1161,8 @@ class _TopLightPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TopLightPainter old) => old.radius != radius;
+  bool shouldRepaint(_TopLightPainter old) =>
+      old.radius != radius || old.top != top || old.bottom != bottom;
 }
 
 /// A recessed tray that holds a row of segments (a segmented control): the options sit in
@@ -1166,6 +1191,7 @@ class DepthSegmented<T> extends StatelessWidget {
     this.onSelectionChanged,
     this.emptySelectionAllowed = false,
     this.compact = false,
+    this.wrapLabels = false,
   });
 
   final List<ButtonSegment<T>> segments;
@@ -1175,6 +1201,10 @@ class DepthSegmented<T> extends StatelessWidget {
 
   /// Smaller text and padding for tight rows.
   final bool compact;
+
+  /// Labels may take two centred lines (a taller tray) instead of being cut short: for a
+  /// narrow space where the text must stay full size.
+  final bool wrapLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -1205,7 +1235,7 @@ class DepthSegmented<T> extends StatelessWidget {
     );
     return IntrinsicWidth(
       child: SizedBox(
-        height: kMinTouchTarget,
+        height: wrapLabels ? 64 : kMinTouchTarget,
         child: Stack(
           children: [
             Positioned.fill(
@@ -1244,6 +1274,7 @@ class DepthSegmented<T> extends StatelessWidget {
                         segment: s,
                         chosen: i == index,
                         compact: compact,
+                        wrap: wrapLabels,
                         onTap: onSelectionChanged == null || !s.enabled
                             ? null
                             : () {
@@ -1277,11 +1308,13 @@ class _DepthSegment<T> extends StatelessWidget {
     required this.compact,
     required this.onTap,
     required this.style,
+    this.wrap = false,
   });
 
   final ButtonSegment<T> segment;
   final bool chosen;
   final bool compact;
+  final bool wrap;
   final VoidCallback? onTap;
   final TextStyle? style;
 
@@ -1303,9 +1336,10 @@ class _DepthSegment<T> extends StatelessWidget {
           Flexible(
             child: DefaultTextStyle.merge(
               style: style,
-              maxLines: 1,
+              maxLines: wrap ? 2 : 1,
               overflow: TextOverflow.ellipsis,
-              softWrap: false,
+              softWrap: wrap,
+              textAlign: TextAlign.center,
               child: segment.label!,
             ),
           ),
@@ -1342,5 +1376,74 @@ class _DepthSegment<T> extends StatelessWidget {
     if (onTap == null) child = Opacity(opacity: segment.enabled ? 0.5 : 0.4, child: child);
     if (segment.tooltip != null) child = Tooltip(message: segment.tooltip, child: child);
     return child;
+  }
+}
+
+/// A checkbox in the depth style: an empty box is a small well pressed into the surface; a
+/// ticked one is a raised blue key with a white tick. Keeps a 48 dp tap target.
+class DepthCheckbox extends StatelessWidget {
+  const DepthCheckbox({super.key, required this.value, required this.onChanged, this.label});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  /// What a screen reader announces with the state.
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TactileTokens.of(context);
+    final enabled = onChanged != null;
+    const size = 24.0;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final box = AnimatedSwitcher(
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 160),
+      child: value
+          ? Container(
+              key: const ValueKey(true),
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(7),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color.lerp(t.primary, Colors.white, 0.08)!, t.primaryDeep],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.primaryDeep.withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(Icons.check_rounded, size: 18, color: t.onPrimary),
+            )
+          : const InsetBox(
+              key: ValueKey(false),
+              width: size,
+              height: size,
+              radius: 7,
+              padding: EdgeInsets.zero,
+              child: SizedBox.shrink(),
+            ),
+    );
+    return Semantics(
+      checked: value,
+      enabled: enabled,
+      label: label,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: InkResponse(
+          onTap: enabled ? () => onChanged!(!value) : null,
+          radius: 22,
+          child: SizedBox.square(
+            dimension: kMinTouchTarget,
+            child: Center(child: box),
+          ),
+        ),
+      ),
+    );
   }
 }

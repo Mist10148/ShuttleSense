@@ -14,18 +14,26 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/router/app_router.dart';
 import '../../data/models/video_info.dart';
+import '../../data/models/health.dart';
 import '../../data/models/job.dart';
 import '../../data/api_client.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/hit_burst.dart';
+import '../../shared/widgets/helper_text.dart';
 import '../../shared/widgets/page_scaffold.dart';
+import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/step_indicator.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../calibration/calibration_screen.dart';
+import '../mode/mode_screen.dart';
 import '../upload/upload_controller.dart';
 import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../shared/widgets/court_view_field.dart';
+import '../../data/models/clip_record.dart' show kStrokeLabels;
+import '../../ui/depth.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -112,7 +120,10 @@ class WatchScreen extends ConsumerStatefulWidget {
   ConsumerState<WatchScreen> createState() => _WatchScreenState();
 }
 
+enum _WatchSetupStep { video, options, calibration }
+
 class _WatchScreenState extends ConsumerState<WatchScreen> {
+  _WatchSetupStep setupStep = _WatchSetupStep.video;
   VideoInfo? video;
   final List<Corner> corners = [];
   WebSocketChannel? socket;
@@ -256,6 +267,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         corners.clear();
         courtDetectionMessage = null;
         matchType = null;
+        suggestion = null;
+        suggestionDetail = null;
         status = 'Tap the four outer court corners for player detection.';
       });
     } catch (e) {
@@ -792,10 +805,395 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     super.dispose();
   }
 
+  bool get setupBusy => uploading || scanning || detectingCourt;
+
+  void showSetupStep(_WatchSetupStep step) {
+    if (!setupBusy) setState(() => setupStep = step);
+  }
+
+  Widget _buildSetup(BuildContext context, VideoInfo? info, Health? health) {
+    final supported = health?.watchVideo == true;
+    final step = info == null ? _WatchSetupStep.video : setupStep;
+    final previous = switch (step) {
+      _WatchSetupStep.video => null,
+      _WatchSetupStep.options => _WatchSetupStep.video,
+      _WatchSetupStep.calibration => _WatchSetupStep.options,
+    };
+    return PopScope(
+      canPop: !supported || previous == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && previous != null) showSetupStep(previous);
+      },
+      child: PageScaffold(
+        key: ValueKey(step),
+        title: 'Watch & Analyze',
+        maxWidth: step == _WatchSetupStep.calibration ? 1200 : 720,
+        actions: const [ChangeModeButton()],
+        children: [
+          if (!supported)
+            const Text('This backend does not support Watch & Analyze.')
+          else ...[
+            StepIndicator(
+              steps: const ['Video', 'Options', 'Court calibration'],
+              current: step.index,
+            ),
+            const SizedBox(height: Spacing.xl),
+            switch (step) {
+              _WatchSetupStep.video => _videoStep(context, info),
+              _WatchSetupStep.options => _optionsStep(health!),
+              _WatchSetupStep.calibration => _calibrationStep(info!, health!),
+            },
+          ],
+          if (error != null) HelperText(error!, error: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _videoStep(BuildContext context, VideoInfo? info) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SectionCard(
+        title: '1. Rally video',
+        child: info == null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  VideoDropZone(
+                    actions: [
+                      FilledButton.tonalIcon(
+                        onPressed: setupBusy ? null : pick,
+                        icon: const Icon(Icons.video_library_outlined),
+                        label: const Text('Choose video'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Spacing.md),
+                  const CameraTips(),
+                ],
+              )
+            : Row(
+                children: [
+                  IconChip(icon: Icons.movie_outlined, background: AppPalette.of(context).mint),
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          info.filename,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${formatBytes(info.sizeBytes)} · '
+                          '${formatWatchElapsed(Duration(seconds: info.durationS.round()))}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Spacing.sm),
+                  OutlinedButton(onPressed: setupBusy ? null : pick, child: const Text('Replace')),
+                ],
+              ),
+      ),
+      const SizedBox(height: Spacing.xl),
+      if (uploading) ...[
+        const LinearProgressIndicator(semanticsLabel: 'Uploading video'),
+        const SizedBox(height: Spacing.sm),
+        const Text('Uploading video…', textAlign: TextAlign.center),
+      ] else
+        FilledButton(
+          onPressed: info == null ? null : () => showSetupStep(_WatchSetupStep.options),
+          child: const Text('Continue to options'),
+        ),
+    ],
+  );
+
+  Widget _optionsStep(Health health) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SectionCard(
+        title: '2. Options',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: Spacing.lg,
+          children: [
+            SectionBlock(
+              title: 'Playback and analysis',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: Spacing.sm,
+                children: [
+                  DepthSegmented<bool>(
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('Real time')),
+                      ButtonSegment(value: false, label: Text('Analyze every frame')),
+                    ],
+                    selected: {realTime},
+                    onSelectionChanged: setupBusy
+                        ? null
+                        : (v) => setState(() => realTime = v.first),
+                  ),
+                  Text(
+                    realTime
+                        ? 'Video plays at normal speed while normalized frames are analyzed in the background.'
+                        : 'Playback waits for every normalized frame. High-frame-rate videos may '
+                              'be sampled to a lower frame rate.',
+                  ),
+                  if (realTime && health.watchBackground)
+                    TactileSwitchTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Faster player analysis (experimental)'),
+                      subtitle: const Text(
+                        'May miss players or change hits and results; not always faster. '
+                        'Requires calibrated court corners.',
+                      ),
+                      value: focusedAnalysis,
+                      onChanged: setupBusy
+                          ? null
+                          : (value) => setState(() => focusedAnalysis = value),
+                    ),
+                  if (realTime && !health.watchBackground)
+                    const HelperText(
+                      'Update the backend to use background analysis, or choose Analyze every frame.',
+                    ),
+                ],
+              ),
+            ),
+            SectionBlock(
+              title: 'Match format',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: Spacing.sm,
+                children: [
+                  DepthSegmented<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Choose manually')),
+                      ButtonSegment(value: true, label: Text('Suggest automatically')),
+                    ],
+                    selected: {autoMode},
+                    onSelectionChanged: setupBusy
+                        ? null
+                        : (v) => setState(() {
+                            autoMode = v.first;
+                            matchType = null;
+                            suggestion = null;
+                            suggestionDetail = null;
+                          }),
+                  ),
+                  _matchChoices(),
+                  if (autoMode)
+                    const HelperText(
+                      'You can request a match format suggestion after marking the court.',
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Spacing.xl),
+      FilledButton(
+        onPressed: setupBusy ? null : () => showSetupStep(_WatchSetupStep.calibration),
+        child: const Text('Continue to calibration'),
+      ),
+      TextButton(
+        onPressed: setupBusy ? null : () => showSetupStep(_WatchSetupStep.video),
+        child: const Text('Back to video'),
+      ),
+    ],
+  );
+
+  Widget _matchChoices() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Confirm the match format:'),
+      DepthSegmented<String>(
+        segments: const [
+          ButtonSegment(value: 'singles', label: Text('Singles')),
+          ButtonSegment(value: 'doubles', label: Text('Doubles')),
+        ],
+        selected: {?matchType},
+        emptySelectionAllowed: true,
+        onSelectionChanged: setupBusy
+            ? null
+            : (values) {
+                if (values.isNotEmpty) setState(() => matchType = values.first);
+              },
+      ),
+    ],
+  );
+
+  Widget _calibrationStep(VideoInfo info, Health health) {
+    final validCorners = fullToSingles(corners) != null;
+    final next = corners.length < 4 ? corners.length : null;
+    final view = ref.watch(courtViewProvider);
+    final instruction = HelperText(
+      next != null
+          ? 'Tap the ${cornerNamesFor(view)[next].toLowerCase()} outer corner (${next + 1} of 4). '
+                'Use the outer sidelines for both singles and doubles.'
+          : validCorners
+          ? 'All four corners are set. Drag them until the blue lines match the court.'
+          : 'The corners cross. Drag them into order around the court: '
+                '${cornerOrderFor(view)}.',
+      error: next == null && !validCorners,
+    );
+    final canvas = AppCard(
+      padding: const EdgeInsets.all(Spacing.md),
+      child: AspectRatio(
+        aspectRatio: info.aspectRatio.clamp(1.0, 2.4).toDouble(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(Radii.md),
+          child: CornerCanvas(
+            cornerNames: cornerNamesFor(view),
+            image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
+            width: info.width,
+            height: info.height,
+            corners: corners,
+            overlayPainter: validCorners ? (scale) => FullCourtPreview(corners, scale) : null,
+            onTap: (c) {
+              if (!setupBusy && corners.length < 4) {
+                setState(() {
+                  corners.add(c);
+                  _resetSuggestedFormat();
+                });
+              }
+            },
+            onMove: (i, c) {
+              if (!setupBusy) {
+                setState(() {
+                  corners[i] = c;
+                  _resetSuggestedFormat();
+                });
+              }
+            },
+          ),
+        ),
+      ),
+    );
+    Widget controls({required bool wide}) => AppCard(
+      title: wide ? '3. Court calibration' : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: Spacing.sm,
+        children: [
+          const CourtViewField(),
+          if (wide) ...[
+            Center(
+              child: CornerDiagram(next: next, view: view),
+            ),
+            instruction,
+          ],
+          // Always changeable here, so a misclick in Options can be put right.
+          _matchChoices(),
+          OutlinedButton.icon(
+            onPressed: matchType == null || setupBusy ? null : detectCourt,
+            icon: detectingCourt
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_fix_high),
+            label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
+          ),
+          if (courtDetectionMessage != null) Text(courtDetectionMessage!),
+          TextButton(
+            onPressed: corners.isEmpty || setupBusy
+                ? null
+                : () => setState(() {
+                    corners.clear();
+                    courtDetectionMessage = null;
+                    _resetSuggestedFormat();
+                  }),
+            child: const Text('Clear corners'),
+          ),
+          if (autoMode) ...[
+            OutlinedButton(
+              onPressed: validCorners && !setupBusy && health.watchMatchType ? suggest : null,
+              child: Text(scanning ? 'Checking video…' : 'Suggest match format'),
+            ),
+            if (!health.watchMatchType)
+              const HelperText(
+                'Automatic detection is unavailable on this server. Choose manually.',
+              ),
+            if (suggestionDetail != null)
+              Text(
+                suggestion == null
+                    ? suggestionDetail!
+                    : 'Suggested: $suggestion. $suggestionDetail',
+              ),
+          ],
+          const HelperText(
+            'Without court calibration, player detection is disabled. For best accuracy, keep the '
+            'whole court visible and the camera fixed.',
+          ),
+          if (realTime && !health.watchBackground)
+            const HelperText('Choose Analyze every frame in Options to use this backend.'),
+          FilledButton(
+            onPressed:
+                !setupBusy &&
+                    matchType != null &&
+                    (!realTime || health.watchBackground) &&
+                    (corners.isEmpty || validCorners)
+                ? start
+                : null,
+            child: const Text('Start analysis'),
+          ),
+          TextButton(
+            onPressed: setupBusy ? null : () => showSetupStep(_WatchSetupStep.options),
+            child: const Text('Back to options'),
+          ),
+        ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth >= 760
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: canvas),
+                const SizedBox(width: Spacing.lg),
+                SizedBox(width: 340, child: controls(wide: true)),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Spacing.lg,
+              children: [
+                SectionBlock(
+                  title: '3. Court calibration',
+                  child: Row(
+                    spacing: Spacing.md,
+                    children: [
+                      CornerDiagram(next: next, view: view),
+                      Expanded(child: instruction),
+                    ],
+                  ),
+                ),
+                canvas,
+                controls(wide: false),
+              ],
+            ),
+    );
+  }
+
+  void _resetSuggestedFormat() {
+    if (autoMode) {
+      matchType = null;
+      suggestion = null;
+      suggestionDetail = null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final info = video;
     final health = ref.watch(healthProvider).valueOrNull;
+    if (health?.watchVideo != true || info == null || (socket == null && !backgroundStarted)) {
+      return _buildSetup(context, info, health);
+    }
     const cardPadding = EdgeInsets.all(Spacing.lg);
     Widget framed(Widget video) => AppCard(
       padding: const EdgeInsets.all(Spacing.md),
@@ -804,425 +1202,173 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     return PageScaffold(
       title: 'Watch & Analyze',
       maxWidth: 900,
-      actions: [
-        TextButton(onPressed: () => context.go(Routes.mode), child: const Text('Change mode')),
-      ],
+      actions: const [ChangeModeButton()],
       children: [
-        if (health?.watchVideo != true)
-          const Text('This backend does not support Watch & Analyze.')
-        else if (info == null)
-          VideoDropZone(
-            actions: [
-              FilledButton.icon(
-                onPressed: uploading || detectingCourt ? null : pick,
-                icon: const Icon(Icons.upload_file),
-                label: Text(uploading ? 'Uploading…' : 'Choose video'),
-              ),
-            ],
-          )
-        else if (socket == null && !backgroundStarted) ...[
-          Text(info.filename, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: Spacing.md),
-          AppCard(
-            title: 'Playback and analysis',
-            padding: cardPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: Spacing.sm,
-              children: [
-                DepthSegmented<bool>(
-                  segments: const [
-                    ButtonSegment(value: true, label: Text('Real time')),
-                    ButtonSegment(value: false, label: Text('Analyze every frame')),
-                  ],
-                  selected: {realTime},
-                  onSelectionChanged: scanning || detectingCourt
-                      ? null
-                      : (v) => setState(() => realTime = v.first),
-                ),
-                Text(
-                  realTime
-                      ? 'Video plays at normal speed while normalized frames are analyzed in the background.'
-                      : 'Playback waits for every normalized frame. High-frame-rate videos may '
-                            'be sampled to a lower frame rate.',
-                ),
-                if (realTime && health?.watchBackground == true)
-                  TactileSwitchTile(
-                    title: const Text('Faster player analysis (experimental)'),
-                    subtitle: const Text(
-                      'May miss players or change hits and results; not always faster. '
-                      'Requires calibrated court corners.',
-                    ),
-                    value: focusedAnalysis,
-                    onChanged: scanning || detectingCourt
-                        ? null
-                        : (value) => setState(() => focusedAnalysis = value),
-                  ),
-                if (realTime && health?.watchBackground != true)
-                  const Text(
-                    'Update the backend to use background analysis, or choose Analyze every frame.',
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Spacing.lg),
-          AppCard(
-            title: 'Match format',
-            padding: cardPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: Spacing.sm,
-              children: [
-                DepthSegmented<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Choose manually')),
-                    ButtonSegment(value: true, label: Text('Suggest automatically')),
-                  ],
-                  selected: {autoMode},
-                  onSelectionChanged: scanning || detectingCourt
-                      ? null
-                      : (v) => setState(() {
-                          autoMode = v.first;
-                          matchType = null;
-                          suggestion = null;
-                          suggestionDetail = null;
-                        }),
-                ),
-                const Text('Confirm the match format:'),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final format in ['singles', 'doubles'])
-                      ChoiceChip(
-                        label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
-                        selected: matchType == format,
-                        onSelected: scanning || detectingCourt
-                            ? null
-                            : (_) => setState(() => matchType = format),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Spacing.lg),
-          AppCard(
-            title: 'Court calibration',
-            padding: cardPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: Spacing.sm,
-              children: [
-                const Text(
-                  'Select the match format above, then find corners automatically or tap them manually.',
-                ),
-                OutlinedButton.icon(
-                  onPressed: matchType == null || scanning || detectingCourt ? null : detectCourt,
-                  icon: detectingCourt
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_fix_high),
-                  label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
-                ),
-                if (courtDetectionMessage != null) Text(courtDetectionMessage!),
-                const Text(
-                  'Tap the four outer corners of the full court, where the outer sidelines meet the back baselines: near left, near right, far right, far left. Use the same corners for singles and doubles.',
-                ),
-                const Text(
-                  'Blue lines preview the court markings. Adjust the corners until they match the video.',
-                ),
-                const Text('Without court calibration, player detection is disabled.'),
-                const Text(
-                  'For best accuracy, use a tripod and keep the whole court in a fixed view; do not pan or zoom.',
-                ),
-                SizedBox(
-                  height: 320,
-                  child: CornerCanvas(
-                    image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
-                    width: info.width,
-                    height: info.height,
-                    corners: corners,
-                    overlayPainter: fullToSingles(corners) == null
-                        ? null
-                        : (scale) => FullCourtPreview(corners, scale),
-                    onTap: (c) {
-                      if (!scanning && !detectingCourt && corners.length < 4) {
-                        setState(() {
-                          corners.add(c);
-                          if (autoMode) {
-                            matchType = null;
-                            suggestion = null;
-                            suggestionDetail = null;
-                          }
-                        });
-                      }
-                    },
-                    onMove: (i, c) {
-                      if (!scanning && !detectingCourt) {
-                        setState(() {
-                          corners[i] = c;
-                          if (autoMode) {
-                            matchType = null;
-                            suggestion = null;
-                            suggestionDetail = null;
-                          }
-                        });
-                      }
-                    },
-                  ),
-                ),
-                TextButton(
-                  onPressed: corners.isEmpty || scanning || detectingCourt
-                      ? null
-                      : () => setState(() {
-                          corners.clear();
-                          courtDetectionMessage = null;
-                          if (autoMode) {
-                            matchType = null;
-                            suggestion = null;
-                            suggestionDetail = null;
-                          }
-                        }),
-                  child: const Text('Clear corners'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Spacing.lg),
-          if (autoMode) ...[
-            AppCard(
-              padding: cardPadding,
-              color: AppPalette.of(context).lavender,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: Spacing.sm,
+        if (realTime && videoController != null)
+          framed(
+            AspectRatio(
+              aspectRatio: frameWidth / frameHeight,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  const Text(
-                    'Automatic detection requires four court corners and may be affected by spectators or hidden players.',
-                  ),
-                  OutlinedButton(
-                    onPressed:
-                        fullToSingles(corners) != null &&
-                            !scanning &&
-                            !detectingCourt &&
-                            health?.watchMatchType == true
-                        ? suggest
-                        : null,
-                    child: Text(scanning ? 'Checking video…' : 'Suggest match format'),
-                  ),
-                  if (health?.watchMatchType != true)
-                    const Text(
-                      'Automatic detection is unavailable on this server; choose manually.',
+                  Video(controller: videoController!, controls: NoVideoControls, fit: BoxFit.fill),
+                  if (lastAnalyzedIndex >= 0 &&
+                      (videoPosition.inMilliseconds - lastAnalyzedIndex * 1000 / fps).abs() <= 250)
+                    IgnorePointer(
+                      child: CustomPaint(painter: WatchOverlay(frameData, frameWidth, frameHeight)),
                     ),
-                  if (suggestionDetail != null)
-                    Text(
-                      suggestion == null
-                          ? suggestionDetail!
-                          : 'Suggested: $suggestion. $suggestionDetail',
-                    ),
+                  HitBurstLayer.watch(
+                    hits: watchHits,
+                    frame: frameData,
+                    frameWidth: frameWidth,
+                    frameHeight: frameHeight,
+                    nowS: videoPosition.inMilliseconds / 1000,
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: Spacing.lg),
-          ],
-          FilledButton(
-            onPressed:
-                !scanning &&
-                    !detectingCourt &&
-                    matchType != null &&
-                    (!realTime || health?.watchBackground == true) &&
-                    (corners.isEmpty || fullToSingles(corners) != null)
-                ? start
-                : null,
-            child: const Text('Start analysis'),
-          ),
-        ] else ...[
-          if (realTime && videoController != null)
-            framed(
-              AspectRatio(
-                aspectRatio: frameWidth / frameHeight,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Video(
-                      controller: videoController!,
-                      controls: NoVideoControls,
-                      fit: BoxFit.fill,
-                    ),
-                    if (lastAnalyzedIndex >= 0 &&
-                        (videoPosition.inMilliseconds - lastAnalyzedIndex * 1000 / fps).abs() <=
-                            250)
-                      IgnorePointer(
-                        child: CustomPaint(
-                          painter: WatchOverlay(frameData, frameWidth, frameHeight),
-                        ),
-                      ),
-                    HitBurstLayer.watch(
-                      hits: watchHits,
-                      frame: frameData,
-                      frameWidth: frameWidth,
-                      frameHeight: frameHeight,
-                      nowS: videoPosition.inMilliseconds / 1000,
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else if (!realTime && image != null)
-            framed(
-              AspectRatio(
-                aspectRatio: frameWidth / frameHeight,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image(
-                      image: _watchProfile
-                          ? _ProfiledMemoryImage(image!, lastAnalyzedIndex)
-                          : MemoryImage(image!),
-                      gaplessPlayback: true,
-                      fit: BoxFit.fill,
-                      frameBuilder: !_watchProfile
-                          ? null
-                          : (context, child, imageFrame, synchronouslyLoaded) {
-                              if (imageFrame != null &&
-                                  lastAnalyzedIndex != profileLastDecodedIndex &&
-                                  profileLastResponseUs != null) {
-                                profileLastDecodedIndex = lastAnalyzedIndex;
-                                debugPrint(
-                                  'WATCH_PROFILE ${jsonEncode({'event': 'image_ready', 'frame': lastAnalyzedIndex, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000, 'synchronous': synchronouslyLoaded})}',
-                                );
-                              }
-                              return child;
-                            },
-                    ),
-                    CustomPaint(painter: WatchOverlay(frameData, frameWidth, frameHeight)),
-                    HitBurstLayer.watch(
-                      hits: watchHits,
-                      frame: frameData,
-                      frameWidth: frameWidth,
-                      frameHeight: frameHeight,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: Spacing.lg),
-          AppCard(
-            padding: cardPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: Spacing.xs,
-              children: [
-                Text(
-                  '$status ·${realTime ? (videoPosition.inMilliseconds / 1000).toStringAsFixed(1) : (index / fps).toStringAsFixed(1)} s${total > 0 ? ' / ${(total / fps).toStringAsFixed(1)} s' : ''}',
-                ),
-                Text('Elapsed: ${formatWatchElapsed(analysisClock.elapsed)} (includes pauses)'),
-                Text('Rally: $rally'),
-                if (synthetic)
-                  const Text('Demo server: results are synthetic and do not describe this video.'),
-                if (!synthetic && modelsMissing)
-                  const Text('Tracking or pose models are unavailable on this server.'),
-                if (latestHit.isNotEmpty) Text(latestHit),
-                if (score.isNotEmpty) Text(score),
-                if (lineCall.isNotEmpty) Text(lineCall),
-                if (coaching.isNotEmpty) Text(coaching),
-                const Text(
-                  'Feedback may be delayed while the rally is confirmed. Playback is silent.',
-                ),
-                if (backgroundStarted)
-                  Text(
-                    'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
-                    'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
-                    'Overlays are hidden when analysis is behind.',
-                  ),
-                if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
-                if (backgroundStarted && focusedAnalysisActive)
-                  const Text('Experimental faster player analysis is active.'),
-                if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
-                  const Text('Faster analysis is unavailable; normal analysis is being used.'),
-                if (started && accelerationDiagnostics != null)
-                  ExpansionTile(
-                    title: const Text('Configured analysis providers'),
-                    children: [Text(accelerationDiagnostics!)],
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Spacing.lg),
-          if (!stopping && started && error == null)
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: realTime && player == null
-                      ? null
-                      : () {
-                          setState(() {
-                            playing = !playing;
-                            status = playing ? 'Playing' : 'Paused';
-                          });
-                          if (playing) {
-                            if (realTime) unawaited(player?.play());
-                            final pending = pendingFrame;
-                            pendingFrame = null;
-                            if (pending != null) {
-                              onMessage(pending);
-                            } else {
-                              next();
+          )
+        else if (!realTime && image != null)
+          framed(
+            AspectRatio(
+              aspectRatio: frameWidth / frameHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image(
+                    image: _watchProfile
+                        ? _ProfiledMemoryImage(image!, lastAnalyzedIndex)
+                        : MemoryImage(image!),
+                    gaplessPlayback: true,
+                    fit: BoxFit.fill,
+                    frameBuilder: !_watchProfile
+                        ? null
+                        : (context, child, imageFrame, synchronouslyLoaded) {
+                            if (imageFrame != null &&
+                                lastAnalyzedIndex != profileLastDecodedIndex &&
+                                profileLastResponseUs != null) {
+                              profileLastDecodedIndex = lastAnalyzedIndex;
+                              debugPrint(
+                                'WATCH_PROFILE ${jsonEncode({'event': 'image_ready', 'frame': lastAnalyzedIndex, 'since_response_ms': (analysisClock.elapsedMicroseconds - profileLastResponseUs!) / 1000, 'synchronous': synchronouslyLoaded})}',
+                              );
                             }
-                          } else if (realTime) {
-                            unawaited(player?.pause());
+                            return child;
+                          },
+                  ),
+                  CustomPaint(painter: WatchOverlay(frameData, frameWidth, frameHeight)),
+                  HitBurstLayer.watch(
+                    hits: watchHits,
+                    frame: frameData,
+                    frameWidth: frameWidth,
+                    frameHeight: frameHeight,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: Spacing.lg),
+        _LiveStatusPanel(
+          padding: cardPadding,
+          status: status,
+          running: playing && !stopping,
+          positionS: realTime ? videoPosition.inMilliseconds / 1000 : index / fps,
+          totalS: total > 0 ? total / fps : null,
+          elapsed: formatWatchElapsed(analysisClock.elapsed),
+          rally: rally,
+          stroke: latestHit,
+          score: score,
+          lineCall: lineCall,
+          coaching: coaching,
+          warnings: [
+            if (synthetic) 'Demo server: results are synthetic and do not describe this video.',
+            if (!synthetic && modelsMissing)
+              'Tracking or pose models are unavailable on this server.',
+          ],
+          notes: [
+            'Feedback may be delayed while the rally is confirmed. Playback is silent.',
+            if (backgroundStarted)
+              'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
+                  'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
+                  'Overlays are hidden when analysis is behind.',
+            if (backgroundStarted && candidateDiagnostics != null) candidateDiagnostics!,
+            if (backgroundStarted && focusedAnalysisActive)
+              'Experimental faster player analysis is active.',
+            if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
+              'Faster analysis is unavailable; normal analysis is being used.',
+          ],
+          providers: started ? accelerationDiagnostics : null,
+        ),
+        const SizedBox(height: Spacing.lg),
+        if (!stopping && started && error == null)
+          Wrap(
+            spacing: Spacing.sm,
+            runSpacing: Spacing.sm,
+            children: [
+              FilledButton(
+                onPressed: realTime && player == null
+                    ? null
+                    : () {
+                        setState(() {
+                          playing = !playing;
+                          status = playing ? 'Playing' : 'Paused';
+                        });
+                        if (playing) {
+                          if (realTime) unawaited(player?.play());
+                          final pending = pendingFrame;
+                          pendingFrame = null;
+                          if (pending != null) {
+                            onMessage(pending);
+                          } else {
+                            next();
                           }
-                        },
-                  child: Text(playing ? 'Pause' : 'Play'),
-                ),
-                OutlinedButton(onPressed: stop, child: const Text('Stop and save')),
-              ],
-            ),
-          if (jobId != null && (!backgroundStarted || stopAcknowledged))
-            FilledButton(
-              onPressed: () => context.go(Routes.job(jobId!)),
-              child: Text(backgroundStarted ? 'View analysis progress' : 'View saved session'),
-            ),
-          if (error != null)
-            OutlinedButton(
-              onPressed: () {
-                unawaited(subscription?.cancel());
-                unawaited(socket?.sink.close());
-                unawaited(videoPositionSubscription?.cancel());
-                unawaited(videoCompletedSubscription?.cancel());
-                unawaited(videoErrorSubscription?.cancel());
-                unawaited(player?.dispose());
-                stopElapsedClock();
-                analysisClock.reset();
-                setState(() {
-                  socket = null;
-                  subscription = null;
-                  player = null;
-                  videoController = null;
-                  videoPosition = Duration.zero;
-                  candidateDiagnostics = null;
-                  accelerationDiagnostics = null;
-                  lastRequestedIndex = -1;
-                  lastAnalyzedIndex = -1;
-                  started = false;
-                  stopAcknowledged = false;
-                  stopping = false;
-                  waiting = false;
-                  playing = false;
-                  error = null;
-                  pendingFrame = null;
-                  image = null;
-                });
-              },
-              child: const Text('Try again'),
-            ),
-        ],
+                        } else if (realTime) {
+                          unawaited(player?.pause());
+                        }
+                      },
+                child: Text(playing ? 'Pause' : 'Play'),
+              ),
+              OutlinedButton(onPressed: stop, child: const Text('Stop and save')),
+            ],
+          ),
+        if (jobId != null && (!backgroundStarted || stopAcknowledged))
+          FilledButton(
+            onPressed: () => context.go(Routes.job(jobId!)),
+            child: Text(backgroundStarted ? 'View analysis progress' : 'View saved session'),
+          ),
         if (error != null)
-          Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          OutlinedButton(
+            onPressed: () {
+              unawaited(subscription?.cancel());
+              unawaited(socket?.sink.close());
+              unawaited(videoPositionSubscription?.cancel());
+              unawaited(videoCompletedSubscription?.cancel());
+              unawaited(videoErrorSubscription?.cancel());
+              unawaited(player?.dispose());
+              stopElapsedClock();
+              analysisClock.reset();
+              setState(() {
+                socket = null;
+                subscription = null;
+                player = null;
+                videoController = null;
+                videoPosition = Duration.zero;
+                candidateDiagnostics = null;
+                accelerationDiagnostics = null;
+                lastRequestedIndex = -1;
+                lastAnalyzedIndex = -1;
+                started = false;
+                stopAcknowledged = false;
+                stopping = false;
+                waiting = false;
+                playing = false;
+                error = null;
+                pendingFrame = null;
+                image = null;
+              });
+            },
+            child: const Text('Try again'),
+          ),
+        if (error != null) HelperText(error!, error: true),
       ],
     );
   }
@@ -1274,4 +1420,226 @@ class WatchOverlay extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant WatchOverlay old) => old.frame != frame;
+}
+
+/// The running analysis at a glance: the state and how far through the video it is, the
+/// figures as recessed tiles (time, rally, stroke, score), then live notes and the fine print.
+class _LiveStatusPanel extends StatelessWidget {
+  const _LiveStatusPanel({
+    required this.padding,
+    required this.status,
+    required this.running,
+    required this.positionS,
+    required this.totalS,
+    required this.elapsed,
+    required this.rally,
+    required this.stroke,
+    required this.score,
+    required this.lineCall,
+    required this.coaching,
+    required this.warnings,
+    required this.notes,
+    required this.providers,
+  });
+
+  final EdgeInsets padding;
+  final String status;
+  final bool running;
+  final double positionS;
+  final double? totalS;
+  final String elapsed;
+  final String rally;
+
+  /// As the screen keeps them: "Stroke: smash", "Unclassified hit", "Score: 0 – 0", or empty.
+  final String stroke;
+  final String score;
+  final String lineCall;
+  final String coaching;
+  final List<String> warnings;
+  final List<String> notes;
+  final String? providers;
+
+  static String _after(String text, String prefix) =>
+      text.startsWith(prefix) ? text.substring(prefix.length) : text;
+
+  static String _capitalised(String text) =>
+      text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final theme = Theme.of(context);
+    final text = theme.textTheme;
+    const figures = [FontFeature.tabularFigures()];
+
+    // "Stroke: smash at 12.3 s" -> Smash.
+    final strokeName = _after(stroke, 'Stroke: ').split(' at ').first;
+    final strokeValue = stroke.isEmpty
+        ? '—'
+        : stroke.startsWith('Stroke: ')
+        ? (kStrokeLabels[strokeName] ?? _capitalised(strokeName))
+        : 'Unclassified';
+    final scoreValue = score.isEmpty ? '—' : _after(score, 'Score: ');
+    final time = totalS == null
+        ? '${positionS.toStringAsFixed(1)} s'
+        : '${positionS.toStringAsFixed(1)} / ${totalS!.toStringAsFixed(1)} s';
+    final progress = totalS == null || totalS! <= 0
+        ? null
+        : (positionS / totalS!).clamp(0.0, 1.0).toDouble();
+
+    Widget tile(IconData icon, String label, String value) => InsetBox(
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(Spacing.md, Spacing.sm + 2, Spacing.md, Spacing.sm + 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: p.text3),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(color: p.text3, letterSpacing: 0.8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // One line at any width: a long value shrinks rather than wrapping.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: text.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: p.ink,
+                fontFeatures: figures,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final liveNotes = [
+      if (lineCall.isNotEmpty) (Icons.flag_outlined, lineCall),
+      for (final line in coaching.split('\n'))
+        if (line.trim().isNotEmpty) (Icons.tips_and_updates_outlined, line.trim()),
+    ];
+
+    return AppCard(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // State and position.
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: running ? p.brand : p.text3,
+                  boxShadow: running
+                      ? [BoxShadow(color: p.brand.withValues(alpha: 0.45), blurRadius: 8)]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: Spacing.sm),
+              Expanded(
+                child: Text(
+                  status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: Spacing.sm),
+              Text(
+                time,
+                style: text.titleSmall?.copyWith(color: p.text2, fontFeatures: figures),
+              ),
+            ],
+          ),
+          const SizedBox(height: Spacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.pill),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              semanticsLabel: 'Video position',
+            ),
+          ),
+          const SizedBox(height: Spacing.md),
+          // The figures: four across with room, else two by two.
+          LayoutBuilder(
+            builder: (context, box) {
+              final columns = box.maxWidth >= 560 ? 4 : 2;
+              const gap = Spacing.sm;
+              final width = (box.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final t in [
+                    tile(Icons.timer_outlined, 'Elapsed', elapsed),
+                    tile(Icons.sports_tennis, 'Rally', _capitalised(rally)),
+                    tile(Icons.bolt_rounded, 'Last stroke', strokeValue),
+                    tile(Icons.scoreboard_outlined, 'Score', scoreValue),
+                  ])
+                    SizedBox(width: width, child: t),
+                ],
+              );
+            },
+          ),
+          for (final w in warnings) ...[
+            const SizedBox(height: Spacing.sm),
+            HelperText(w, warning: true),
+          ],
+          if (liveNotes.isNotEmpty) ...[
+            const SizedBox(height: Spacing.md),
+            const EngravedLabel('Live notes'),
+            const SizedBox(height: Spacing.xs),
+            for (final (icon, line) in liveNotes)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(icon, size: 16, color: theme.colorScheme.primary),
+                    ),
+                    const SizedBox(width: Spacing.sm),
+                    Expanded(child: Text(line, style: text.bodyMedium)),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: Spacing.md),
+          for (final n in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Spacing.xs),
+              child: HelperText(n),
+            ),
+          if (providers != null)
+            Theme(
+              // No divider lines: the card already frames it.
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text('Configured analysis providers', style: text.bodyMedium),
+                children: [Text(providers!, style: text.bodySmall)],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

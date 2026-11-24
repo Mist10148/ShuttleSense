@@ -145,10 +145,16 @@ class ApiClient {
 
   String sourceVideoUrl(String videoId) => urlWithToken('/videos/$videoId/source');
 
-  Future<Json> practicePlayers(String videoId, int frame) => _call(
+  Future<Json> practicePlayers(String videoId, int frame) =>
+      _practicePlayers(videoId, frame, watchGrid: false);
+
+  Future<Json> practiceWatchPlayers(String videoId, int frame) =>
+      _practicePlayers(videoId, frame, watchGrid: true);
+
+  Future<Json> _practicePlayers(String videoId, int frame, {required bool watchGrid}) => _call(
     () async => (await _dio.get<Json>(
       '/practice/videos/$videoId/players',
-      queryParameters: {'frame': frame},
+      queryParameters: {'frame': frame, if (watchGrid) 'watch_grid': true},
       options: Options(receiveTimeout: const Duration(minutes: 5)),
     )).data!,
   );
@@ -187,6 +193,18 @@ class ApiClient {
       options: Options(receiveTimeout: const Duration(minutes: 5)),
     )).data!,
   );
+
+  Stream<Json> practiceChat(
+    String id,
+    String question, {
+    required String contextVersion,
+    List<Json> history = const [],
+    CancelToken? cancelToken,
+  }) => _events('/practice/sessions/$id/chat', {
+    'message': question,
+    'history': history,
+    'context_version': contextVersion,
+  }, cancelToken: cancelToken);
 
   Future<Json> savePracticeEvents(String id, List<dynamic> events) => _call(
     () async =>
@@ -435,12 +453,13 @@ class ApiClient {
   });
 
   /// POST [path] and yield its server-sent events (delta, done, error).
-  Stream<Json> _events(String path, Json data) async* {
+  Stream<Json> _events(String path, Json data, {CancelToken? cancelToken}) async* {
     final Response<ResponseBody> res;
     try {
       res = await _dio.post<ResponseBody>(
         path,
         data: data,
+        cancelToken: cancelToken,
         options: Options(
           responseType: ResponseType.stream,
           receiveTimeout: const Duration(minutes: 3),

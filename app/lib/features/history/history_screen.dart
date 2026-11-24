@@ -24,7 +24,7 @@ final _deletedJobsProvider = StateProvider.autoDispose<Set<String>>((ref) => {})
 final historyQueryProvider = StateProvider<String>((ref) => '');
 
 /// Which jobs the list shows.
-enum _ModeFilter { all, upload, live }
+enum _ModeFilter { all, upload, live, coach }
 
 /// Past jobs on the connected server: search, filter and sort them, open or delete them
 /// (privacy).
@@ -67,8 +67,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         if (!deleted.contains(j.id) &&
             switch (_mode) {
               _ModeFilter.all => true,
-              _ModeFilter.upload => !j.isLive,
+              // AI Coach sessions get their own filter instead of counting as uploads.
+              _ModeFilter.upload => !j.isLive && j.mode != 'practice',
               _ModeFilter.live => j.isLive,
+              _ModeFilter.coach => j.mode == 'practice',
             } &&
             (query.isEmpty ||
                 j.id.toLowerCase().contains(query) ||
@@ -141,7 +143,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   detail: '$e',
                   action: FilledButton(
                     onPressed: () => ref.invalidate(jobsListProvider),
-                    child: const Text('Retry'),
+                    child: const Text('Try again'),
                   ),
                 ),
                 data: (all) {
@@ -219,6 +221,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ButtonSegment(value: _ModeFilter.all, label: Text('All')),
           ButtonSegment(value: _ModeFilter.upload, label: Text('Upload')),
           ButtonSegment(value: _ModeFilter.live, label: Text('Live')),
+          ButtonSegment(value: _ModeFilter.coach, label: Text('AI Coach')),
         ],
         selected: {_mode},
         onSelectionChanged: (s) => setState(() => _mode = s.first),

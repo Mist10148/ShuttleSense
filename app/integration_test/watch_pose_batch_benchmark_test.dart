@@ -12,7 +12,7 @@ import 'package:shuttlesense_app/app.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/features/calibration/calibration_screen.dart';
 
-import 'app_flow_test.dart' show LocalFile, PickOneFile, pumpUntil, tapText;
+import 'app_flow_test.dart' show LocalFile, PickOneFile, pumpUntil, pumpUntilCondition, tapText;
 
 const videoPath = String.fromEnvironment('BENCH_VIDEO');
 const batchPath = String.fromEnvironment('BENCH_BATCH_FILE');
@@ -44,9 +44,18 @@ void main() {
       );
       await pumpUntil(tester, find.text('Choose video'));
       await tapText(tester, 'Choose video');
+      await pumpUntilCondition(
+        tester,
+        () => tester
+            .widgetList<FilledButton>(find.widgetWithText(FilledButton, 'Continue to options'))
+            .any((button) => button.onPressed != null),
+        'video is uploaded',
+      );
+      await tapText(tester, 'Continue to options');
       await pumpUntil(tester, find.text('Analyze every frame'));
       await tapText(tester, 'Analyze every frame');
       await tapText(tester, 'Doubles');
+      await tapText(tester, 'Continue to calibration');
       await pumpUntil(tester, find.byType(CornerCanvas));
       for (final point in [
         (x: 449.686, y: 1011.452),

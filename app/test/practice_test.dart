@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shuttlesense_app/features/mode/mode_screen.dart';
+import 'package:shuttlesense_app/core/config/app_mode.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
@@ -25,6 +28,40 @@ void main() {
     expect(find.text('AI Coach'), findsOneWidget);
     expect(find.text('Choose practice video'), findsOneWidget);
     expect(find.textContaining('not verified shuttle contacts'), findsOneWidget);
+  });
+
+  testWidgets('choosing AI Coach starts a fresh session on a new video', (tester) async {
+    late WidgetRef read;
+    await pumpScreen(
+      tester,
+      Consumer(
+        builder: (context, ref, _) {
+          read = ref;
+          return Column(
+            children: [
+              const Expanded(child: ModeChoices()),
+              Text('session ${ref.watch(practiceSessionProvider)}'),
+            ],
+          );
+        },
+      ),
+      api: FakeApiClient(
+        health: const Health(
+          version: '1',
+          schemaVersion: '1',
+          device: 'cpu',
+          authRequired: false,
+          stages: [],
+          practiceVideo: true,
+        ),
+      ),
+      size: laptop,
+    );
+    expect(find.text('session 0'), findsOneWidget);
+    await tester.tap(find.text('AI Coach'));
+    await tester.pumpAndSettle();
+    expect(read.read(practiceSessionProvider), 1);
+    expect(read.read(appModeProvider), AppMode.practice);
   });
 
   testWidgets('running practice offers watch controls and elapsed time', (tester) async {
@@ -73,6 +110,7 @@ void main() {
     await tester.pump();
     await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
     await tester.ensureVisible(find.text('Find court automatically'));
+    await tester.pump(); // lay out the scrolled page before tapping
     await tester.tap(find.text('Find court automatically'));
     await tester.pump();
     await tester.ensureVisible(find.text('Confirm and analyze'));
@@ -84,6 +122,7 @@ void main() {
       isNull,
     );
     await tester.ensureVisible(find.text('Suggest match format'));
+    await tester.pump(); // lay out the scrolled page before tapping
     await tester.tap(find.text('Suggest match format'));
     await tester.pump();
     expect(find.textContaining('Suggested: doubles'), findsOneWidget);
@@ -92,13 +131,6 @@ void main() {
       alignment: 0.5,
     );
     await tester.pump();
-    await tester.tap(
-      find.ancestor(
-        of: find.text('Choose singles or doubles'),
-        matching: find.byType(DropdownButton<String>),
-      ),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Doubles').last);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Confirm and analyze'));
@@ -163,6 +195,36 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('Coaching ready'), findsOneWidget);
+  });
+
+  testWidgets('general practice submits a selected player without match setup', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('solo.mp4', 1000)]);
+    final api = _GeneralPracticeApi();
+    await pumpScreen(tester, const PracticeScreen(), size: laptop, api: api);
+    await tester.tap(find.text('Choose practice video'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Keep your whole body'), findsOneWidget);
+    expect(find.text('Court calibration'), findsNothing);
+    expect(find.text('Choose singles or doubles'), findsNothing);
+    expect(find.textContaining('racket arm', findRichText: true), findsOneWidget);
+    final image = find.byType(Image).first;
+    await tester.ensureVisible(image);
+    await tester.pump();
+    await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
+    final start = find.text('Confirm and analyze');
+    await tester.ensureVisible(start);
+    await tester.pump();
+    await tester.tap(start);
+    await tester.pump();
+    await tester.pump();
+    expect(api.setup, {
+      'analysis_kind': 'general',
+      'video_id': 'vid1',
+      'selection_frame': 0,
+      'selected_bbox': [0.0, 0.0, 700.0, 650.0],
+      'review_seconds': [],
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   for (final size in [laptop, phone]) {
@@ -283,6 +345,41 @@ class _PracticeWatchApi extends FakeApiClient {
         'bbox': [0, 0, 700, 650],
       },
     ],
+  };
+}
+
+class _GeneralPracticeApi extends _PracticeWatchApi {
+  Map<String, dynamic>? setup;
+
+  @override
+  Future<Map<String, dynamic>> practiceWatchPlayers(String videoId, int frame) async => {
+    ...await practicePlayers(videoId, frame),
+    'frame': frame,
+  };
+
+  @override
+  Future<Health> health() async => const Health(
+    version: '1',
+    schemaVersion: '1',
+    device: 'cpu',
+    authRequired: false,
+    stages: [],
+    practiceVideo: true,
+    practiceGeneral: true,
+  );
+
+  @override
+  Future<Map<String, dynamic>> startPractice(Map<String, dynamic> setup) async {
+    this.setup = setup;
+    return practiceStatus('job1');
+  }
+
+  @override
+  Future<Map<String, dynamic>> practiceStatus(String id) async => {
+    'id': id,
+    'video_id': 'vid1',
+    'status': 'queued',
+    'practice_setup': setup,
   };
 }
 

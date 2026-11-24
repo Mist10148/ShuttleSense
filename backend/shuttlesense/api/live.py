@@ -49,7 +49,7 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
     """Analyze an uploaded video one requested frame at a time, on its video clock."""
     import cv2
 
-    from shuttlesense.io import FrameReader
+    from shuttlesense.stream.watch_video import open_watch_video
 
     await ws.accept()
     settings = ws.app.state.settings
@@ -74,12 +74,8 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
         source = manager.storage.video_source(video_id)
         if meta is None or source is None:
             raise ValueError("video not found")
-        live_cfg = manager.state.jobs.config.get("live") or {}
         reader = await asyncio.to_thread(
-            FrameReader,
-            source,
-            int(live_cfg.get("target_height", 720)),
-            float(live_cfg.get("max_fps", 30)),
+            open_watch_video, source, manager.state.jobs.config,
         )
         corners = start.get("corners")
         if corners is not None:
@@ -584,7 +580,7 @@ class LiveManager:
         """Annotated video for the saved session, off the socket's thread."""
         from shuttlesense.api.jobs import JobCancelled
         from shuttlesense.io import FrameReader
-        from shuttlesense.render import render_video
+        from shuttlesense.stream.watch_video import render_watch_video
 
         jobs = self.state.jobs
         try:
@@ -628,7 +624,7 @@ class LiveManager:
                         or (job.court != "doubles" and hit.player == slot)
                     )
                 ]
-            render_video(record, reader, self.storage.job_dir(job.id) / "annotated.mp4",
+            render_watch_video(record, reader, self.storage.job_dir(job.id) / "annotated.mp4",
                          overlays=job.overlays, config=jobs.config,
                          progress=on_progress)  # fmt: skip
             jobs.check_cancelled(job.id)  # deleted while the last frames were written

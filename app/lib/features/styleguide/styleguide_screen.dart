@@ -145,7 +145,7 @@ class _StyleguideScreenState extends State<StyleguideScreen> {
                   MessageView(
                     icon: Icons.cloud_off,
                     message: 'Could not reach the server',
-                    action: OutlinedButton(onPressed: () {}, child: const Text('Retry')),
+                    action: OutlinedButton(onPressed: () {}, child: const Text('Try again')),
                   ),
                   const Skeleton(width: 180),
                   const SizedBox(height: Spacing.sm),

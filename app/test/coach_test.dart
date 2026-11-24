@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/shared/widgets/notice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
@@ -12,6 +13,7 @@ import 'package:shuttlesense_app/features/results/widgets/line_call_banner.dart'
 import 'package:shuttlesense_app/features/results/widgets/results_layout.dart';
 import 'package:shuttlesense_app/features/results/widgets/session_summary.dart';
 import 'package:shuttlesense_app/shared/disclaimers.dart';
+import 'package:shuttlesense_app/shared/widgets/surfaces.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
@@ -47,19 +49,26 @@ Widget host(Widget child) => MaterialApp(
 void main() {
   group('mode picker', () {
     for (final MapEntry(key: name, value: size) in kSizes.entries) {
-      testWidgets('$name: picking a mode saves it and goes to Analyze', (tester) async {
+      testWidgets('$name: Upload is hidden and an available mode can still be picked', (
+        tester,
+      ) async {
         final visited = await pumpScreen(
           tester,
           const ModeScreen(),
           size: size,
-          prefs: {'ui.mode': 'live'},
+          prefs: {'ui.mode': 'upload'},
         );
-        expect(find.text('Last used'), findsOneWidget);
+        // Upload clip is switched off: only Watch & Analyze, Go live and AI Coach are offered.
+        expect(find.text('Upload clip'), findsNothing);
+        expect(find.byType(PastelActionCard), findsNWidgets(3));
         expect(tester.takeException(), isNull);
-        await tester.tap(find.text('Upload clip'));
+        await tester.ensureVisible(find.text('Go live'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Go live'));
         await tester.pumpAndSettle();
         final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getString('ui.mode'), 'upload');
+        expect(prefs.getString('ui.mode'), 'live');
+        expect(find.text('Last used'), findsOneWidget);
         // In pumpScreen '/' is this screen, so going home shows it again with the new pick.
         expect(visited, isEmpty);
       });
@@ -205,11 +214,11 @@ void main() {
       expect(find.text('Completed · self-reported'), findsOneWidget);
       expect(find.text('Shared finding'), findsOneWidget);
       expect(find.text('Shared practice goal'), findsOneWidget);
-      await tester.ensureVisible(find.byType(ActionChip).first);
-      await tester.tap(find.byType(ActionChip).first);
+      await tester.ensureVisible(find.byType(TimePill).first);
+      await tester.tap(find.byType(TimePill).first);
       expect(seeks.single.frame, 15);
       await tester.pumpWidget(view(videoAvailable: false));
-      expect(find.byType(ActionChip), findsNothing);
+      expect(find.byType(TimePill), findsNothing);
     });
 
     testWidgets('lists top fixes with seek chips and the disclaimer', (tester) async {

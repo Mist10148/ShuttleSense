@@ -103,9 +103,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => Consumer(
                   builder: (context, ref, _) => switch (ref.watch(appModeProvider)) {
                     AppMode.watch => const WatchScreen(),
-                    AppMode.practice => const PracticeScreen(),
+                    // A fresh screen per session, so AI Coach starts on a new video.
+                    AppMode.practice => PracticeScreen(
+                      key: ValueKey(('practice', ref.watch(practiceSessionProvider))),
+                    ),
                     AppMode.live when ref.watch(liveAvailableProvider) => const LiveScreen(),
-                    _ => const UploadScreen(),
+                    _ when uploadClipEnabled => const UploadScreen(),
+                    _ => const ModeScreen(),
                   },
                 ),
                 routes: [
@@ -113,11 +117,14 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(path: 'mode', builder: (context, state) => const ModeScreen()),
                   GoRoute(
                     path: 'practice/:jobId',
-                    builder: (context, state) =>
-                        PracticeScreen(jobId: state.pathParameters['jobId']!),
+                    builder: (context, state) {
+                      final jobId = state.pathParameters['jobId']!;
+                      return PracticeScreen(key: ValueKey(jobId), jobId: jobId);
+                    },
                   ),
                   GoRoute(
                     path: 'videos/:videoId/calibrate',
+                    redirect: (_, _) => uploadClipEnabled ? null : Routes.mode,
                     builder: (context, state) =>
                         CalibrationScreen(videoId: state.pathParameters['videoId']!),
                   ),

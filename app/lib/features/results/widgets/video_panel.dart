@@ -37,7 +37,7 @@ class VideoPanel extends StatelessWidget {
     return AspectRatio(
       aspectRatio: aspectRatio ?? 16 / 9,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(Radii.sm),
         child: ColoredBox(
           color: Colors.black,
           child: switch (available) {

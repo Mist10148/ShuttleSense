@@ -1,3 +1,4 @@
+import '../../../shared/widgets/notice.dart';
 import '../../../shared/widgets/courtside_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import '../../../shared/disclaimers.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 
 /// Seek requests from other screens (chat citations) to a job's results player.
 final seekRequestProvider = StateProvider.family<Moment?, String>((ref, jobId) => null);
@@ -107,7 +109,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             children: [
               Text('Session recap', style: theme.textTheme.titleLarge),
               if (record.score?.matchWinner != null)
-                Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
+                Text('Match won by ${context.sideLabel(record.score!.matchWinner!)}'),
               if (record.score != null)
                 Text(
                   'Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}',
@@ -163,7 +165,7 @@ class _SessionSummaryState extends State<SessionSummary> {
           if (top.isEmpty)
             Text(
               _player != null
-                  ? 'No repeated pattern was identified for ${playerLabel(_player!)}.'
+                  ? 'No repeated pattern was identified for ${context.sideLabel(_player!)}.'
                   : coaching == null
                   ? 'Session notes appear once strokes are classified.'
                   : 'Not enough evidence of a repeated pattern in this session.',
@@ -264,17 +266,10 @@ class MomentChips extends StatelessWidget {
   final ValueChanged<Moment> onSeek;
 
   @override
+  // The same play-from pill as every other moment link in the app.
   Widget build(BuildContext context) => Wrap(
-    spacing: 6,
-    runSpacing: 4,
-    children: [
-      for (final m in moments)
-        ActionChip(
-          avatar: const Icon(Icons.play_arrow, size: 16),
-          label: Text(m.label),
-          tooltip: 'Play from ${m.label}',
-          onPressed: () => onSeek(m),
-        ),
-    ],
+    spacing: Spacing.xs + 2,
+    runSpacing: Spacing.xs + 2,
+    children: [for (final m in moments) TimePill(label: m.label, onTap: () => onSeek(m))],
   );
 }

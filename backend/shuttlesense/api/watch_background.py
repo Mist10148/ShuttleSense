@@ -17,9 +17,9 @@ from shuttlesense.api.live import HEADER, LiveBusy, _frames, _start_request, cou
 from shuttlesense.api.models import Job, utcnow
 from shuttlesense.api.routes import get_storage, require_token
 from shuttlesense.api.storage import Storage
-from shuttlesense.io import FrameReader
 from shuttlesense.stage import StageSkipped
 from shuttlesense.stream.watch_parallel import parallel_watch_enabled as _parallel_watch_enabled
+from shuttlesense.stream.watch_video import open_watch_video
 from shuttlesense.strokes import registry
 from shuttlesense.strokes.classify import load_classifier
 
@@ -261,11 +261,7 @@ def _start_background(body: BackgroundStart, request: Request, storage: Storage)
     meta, source = storage.load_video_meta(body.video_id), storage.video_source(body.video_id)
     if meta is None or source is None:
         raise HTTPException(status_code=404, detail="Video not found")
-    reader = FrameReader(
-        source,
-        target_height=int((state.jobs.config.get("live") or {}).get("target_height", 720)),
-        max_fps=float((state.jobs.config.get("live") or {}).get("max_fps", 30)),
-    )
+    reader = open_watch_video(source, state.jobs.config)
     if not len(reader) or not reader.fps:
         raise HTTPException(status_code=400, detail="Video has no readable frames")
     corners = body.corners

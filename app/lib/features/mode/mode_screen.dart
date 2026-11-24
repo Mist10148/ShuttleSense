@@ -40,6 +40,8 @@ class ModeChoices extends ConsumerWidget {
     final watchSupported = kIsWeb || defaultTargetPlatform == TargetPlatform.windows;
     final watchOn = health?.watchVideo == true && watchSupported;
     Future<void> pick(AppMode mode) async {
+      // Choosing AI Coach starts on a new video; past sessions are in History.
+      if (mode == AppMode.practice) ref.read(practiceSessionProvider.notifier).next();
       await ref.read(appModeProvider.notifier).set(mode);
       if (context.mounted) context.go(Routes.home);
     }
@@ -49,34 +51,10 @@ class ModeChoices extends ConsumerWidget {
 
     return CardGrid(
       minWidth: detailed ? 280 : 220,
+      // Watch & Analyze, Go live, AI Coach: side by side when there is room.
+      maxColumns: uploadClipEnabled ? 4 : 3,
+      equalHeight: true,
       children: [
-        PastelActionCard(
-          color: p.lavender,
-          icon: Icons.upload_file,
-          title: 'Upload clip',
-          description: detailed
-              ? 'Pick a recorded rally. The server processes it and shows full results, '
-                    'line calls and coaching notes.'
-              : 'Analyze a recorded rally.',
-          footnote: detailed ? 'You need: a recorded video file (MP4, MOV or AVI)' : null,
-          badge: lastUsed(AppMode.upload),
-          onTap: () => pick(AppMode.upload),
-        ),
-        PastelActionCard(
-          color: p.sky,
-          icon: Icons.videocam_outlined,
-          title: 'Go live',
-          description: liveOff
-              ? 'This server is too old for live mode (clip record ${health.schemaVersion}). '
-                    'Update the backend to use it.'
-              : detailed
-              ? 'Point a camera at the court and see the shuttle, score and line calls while '
-                    'you play. The session is saved to History when you stop.'
-              : 'Use a camera at the court.',
-          footnote: detailed ? 'You need: a camera pointed at the court' : null,
-          badge: lastUsed(AppMode.live, available: !liveOff),
-          onTap: liveOff ? null : () => pick(AppMode.live),
-        ),
         PastelActionCard(
           color: p.mint,
           icon: Icons.play_circle_outline,
@@ -95,16 +73,48 @@ class ModeChoices extends ConsumerWidget {
           onTap: watchOn ? () => pick(AppMode.watch) : null,
         ),
         PastelActionCard(
-          color: p.lavender,
+          color: p.sky,
+          icon: Icons.videocam_outlined,
+          title: 'Go live',
+          description: liveOff
+              ? 'This server is too old for live mode (clip record ${health.schemaVersion}). '
+                    'Update the backend to use it.'
+              : detailed
+              ? 'Point a camera at the court and see the shuttle, score and line calls while '
+                    'you play. The session is saved to History when you stop.'
+              : 'Use a camera at the court.',
+          footnote: detailed ? 'You need: a camera pointed at the court' : null,
+          badge: lastUsed(AppMode.live, available: !liveOff),
+          onTap: liveOff ? null : () => pick(AppMode.live),
+        ),
+        PastelActionCard(
+          // Its own colour: lavender is Upload's.
+          color: p.peach,
           icon: Icons.sports_tennis,
           title: 'AI Coach',
-          description: health?.practiceVideo == true
-              ? 'Review a player’s recorded practice with pose and coaching.'
-              : 'Requires a backend with practice analysis and pose models.',
-          footnote: detailed ? 'You need a recorded video of your practice.' : null,
+          description: health?.practiceVideo != true
+              ? 'Requires a backend with practice analysis and pose models.'
+              : detailed
+              ? 'Review a player’s recorded practice with pose tracking and coaching feedback.'
+              : 'Get coaching on your practice.',
+          footnote: detailed ? 'You need: a recorded video of your practice' : null,
           badge: lastUsed(AppMode.practice, available: health?.practiceVideo == true),
           onTap: health?.practiceVideo == true ? () => pick(AppMode.practice) : null,
         ),
+        // Upload clip is switched off (uploadClipEnabled); its code stays for when it returns.
+        if (uploadClipEnabled)
+          PastelActionCard(
+            color: p.lavender,
+            icon: Icons.upload_file,
+            title: 'Upload clip',
+            description: detailed
+                ? 'Pick a recorded rally. The server processes it and shows full results, '
+                      'line calls and coaching notes.'
+                : 'Analyze a recorded rally.',
+            footnote: detailed ? 'You need: a recorded video file (MP4, MOV or AVI)' : null,
+            badge: lastUsed(AppMode.upload),
+            onTap: () => pick(AppMode.upload),
+          ),
       ],
     );
   }

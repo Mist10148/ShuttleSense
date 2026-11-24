@@ -321,11 +321,28 @@ class JobManager:
                 raise KeyError(job_id)
             if job.mode != "practice" or job.status != "needs_selection":
                 raise JobBusy(job_id)
-            if job.practice_selection_frame is None or frame < job.practice_selection_frame:
+            setup = job.practice_setup or {}
+            general = setup.get("analysis_kind") == "general"
+            if job.practice_selection_frame is None or (
+                not general and frame < job.practice_selection_frame
+            ):
                 raise ValueError("selection must be at or after the stopped frame")
-            if frame > job.practice_selection_frame:
-                job.practice_gaps.append((job.practice_selection_frame, frame))
-            job.practice_selections[frame] = bbox
+            if general:
+                meta = self.storage.load_video_meta(job.video_id)
+                if meta is None:
+                    raise KeyError(job.video_id)
+                job.practice_setup = {
+                    **setup,
+                    "selection_frame": frame,
+                    "selected_bbox": bbox,
+                    "review_seconds": [
+                        t for t in setup.get("review_seconds", []) if round(t * meta.fps) >= frame
+                    ],
+                }
+            else:
+                if frame > job.practice_selection_frame:
+                    job.practice_gaps.append((job.practice_selection_frame, frame))
+                job.practice_selections[frame] = bbox
             job.practice_selection_frame = None
             job.status = "queued"
             job.progress = 0.0
@@ -449,24 +466,47 @@ class JobManager:
         try:
             with self.gpu:
                 if job.mode == "practice":
-                    from shuttlesense.practice.pipeline import PracticeSetup
-                    from shuttlesense.practice.runner import run_practice
+                    from shuttlesense.practice.pipeline import GeneralPracticeSetup, PracticeSetup
 
-                    run_practice(
-                        source,
-                        out_dir,
-                        PracticeSetup.model_validate(job.practice_setup),
-                        job.practice_selections,
-                        job.practice_gaps,
+                    general = (job.practice_setup or {}).get("analysis_kind") == "general"
+
+                    def progress(p):
+                        self._update(
+                            job_id,
+                            current_stage="render"
+                            if p >= (0.9 if general else 0.75)
+                            else "practice",
+                            progress=p,
+                        )
+
+                    callbacks = (
                         self.config,
                         self.device,
-                        lambda p: self._update(
-                            job_id, current_stage="render" if p >= 0.75 else "practice", progress=p
-                        ),
+                        progress,
                         lambda: self.check_cancelled(job_id),
                         lambda frame, jpeg: self.set_practice_preview(job_id, frame, jpeg),
                         lambda: self.check_practice_control(job_id),
                     )
+                    if general:
+                        from shuttlesense.practice.general import run_general_practice
+
+                        run_general_practice(
+                            source,
+                            out_dir,
+                            GeneralPracticeSetup.model_validate(job.practice_setup),
+                            *callbacks,
+                        )
+                    else:
+                        from shuttlesense.practice.runner import run_practice
+
+                        run_practice(
+                            source,
+                            out_dir,
+                            PracticeSetup.model_validate(job.practice_setup),
+                            job.practice_selections,
+                            job.practice_gaps,
+                            *callbacks,
+                        )
                 elif job.mode == "live" and self.has_outputs(job_id):
                     self._rerender_live(job, source, out_dir)
                 else:

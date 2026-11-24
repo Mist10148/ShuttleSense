@@ -8,7 +8,6 @@ import '../../core/router/app_router.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
-import '../../shared/widgets/surfaces.dart';
 import '../mode/mode_screen.dart';
 import '../../data/models/health.dart';
 import '../../shared/widgets/dependent_switch.dart';
@@ -22,6 +21,7 @@ import 'upload_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import '../../shared/widgets/court_view_field.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -157,7 +157,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               if (file == null)
                 VideoDropZone(actions: pickButtons)
               else ...[
-                _FileRow(
+                VideoFileRow(
                   name: file.name,
                   details: details.join(' · '),
                   warn: upload.large || upload.tooLong,
@@ -169,6 +169,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     error: true,
                   ),
               ],
+              const SizedBox(height: Spacing.md),
+              const CameraTips(),
             ],
           ),
         ),
@@ -193,6 +195,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   'stay empty, and Court outline, Minimap, Speed, Scoreboard and the Referee '
                   'layer are off.',
                   warning: true,
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: Spacing.sm),
+                  child: CourtViewField(),
                 ),
               DependentSwitch(
                 title: 'Referee layer (beta)',
@@ -209,6 +216,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               ),
               if (options.calibrate && options.referee)
                 StartScoreField(
+                  sides: SideNames.forView(ref.watch(courtViewProvider)),
                   key: ObjectKey(file), // a new clip starts from 0-0 again
                   value: options.startScore,
                   doubles: options.match.doubles,
@@ -216,6 +224,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 ),
               if (options.calibrate && options.referee)
                 MatchSetupField(
+                  sides: SideNames.forView(ref.watch(courtViewProvider)),
                   value: options.match,
                   onChanged: notifier.setMatch,
                   showCourt: true,
@@ -291,9 +300,13 @@ String _minutes(double seconds) {
 
 /// The empty video slot: a dashed outline with what the server accepts and the pick buttons.
 class VideoDropZone extends StatelessWidget {
-  const VideoDropZone({super.key, required this.actions});
+  const VideoDropZone({super.key, required this.actions, this.title, this.detail});
 
   final List<Widget> actions;
+
+  /// Override the default rally wording (the AI Coach asks for a practice video).
+  final String? title;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -310,11 +323,16 @@ class VideoDropZone extends StatelessWidget {
             children: [
               const IconWell(icon: Icons.movie_outlined, size: 44, iconSize: 22),
               const SizedBox(height: Spacing.sm),
-              Text('Choose a rally video', style: text.titleMedium, textAlign: TextAlign.center),
+              Text(
+                title ?? 'Choose a rally video',
+                style: text.titleMedium,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: Spacing.xs),
               Text(
-                'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
-                'Best results from a phone on a tripod, elevated and behind the baseline.',
+                detail ??
+                    'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
+                        'Best results from a phone on a tripod, raised, behind a baseline or at the side.',
                 style: text.bodySmall?.copyWith(color: p.text2),
                 textAlign: TextAlign.center,
               ),
@@ -335,8 +353,10 @@ class VideoDropZone extends StatelessWidget {
 
 /// The chosen video: name, length and size (in the error colour past a server limit), and
 /// the Replace button.
-class _FileRow extends StatelessWidget {
-  const _FileRow({
+/// A chosen video: a tinted icon, the file name, its details, and actions (change it).
+class VideoFileRow extends StatelessWidget {
+  const VideoFileRow({
+    super.key,
     required this.name,
     required this.details,
     required this.warn,
@@ -352,15 +372,20 @@ class _FileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final theme = Theme.of(context);
-    return Row(
+    final info = Row(
       children: [
-        IconChip(icon: Icons.movie_outlined, background: p.mint),
+        const IconWell(icon: Icons.movie_outlined, size: 44, iconSize: 22),
         const SizedBox(width: Spacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis),
+              Text(
+                name,
+                style: theme.textTheme.titleMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               Text(
                 details,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -370,9 +395,31 @@ class _FileRow extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: Spacing.sm),
-        Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions),
       ],
+    );
+    final buttons = Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions);
+    // The chosen file sits in a recessed tray, like the drop zone it replaces; the actions
+    // sit beside the name when there is room, else under it (a phone).
+    return InsetBox(
+      radius: Radii.lg,
+      padding: const EdgeInsets.all(Spacing.md),
+      child: LayoutBuilder(
+        builder: (context, box) => actions.isEmpty
+            ? info
+            : box.maxWidth >= 480
+            ? Row(
+                children: [
+                  Expanded(child: info),
+                  const SizedBox(width: Spacing.sm),
+                  buttons,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: Spacing.sm,
+                children: [info, buttons],
+              ),
+      ),
     );
   }
 }

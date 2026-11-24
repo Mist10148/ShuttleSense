@@ -1,5 +1,21 @@
 # AI Coach: recorded single-player practice
 
+## Court-free general practice preview
+
+To try general practice, set `SHUTTLESENSE_PRACTICE_GENERAL=1` in the backend's environment and restart the backend and app. This is opt-in until the tracker has been compared with the existing court-based path on annotated practice clips.
+
+Upload a steady, well-lit clip, select yourself on a clear frame, and optionally mark moments to review. The whole player and racket arm should stay in frame. General practice follows the selected person without court corners, match format, or stroke and arm labels. It measures visible wrist height and elbow angle in the image. Motion peaks suggest moments to replay. If there is no reliable peak, one clear frame can be shown as a pose snapshot. No stroke or contact is classified.
+
+The video and report preserve gaps if the selected person cannot be tracked confidently. Overall Summary, Detailed Analysis, and Follow-up Questions use only the saved observations from this video. Older stroke-specific sessions still open with their original controls.
+
+General practice uses Watch's recorded-video frame sizing, pose settings, and export. The player picker shows a frame that the analysis will process. If the initial selection cannot be confirmed, choose a clearer frame and select yourself again.
+
+When players cross, the tracker uses nearby players' motion to help keep the selected identity. A dashed **Temporarily obscured** box can appear for up to 0.25 seconds in the preview and saved video. It shows the last confirmed position, and those frames do not contribute pose measurements or coaching evidence.
+
+The general request to `POST /practice/sessions` includes `analysis_kind: "general"`, `video_id`, `selection_frame`, `selected_bbox`, and optional `review_seconds`. The backend advertises the enabled preview with `practice_general` on `GET /health`.
+
+## Stroke-specific practice
+
 AI Coach analyzes a recorded clip using the same calibrated player tracker as Watch & Analyze. Version 1 supports a user-selected player, racket arm, and overhead clear, smash or drop. It can process shadow swings without a shuttle. It uses selected-player detection and 2D pose. When shuttle tracking is available, it also proposes hit events and uses the match-trained CNN with the Watch evidence guard; predictions are estimates and require review. Shadow practice can still use manually marked attempts.
 
 ## Setup and workflow
@@ -10,7 +26,7 @@ Start or restart the updated real backend and Windows or web app as described in
 2. Optionally mark attempt frames with the button, or enter their times in seconds separated by commas; leave them empty to review automatically detected candidates after analysis. Choose a selection frame at or before the first attempt, then click the target player's box.
 3. Explicitly choose the format in the recording: use doubles if two players are on each side, even though AI Coach follows one selected player. Find or mark the court corners; the optional format suggestion needs your confirmation. Choose clear, smash or drop and the racket arm; then confirm and start Watch-style analysis of every normalized frame. The same Watch frame pacing and configured parallel-perception setting apply. Watch assigns stable court player slots. The selected box is matched to one confirmed slot; if no unique match is available, that frame is excluded from the coaching report. Identity can still be uncertain during an occlusion.
 4. During processing, the preview shows the latest analyzed frame and elapsed time includes pauses. Pause stops requests after the current frame; Play resumes. Stop and save finishes the frames already analyzed, then renders and saves that portion.
-5. After rendering, rules-based coaching appears below the stroke review; the separate AI Coach panel summarizes the saved analysis and retrieved badminton knowledge. The report includes available timestamped technique feedback and pose observations. Tap a report entry to seek to its moment in the video.
+5. After rendering, **Overall Summary** shows what to focus on next. **Detailed Analysis** pairs observations with coach feedback, timestamps you can replay, and retrieved badminton sources. **Follow-up Questions** lets you ask about the saved evidence for that video. Saving event changes updates the report and starts a new follow-up conversation.
 6. Open the completed session from History. Review, confirm, correct, add or remove candidate events and save them to update the report. Automatic labels are estimates.
 
 Automatic stroke labels are estimates; manually selected labels and attempt times are user-supplied. Neither proves the stroke class or shuttle contact. The current report describes 2D wrist/nose position and elbow angle where joints are visible and provides limited general review cues. It does not diagnose technique or injury. Camera angle, occlusion, motion blur, detections and tracking affect results. Player selection based on bounding boxes cannot guarantee identity in every occlusion. Use a fixed camera with the whole player visible and review outputs with a qualified coach.
@@ -33,7 +49,8 @@ All practice endpoints use the existing token authentication:
 - `POST /practice/sessions/{job_id}/selection` remains available for older paused sessions.
 - `POST /practice/sessions/{job_id}/control/{pause|resume|stop}` controls a running job; stop saves the analyzed portion.
 - `GET /practice/sessions/{job_id}/analysis` returns the completed analysis and independent rules-based coaching without waiting for the AI guide.
-- `GET /practice/sessions/{job_id}/report` returns a cached or newly generated guide; `POST` refreshes it. The guide uses the current session's structured evidence and retrieved badminton knowledge.
+- `GET /practice/sessions/{job_id}/report` returns a cached or newly generated guide; `POST` refreshes it. The guide uses the current session's structured evidence and retrieved badminton knowledge and includes a `context_version`.
+- `POST /practice/sessions/{job_id}/chat` accepts `message`, up to 12 earlier `history` turns, and the guide's `context_version`. It streams `delta`, `done`, and `error` events. A stale version returns `409`; reload the guide before sending again. Follow-up sends bounded report text, questions, and retrieved excerpts to the provider. The server does not store the conversation.
 - `GET /practice/sessions/{job_id}/result` remains available for clients needing observations and report together. The rendered video uses the existing `/jobs/{job_id}/video` endpoint and deletion uses `DELETE /jobs/{job_id}`.
 
 - `PUT /practice/sessions/{job_id}/events` saves the reviewed event list, rebuilds confirmed pose observations, and invalidates the cached report.

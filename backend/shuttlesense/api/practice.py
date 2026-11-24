@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from shuttlesense.api.coach_routes import CoachChatRequest, Turn
 from shuttlesense.api.routes import StorageDep, _video_or_404, require_token
 from shuttlesense.io import read_frame
 from shuttlesense.pose.estimator import load_detector
-from shuttlesense.practice.pipeline import PracticeSetup
+from shuttlesense.practice.pipeline import GeneralPracticeSetup, PracticeSetup
 from shuttlesense.stage import StageSkipped
 
 router = APIRouter(dependencies=[Depends(require_token)], prefix="/practice")
@@ -36,6 +40,7 @@ def practice_candidates(
     request: Request,
     storage: StorageDep,
     frame: Annotated[int, Query(ge=0)] = 0,
+    watch_grid: bool = False,
 ) -> PlayerCandidates:
     """Find selectable people on a source frame, without court-specific tracking."""
     if request.app.state.settings.fake_pipeline:
@@ -44,17 +49,29 @@ def practice_candidates(
     source = storage.video_source(video_id)
     if source is None or (info.num_frames > 0 and frame >= info.num_frames):
         raise HTTPException(status_code=404, detail="frame not found")
-    image = read_frame(source, frame)
-    if image is None:
-        raise HTTPException(status_code=404, detail="frame not found")
     jobs = request.app.state.jobs
     if not jobs.gpu.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Server is busy; try again")
     try:
         config = jobs.config.get("stages", {}).get("pose", {})
-        detect = load_detector(
-            config.get("backend", "rtmlib"), config.get("mode", "balanced"), jobs.device
-        )
+        sx = sy = 1.0
+        if watch_grid:
+            from shuttlesense.practice.general import practice_pose_detector, retained_frame
+            from shuttlesense.stream.watch_video import open_watch_video
+
+            reader = open_watch_video(source, jobs.config)
+            normalized = retained_frame(reader, frame)
+            frame = normalized * reader.step
+            image = reader.read(normalized)
+            sx, sy = info.width / reader.width, info.height / reader.height
+            detect = practice_pose_detector(jobs.config, jobs.device)
+        else:
+            image = read_frame(source, frame)
+            detect = load_detector(
+                config.get("backend", "rtmlib"), config.get("mode", "balanced"), jobs.device
+            )
+        if image is None:
+            raise HTTPException(status_code=404, detail="frame not found")
         people = detect(image)
     except (StageSkipped, ImportError, RuntimeError, OSError) as exc:
         raise HTTPException(status_code=503, detail="Player detection unavailable") from exc
@@ -62,7 +79,7 @@ def practice_candidates(
         jobs.gpu.release()
     candidates = []
     for p in people:
-        x, y, w, h = p.bbox
+        x, y, w, h = (v * scale for v, scale in zip(p.bbox, (sx, sy, sx, sy), strict=True))
         if (
             all(math.isfinite(v) for v in (x, y, w, h, p.score))
             and w > 0
@@ -96,7 +113,9 @@ def _check_box(box, info):
 
 
 @router.post("/sessions", status_code=202)
-def start_practice(body: PracticeSetup, request: Request, storage: StorageDep):
+def start_practice(
+    body: GeneralPracticeSetup | PracticeSetup, request: Request, storage: StorageDep
+):
     from shuttlesense.api.jobs import VideoGone
     from shuttlesense.api.models import Job
     from shuttlesense.api.storage import new_id
@@ -104,10 +123,15 @@ def start_practice(body: PracticeSetup, request: Request, storage: StorageDep):
 
     if request.app.state.settings.fake_pipeline:
         raise HTTPException(status_code=503, detail="Practice analysis is unavailable in demo mode")
+    if isinstance(body, GeneralPracticeSetup) and not request.app.state.settings.practice_general:
+        raise HTTPException(status_code=503, detail="General practice is disabled on this backend")
     info = _video_or_404(storage, body.video_id)
     _check_box(body.selected_bbox, info)
     try:
-        PracticeAnalyzer(body, info.fps, info.num_frames)
+        if isinstance(body, GeneralPracticeSetup):
+            body.validate_segment(info.fps, info.num_frames)
+        else:
+            PracticeAnalyzer(body, info.fps, info.num_frames)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     job = Job(
@@ -205,8 +229,6 @@ def _current_analysis_notes(data: dict) -> list[dict]:
 
 
 def _completed_practice(job_id: str, request: Request, storage):
-    import json
-
     job = request.app.state.jobs.get(job_id)
     if job is None or job.mode != "practice":
         raise HTTPException(status_code=404, detail="session not found")
@@ -257,24 +279,62 @@ def _practice_report_inputs(data):
     return observations, events, notes, context
 
 
+def _general_report_inputs(data):
+    if data.get("analysis_kind") != "general":
+        return {}, None
+    excluded = set(data.get("unobserved_indices", []))
+    first = data["selection_frame"]
+    frames = data["processed_frames"]
+    return {
+        "frames_before_selection": first,
+        "tracked_frames": max(0, frames - first - len(excluded)),
+        "tracking_lost_from_s": data.get("tracking_lost_from_s"),
+    }, [
+        moment
+        for moment in data["review_moments"]
+        if first <= moment["frame"] < frames and moment["frame"] not in excluded
+    ]
+
+
 @router.get("/sessions/{job_id}/analysis")
 async def practice_analysis(job_id: str, request: Request, storage: StorageDep):
     from shuttlesense.practice.report import create_practice_report
 
     _, data, _ = _completed_practice(job_id, request, storage)
     observations, events, notes, context = _practice_report_inputs(data)
+    coverage, moments = _general_report_inputs(data)
     rules = await create_practice_report(
-        observations, events=events, analysis_notes=notes, session_context=context
+        observations,
+        events=events,
+        analysis_notes=notes,
+        session_context={**context, **coverage},
+        general_moments=moments,
     )
     return {**data, "rules_report": rules.model_dump()}
 
 
+def _cached_practice_report(cache_path, revision):
+    from shuttlesense.practice.report import PracticeReport
+
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        if cached["version"] == 8 and cached["source_mtime_ns"] == revision:
+            return PracticeReport.model_validate(cached["report"]).model_dump()
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def _with_context_version(job_id, revision, report):
+    payload = json.dumps([job_id, revision, report], sort_keys=True, separators=(",", ":"))
+    return {**report, "context_version": hashlib.sha256(payload.encode()).hexdigest()}
+
+
 async def _practice_report(job_id: str, request: Request, storage, refresh: bool = False):
     import asyncio
-    import json
 
     from shuttlesense.atomic import atomic_write_text
-    from shuttlesense.practice.report import PracticeReport, create_practice_report
+    from shuttlesense.practice.report import create_practice_report
 
     state = request.app.state
     if not hasattr(state, "practice_report_locks"):
@@ -285,16 +345,19 @@ async def _practice_report(job_id: str, request: Request, storage, refresh: bool
         cache_path = storage.job_dir(job_id) / "practice_report.json"
         provider = state.coach_provider
         if not refresh:
-            try:
-                cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                report = PracticeReport.model_validate(cached["report"])
-                if cached.get("version") == 8 and cached["source_mtime_ns"] == mtime:
-                    return report.model_dump(), mtime
-            except (OSError, ValueError, KeyError, TypeError):
-                pass
+            cached = _cached_practice_report(cache_path, mtime)
+            if cached is not None:
+                return _with_context_version(job_id, mtime, cached), mtime
         observations, visible_events, visible_notes, context = _practice_report_inputs(data)
+        coverage, moments = _general_report_inputs(data)
         report = await create_practice_report(
-            observations, provider, state.coach.retriever, visible_events, visible_notes, context
+            observations,
+            provider,
+            state.coach.retriever,
+            visible_events,
+            visible_notes,
+            {**context, **coverage},
+            general_moments=moments,
         )
         jobs = state.jobs
         with jobs.job_lock(job_id):
@@ -313,7 +376,7 @@ async def _practice_report(job_id: str, request: Request, storage, refresh: bool
                     }
                 ),
             )
-        return report.model_dump(), mtime
+        return _with_context_version(job_id, mtime, report.model_dump()), mtime
 
 
 @router.get("/sessions/{job_id}/report")
@@ -326,6 +389,68 @@ async def practice_report(job_id: str, request: Request, storage: StorageDep):
 async def refresh_practice_report(job_id: str, request: Request, storage: StorageDep):
     report, _ = await _practice_report(job_id, request, storage, refresh=True)
     return report
+
+
+class PracticeChatRequest(CoachChatRequest):
+    context_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    history: list[Turn] = Field(default_factory=list, max_length=12)
+
+
+@router.post("/sessions/{job_id}/chat")
+async def practice_chat(
+    job_id: str, body: PracticeChatRequest, request: Request, storage: StorageDep
+) -> StreamingResponse:
+    from shuttlesense.coach.llm import ChatError
+    from shuttlesense.practice.followup import answer
+
+    state = request.app.state
+    jobs = state.jobs
+
+    def current_report():
+        with jobs.job_lock(job_id):
+            _, data, revision = _completed_practice(job_id, request, storage)
+            cache_path = storage.job_dir(job_id) / "practice_report.json"
+            cached = _cached_practice_report(cache_path, revision)
+            if (
+                cached is None
+                or _with_context_version(job_id, revision, cached)["context_version"]
+                != body.context_version
+            ):
+                raise HTTPException(status_code=409, detail="Analysis changed. Reload the guide.")
+            return cached, data.get("fps")
+
+    report, fps = current_report()
+    if not report["evidence"]:
+        raise HTTPException(status_code=409, detail="There is not enough evidence in this video.")
+    provider = state.coach_provider
+    if provider is None:
+        raise HTTPException(status_code=503, detail="No AI coach provider is configured.")
+    state.practice_chat_limits.start_answer()
+
+    async def events():
+        try:
+            async for event in answer(
+                provider,
+                state.coach.retriever,
+                report,
+                body.message.strip(),
+                [turn.model_dump() for turn in body.history],
+                state.settings.coach_top_k,
+                fps,
+            ):
+                if event["type"] == "done":
+                    current_report()
+                yield f"data: {json.dumps(event)}\n\n"
+        except (ChatError, HTTPException) as exc:
+            status = exc.status if isinstance(exc, ChatError) else exc.status_code
+            event = {"type": "error", "status": status, "detail": exc.detail}
+            yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            state.practice_chat_limits.end_answer()
+
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+    )
 
 
 @router.get("/sessions/{job_id}/result")
@@ -374,6 +499,8 @@ def update_events(job_id: str, body: PracticeEvents, request: Request, storage: 
                 status_code=409, detail="Event editing is unavailable for this older session"
             )
         data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("analysis_kind") == "general":
+            raise HTTPException(status_code=409, detail="General practice has no stroke events")
         record = ClipRecord.model_validate_json(frames_path.read_text(encoding="utf-8"))
         if len({event.id for event in body.events}) != len(body.events):
             raise HTTPException(status_code=422, detail="event ids must be distinct")

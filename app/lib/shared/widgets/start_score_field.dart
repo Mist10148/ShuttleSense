@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/tokens.dart';
 import 'tactile.dart';
+import 'helper_text.dart';
+import '../../data/models/court_view.dart';
 
 typedef StartScore = ({int near, int far});
 
@@ -28,10 +30,14 @@ class StartScoreField extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.doubles = false,
+    this.sides = SideNames.ends,
   });
 
   /// Doubles: the scores belong to pairs, not players.
   final bool doubles;
+
+  /// What the two ends are called (Near / Far, or Left / Right side-on).
+  final SideNames sides;
   final StartScore? value;
   final ValueChanged<StartScore?> onChanged;
 
@@ -77,13 +83,13 @@ class _StartScoreFieldState extends State<StartScoreField> {
           Row(
             children: [
               points(
-                widget.doubles ? 'Near pair' : 'Near player',
+                '${widget.sides.near} ${widget.doubles ? 'pair' : 'player'}',
                 _score.near,
                 (v) => _update(score: (near: v, far: _score.far)),
               ),
               const SizedBox(width: Spacing.md),
               points(
-                widget.doubles ? 'Far pair' : 'Far player',
+                '${widget.sides.far} ${widget.doubles ? 'pair' : 'player'}',
                 _score.far,
                 (v) => _update(score: (near: _score.near, far: v)),
               ),
@@ -92,7 +98,7 @@ class _StartScoreFieldState extends State<StartScoreField> {
           if (problem != null)
             Padding(
               padding: const EdgeInsets.only(top: Spacing.sm),
-              child: Text(problem, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: HelperText(problem, error: true),
             ),
         ],
       ],
@@ -108,11 +114,15 @@ class StartGamesField extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.doubles = false,
+    this.sides = SideNames.ends,
   });
 
   final StartScore? value;
   final ValueChanged<StartScore?> onChanged;
   final bool doubles;
+
+  /// What the two ends are called (Near / Far, or Left / Right side-on).
+  final SideNames sides;
 
   @override
   Widget build(BuildContext context) {
@@ -145,13 +155,13 @@ class StartGamesField extends StatelessWidget {
         Row(
           children: [
             side(
-              doubles ? 'Near pair' : 'Near player',
+              '${sides.near} ${doubles ? 'pair' : 'player'}',
               games.near,
               (v) => update((near: v, far: games.far)),
             ),
             const SizedBox(width: Spacing.md),
             side(
-              doubles ? 'Far pair' : 'Far player',
+              '${sides.far} ${doubles ? 'pair' : 'player'}',
               games.far,
               (v) => update((near: games.near, far: v)),
             ),

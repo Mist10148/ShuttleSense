@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/game_service_prompt.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../data/models/court_view.dart';
 
 /// F14/F16: assisted scoreboard at the current playback position, with per-rally winner
 /// chips to correct the referee layer's calls, and the match state (D21): games, who
@@ -160,9 +161,9 @@ class Scoreboard extends StatelessWidget {
             label: [
               'Score: near ${score.near}, far ${score.far}',
               if (server != null)
-                '${playerLabel(total.serverId ?? server)} serves from the '
+                '${context.sideLabel(total.serverId ?? server)} serves from the '
                     '${total.serviceCourt} court'
-                    '${total.receiverId == null ? '' : ' to ${playerLabel(total.receiverId!)}'}',
+                    '${total.receiverId == null ? '' : ' to ${context.sideLabel(total.receiverId!)}'}',
             ].join('. '),
             excludeSemantics: true,
             // Each side's score in its own recessed display, its point key right under it.
@@ -179,7 +180,7 @@ class Scoreboard extends StatelessWidget {
                           radius: 16,
                           padding: const EdgeInsets.symmetric(vertical: Spacing.md),
                           child: _Side(
-                            label: side == 'near' ? 'Near' : 'Far',
+                            label: context.sideLabel(side),
                             points: side == 'near' ? score.near : score.far,
                             color: colors.forSide(side),
                             serving: server == side,
@@ -208,7 +209,7 @@ class Scoreboard extends StatelessWidget {
           // Doubles: who serves and receives, named (Phase 9).
           if (server != null && total.serverId != null && total.receiverId != null)
             Text(
-              '${playerLabel(total.serverId!)} serves to ${playerLabel(total.receiverId!)}',
+              '${context.sideLabel(total.serverId!)} serves to ${context.sideLabel(total.receiverId!)}',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall,
             ),
@@ -383,8 +384,6 @@ class _MatchState extends StatelessWidget {
 
   final Score score;
 
-  static String _name(String side) => playerLabel(side);
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -394,7 +393,7 @@ class _MatchState extends StatelessWidget {
         Chip(
           avatar: const Icon(Icons.emoji_events_outlined, size: 16),
           label: Text(
-            '${score.bestOf > 1 ? 'Match won by ${_name(winner)}' : '${_name(winner)} wins'}'
+            '${score.bestOf > 1 ? 'Match won by ${context.sideLabel(winner)}' : '${context.sideLabel(winner)} wins'}'
             '${score.conceded ? ' (retired)' : ''}',
           ),
         )
@@ -402,18 +401,18 @@ class _MatchState extends StatelessWidget {
         if (score.server != null)
           Chip(
             avatar: const Icon(Icons.sports_tennis, size: 16),
-            label: Text('${_name(score.server!)} serves · ${score.serviceCourt} court'),
+            label: Text('${context.sideLabel(score.server!)} serves · ${score.serviceCourt} court'),
           ),
         for (final side in score.matchPoint)
           Chip(
             backgroundColor: scheme.tertiaryContainer,
-            label: Text('Match point ${_name(side)}'),
+            label: Text('Match point ${context.sideLabel(side)}'),
           ),
         for (final side in score.gamePoint)
           if (!score.matchPoint.contains(side))
             Chip(
               backgroundColor: scheme.secondaryContainer,
-              label: Text('Game point ${_name(side)}'),
+              label: Text('Game point ${context.sideLabel(side)}'),
             ),
       ],
     ];
@@ -513,7 +512,7 @@ class _RallyRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: Spacing.xs),
               child: ChoiceChip(
-                label: Text(playerLabel(side)),
+                label: Text(context.sideLabel(side)),
                 selected: rally.winner == side,
                 tooltip: rally.winner == side
                     ? 'Rally ${rally.index + 1} won by the $side ${doubles ? 'pair' : 'player'}; '
@@ -610,9 +609,9 @@ class DecisionMenu extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${playerLabel(retiring)} retires?'),
+        title: Text('${context.sideLabel(retiring)} retires?'),
         content: Text(
-          '${playerLabel(winner)} wins the match. Rallies after this do not count. '
+          '${context.sideLabel(winner)} wins the match. Rallies after this do not count. '
           'Undo takes it back.',
         ),
         actions: [
@@ -648,12 +647,14 @@ class DecisionMenu extends StatelessWidget {
           for (final side in const ['near', 'far']) ...[
             PopupMenuItem(
               value: 'fault:$side',
-              child: Text('Fault by ${playerLabel(side)} (point ${playerLabel(_other(side))})'),
+              child: Text(
+                'Fault by ${context.sideLabel(side)} (point ${context.sideLabel(_other(side))})',
+              ),
             ),
             PopupMenuItem(
               value: 'service_fault:$side',
               child: Text(
-                'Service fault by ${playerLabel(side)} (point ${playerLabel(_other(side))})',
+                'Service fault by ${context.sideLabel(side)} (point ${context.sideLabel(_other(side))})',
               ),
             ),
           ],
@@ -663,7 +664,7 @@ class DecisionMenu extends StatelessWidget {
           const PopupMenuItem(value: 'ends:-', child: Text('Players changed ends')),
         if (onConcede != null)
           for (final side in const ['near', 'far'])
-            PopupMenuItem(value: 'retire:$side', child: Text('${playerLabel(side)} retires')),
+            PopupMenuItem(value: 'retire:$side', child: Text('${context.sideLabel(side)} retires')),
       ],
       child: const Padding(
         padding: EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),

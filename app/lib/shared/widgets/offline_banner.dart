@@ -45,7 +45,7 @@ class OfflineBanner extends ConsumerWidget {
                       ),
                       TextButton(
                         onPressed: () => ref.invalidate(healthProvider),
-                        child: const Text('Retry'),
+                        child: const Text('Try again'),
                       ),
                     ],
                   ),

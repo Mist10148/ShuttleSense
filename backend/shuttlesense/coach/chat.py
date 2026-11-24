@@ -126,14 +126,16 @@ def _tidy(text: str) -> str:
     return re.sub(r"[ \t]+([.,;:])", r"\1", re.sub(r"[ \t]{2,}", " ", text)).strip()
 
 
-def validate_citations(text: str, moments: list[Moment]) -> tuple[str, list[Moment]]:
+def validate_citations(
+    text: str, moments: list[Moment], *, tolerance_s: float = CITATION_TOLERANCE_S
+) -> tuple[str, list[Moment]]:
     """Drop citations that match no moment in the digest; return (clean text, moments)."""
     found: list[Moment] = []
 
     def keep(match: re.Match[str]) -> str:
         t = float(match.group(1))
         best = min(moments, key=lambda m: abs(m.time_s - t), default=None)
-        if best is None or abs(best.time_s - t) > CITATION_TOLERANCE_S:
+        if best is None or abs(best.time_s - t) > tolerance_s:
             return ""
         if all(m.frame != best.frame for m in found):
             found.append(best)

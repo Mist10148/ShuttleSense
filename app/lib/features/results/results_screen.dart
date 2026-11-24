@@ -37,6 +37,7 @@ import 'widgets/hit_anchor.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import '../../data/models/court_view.dart';
 
 /// C3 / FR-C3: annotated playback with timeline, minimap, status and score.
 class ResultsScreen extends ConsumerWidget {
@@ -108,15 +109,18 @@ class ResultsScreen extends ConsumerWidget {
                       detail: '$e',
                       action: FilledButton(
                         onPressed: () => ref.invalidate(recordProvider(jobId)),
-                        child: const Text('Retry'),
+                        child: const Text('Try again'),
                       ),
                     ),
-                    data: (record) => _ResultsBody(
-                      jobId: jobId,
-                      record: record,
-                      videoUrl: api.videoUrl(jobId),
-                      headers: api.authHeaders,
-                      videoAvailable: outputs?.video,
+                    data: (record) => CourtSides(
+                      names: SideNames.fromCorners(record.courtCorners),
+                      child: _ResultsBody(
+                        jobId: jobId,
+                        record: record,
+                        videoUrl: api.videoUrl(jobId),
+                        headers: api.authHeaders,
+                        videoAvailable: outputs?.video,
+                      ),
                     ),
                   ),
                 ),

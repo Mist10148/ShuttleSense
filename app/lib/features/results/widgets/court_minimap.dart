@@ -10,6 +10,7 @@ import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
 import '../../../shared/widgets/tactile.dart';
 import '../../../ui/depth.dart';
+import '../../../data/models/court_view.dart';
 
 /// Singles court in meters, same lines as backend/shuttlesense/court/lines.py.
 const double kCourtWidthM = 5.18;
@@ -303,7 +304,12 @@ class _CourtMinimapState extends State<CourtMinimap> with SingleTickerProviderSt
                     const SizedBox(height: Spacing.md),
                     Semantics(
                       label: [
-                        minimapLabel(record, frameIndex, doubles: doubles),
+                        minimapLabel(
+                          record,
+                          frameIndex,
+                          doubles: doubles,
+                          sides: CourtSides.of(context),
+                        ),
                         if (widget.reviewCall case final call?)
                           'Highlighted landing for rally ${call.rallyIndex + 1}.',
                         ?heat?.describe(),
@@ -410,7 +416,12 @@ class _CourtMinimapState extends State<CourtMinimap> with SingleTickerProviderSt
 /// What the minimap shows at [frameIndex], for screen readers (T4.11): each player's and the
 /// shuttle's position in court meters (x across from the left sideline, y from the near
 /// baseline).
-String minimapLabel(ClipRecord record, int frameIndex, {bool? doubles}) {
+String minimapLabel(
+  ClipRecord record,
+  int frameIndex, {
+  bool? doubles,
+  SideNames sides = SideNames.ends,
+}) {
   final f = record.frame(frameIndex);
   if (f == null) return 'Top-down court, no positions for this moment';
   String at(String who, CourtPoint? p) => p == null
@@ -423,11 +434,12 @@ String minimapLabel(ClipRecord record, int frameIndex, {bool? doubles}) {
       ? location
       : '$location (${shuttle.$2 ? 'rally estimate' : 'camera projection'})';
   if (isDoubles) {
-    return 'Top-down doubles court. ${at('Near player 1', f.nearPos)}. '
-        '${at('Near player 2', f.near2Pos)}. ${at('Far player 1', f.farPos)}. '
-        '${at('Far player 2', f.far2Pos)}. $description.';
+    return 'Top-down doubles court. ${at('${sides.near} player 1', f.nearPos)}. '
+        '${at('${sides.near} player 2', f.near2Pos)}. ${at('${sides.far} player 1', f.farPos)}. '
+        '${at('${sides.far} player 2', f.far2Pos)}. $description.';
   }
-  return 'Top-down court. ${at('Near player', f.nearPos)}. ${at('Far player', f.farPos)}. '
+  return 'Top-down court. ${at('${sides.near} player', f.nearPos)}. '
+      '${at('${sides.far} player', f.farPos)}. '
       '$description.';
 }
 
@@ -1163,8 +1175,14 @@ class HeatLegend extends StatelessWidget {
         runSpacing: Spacing.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          key(players.near, heat.doubles ? 'Near pair' : 'Near'),
-          key(players.far, heat.doubles ? 'Far pair' : 'Far'),
+          key(
+            players.near,
+            heat.doubles ? '${context.sideLabel('near')} pair' : context.sideLabel('near'),
+          ),
+          key(
+            players.far,
+            heat.doubles ? '${context.sideLabel('far')} pair' : context.sideLabel('far'),
+          ),
           Text(
             'Time in play per 25 cm square, up to ${top.toStringAsFixed(top < 1 ? 2 : 1)} s',
             style: text,

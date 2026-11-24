@@ -246,7 +246,9 @@ def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, m
     storage.job_dir.return_value = tmp_path
     storage.video_deleted.return_value = False
     manager = LiveManager(SimpleNamespace(jobs=jobs, storage=storage), fake=True, ttl_s=0)
-    monkeypatch.setattr(shuttlesense.io, "FrameReader", lambda *a, **kw: [])
+    monkeypatch.setattr(
+        shuttlesense.io, "FrameReader", lambda *a, **kw: SimpleNamespace(frames=lambda *_: [])
+    )
 
     def render(*args, progress, **kwargs):
         progress(0.25)
@@ -256,7 +258,7 @@ def test_saved_watch_render_reports_progress_and_checks_cancellation(tmp_path, m
     monkeypatch.setattr(shuttlesense.render, "render_video", render)
     manager._render(
         SimpleNamespace(id="job", video_id="v", overlays=[]),
-        SimpleNamespace(height=720, fps=30),
+        SimpleNamespace(height=720, fps=30, frames=[]),
         tmp_path / "source.mp4",
     )
     values = [call.kwargs["progress"] for call in jobs._update.call_args_list]

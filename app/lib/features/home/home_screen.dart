@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/config/app_mode.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/models/clip_record.dart';
@@ -84,23 +83,20 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-/// No analyses on this server yet: say what Home will show and offer the first upload.
-class _FirstRun extends ConsumerWidget {
+/// No analyses on this server yet: say what Home will show and open the mode picker.
+class _FirstRun extends StatelessWidget {
   const _FirstRun();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => AppCard(
+  Widget build(BuildContext context) => AppCard(
     child: MessageView(
       icon: Icons.sports_tennis,
       message: 'No analyses yet',
       detail: 'Your latest analyses and their stroke mix show up here.',
       action: FilledButton.icon(
-        onPressed: () async {
-          await ref.read(appModeProvider.notifier).set(AppMode.upload);
-          if (context.mounted) context.go(Routes.home);
-        },
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Upload your first rally'),
+        onPressed: () => context.go(Routes.mode),
+        icon: const Icon(Icons.insights_outlined),
+        label: const Text('Choose an analysis mode'),
       ),
     ),
   );
@@ -187,9 +183,18 @@ class _RecentRow extends ConsumerWidget {
             : Routes.job(job.id),
       ),
       child: ListRow(
+        // The same icon and pastel as the job's mode card.
         leading: IconChip(
-          icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined,
-          background: job.isLive ? p.sky : p.lavender,
+          icon: job.mode == 'practice'
+              ? Icons.sports_tennis
+              : job.isLive
+              ? Icons.videocam_outlined
+              : Icons.movie_outlined,
+          background: job.mode == 'practice'
+              ? p.peach
+              : job.isLive
+              ? p.sky
+              : p.lavender,
         ),
         title: title,
         subtitle:

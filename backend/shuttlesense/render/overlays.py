@@ -106,9 +106,17 @@ def draw_boxes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
     from shuttlesense.render.player_boxes import display_players
 
     thick = max(1, int(round(2 * state.scale)))
+    render = state.stage("render")
+    occluded = (render.get("practice_occlusion_boxes") or {}).get(i)
+    if occluded is not None:
+        _draw_obscured_box(img, occluded, state.scale, thick)
     if "labels" not in state.cache:
-        state.cache["labels"] = _player_labels(record)
-    boxes = display_players(record, i, float(state.stage("render").get("player_box_hold_s", 0.6)))
+        state.cache["labels"] = (
+            (("near", "Selected player"),)
+            if render.get("selected_player")
+            else _player_labels(record)
+        )
+    boxes = display_players(record, i, float(render.get("player_box_hold_s", 0.6)))
     for side, label in state.cache["labels"]:
         player = boxes.get(side)
         if player is None:
@@ -130,6 +138,35 @@ def draw_boxes(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) 
             cv2.rectangle(img, _pt(x, y), _pt(x + w, y + h), color, thick, cv2.LINE_AA)
         cv2.putText(img, label, _pt(x, y - 6 * state.scale), style.FONT, 0.6 * state.scale,
                     color, thick, cv2.LINE_AA)  # fmt: skip
+
+
+def _draw_obscured_box(img, bbox, scale, thick):
+    import cv2
+
+    x, y, w, h = bbox
+    x0, y0 = _pt(x, y)
+    x1, y1 = _pt(x + w, y + h)
+    dash = max(4, round(9 * scale))
+    color = style.PLAYER_COLORS["near"]
+    for y in (y0, y1):
+        for x in range(x0, x1, 2 * dash):
+            cv2.line(img, (x, y), (min(x + dash, x1), y), color, thick, cv2.LINE_AA)
+    for x in (x0, x1):
+        for y in range(y0, y1, 2 * dash):
+            cv2.line(img, (x, y), (x, min(y + dash, y1)), color, thick, cv2.LINE_AA)
+    label = "Temporarily obscured"
+    (label_width, _), _ = cv2.getTextSize(label, style.FONT, 0.6 * scale, thick)
+    label_x = max(0, min(x0, img.shape[1] - label_width - 2))
+    cv2.putText(
+        img,
+        label,
+        (label_x, max(round(18 * scale), y0 - dash)),
+        style.FONT,
+        0.6 * scale,
+        color,
+        thick,
+        cv2.LINE_AA,
+    )
 
 
 def draw_pose(img: np.ndarray, record: ClipRecord, i: int, state: RenderState) -> None:

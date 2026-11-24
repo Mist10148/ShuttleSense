@@ -6,6 +6,7 @@ import '../../../shared/disclaimers.dart';
 import '../../../shared/widgets/courtside_tools.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../live_controller.dart';
+import '../../../data/models/court_view.dart';
 
 typedef PracticeCue = ({String text, int rally});
 
@@ -64,9 +65,9 @@ class LiveCoachPanel extends StatelessWidget {
     final scheme = theme.colorScheme;
     final colors = PlayerColors.of(context);
     final last = state.lastRally;
-    final nextCue = _nextCue(last);
+    final nextCue = _nextCue(context, last);
     final top = _topFixes(state.coaching);
-    final side = player == null ? '' : playerLabel(player!);
+    final side = player == null ? '' : context.sideLabel(player!);
     return SectionCard(
       title: 'Between-rally coaching',
       child: Column(
@@ -145,7 +146,7 @@ class LiveCoachPanel extends StatelessWidget {
                 if (last.durationS != null) '${last.durationS!.toStringAsFixed(1)} s',
                 if (last.peakSpeedKmh != null) 'peak ${last.peakSpeedKmh!.round()} km/h (est.)',
                 if (last.call != null) 'landed ${last.call}',
-                if (last.winner != null) '${playerLabel(last.winner!)} won',
+                if (last.winner != null) '${context.sideLabel(last.winner!)} won',
               ].join(' · '),
             ),
           ],
@@ -203,7 +204,7 @@ class LiveCoachPanel extends StatelessWidget {
     String? cue;
     for (final hit in hits) {
       if (player != null && hit.player != player && hit.who != player) continue;
-      cue = _formatCue(hit.who, hit.stroke, hit.tip);
+      cue = _formatCue(context, hit.who, hit.stroke, hit.tip);
       if (cue != null) break;
     }
     final count = rally.strokeCount;
@@ -225,11 +226,11 @@ class LiveCoachPanel extends StatelessWidget {
     );
   }
 
-  String? _nextCue(RallySummary? rally) {
+  String? _nextCue(BuildContext context, RallySummary? rally) {
     if (rally == null) return null;
     for (final fault in rally.faults) {
       if (player != null && fault.player != player && _faultWho(fault) != player) continue;
-      final cue = _formatCue(_faultWho(fault), fault.stroke, fault.tip);
+      final cue = _formatCue(context, _faultWho(fault), fault.stroke, fault.tip);
       if (cue != null) return cue;
     }
     return null;
@@ -246,9 +247,9 @@ class LiveCoachPanel extends StatelessWidget {
   }
 
   /// "Near 2, Smash: tip" for a side or a doubles partner.
-  String? _formatCue(String who, String? stroke, String? tip) {
+  String? _formatCue(BuildContext context, String who, String? stroke, String? tip) {
     if (tip == null || tip.trim().isEmpty) return null;
-    final name = playerLabel(who);
+    final name = context.sideLabel(who);
     final label = stroke == null ? name : '$name, ${kStrokeLabels[stroke] ?? stroke}';
     return '$label: ${tip.trim()}';
   }

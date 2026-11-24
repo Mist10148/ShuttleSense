@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 import 'stroke_timeline.dart' show formatClock;
 
 /// What the shot panel shows at one frame: the current stroke, the shuttle speed, the rally
@@ -119,7 +120,7 @@ class ShotPanel extends StatelessWidget {
     };
     final who = [
       if (hit != null) ...[
-        playerLabel(hit.who),
+        context.sideLabel(hit.who),
         formatClock(hit.timeS),
         if (hit.confidence case final c?) '${(c * 100).round()}% sure',
       ] else
@@ -158,7 +159,7 @@ class ShotPanel extends StatelessWidget {
           Semantics(
             label: hit == null
                 ? 'No stroke yet'
-                : 'Shot ${r.shotNumber}: $stroke by the ${playerLabel(hit.who)} player '
+                : 'Shot ${r.shotNumber}: $stroke by the ${context.sideLabel(hit.who)} player '
                       'at ${formatClock(hit.timeS)}',
             excludeSemantics: true,
             child: Row(

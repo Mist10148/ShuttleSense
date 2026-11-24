@@ -17,6 +17,7 @@ import '../coach/source_chips.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import '../../shared/widgets/helper_text.dart';
 
 class ChatState {
   const ChatState({this.messages = const [], this.streaming, this.busy = false, this.error});
@@ -239,10 +240,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   if (state.error != null)
                                     Padding(
                                       padding: const EdgeInsets.only(top: Spacing.sm),
-                                      child: Text(
-                                        state.error!,
-                                        style: TextStyle(color: theme.colorScheme.error),
-                                      ),
+                                      child: HelperText(state.error!, error: true),
                                     ),
                                 ],
                               ),
