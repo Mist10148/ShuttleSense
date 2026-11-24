@@ -179,3 +179,30 @@ def test_the_overlay_score_turns_after_a_change_by_rule() -> None:
     assert score_at(record, 16) == (4, 11)  # 11-4 as played, seen from the new ends
     assert score_at(record, 26) == (5, 11)
     assert (record.score.near, record.score.far) == (5, 11)
+
+
+def test_jittery_rest_still_lands() -> None:
+    """Tracker jitter of a few pixels per frame on a resting shuttle is still a landing."""
+    from shuttlesense.referee.rally import scaled_pixels
+
+    n = 80
+    xy = moving(n)
+    rng = np.random.default_rng(0)
+    xy[30:] = np.array([600.0, 900.0]) + rng.uniform(-6, 6, size=(n - 30, 2))  # 1080p jitter
+    visible = np.ones(n, dtype=int)
+    visible[[33, 40]] = 0  # a missed detection or two while resting
+    cfg = scaled_pixels(CFG, 1080)
+    segs = segment_rallies(visible, xy, [2, 15], cfg)
+    assert len(segs) == 1 and segs[0].closed and segs[0].landing_frame == 30
+
+
+def test_a_detection_that_never_moved_is_not_a_landing() -> None:
+    """A static false detection (logo, line) ends the rally without a landing call."""
+    n = 80
+    xy = np.tile([300.0, 400.0], (n, 1))
+    visible = np.zeros(n, dtype=int)
+    visible[2:4] = 1  # the serve is seen, then only a fixed bright spot
+    visible[9:] = 1
+    segs = segment_rallies(visible, xy, [2], CFG)
+    assert len(segs) == 1 and segs[0].closed and segs[0].landing_frame is None
+    assert segs[0].end == 9  # ended by the rest rule, not by losing the shuttle

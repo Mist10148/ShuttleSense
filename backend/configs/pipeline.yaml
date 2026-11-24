@@ -178,7 +178,10 @@ stages:
     enabled: true
     stationary_frames_end: 20   # shuttle still on floor for N frames ends a rally
     lost_frames_end: 30
-    line_call:                  # F20, docs/PRD.md: automated calls, never official
+    rest_radius_px: 6.0         # at 720p: a resting shuttle's detections stay this close (jitter)
+    min_approach_px: 15.0       # at 720p: a landing follows a flight from at least this far
+    approach_frames: 10         # frames before the rest searched for that flight
+    line_call:                 # F20, docs/PRD.md: automated calls, never official
       court: singles            # singles | doubles lines
       homography_err_m: 0.05    # line position error from the corner taps
       tracking_err_px: 4.0      # shuttle position error in pixels, scaled to meters per landing

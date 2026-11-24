@@ -24,8 +24,42 @@ from shuttlesense.stage import StageContext, StageSkipped
 from shuttlesense.timing import scaled
 
 STATIONARY_PX = 3.0
+# Pixel distances in the config are for 720p video and scale with the frame height.
+REST_RADIUS_PX = 6.0  # a resting shuttle's detections stay this close to where it settled
+MIN_APPROACH_PX = 15.0  # ...and it flew in from at least this far away
+APPROACH_FRAMES = 10  # frames before the rest that must show that flight
+MAX_MISSED_AT_REST = 2  # single missed detections while resting do not break the rest
 # stages.referee keys that count frames.
-FRAME_KEYS = ("stationary_frames_end", "lost_frames_end")
+FRAME_KEYS = ("stationary_frames_end", "lost_frames_end", "approach_frames")
+PIXEL_KEYS = ("rest_radius_px", "min_approach_px")
+
+
+def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
+    """A copy of `cfg` with the 720p pixel distances converted to the video's height."""
+    scale = (height or 720) / 720
+    out = dict(cfg)
+    defaults = {"rest_radius_px": REST_RADIUS_PX, "min_approach_px": MIN_APPROACH_PX}
+    for key in PIXEL_KEYS:
+        out[key] = float(out.get(key, defaults[key])) * scale
+    return out
+
+
+def _approached(
+    visible: np.ndarray, xy: np.ndarray, rest: int, first: int, cfg: dict[str, Any]
+) -> bool:
+    """Whether the shuttle flew in before resting at frame `rest`.
+
+    A real landing follows a flight, so some detection in the approach_frames before the
+    rest lies min_approach_px or more away. A detection that never moved (a logo, a line,
+    a shuttle lying off court the whole time) is not a landing (D33).
+    """
+    lookback = int(cfg.get("approach_frames", APPROACH_FRAMES))
+    far = float(cfg.get("min_approach_px", MIN_APPROACH_PX))
+    lo = max(first, rest - lookback)
+    seen = visible[lo:rest].astype(bool)
+    if not seen.any():
+        return False
+    return bool((np.linalg.norm(xy[lo:rest][seen] - xy[rest], axis=1) >= far).any())
 
 
 @dataclass(frozen=True)
@@ -47,12 +81,16 @@ def _rest_after(
     """First rally end in [frame, stop): (end frame, landing frame) or None if play goes on.
 
     End rules: the shuttle stays invisible for lost_frames_end frames (end = last visible
-    frame, landing unknown unless it was resting), or it stays within STATIONARY_PX for
-    stationary_frames_end frames (end = landing = first resting frame). A lost shuttle gives
-    no landing call: it may have left the frame, so the user decides that rally.
+    frame, landing unknown unless it was resting), or its detections stay within
+    rest_radius_px of where it settled for stationary_frames_end frames (end = landing =
+    first resting frame). The radius, not a per-frame step, absorbs tracker jitter, and a
+    missed detection or two while resting does not restart the count. A lost shuttle gives
+    no landing call: it may have left the frame, so the user decides that rally. A rest
+    that did not follow a flight (_approached) also ends the rally without a landing.
     """
     lost = int(cfg.get("lost_frames_end", 30))
     still = int(cfg.get("stationary_frames_end", 20))
+    radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
     last_visible, missing = frame, 0
     rest_start: int | None = None
     for i in range(frame, stop):
@@ -62,19 +100,20 @@ def _rest_after(
             continue
         if not visible[i]:
             missing += 1
+            if missing > MAX_MISSED_AT_REST:
+                rest_start = None
             if missing >= lost:
                 return last_visible, None
             continue
-        moved = np.linalg.norm(xy[i] - xy[i - 1]) if i > frame and visible[i - 1] else None
-        if moved is not None and moved < STATIONARY_PX:
-            if rest_start is None:
-                rest_start = i - 1
-            if i - rest_start + 1 >= still:
-                return rest_start, rest_start
-        else:
-            rest_start = None
         missing = 0
         last_visible = i
+        if rest_start is not None and np.linalg.norm(xy[i] - xy[rest_start]) <= radius:
+            if i - rest_start + 1 >= still:
+                if _approached(visible, xy, rest_start, frame, cfg):
+                    return rest_start, rest_start
+                return rest_start, None
+        else:
+            rest_start = i
     return None
 
 
@@ -189,7 +228,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     if not record.hits:
         raise StageSkipped("no hits, so no rallies")
     # Frame counts in the config are for 30 fps.
-    cfg = scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps)
+    # Pixel distances are for 720p.
+    cfg = scaled_pixels(scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps), record.height)
     xy, visible = track_arrays(record)
     segments = segment_rallies(
         visible,
