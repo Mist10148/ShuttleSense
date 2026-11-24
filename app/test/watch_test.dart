@@ -54,6 +54,21 @@ class _WatchSocket extends Fake implements WebSocketChannel {
   void send(Map<String, dynamic> message) => incoming.add(jsonEncode(message));
 }
 
+Future<void> _tapSetup(WidgetTester tester, String label) async {
+  final target = find.text(label);
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _uploadAndOpenOptions(WidgetTester tester) async {
+  await _tapSetup(tester, 'Choose video');
+  expect(find.text('Playback and analysis'), findsNothing);
+  await _tapSetup(tester, 'Continue to options');
+  expect(find.byType(CornerCanvas), findsNothing);
+}
+
 void main() {
   testWidgets('pause holds an in-flight frame until resume and stop sends no next', (tester) async {
     FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
@@ -78,19 +93,23 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.text('Choose video'));
-    await tester.pumpAndSettle();
+    await _uploadAndOpenOptions(tester);
     await tester.tap(find.text('Analyze every frame'));
     await tester.pump();
     await tester.ensureVisible(find.text('Singles'));
     await tester.pump();
     await tester.tap(find.text('Singles'));
     await tester.pump();
+    await _tapSetup(tester, 'Continue to calibration');
+    expect(find.text('Playback and analysis'), findsNothing);
     await tester.ensureVisible(find.text('Start analysis'));
     await tester.pump();
     await tester.tap(find.text('Start analysis'));
     await tester.pump();
     expect(socket.outgoing.messages.first['type'], 'start');
+    expect(socket.outgoing.messages.first['playback'], 'complete');
+    expect(socket.outgoing.messages.first['court'], 'singles');
+    expect(socket.outgoing.messages.first.containsKey('corners'), isFalse);
     socket.send({
       'type': 'started',
       'fps': 25,
@@ -224,8 +243,7 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.text('Choose video'));
-    await tester.pumpAndSettle();
+    await _uploadAndOpenOptions(tester);
     final faster = find.widgetWithText(TactileSwitchTile, 'Faster player analysis (experimental)');
     expect(tester.widget<TactileSwitchTile>(faster).value, isFalse);
     await tester.tap(faster);
@@ -242,6 +260,7 @@ void main() {
     await tester.tap(find.text('Analyze every frame'));
     await tester.pump();
     expect(find.textContaining('Playback waits for every normalized frame'), findsOneWidget);
+    await _tapSetup(tester, 'Continue to calibration');
     await tester.ensureVisible(find.text('Start analysis'));
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start analysis')).onPressed,
@@ -255,10 +274,14 @@ void main() {
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start analysis')).onPressed,
       isNotNull,
     );
+    await _tapSetup(tester, 'Back to options');
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Doubles')).selected, isTrue);
+    expect(find.textContaining('Playback waits for every normalized frame'), findsOneWidget);
     await tester.ensureVisible(find.text('Suggest automatically'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Suggest automatically'));
     await tester.pumpAndSettle();
+    await _tapSetup(tester, 'Continue to calibration');
     await tester.ensureVisible(find.text('Suggest match format'));
     expect(
       tester
@@ -284,7 +307,7 @@ void main() {
     await pumpScreen(
       tester,
       const WatchScreen(),
-      size: laptop,
+      size: phone,
       api: api,
       overrides: [
         healthProvider.overrideWith(
@@ -299,8 +322,8 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.text('Choose video'));
-    await tester.pumpAndSettle();
+    await _uploadAndOpenOptions(tester);
+    await _tapSetup(tester, 'Continue to calibration');
     await tester.ensureVisible(find.text('Find corners automatically'));
     await tester.pumpAndSettle();
     expect(
@@ -326,6 +349,9 @@ void main() {
       expect(singles[i].x, closeTo(api.suggestedCorners![i].x, 0.001));
       expect(singles[i].y, closeTo(api.suggestedCorners![i].y, 0.001));
     }
+    await _tapSetup(tester, 'Back to options');
+    await _tapSetup(tester, 'Continue to calibration');
+    expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, hasLength(4));
     await tester.ensureVisible(find.text('Clear corners'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Clear corners'));
@@ -353,12 +379,12 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.text('Choose video'));
-    await tester.pumpAndSettle();
+    await _uploadAndOpenOptions(tester);
     await tester.ensureVisible(find.text('Singles'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Singles'));
     await tester.pumpAndSettle();
+    await _tapSetup(tester, 'Continue to calibration');
     await tester.ensureVisible(find.text('Find corners automatically'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Find corners automatically'));
@@ -393,12 +419,12 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.text('Choose video'));
-    await tester.pumpAndSettle();
+    await _uploadAndOpenOptions(tester);
     await tester.ensureVisible(find.text('Suggest automatically'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Suggest automatically'));
     await tester.pumpAndSettle();
+    await _tapSetup(tester, 'Continue to calibration');
     for (final point in [
       (x: 100.0, y: 650.0),
       (x: 1180.0, y: 650.0),
