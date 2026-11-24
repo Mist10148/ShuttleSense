@@ -29,16 +29,31 @@ REST_RADIUS_PX = 6.0  # a resting shuttle's detections stay this close to where 
 MIN_APPROACH_PX = 15.0  # ...and it flew in from at least this far away
 APPROACH_FRAMES = 10  # frames before the rest that must show that flight
 MAX_MISSED_AT_REST = 2  # single missed detections while resting do not break the rest
+# A shuttle lost as it falls and found lying where it fell (D46).
+RELOCATE_PX = 40.0  # the rest is at most this far from the last point of the flight
+RELOCATE_STILL_FRAMES = 6  # ...and stays put this long
+RELOCATE_EXTRA_FRAMES = 15  # it must settle within lost_frames_end + this after the loss
+FALLING_FRAMES = 8  # frames before the loss that must show the shuttle coming down
 # stages.referee keys that count frames.
-FRAME_KEYS = ("stationary_frames_end", "lost_frames_end", "approach_frames")
-PIXEL_KEYS = ("rest_radius_px", "min_approach_px")
+FRAME_KEYS = (
+    "stationary_frames_end",
+    "lost_frames_end",
+    "approach_frames",
+    "relocate_still_frames",
+    "relocate_extra_frames",
+)
+PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px")
 
 
 def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
     """A copy of `cfg` with the 720p pixel distances converted to the video's height."""
     scale = (height or 720) / 720
     out = dict(cfg)
-    defaults = {"rest_radius_px": REST_RADIUS_PX, "min_approach_px": MIN_APPROACH_PX}
+    defaults = {
+        "rest_radius_px": REST_RADIUS_PX,
+        "min_approach_px": MIN_APPROACH_PX,
+        "relocate_px": RELOCATE_PX,
+    }
     for key in PIXEL_KEYS:
         out[key] = float(out.get(key, defaults[key])) * scale
     return out
@@ -60,6 +75,53 @@ def _approached(
     if not seen.any():
         return False
     return bool((np.linalg.norm(xy[lo:rest][seen] - xy[rest], axis=1) >= far).any())
+
+
+def _relocated_rest(
+    visible: np.ndarray,
+    xy: np.ndarray,
+    last_visible: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
+) -> int | None:
+    """The landing frame of a shuttle lost as it fell and then found lying where it fell.
+
+    Small, fast and often hidden by a player or the net, a falling shuttle is commonly
+    missed for a second and found again on the floor. That is a landing when (D46):
+    the shuttle was coming down (image y rising) when it was lost; it is found again and
+    stays within rest_radius_px for relocate_still_frames, settling no later than
+    lost_frames_end + relocate_extra_frames after the loss, so a live session knows it
+    before it closes the rally; and it lies within relocate_px of the last flight point.
+    Anything else (an unobserved frame, a rest somewhere else) gives no landing. Hits after
+    the loss are not a limit: a hit detected on a shuttle lying still is not a stroke.
+    """
+    lost = int(cfg.get("lost_frames_end", 30))
+    still = int(cfg.get("relocate_still_frames", RELOCATE_STILL_FRAMES))
+    extra = int(cfg.get("relocate_extra_frames", RELOCATE_EXTRA_FRAMES))
+    radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
+    near = float(cfg.get("relocate_px", RELOCATE_PX))
+    lookback = int(cfg.get("approach_frames", FALLING_FRAMES))
+    seen = [j for j in range(max(0, last_visible - lookback), last_visible + 1) if visible[j]]
+    if len(seen) < 3 or xy[seen[-1]][1] - xy[seen[0]][1] <= 0:
+        return None  # not seen coming down: it may have flown out of the frame
+    rest_start: int | None = None
+    missing = 0
+    for i in range(last_visible + 1, min(len(visible), last_visible + lost + extra + 1)):
+        if i in unobserved:
+            return None
+        if not visible[i]:
+            missing += 1
+            if missing > MAX_MISSED_AT_REST:
+                rest_start = None
+            continue
+        missing = 0
+        if rest_start is not None and np.linalg.norm(xy[i] - xy[rest_start]) <= radius:
+            if i - rest_start + 1 >= still:
+                close = np.linalg.norm(xy[rest_start] - xy[last_visible]) <= near
+                return rest_start if close else None
+        else:
+            rest_start = i
+    return None
 
 
 @dataclass(frozen=True)
@@ -85,8 +147,9 @@ def _rest_after(
     rest_radius_px of where it settled for stationary_frames_end frames (end = landing =
     first resting frame). The radius, not a per-frame step, absorbs tracker jitter, and a
     missed detection or two while resting does not restart the count. A lost shuttle gives
-    no landing call: it may have left the frame, so the user decides that rally. A rest
-    that did not follow a flight (_approached) also ends the rally without a landing.
+    no landing call (it may have left the frame, so the user decides that rally) unless it
+    is found lying where it fell (_relocated_rest). A rest that did not follow a flight
+    (_approached) also ends the rally without a landing.
     """
     lost = int(cfg.get("lost_frames_end", 30))
     still = int(cfg.get("stationary_frames_end", 20))
@@ -103,7 +166,7 @@ def _rest_after(
             if missing > MAX_MISSED_AT_REST:
                 rest_start = None
             if missing >= lost:
-                return last_visible, None
+                return last_visible, _relocated_rest(visible, xy, last_visible, cfg, unobserved)
             continue
         missing = 0
         last_visible = i
