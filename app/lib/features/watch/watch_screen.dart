@@ -32,6 +32,8 @@ import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../shared/widgets/court_view_field.dart';
+import '../../data/models/clip_record.dart' show kStrokeLabels;
+import '../../ui/depth.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -1265,46 +1267,36 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             ),
           ),
         const SizedBox(height: Spacing.lg),
-        AppCard(
+        _LiveStatusPanel(
           padding: cardPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: Spacing.xs,
-            children: [
-              Text(
-                '$status ·${realTime ? (videoPosition.inMilliseconds / 1000).toStringAsFixed(1) : (index / fps).toStringAsFixed(1)} s${total > 0 ? ' / ${(total / fps).toStringAsFixed(1)} s' : ''}',
-              ),
-              Text('Elapsed: ${formatWatchElapsed(analysisClock.elapsed)} (includes pauses)'),
-              Text('Rally: $rally'),
-              if (synthetic)
-                const Text('Demo server: results are synthetic and do not describe this video.'),
-              if (!synthetic && modelsMissing)
-                const Text('Tracking or pose models are unavailable on this server.'),
-              if (latestHit.isNotEmpty) Text(latestHit),
-              if (score.isNotEmpty) Text(score),
-              if (lineCall.isNotEmpty) Text(lineCall),
-              if (coaching.isNotEmpty) Text(coaching),
-              const Text(
-                'Feedback may be delayed while the rally is confirmed. Playback is silent.',
-              ),
-              if (backgroundStarted)
-                Text(
-                  'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
+          status: status,
+          running: playing && !stopping,
+          positionS: realTime ? videoPosition.inMilliseconds / 1000 : index / fps,
+          totalS: total > 0 ? total / fps : null,
+          elapsed: formatWatchElapsed(analysisClock.elapsed),
+          rally: rally,
+          stroke: latestHit,
+          score: score,
+          lineCall: lineCall,
+          coaching: coaching,
+          warnings: [
+            if (synthetic) 'Demo server: results are synthetic and do not describe this video.',
+            if (!synthetic && modelsMissing)
+              'Tracking or pose models are unavailable on this server.',
+          ],
+          notes: [
+            'Feedback may be delayed while the rally is confirmed. Playback is silent.',
+            if (backgroundStarted)
+              'Analysis: ${analysisSeconds.toStringAsFixed(1)} s · '
                   'Preview: ${(videoPosition.inMilliseconds / 1000).toStringAsFixed(1)} s. '
                   'Overlays are hidden when analysis is behind.',
-                ),
-              if (backgroundStarted && candidateDiagnostics != null) Text(candidateDiagnostics!),
-              if (backgroundStarted && focusedAnalysisActive)
-                const Text('Experimental faster player analysis is active.'),
-              if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
-                const Text('Faster analysis is unavailable; normal analysis is being used.'),
-              if (started && accelerationDiagnostics != null)
-                ExpansionTile(
-                  title: const Text('Configured analysis providers'),
-                  children: [Text(accelerationDiagnostics!)],
-                ),
-            ],
-          ),
+            if (backgroundStarted && candidateDiagnostics != null) candidateDiagnostics!,
+            if (backgroundStarted && focusedAnalysisActive)
+              'Experimental faster player analysis is active.',
+            if (backgroundStarted && focusedAnalysis && !focusedAnalysisActive)
+              'Faster analysis is unavailable; normal analysis is being used.',
+          ],
+          providers: started ? accelerationDiagnostics : null,
         ),
         const SizedBox(height: Spacing.lg),
         if (!stopping && started && error == null)
@@ -1428,4 +1420,226 @@ class WatchOverlay extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant WatchOverlay old) => old.frame != frame;
+}
+
+/// The running analysis at a glance: the state and how far through the video it is, the
+/// figures as recessed tiles (time, rally, stroke, score), then live notes and the fine print.
+class _LiveStatusPanel extends StatelessWidget {
+  const _LiveStatusPanel({
+    required this.padding,
+    required this.status,
+    required this.running,
+    required this.positionS,
+    required this.totalS,
+    required this.elapsed,
+    required this.rally,
+    required this.stroke,
+    required this.score,
+    required this.lineCall,
+    required this.coaching,
+    required this.warnings,
+    required this.notes,
+    required this.providers,
+  });
+
+  final EdgeInsets padding;
+  final String status;
+  final bool running;
+  final double positionS;
+  final double? totalS;
+  final String elapsed;
+  final String rally;
+
+  /// As the screen keeps them: "Stroke: smash", "Unclassified hit", "Score: 0 – 0", or empty.
+  final String stroke;
+  final String score;
+  final String lineCall;
+  final String coaching;
+  final List<String> warnings;
+  final List<String> notes;
+  final String? providers;
+
+  static String _after(String text, String prefix) =>
+      text.startsWith(prefix) ? text.substring(prefix.length) : text;
+
+  static String _capitalised(String text) =>
+      text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final theme = Theme.of(context);
+    final text = theme.textTheme;
+    const figures = [FontFeature.tabularFigures()];
+
+    // "Stroke: smash at 12.3 s" -> Smash.
+    final strokeName = _after(stroke, 'Stroke: ').split(' at ').first;
+    final strokeValue = stroke.isEmpty
+        ? '—'
+        : stroke.startsWith('Stroke: ')
+        ? (kStrokeLabels[strokeName] ?? _capitalised(strokeName))
+        : 'Unclassified';
+    final scoreValue = score.isEmpty ? '—' : _after(score, 'Score: ');
+    final time = totalS == null
+        ? '${positionS.toStringAsFixed(1)} s'
+        : '${positionS.toStringAsFixed(1)} / ${totalS!.toStringAsFixed(1)} s';
+    final progress = totalS == null || totalS! <= 0
+        ? null
+        : (positionS / totalS!).clamp(0.0, 1.0).toDouble();
+
+    Widget tile(IconData icon, String label, String value) => InsetBox(
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(Spacing.md, Spacing.sm + 2, Spacing.md, Spacing.sm + 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: p.text3),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(color: p.text3, letterSpacing: 0.8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // One line at any width: a long value shrinks rather than wrapping.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: text.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: p.ink,
+                fontFeatures: figures,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final liveNotes = [
+      if (lineCall.isNotEmpty) (Icons.flag_outlined, lineCall),
+      for (final line in coaching.split('\n'))
+        if (line.trim().isNotEmpty) (Icons.tips_and_updates_outlined, line.trim()),
+    ];
+
+    return AppCard(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // State and position.
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: running ? p.brand : p.text3,
+                  boxShadow: running
+                      ? [BoxShadow(color: p.brand.withValues(alpha: 0.45), blurRadius: 8)]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: Spacing.sm),
+              Expanded(
+                child: Text(
+                  status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: Spacing.sm),
+              Text(
+                time,
+                style: text.titleSmall?.copyWith(color: p.text2, fontFeatures: figures),
+              ),
+            ],
+          ),
+          const SizedBox(height: Spacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.pill),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              semanticsLabel: 'Video position',
+            ),
+          ),
+          const SizedBox(height: Spacing.md),
+          // The figures: four across with room, else two by two.
+          LayoutBuilder(
+            builder: (context, box) {
+              final columns = box.maxWidth >= 560 ? 4 : 2;
+              const gap = Spacing.sm;
+              final width = (box.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final t in [
+                    tile(Icons.timer_outlined, 'Elapsed', elapsed),
+                    tile(Icons.sports_tennis, 'Rally', _capitalised(rally)),
+                    tile(Icons.bolt_rounded, 'Last stroke', strokeValue),
+                    tile(Icons.scoreboard_outlined, 'Score', scoreValue),
+                  ])
+                    SizedBox(width: width, child: t),
+                ],
+              );
+            },
+          ),
+          for (final w in warnings) ...[
+            const SizedBox(height: Spacing.sm),
+            HelperText(w, warning: true),
+          ],
+          if (liveNotes.isNotEmpty) ...[
+            const SizedBox(height: Spacing.md),
+            const EngravedLabel('Live notes'),
+            const SizedBox(height: Spacing.xs),
+            for (final (icon, line) in liveNotes)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(icon, size: 16, color: theme.colorScheme.primary),
+                    ),
+                    const SizedBox(width: Spacing.sm),
+                    Expanded(child: Text(line, style: text.bodyMedium)),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: Spacing.md),
+          for (final n in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Spacing.xs),
+              child: HelperText(n),
+            ),
+          if (providers != null)
+            Theme(
+              // No divider lines: the card already frames it.
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text('Configured analysis providers', style: text.bodyMedium),
+                children: [Text(providers!, style: text.bodySmall)],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
