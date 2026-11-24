@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -29,6 +30,7 @@ import 'coach_guide_panel.dart';
 import '../../core/config/app_mode.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
+import '../../shared/widgets/smooth_scroll.dart';
 import '../calibration/calibration_screen.dart' show Corner, CornerCanvas;
 import '../watch/court_geometry.dart' show fullToSingles, singlesToFull, FullCourtPreview;
 
@@ -717,51 +719,23 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   warning: true,
                 ),
               for (final event in ((result!['events'] as List?) ?? []))
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${event['time_s']} s · ${event['source']} · ${event['model'] ?? 'user label'}'
-                    '${event['confidence'] is num ? ' · ${((event['confidence'] as num) * 100).toStringAsFixed(0)}% confidence' : ''}',
-                  ),
-                  subtitle: DropdownButton<String>(
-                    value: event['stroke'] as String?,
-                    hint: const Text('Choose stroke'),
-                    items: [
-                      'clear',
-                      'smash',
-                      'drop',
-                      'net_shot',
-                      'lift',
-                      'serve',
-                    ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                    onChanged: busy || savedAnalysisPending
-                        ? null
-                        : (value) => setState(() {
-                            event['stroke'] = value;
-                            event['confirmed'] = true;
-                            eventsDirty = true;
-                          }),
-                  ),
-                  leading: Checkbox(
-                    value: event['confirmed'] == true,
-                    onChanged: busy || savedAnalysisPending
-                        ? null
-                        : (value) => setState(() {
-                            event['confirmed'] = value;
-                            eventsDirty = true;
-                          }),
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Remove event',
-                    onPressed: busy || savedAnalysisPending
-                        ? null
-                        : () => setState(() {
-                            (result!['events'] as List).remove(event);
-                            eventsDirty = true;
-                          }),
-                  ),
-                  onTap: () => player?.seek(
+                _EventRow(
+                  event: event as Map<String, dynamic>,
+                  enabled: !(busy || savedAnalysisPending),
+                  onStroke: (value) => setState(() {
+                    event['stroke'] = value;
+                    event['confirmed'] = true;
+                    eventsDirty = true;
+                  }),
+                  onConfirmed: (value) => setState(() {
+                    event['confirmed'] = value;
+                    eventsDirty = true;
+                  }),
+                  onRemove: () => setState(() {
+                    (result!['events'] as List).remove(event);
+                    eventsDirty = true;
+                  }),
+                  onSeek: () => player?.seek(
                     Duration(milliseconds: ((event['time_s'] as num) * 1000).round()),
                   ),
                 ),
@@ -1395,18 +1369,38 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               // Wide: two equal columns, the video with its review cards under it on the left
               // and the coach on the right, so neither side is left half empty.
               if (constraints.maxWidth >= 980) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [videoView, ...reviewCards()],
-                      ),
+                // A two-pane workspace the height of the window: each side scrolls on its own,
+                // so the shorter one never leaves an empty strip beside the longer one.
+                final paneHeight = math.max(560.0, MediaQuery.sizeOf(context).height - 150);
+                Widget pane(List<Widget> children) => SmoothScroll(
+                  builder: (context, controller) => SingleChildScrollView(
+                    controller: controller,
+                    // Room for the cards' shadows inside the scroll area.
+                    padding: const EdgeInsets.fromLTRB(4, 4, 12, Spacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: children,
                     ),
-                    const SizedBox(width: Spacing.lg),
-                    Expanded(child: panel),
-                  ],
+                  ),
+                );
+                return SizedBox(
+                  height: paneHeight,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: pane([videoView, ...reviewCards()])),
+                      const SizedBox(width: Spacing.sm),
+                      // The coach card runs the full height of its pane, top-aligned content.
+                      Expanded(
+                        child: pane([
+                          ConstrainedBox(
+                            constraints: BoxConstraints(minHeight: paneHeight - 4 - Spacing.lg),
+                            child: panel,
+                          ),
+                        ]),
+                      ),
+                    ],
+                  ),
                 );
               }
               return Column(
@@ -1476,6 +1470,153 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               onTap: () => seekCoachMoment((moment['time_s'] as num).toDouble()),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// One stroke event to review: a recessed confirm box, the time and where the label came
+/// from, the stroke in a recessed picker, and remove. A confirmed event gets an accent edge
+/// and a soft tint across the whole rounded row.
+class _EventRow extends StatelessWidget {
+  const _EventRow({
+    required this.event,
+    required this.enabled,
+    required this.onStroke,
+    required this.onConfirmed,
+    required this.onRemove,
+    required this.onSeek,
+  });
+
+  final Map<String, dynamic> event;
+  final bool enabled;
+  final ValueChanged<String?> onStroke;
+  final ValueChanged<bool> onConfirmed;
+  final VoidCallback onRemove;
+  final VoidCallback onSeek;
+
+  static const _strokes = ['clear', 'smash', 'drop', 'net_shot', 'lift', 'serve'];
+
+  static String _label(String s) => (s[0].toUpperCase() + s.substring(1)).replaceAll('_', ' ');
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TactileTokens.of(context);
+    final p = AppPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final confirmed = event['confirmed'] == true;
+    final manual = event['source'] == 'manual';
+    final accent = manual ? StatusColors.of(context).inCall : t.primary;
+    final time = (event['time_s'] as num).toDouble();
+    final meta = [
+      '${event['source']}',
+      '${event['model'] ?? 'user label'}',
+      if (event['confidence'] case final num c) '${(c * 100).toStringAsFixed(0)}% confidence',
+    ].join(' · ');
+    const radius = BorderRadius.all(Radius.circular(Radii.md));
+    final picker = InsetBox(
+      radius: 10,
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: event['stroke'] as String?,
+          isExpanded: true,
+          isDense: true,
+          borderRadius: BorderRadius.circular(Radii.md),
+          padding: const EdgeInsets.symmetric(vertical: Spacing.sm + 2),
+          hint: const Text('Choose stroke'),
+          items: [for (final s in _strokes) DropdownMenuItem(value: s, child: Text(_label(s)))],
+          onChanged: enabled ? onStroke : null,
+        ),
+      ),
+    );
+    final when = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${time.toStringAsFixed(1)} s',
+          style: kFigureStyle.copyWith(fontSize: 18, color: p.ink, letterSpacing: 0),
+        ),
+        Text(
+          meta,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: text.bodySmall?.copyWith(color: p.text3, height: 1.3),
+        ),
+      ],
+    );
+    final remove = Theme(
+      // A flat icon, not a raised key: it is a secondary action on every row.
+      data: Theme.of(context).copyWith(iconButtonTheme: const IconButtonThemeData()),
+      child: IconButton(
+        icon: const Icon(Icons.delete_outline_rounded),
+        color: p.text3,
+        hoverColor: Theme.of(context).colorScheme.error.withValues(alpha: 0.08),
+        tooltip: 'Remove event',
+        onPressed: enabled ? onRemove : null,
+      ),
+    );
+    final check = DepthCheckbox(
+      value: confirmed,
+      label: 'Confirmed',
+      onChanged: enabled ? onConfirmed : null,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        // Confirmed rows carry a faint tint and a coloured outline; others a fine edge.
+        color: confirmed ? accent.withValues(alpha: 0.06) : t.raisedTop.withValues(alpha: 0.5),
+        border: Border.all(
+          color: confirmed ? accent.withValues(alpha: 0.35) : (p.hairline ?? p.surface2),
+        ),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          // The whole row, rounded, plays the video from this event.
+          borderRadius: radius,
+          onTap: onSeek,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Spacing.xs, Spacing.sm, Spacing.xs, Spacing.sm),
+            child: LayoutBuilder(
+              builder: (context, box) {
+                if (box.maxWidth >= 440) {
+                  return Row(
+                    children: [
+                      check,
+                      const SizedBox(width: Spacing.xs),
+                      SizedBox(width: 150, child: when),
+                      const SizedBox(width: Spacing.md),
+                      Expanded(child: picker),
+                      const SizedBox(width: Spacing.xs),
+                      remove,
+                    ],
+                  );
+                }
+                // Narrow: the time row on top, the picker under it.
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        check,
+                        const SizedBox(width: Spacing.xs),
+                        Expanded(child: when),
+                        remove,
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(Spacing.sm, Spacing.xs, Spacing.sm, 0),
+                      child: picker,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
