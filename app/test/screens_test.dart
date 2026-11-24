@@ -58,7 +58,7 @@ void main() {
     await pumpScreen(tester, const OfflineBanner(child: Text('content')), api: api);
     expect(find.textContaining('Server unreachable'), findsOneWidget);
     api.failWith = null;
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Server unreachable'), findsNothing);
   });

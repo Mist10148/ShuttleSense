@@ -203,7 +203,11 @@ class _NotificationsButton extends ConsumerWidget {
   };
 
   static String _describe(Job job) {
-    final kind = job.isLive ? 'Live session' : 'Analysis';
+    final kind = job.mode == 'practice'
+        ? 'AI Coach session'
+        : job.isLive
+        ? 'Live session'
+        : 'Analysis';
     return switch (job.status) {
       JobStatus.done => '$kind finished',
       JobStatus.failed => '$kind failed',

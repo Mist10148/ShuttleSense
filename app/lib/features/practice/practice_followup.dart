@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/theme/tokens.dart';
+import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/notice.dart';
 import '../../data/api_client.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/coach.dart';
@@ -114,30 +115,56 @@ class _PracticeFollowupState extends State<PracticeFollowup> {
   @override
   Widget build(BuildContext context) {
     final canSend = widget.enabled && !needsReload && pending == null;
+    final p = AppPalette.of(context);
+    final text = Theme.of(context).textTheme;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: Spacing.sm,
       children: [
         if (widget.enabled)
-          Text(
-            'The AI provider receives your questions and text from this report. Video and images stay on the server.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.shield_outlined, size: 16, color: p.text3),
+              const SizedBox(width: Spacing.sm),
+              Expanded(
+                child: Text(
+                  'The AI provider receives your questions and text from this report. Video and images stay on the server.',
+                  style: text.bodySmall?.copyWith(color: p.text3),
+                ),
+              ),
+            ],
           ),
-        if (turns.isEmpty && canSend)
+        if (turns.isEmpty && canSend) ...[
+          Text(
+            'TRY ASKING',
+            style: text.labelSmall?.copyWith(
+              color: p.text3,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+          ),
           Wrap(
-            spacing: Spacing.xs,
+            spacing: Spacing.xs + 2,
+            runSpacing: Spacing.xs + 2,
             children: [
               for (final suggestion in widget.suggestions)
-                ActionChip(
-                  label: Text(suggestion),
-                  onPressed: () => input.value = TextEditingValue(
-                    text: suggestion,
-                    selection: TextSelection.collapsed(offset: suggestion.length),
+                // A long coach-written title wraps to two lines instead of running out.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: ActionChip(
+                    avatar: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                    label: Text(suggestion, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    onPressed: () => input.value = TextEditingValue(
+                      text: suggestion,
+                      selection: TextSelection.collapsed(offset: suggestion.length),
+                    ),
                   ),
                 ),
             ],
           ),
-        for (final turn in turns) ...[
+        ],
+        for (final turn in turns)
           CoachBubble(
             turn: turn.message.fromUser
                 ? turn
@@ -149,33 +176,73 @@ class _PracticeFollowupState extends State<PracticeFollowup> {
                     ),
                     sources: turn.sources,
                   ),
+            footer: turn.message.citations.isEmpty
+                ? null
+                : MomentChips(
+                    moments: turn.message.citations,
+                    onSeek: (m) => widget.onSeek(m.timeS),
+                  ),
           ),
-          if (turn.message.citations.isNotEmpty)
-            MomentChips(moments: turn.message.citations, onSeek: (m) => widget.onSeek(m.timeS)),
-        ],
-        if (streaming case final String text)
-          Text(text.isEmpty ? 'Preparing an answer…' : _withoutMarkers(text)),
+        if (streaming case final String partial)
+          CoachBubble(
+            turn: CoachTurn(
+              message: ChatMessage(
+                role: 'assistant',
+                text: partial.isEmpty ? 'Preparing an answer…' : _withoutMarkers(partial),
+                at: DateTime.now().toUtc(),
+              ),
+            ),
+          ),
         if (error != null)
-          Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        if (needsReload)
-          TextButton(
-            onPressed: widget.enabled ? widget.onReload : null,
-            child: const Text('Reload coaching guide'),
+          NoticeBanner(
+            tone: NoticeTone.error,
+            message: error!,
+            actionLabel: needsReload ? 'Reload coaching guide' : null,
+            onAction: needsReload && widget.enabled ? widget.onReload : null,
           ),
-        TextField(
-          controller: input,
-          enabled: canSend,
-          maxLength: 1000,
-          minLines: 1,
-          maxLines: 3,
-          decoration: const InputDecoration(labelText: 'Ask about this video'),
-        ),
-        ValueListenableBuilder(
-          valueListenable: input,
-          builder: (context, value, _) => FilledButton(
-            onPressed: canSend && value.text.trim().isNotEmpty ? send : null,
-            child: const Text('Send question'),
+        if (needsReload && error == null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              onPressed: widget.enabled ? widget.onReload : null,
+              child: const Text('Reload coaching guide'),
+            ),
           ),
+        // The question box and its send key, side by side when there is room.
+        LayoutBuilder(
+          builder: (context, box) {
+            final field = TextField(
+              controller: input,
+              enabled: canSend,
+              maxLength: 1000,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Ask about this video'),
+            );
+            final button = ValueListenableBuilder(
+              valueListenable: input,
+              builder: (context, value, _) => FilledButton.icon(
+                onPressed: canSend && value.text.trim().isNotEmpty ? send : null,
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: const Text('Send question'),
+              ),
+            );
+            if (box.maxWidth < 420) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: Spacing.sm,
+                children: [field, button],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: Spacing.sm),
+                Padding(padding: const EdgeInsets.only(top: 4), child: button),
+              ],
+            );
+          },
         ),
       ],
     );

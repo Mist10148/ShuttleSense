@@ -1,4 +1,9 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,6 +18,8 @@ import '../../shared/widgets/page_scaffold.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../upload/upload_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../shared/widgets/helper_text.dart';
+import '../../shared/widgets/data_display.dart';
 
 typedef Corner = ({double x, double y});
 
@@ -121,7 +128,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
                 const SizedBox(height: Spacing.lg),
                 Expanded(
                   child: video.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    loading: () => const Skeleton(height: double.infinity, radius: Radii.lg),
                     error: (e, _) => MessageView(icon: Icons.error_outline, message: e.toString()),
                     data: (info) => window == WindowClass.expanded ? _wide(info) : _narrow(info),
                   ),
@@ -264,7 +271,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
     if (_error != null)
       Padding(
         padding: const EdgeInsets.only(top: Spacing.sm),
-        child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        child: HelperText(_error!, error: true),
       ),
     const SizedBox(height: Spacing.md),
     FilledButton.icon(
@@ -431,97 +438,264 @@ class _CornerCanvasState extends State<CornerCanvas> {
   int? _dragging;
   Offset? _loupe;
 
+  /// Zoom: never below the whole frame, never past 5×, never showing empty space beside it.
+  static const double _minScale = 1, _maxScale = 5;
+  final _view = TransformationController();
+  Size _viewport = Size.zero;
+
+  @override
+  void dispose() {
+    _view.dispose();
+    super.dispose();
+  }
+
+  double get _scale => _view.value.getMaxScaleOnAxis();
+
+  /// Scales by [factor] around [focal] (in the zoomed picture's own coordinates), keeping the
+  /// picture filling the view.
+  void _zoom(double factor, Offset focal) {
+    final scale = (_scale * factor).clamp(_minScale, _maxScale);
+    final k = scale / _scale;
+    if (k == 1) return;
+    final next = _view.value.clone()
+      ..translateByDouble(focal.dx, focal.dy, 0, 1)
+      ..scaleByDouble(k, k, 1, 1)
+      ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
+    _view.value = _clamped(next);
+  }
+
+  Matrix4 _clamped(Matrix4 m) {
+    final scale = m.getMaxScaleOnAxis();
+    final t = m.getTranslation();
+    final minX = _viewport.width * (1 - scale), minY = _viewport.height * (1 - scale);
+    return Matrix4.identity()
+      ..translateByDouble(t.x.clamp(minX, 0), t.y.clamp(minY, 0), 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+  }
+
+  /// The view's centre in the picture's own coordinates (for the + and − keys).
+  Offset _centre() {
+    final inverse = Matrix4.inverted(_view.value);
+    final c = MatrixUtils.transformPoint(
+      inverse,
+      Offset(_viewport.width / 2, _viewport.height / 2),
+    );
+    return c;
+  }
+
+  /// A plain wheel scrolls the page; Ctrl / ⌘ + wheel zooms the picture.
+  void _onSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final keys = HardwareKeyboard.instance;
+    final zoom = keys.isControlPressed || keys.isMetaPressed;
+    GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+      final scroll = e as PointerScrollEvent;
+      if (zoom) {
+        _zoom(math.exp(-scroll.scrollDelta.dy / 300), scroll.localPosition);
+      } else {
+        Scrollable.maybeOf(context)?.position.pointerScroll(scroll.scrollDelta.dy);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = widget.width, height = widget.height;
-    return InteractiveViewer(
-      maxScale: 6,
-      panEnabled: _dragging == null,
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: height == 0 ? 16 / 9 : width / height,
-          child: LayoutBuilder(
-            builder: (context, box) {
-              final scale = width / box.maxWidth; // image px per dp
-              Corner toVideo(Offset p) => (
-                x: (p.dx * scale).clamp(0, width.toDouble()),
-                y: (p.dy * scale).clamp(0, height.toDouble()),
-              );
-              Offset toCanvas(Corner c) => Offset(c.x / scale, c.y / scale);
-              return GestureDetector(
-                onTapUp: (d) {
-                  // The handles are raw Listeners, outside the gesture arena, so a tap on one
-                  // reaches this detector too: it must not drop a new corner on top of it.
-                  final onHandle = widget.corners.any(
-                    (c) => (toCanvas(c) - d.localPosition).distance <= kHandleRadius,
-                  );
-                  if (!onHandle) widget.onTap(toVideo(d.localPosition));
-                },
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image(
-                      image: widget.image,
-                      fit: BoxFit.fill,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) =>
-                          const MessageView(icon: Icons.broken_image, message: 'Frame unavailable'),
-                    ),
-                    if (widget.overlayPainter != null)
-                      IgnorePointer(child: CustomPaint(painter: widget.overlayPainter!(1 / scale))),
-                    CustomPaint(painter: CornersPainter(widget.corners, 1 / scale)),
-                    for (var i = 0; i < widget.corners.length; i++)
-                      Positioned(
-                        left: toCanvas(widget.corners[i]).dx - kHandleRadius,
-                        top: toCanvas(widget.corners[i]).dy - kHandleRadius,
-                        width: kHandleRadius * 2,
-                        height: kHandleRadius * 2,
-                        child: Semantics(
-                          label: '${kCornerNames[i]} corner handle',
-                          // Raw pointer events, so the handle moves even though the zoomable
-                          // viewer around it also listens for drags (panning is off meanwhile).
-                          child: Listener(
-                            key: ValueKey('corner-$i'),
-                            behavior: HitTestBehavior.opaque,
-                            onPointerDown: (_) => setState(() => _dragging = i),
-                            onPointerMove: (e) {
-                              final p = toCanvas(widget.corners[i]) + e.localDelta;
-                              widget.onMove(i, toVideo(p));
-                              setState(() => _loupe = p);
-                            },
-                            onPointerUp: (_) => setState(() {
-                              _dragging = null;
-                              _loupe = null;
-                            }),
-                            onPointerCancel: (_) => setState(() {
-                              _dragging = null;
-                              _loupe = null;
-                            }),
-                          ),
+    final viewer = ClipRRect(
+      borderRadius: BorderRadius.circular(Radii.md),
+      child: InteractiveViewer(
+        transformationController: _view,
+        minScale: _minScale,
+        maxScale: _maxScale,
+        boundaryMargin: EdgeInsets.zero,
+        panEnabled: _dragging == null,
+        child: Listener(
+          onPointerSignal: _onSignal,
+          child: AspectRatio(
+            aspectRatio: height == 0 ? 16 / 9 : width / height,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final scale = width / box.maxWidth; // image px per dp
+                Corner toVideo(Offset p) => (
+                  x: (p.dx * scale).clamp(0, width.toDouble()),
+                  y: (p.dy * scale).clamp(0, height.toDouble()),
+                );
+                Offset toCanvas(Corner c) => Offset(c.x / scale, c.y / scale);
+                return GestureDetector(
+                  onTapUp: (d) {
+                    // The handles are raw Listeners, outside the gesture arena, so a tap on one
+                    // reaches this detector too: it must not drop a new corner on top of it.
+                    final onHandle = widget.corners.any(
+                      (c) => (toCanvas(c) - d.localPosition).distance <= kHandleRadius,
+                    );
+                    if (!onHandle) widget.onTap(toVideo(d.localPosition));
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image(
+                        image: widget.image,
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) => const MessageView(
+                          icon: Icons.broken_image,
+                          message: 'Frame unavailable',
                         ),
                       ),
-                    if (_loupe != null)
-                      Positioned(
-                        left: _loupe!.dx - 50,
-                        top: _loupe!.dy - 130,
-                        child: const RawMagnifier(
-                          size: Size(100, 100),
-                          magnificationScale: 2.5,
-                          focalPointOffset: Offset(0, 80),
-                          decoration: MagnifierDecoration(
-                            shape: CircleBorder(side: BorderSide(color: Colors.white, width: 2)),
+                      if (widget.overlayPainter != null)
+                        IgnorePointer(
+                          child: CustomPaint(painter: widget.overlayPainter!(1 / scale)),
+                        ),
+                      CustomPaint(painter: CornersPainter(widget.corners, 1 / scale)),
+                      for (var i = 0; i < widget.corners.length; i++)
+                        Positioned(
+                          left: toCanvas(widget.corners[i]).dx - kHandleRadius,
+                          top: toCanvas(widget.corners[i]).dy - kHandleRadius,
+                          width: kHandleRadius * 2,
+                          height: kHandleRadius * 2,
+                          child: Semantics(
+                            label: '${kCornerNames[i]} corner handle',
+                            // Raw pointer events, so the handle moves even though the zoomable
+                            // viewer around it also listens for drags (panning is off meanwhile).
+                            child: Listener(
+                              key: ValueKey('corner-$i'),
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: (_) => setState(() => _dragging = i),
+                              onPointerMove: (e) {
+                                final p = toCanvas(widget.corners[i]) + e.localDelta;
+                                widget.onMove(i, toVideo(p));
+                                setState(() => _loupe = p);
+                              },
+                              onPointerUp: (_) => setState(() {
+                                _dragging = null;
+                                _loupe = null;
+                              }),
+                              onPointerCancel: (_) => setState(() {
+                                _dragging = null;
+                                _loupe = null;
+                              }),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              );
-            },
+                      if (_loupe != null)
+                        Positioned(
+                          left: _loupe!.dx - 50,
+                          top: _loupe!.dy - 130,
+                          child: const RawMagnifier(
+                            size: Size(100, 100),
+                            magnificationScale: 2.5,
+                            focalPointOffset: Offset(0, 80),
+                            decoration: MagnifierDecoration(
+                              shape: CircleBorder(side: BorderSide(color: Colors.white, width: 2)),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
     );
+    final aspect = height == 0 ? 16 / 9 : width / height;
+    final picture = AspectRatio(
+      aspectRatio: aspect,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          _viewport = box.biggest;
+          return viewer;
+        },
+      ),
+    );
+    // Zoom keys and a hint under the picture, never over it (a corner near the bottom edge
+    // stays tappable).
+    final bar = Row(
+      children: [
+        Expanded(
+          child: _ZoomHint(
+            text: kIsWeb || defaultTargetPlatform != TargetPlatform.android
+                ? 'Ctrl + scroll or pinch to zoom'
+                : 'Pinch to zoom',
+          ),
+        ),
+        _ZoomBar(
+          onOut: () => _zoom(1 / 1.5, _centre()),
+          onIn: () => _zoom(1.5, _centre()),
+          onFit: () => _view.value = Matrix4.identity(),
+        ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, box) => box.hasBoundedHeight
+          ? Column(
+              children: [
+                Expanded(child: Center(child: picture)),
+                const SizedBox(height: Spacing.xs),
+                bar,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                picture,
+                const SizedBox(height: Spacing.xs),
+                bar,
+              ],
+            ),
+    );
   }
+}
+
+/// A short hint on how to zoom, on a dark glass strip so it reads over any frame.
+class _ZoomHint extends StatelessWidget {
+  const _ZoomHint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    return Row(
+      children: [
+        Icon(Icons.zoom_in_rounded, size: 16, color: p.text3),
+        const SizedBox(width: Spacing.xs),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: p.text3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Zoom out, zoom in and fit the whole frame.
+class _ZoomBar extends StatelessWidget {
+  const _ZoomBar({required this.onOut, required this.onIn, required this.onFit});
+
+  final VoidCallback onOut, onIn, onFit;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(tooltip: 'Zoom out', onPressed: onOut, icon: const Icon(Icons.remove_rounded)),
+      const SizedBox(width: Spacing.xs),
+      IconButton(tooltip: 'Zoom in', onPressed: onIn, icon: const Icon(Icons.add_rounded)),
+      const SizedBox(width: Spacing.xs),
+      IconButton(
+        tooltip: 'Fit the whole frame',
+        onPressed: onFit,
+        icon: const Icon(Icons.fit_screen_rounded),
+      ),
+    ],
+  );
 }
 
 class CornersPainter extends CustomPainter {

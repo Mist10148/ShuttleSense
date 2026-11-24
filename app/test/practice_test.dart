@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shuttlesense_app/features/mode/mode_screen.dart';
+import 'package:shuttlesense_app/core/config/app_mode.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
@@ -25,6 +28,40 @@ void main() {
     expect(find.text('AI Coach'), findsOneWidget);
     expect(find.text('Choose practice video'), findsOneWidget);
     expect(find.textContaining('not verified shuttle contacts'), findsOneWidget);
+  });
+
+  testWidgets('choosing AI Coach starts a fresh session on a new video', (tester) async {
+    late WidgetRef read;
+    await pumpScreen(
+      tester,
+      Consumer(
+        builder: (context, ref, _) {
+          read = ref;
+          return Column(
+            children: [
+              const Expanded(child: ModeChoices()),
+              Text('session ${ref.watch(practiceSessionProvider)}'),
+            ],
+          );
+        },
+      ),
+      api: FakeApiClient(
+        health: const Health(
+          version: '1',
+          schemaVersion: '1',
+          device: 'cpu',
+          authRequired: false,
+          stages: [],
+          practiceVideo: true,
+        ),
+      ),
+      size: laptop,
+    );
+    expect(find.text('session 0'), findsOneWidget);
+    await tester.tap(find.text('AI Coach'));
+    await tester.pumpAndSettle();
+    expect(read.read(practiceSessionProvider), 1);
+    expect(read.read(appModeProvider), AppMode.practice);
   });
 
   testWidgets('running practice offers watch controls and elapsed time', (tester) async {
@@ -73,6 +110,7 @@ void main() {
     await tester.pump();
     await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
     await tester.ensureVisible(find.text('Find court automatically'));
+    await tester.pump(); // lay out the scrolled page before tapping
     await tester.tap(find.text('Find court automatically'));
     await tester.pump();
     await tester.ensureVisible(find.text('Confirm and analyze'));
@@ -84,6 +122,7 @@ void main() {
       isNull,
     );
     await tester.ensureVisible(find.text('Suggest match format'));
+    await tester.pump(); // lay out the scrolled page before tapping
     await tester.tap(find.text('Suggest match format'));
     await tester.pump();
     expect(find.textContaining('Suggested: doubles'), findsOneWidget);
@@ -92,13 +131,6 @@ void main() {
       alignment: 0.5,
     );
     await tester.pump();
-    await tester.tap(
-      find.ancestor(
-        of: find.text('Choose singles or doubles'),
-        matching: find.byType(DropdownButton<String>),
-      ),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Doubles').last);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Confirm and analyze'));

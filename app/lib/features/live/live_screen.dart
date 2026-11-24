@@ -20,6 +20,7 @@ import '../results/widgets/hit_anchor.dart';
 import '../upload/upload_controller.dart';
 import 'live_controller.dart';
 import 'widgets/live_view.dart';
+import '../../shared/widgets/helper_text.dart';
 
 export 'widgets/live_coach_panel.dart';
 export 'widgets/live_status.dart';
@@ -240,7 +241,7 @@ class _ReadyView extends ConsumerWidget {
       if (state.error != null)
         Padding(
           padding: const EdgeInsets.only(top: Spacing.sm),
-          child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          child: HelperText(state.error!, error: true),
         ),
     ];
     final tips = AppCard(
