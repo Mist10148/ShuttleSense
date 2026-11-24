@@ -28,6 +28,8 @@ import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../shared/widgets/helper_text.dart';
 import '../mode/mode_screen.dart';
+import '../../shared/widgets/court_view_field.dart';
+import '../../shared/widgets/section_card.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -811,14 +813,25 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         if (health?.watchVideo != true)
           const Text('This backend does not support Watch & Analyze.')
         else if (info == null)
-          VideoDropZone(
-            actions: [
-              FilledButton.icon(
-                onPressed: uploading || detectingCourt ? null : pick,
-                icon: const Icon(Icons.upload_file),
-                label: Text(uploading ? 'Uploading…' : 'Choose video'),
-              ),
-            ],
+          // The same card as New analysis' "1. Rally video".
+          SectionCard(
+            title: 'Rally video',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                VideoDropZone(
+                  actions: [
+                    FilledButton.icon(
+                      onPressed: uploading || detectingCourt ? null : pick,
+                      icon: const Icon(Icons.upload_file),
+                      label: Text(uploading ? 'Uploading…' : 'Choose video'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Spacing.md),
+                const CameraTips(),
+              ],
+            ),
           )
         else if (socket == null && !backgroundStarted) ...[
           Text(info.filename, style: Theme.of(context).textTheme.titleMedium),
@@ -927,8 +940,11 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                   label: Text(detectingCourt ? 'Finding court...' : 'Find corners automatically'),
                 ),
                 if (courtDetectionMessage != null) Text(courtDetectionMessage!),
-                const Text(
-                  'Tap the four outer corners of the full court, where the outer sidelines meet the back baselines: near left, near right, far right, far left. Use the same corners for singles and doubles.',
+                const CourtViewField(),
+                Text(
+                  'Tap the four outer corners of the full court, where the outer sidelines meet '
+                  'the back baselines: ${cornerOrderFor(ref.watch(courtViewProvider))}. Use '
+                  'the same corners for singles and doubles.',
                 ),
                 const Text(
                   'Blue lines preview the court markings. Adjust the corners until they match the video.',
@@ -940,6 +956,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                 SizedBox(
                   height: 320,
                   child: CornerCanvas(
+                    cornerNames: cornerNamesFor(ref.watch(courtViewProvider)),
                     image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
                     width: info.width,
                     height: info.height,
