@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/shared/widgets/notice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/data/api_client.dart';
@@ -205,11 +206,11 @@ void main() {
       expect(find.text('Completed · self-reported'), findsOneWidget);
       expect(find.text('Shared finding'), findsOneWidget);
       expect(find.text('Shared practice goal'), findsOneWidget);
-      await tester.ensureVisible(find.byType(ActionChip).first);
-      await tester.tap(find.byType(ActionChip).first);
+      await tester.ensureVisible(find.byType(TimePill).first);
+      await tester.tap(find.byType(TimePill).first);
       expect(seeks.single.frame, 15);
       await tester.pumpWidget(view(videoAvailable: false));
-      expect(find.byType(ActionChip), findsNothing);
+      expect(find.byType(TimePill), findsNothing);
     });
 
     testWidgets('lists top fixes with seek chips and the disclaimer', (tester) async {
