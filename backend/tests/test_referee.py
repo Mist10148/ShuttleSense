@@ -247,3 +247,33 @@ def test_line_calls_use_the_match_court() -> None:
         analytics.run(record, ctx)
         out = referee_run(record, ctx)
         assert out.line_calls and all(c.court == court for c in out.line_calls)
+
+
+def _lost_while_falling(rest_at: tuple[float, float], falling: bool = True) -> np.ndarray:
+    """A shuttle falling to frame 52, lost for 30 frames, then still at `rest_at` (D46)."""
+    n = 110
+    xy = moving(n)
+    for i, j in enumerate(range(44, 53)):  # the end of the flight, coming down (or up)
+        xy[j] = [500.0 - 4 * i, 200.0 + (4 * i if falling else -4 * i)]
+    xy[83:] = rest_at
+    return xy
+
+
+def test_a_shuttle_found_lying_where_it_fell_is_a_landing() -> None:
+    """Lost as it fell, found still near its last point: a landing, though only 8 frames
+    still before a hit is (wrongly) detected on it, as in a broadcast doubles clip."""
+    cfg = {**CFG, "lost_frames_end": 30, "relocate_still_frames": 6}
+    visible = np.ones(110, dtype=int)
+    visible[53:83] = 0
+    segs = segment_rallies(visible, _lost_while_falling((462.0, 238.0)), [2, 20, 91], cfg)
+    assert segs[0].closed and segs[0].end == 52 and segs[0].landing_frame == 83
+
+
+def test_a_shuttle_found_somewhere_else_or_after_rising_is_not_a_landing() -> None:
+    cfg = {**CFG, "lost_frames_end": 30, "relocate_still_frames": 6}
+    visible = np.ones(110, dtype=int)
+    visible[53:83] = 0
+    far_away = segment_rallies(visible, _lost_while_falling((200.0, 400.0)), [2, 20, 91], cfg)
+    assert far_away[0].end == 52 and far_away[0].landing_frame is None
+    rising = _lost_while_falling((462.0, 166.0), falling=False)
+    assert segment_rallies(visible, rising, [2, 20, 91], cfg)[0].landing_frame is None
