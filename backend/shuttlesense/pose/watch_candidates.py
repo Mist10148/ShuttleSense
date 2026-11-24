@@ -225,3 +225,30 @@ class WatchCandidates:
             player = getattr(players, name)
             if player is not None and any(player.bbox == p.bbox for p in self.excluded_players):
                 self.stats["tracked_excluded"] += 1
+
+
+class SelectedWatchCandidates(WatchCandidates):
+    """Use Watch's pose preselection without a projected court polygon."""
+
+    def __init__(self, tracker, frame_size, mode, refresh_frames):
+        super().__init__(tracker, None, frame_size, mode, refresh_frames=refresh_frames)
+
+    def _select(self, boxes, image_shape):
+        keep = super()._select(boxes, image_shape)
+        track = self.tracker
+        if (
+            not track.initialized
+            or track.missing
+            or getattr(track, "overlap_active", False)
+            or self._selection_count % self.refresh_frames == 0
+        ):
+            return keep
+        x, y, w, h = track.bbox
+        # Keep possible target detections and neighboring people that could cause a tie.
+        left, top, right, bottom = x - h, y - h, x + w + h, y + 2 * h
+        for i, box in enumerate(boxes):
+            x0, y0, x1, y1 = map(float, box[:4])
+            if not np.isfinite((x0, y0, x1, y1)).all() or x1 <= x0 or y1 <= y0:
+                return [True] * len(keep)
+            keep[i] = x0 <= right and x1 >= left and y0 <= bottom and y1 >= top
+        return keep if any(keep) else [True] * len(keep)

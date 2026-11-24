@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 1024
     config: Path = DEFAULT_CONFIG
     fake_pipeline: bool = False
+    practice_general: bool = False  # opt-in until the annotated tracking comparison passes
     live_session_ttl_s: float = 60.0  # a dropped live session waits this long for a resume
     # Coach chat (docs/PRIVACY.md). The key lives only here, never in the app or the repo;
     # ANTHROPIC_API_KEY is used when SHUTTLESENSE_ANTHROPIC_API_KEY is not set.

@@ -64,7 +64,14 @@ async def answer(provider, retriever, report, question, history, top_k, fps):
     context["badminton_knowledge"] = [
         {"id": chunk.id, "title": chunk.title, "text": chunk.text} for chunk in chunks.values()
     ]
-    system = f"{SYSTEM}\n\nSaved practice context:\n{json.dumps(context, ensure_ascii=False)}"
+    system = SYSTEM
+    general = report["session_overview"].get("analysis_kind") == "general"
+    if general:
+        system += (
+            " This general practice analysis did not determine stroke type, racket hand, "
+            "or a technique fault. Distinguish the measured pose from coaching suggestions."
+        )
+    system += f"\n\nSaved practice context:\n{json.dumps(context, ensure_ascii=False)}"
     turns = [{"role": turn["role"], "text": turn["text"][:2000]} for turn in history]
     turns.append({"role": "user", "text": question})
     parts: list[str] = []
@@ -78,7 +85,11 @@ async def answer(provider, retriever, report, question, history, top_k, fps):
         )
         return
 
-    text, citations = validate_citations("".join(parts), moments)
+    if general:
+        tolerance = min(0.00501, 0.49 / fps) if fps else 0.00501
+        text, citations = validate_citations("".join(parts), moments, tolerance_s=tolerance)
+    else:
+        text, citations = validate_citations("".join(parts), moments)
     text, sources = validate_sources(text, list(chunks.values()))
     yield _done(
         text or "I couldn't find enough evidence to answer that question.", citations, sources

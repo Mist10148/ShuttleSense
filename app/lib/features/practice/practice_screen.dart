@@ -130,7 +130,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   }
 
   Future<void> findPlayers() async {
-    if (video == null) return;
+    final info = video;
+    if (info == null) return;
     setState(() {
       busy = true;
       error = null;
@@ -138,11 +139,24 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       candidates = [];
     });
     try {
-      final data = await ref.read(apiClientProvider).practicePlayers(video!.id, selectionFrame);
+      final api = ref.read(apiClientProvider);
+      final analysisKind = (job?['practice_setup'] as Map?)?['analysis_kind'];
+      final useWatchGrid = job != null
+          ? analysisKind == 'general'
+          : (ref.read(healthProvider).valueOrNull ?? await api.health()).practiceGeneral;
+      if (!mounted || video?.id != info.id) return;
+      final data = useWatchGrid
+          ? await api.practiceWatchPlayers(info.id, selectionFrame)
+          : await api.practicePlayers(info.id, selectionFrame);
       final values = (data['candidates'] as List)
           .map((p) => (p['bbox'] as List).map((n) => (n as num).toDouble()).toList())
           .toList();
-      if (mounted) setState(() => candidates = values);
+      if (mounted && video?.id == info.id) {
+        setState(() {
+          selectionFrame = (data['frame'] as num?)?.toInt() ?? selectionFrame;
+          candidates = values;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
     } finally {
@@ -206,21 +220,21 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
-  Future<void> start() async {
+  Future<void> start({bool general = false}) async {
     final times = attempts.text.trim().isEmpty
         ? <double?>[]
         : attempts.text.split(',').map((s) => double.tryParse(s.trim())).toList();
     final singlesCorners = fullToSingles(courtCorners);
-    if (courtType == null) {
+    if (!general && courtType == null) {
       setState(() => error = 'Choose singles or doubles to match the video.');
       return;
     }
-    if (singlesCorners == null) {
+    if (!general && singlesCorners == null) {
       setState(() => error = 'Mark the four court corners to use Watch player tracking.');
       return;
     }
     if (selected == null || times.any((v) => v == null || !v.isFinite)) {
-      setState(() => error = 'Select a player and enter valid attempt times in seconds.');
+      setState(() => error = 'Select a player and enter valid review times in seconds.');
       return;
     }
     setState(() {
@@ -228,7 +242,26 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       error = null;
     });
     try {
-      final health = await ref.read(apiClientProvider).health();
+      final api = ref.read(apiClientProvider);
+      final health = await api.health();
+      if (!mounted) return;
+      if (general) {
+        if (!health.practiceGeneral) {
+          throw Exception('General practice is unavailable on this backend.');
+        }
+        final queued = await api.startPractice({
+          'analysis_kind': 'general',
+          'video_id': video!.id,
+          'selection_frame': selectionFrame,
+          'selected_bbox': selected,
+          'review_seconds': times,
+        });
+        if (mounted) {
+          setState(() => job = queued);
+          await loadJob(queued['id'] as String);
+        }
+        return;
+      }
       if (!health.practiceCourtWatch) {
         throw Exception(
           'This backend needs to be updated and restarted to support AI Coach playback.',
@@ -271,7 +304,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           'video_id': video!.id,
           'court': courtType!,
           'corners': [
-            for (final c in singlesCorners) [c.x, c.y],
+            for (final c in singlesCorners!) [c.x, c.y],
           ],
           'playback': 'complete',
           'mode': 'practice',
@@ -406,7 +439,15 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       });
       timer?.cancel();
       if (status == 'queued' || status == 'running') {
-        timer = Timer(const Duration(seconds: 1), () => loadJob(id));
+        final generalPreview =
+            status == 'running' &&
+            (data['practice_setup'] as Map?)?['analysis_kind'] == 'general' &&
+            data['preview'] != null &&
+            data['current_stage'] != 'render';
+        timer = Timer(
+          generalPreview ? const Duration(milliseconds: 300) : const Duration(seconds: 1),
+          () => loadJob(id),
+        );
       } else if (status == 'needs_selection' && previousStatus != 'needs_selection') {
         await player?.pause();
         setState(() => selectionFrame = data['practice_selection_frame'] as int);
@@ -572,19 +613,46 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
+  void analyzeAgain() {
+    final playback = player;
+    ++guideRevision;
+    attempts.clear();
+    setState(() {
+      job = result = guide = null;
+      guideError = error = null;
+      loadingReport = eventsDirty = savedAnalysisPending = false;
+      player = null;
+      videoController = null;
+      selected = null;
+      candidates = [];
+    });
+    unawaited(playback?.dispose());
+    unawaited(findPlayers());
+  }
+
   @override
   Widget build(BuildContext context) {
     final info = video;
     final status = job?['status'] as String?;
+    final generalAvailable = ref.watch(healthProvider).valueOrNull?.practiceGeneral ?? false;
+    final generalResult = result?['analysis_kind'] == 'general';
+    final generalJob = (job?['practice_setup'] as Map?)?['analysis_kind'] == 'general';
+    final legacyReselect = status == 'needs_selection' && !generalJob;
     final selecting = info != null && !watchActive && (job == null || status == 'needs_selection');
     return PageScaffold(
       title: 'AI Coach',
       maxWidth: result == null ? 900 : 1200,
       actions: const [ChangeModeButton()],
       children: [
-        const Text(
-          'Recorded practice for clear, smash or drop. Marked attempts are not verified shuttle contacts.',
-        ),
+        if (generalAvailable && job == null)
+          const Text(
+            'Use a steady, well-lit camera. Keep your whole body and racket arm in frame '
+            'throughout the movement. Select yourself on a clear frame before your first stroke.',
+          )
+        else if (!generalResult && !generalJob)
+          const Text(
+            'Recorded practice for clear, smash or drop. Marked attempts are not verified shuttle contacts.',
+          ),
         const SizedBox(height: 16),
         if (info == null)
           FilledButton(onPressed: busy ? null : pick, child: const Text('Choose practice video')),
@@ -593,24 +661,21 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           const SizedBox(height: 12),
           Text(
             status == 'needs_selection'
-                ? 'Select the player to continue this older session.'
+                ? generalJob
+                      ? 'The selected player could not be confirmed. Pick a clear frame and select yourself again.'
+                      : 'Select the player to continue this older session.'
                 : 'Choose the player in the frame.',
           ),
           Slider(
-            min: status == 'needs_selection'
-                ? (job!['practice_selection_frame'] as int).toDouble()
-                : 0,
+            min: legacyReselect ? (job!['practice_selection_frame'] as int).toDouble() : 0,
             value: selectionFrame.toDouble(),
             max: (info.numFrames - 1)
-                .clamp(
-                  status == 'needs_selection' ? (job!['practice_selection_frame'] as int) + 1 : 1,
-                  10000000,
-                )
+                .clamp(legacyReselect ? (job!['practice_selection_frame'] as int) + 1 : 1, 10000000)
                 .toDouble(),
             onChanged:
                 busy ||
                     info.numFrames <= 1 ||
-                    (status == 'needs_selection' &&
+                    (legacyReselect &&
                         (job!['practice_selection_frame'] as int) >= info.numFrames - 1)
                 ? null
                 : (v) => setState(() {
@@ -632,9 +697,15 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                           : '${attempts.text.trim()}, $time';
                     },
               icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Mark attempt at this frame'),
+              label: Text(
+                generalAvailable ? 'Mark this moment for review' : 'Mark attempt at this frame',
+              ),
             ),
-            const Text('Select the player at or before the first marked attempt.'),
+            Text(
+              generalAvailable
+                  ? 'Select the player at or before the first marked moment.'
+                  : 'Select the player at or before the first marked attempt.',
+            ),
           ] else
             const Text(
               'Move forward if the player is hidden; skipped attempts will be unavailable.',
@@ -680,113 +751,117 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           if (candidates.isEmpty && !busy)
             const Text('No player detected. Choose another frame or check the models.'),
           if (job == null) ...[
-            const SizedBox(height: Spacing.lg),
-            AppCard(
-              title: 'Court calibration',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Mark the four outer court corners: near left, near right, far right, far left. AI Coach uses Watch player tracking.',
-                  ),
-                  const Text(
-                    'Choose the format played in the video. Doubles tracks both players on each side.',
-                  ),
-                  DropdownButton<String>(
-                    value: courtType,
-                    hint: const Text('Choose singles or doubles'),
-                    items: const [
-                      DropdownMenuItem(value: 'singles', child: Text('Singles')),
-                      DropdownMenuItem(value: 'doubles', child: Text('Doubles')),
-                    ],
-                    onChanged: busy || suggestingFormat
-                        ? null
-                        : (value) => setState(() => courtType = value),
-                  ),
-                  OutlinedButton(
-                    onPressed: busy || detectingCourt ? null : detectCourt,
-                    child: Text(detectingCourt ? 'Finding court...' : 'Find court automatically'),
-                  ),
-                  if (courtMessage != null) Text(courtMessage!),
-                  OutlinedButton(
-                    onPressed:
-                        busy ||
-                            detectingCourt ||
-                            suggestingFormat ||
-                            fullToSingles(courtCorners) == null
-                        ? null
-                        : suggestFormat,
-                    child: Text(suggestingFormat ? 'Checking video...' : 'Suggest match format'),
-                  ),
-                  if (formatSuggestion != null)
-                    Text('Suggested: $formatSuggestion. Choose and confirm the format above.'),
-                  if (formatDetail != null) Text(formatDetail!),
-                  SizedBox(
-                    height: 320,
-                    child: CornerCanvas(
-                      image: NetworkImage(
-                        ref.read(apiClientProvider).frameUrl(info.id, selectionFrame),
-                      ),
-                      width: info.width,
-                      height: info.height,
-                      corners: courtCorners,
-                      overlayPainter: fullToSingles(courtCorners) == null
-                          ? null
-                          : (scale) => FullCourtPreview(courtCorners, scale),
-                      onTap: (c) {
-                        if (!busy && !suggestingFormat && courtCorners.length < 4) {
-                          setState(() {
-                            courtCorners.add(c);
-                            formatSuggestion = null;
-                            formatDetail = null;
-                          });
-                        }
-                      },
-                      onMove: (i, c) {
-                        if (!busy && !suggestingFormat) {
-                          setState(() {
-                            courtCorners[i] = c;
-                            formatSuggestion = null;
-                            formatDetail = null;
-                          });
-                        }
-                      },
+            if (!generalAvailable) ...[
+              const SizedBox(height: Spacing.lg),
+              AppCard(
+                title: 'Court calibration',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Mark the four outer court corners: near left, near right, far right, far left. AI Coach uses Watch player tracking.',
                     ),
-                  ),
-                  TextButton(
-                    onPressed: courtCorners.isEmpty || suggestingFormat
-                        ? null
-                        : () => setState(() {
-                            courtCorners.clear();
-                            formatSuggestion = null;
-                            formatDetail = null;
-                          }),
-                    child: const Text('Clear corners'),
-                  ),
-                ],
+                    const Text(
+                      'Choose the format played in the video. Doubles tracks both players on each side.',
+                    ),
+                    DropdownButton<String>(
+                      value: courtType,
+                      hint: const Text('Choose singles or doubles'),
+                      items: const [
+                        DropdownMenuItem(value: 'singles', child: Text('Singles')),
+                        DropdownMenuItem(value: 'doubles', child: Text('Doubles')),
+                      ],
+                      onChanged: busy || suggestingFormat
+                          ? null
+                          : (value) => setState(() => courtType = value),
+                    ),
+                    OutlinedButton(
+                      onPressed: busy || detectingCourt ? null : detectCourt,
+                      child: Text(detectingCourt ? 'Finding court...' : 'Find court automatically'),
+                    ),
+                    if (courtMessage != null) Text(courtMessage!),
+                    OutlinedButton(
+                      onPressed:
+                          busy ||
+                              detectingCourt ||
+                              suggestingFormat ||
+                              fullToSingles(courtCorners) == null
+                          ? null
+                          : suggestFormat,
+                      child: Text(suggestingFormat ? 'Checking video...' : 'Suggest match format'),
+                    ),
+                    if (formatSuggestion != null)
+                      Text('Suggested: $formatSuggestion. Choose and confirm the format above.'),
+                    if (formatDetail != null) Text(formatDetail!),
+                    SizedBox(
+                      height: 320,
+                      child: CornerCanvas(
+                        image: NetworkImage(
+                          ref.read(apiClientProvider).frameUrl(info.id, selectionFrame),
+                        ),
+                        width: info.width,
+                        height: info.height,
+                        corners: courtCorners,
+                        overlayPainter: fullToSingles(courtCorners) == null
+                            ? null
+                            : (scale) => FullCourtPreview(courtCorners, scale),
+                        onTap: (c) {
+                          if (!busy && !suggestingFormat && courtCorners.length < 4) {
+                            setState(() {
+                              courtCorners.add(c);
+                              formatSuggestion = null;
+                              formatDetail = null;
+                            });
+                          }
+                        },
+                        onMove: (i, c) {
+                          if (!busy && !suggestingFormat) {
+                            setState(() {
+                              courtCorners[i] = c;
+                              formatSuggestion = null;
+                              formatDetail = null;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: courtCorners.isEmpty || suggestingFormat
+                          ? null
+                          : () => setState(() {
+                              courtCorners.clear();
+                              formatSuggestion = null;
+                              formatDetail = null;
+                            }),
+                      child: const Text('Clear corners'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            DropdownButton<String>(
-              value: stroke,
-              items: [
-                'clear',
-                'smash',
-                'drop',
-              ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (s) => setState(() => stroke = s!),
-            ),
-            DropdownButton<String>(
-              value: arm,
-              items: [
-                'right',
-                'left',
-              ].map((s) => DropdownMenuItem(value: s, child: Text('$s racket arm'))).toList(),
-              onChanged: (s) => setState(() => arm = s!),
-            ),
+              DropdownButton<String>(
+                value: stroke,
+                items: [
+                  'clear',
+                  'smash',
+                  'drop',
+                ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                onChanged: (s) => setState(() => stroke = s!),
+              ),
+              DropdownButton<String>(
+                value: arm,
+                items: [
+                  'right',
+                  'left',
+                ].map((s) => DropdownMenuItem(value: s, child: Text('$s racket arm'))).toList(),
+                onChanged: (s) => setState(() => arm = s!),
+              ),
+            ],
             TextField(
               controller: attempts,
-              decoration: const InputDecoration(
-                labelText: 'Optional manual attempt times in seconds, separated by commas',
+              decoration: InputDecoration(
+                labelText: generalAvailable
+                    ? 'Optional review times in seconds, separated by commas'
+                    : 'Optional manual attempt times in seconds, separated by commas',
                 hintText: '1.2, 3.5, 6.0',
               ),
             ),
@@ -795,11 +870,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   busy ||
                       detectingCourt ||
                       suggestingFormat ||
-                      courtType == null ||
                       selected == null ||
-                      fullToSingles(courtCorners) == null
+                      (!generalAvailable &&
+                          (courtType == null || fullToSingles(courtCorners) == null))
                   ? null
-                  : start,
+                  : () => start(general: generalAvailable),
               child: const Text('Confirm and analyze'),
             ),
           ] else
@@ -1034,7 +1109,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             },
           ),
         ],
-        if (result != null) ...[
+        if (generalResult) ...[
+          const SizedBox(height: Spacing.lg),
+          _generalReview(result!, generalAvailable),
+        ] else if (result != null) ...[
           if (result!.containsKey('selected_slot') && result!['selected_slot'] == null)
             const Text(
               'Watch could not match your selection to a player. Check the court corners and select a clearly visible frame.',
@@ -1135,6 +1213,45 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         if (error != null)
           Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
       ],
+    );
+  }
+
+  Widget _generalReview(Map<String, dynamic> analysis, bool canRetry) {
+    final selectedFrom = (analysis['selection_frame'] as int?) ?? 0;
+    final frames = (analysis['processed_frames'] as int?) ?? 0;
+    final untracked = (analysis['unobserved_frames'] as int?) ?? 0;
+    final tracked = frames - selectedFrom - untracked;
+    final lost = analysis['tracking_lost_from_s'];
+    return AppCard(
+      title: 'Review moments',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: Spacing.sm,
+        children: [
+          Text('Tracked $tracked of ${frames - selectedFrom} frames after selection.'),
+          if (analysis['stopped_early'] == true)
+            const Text('This report covers the saved portion of the video.'),
+          if (lost is num) ...[
+            Text(
+              'The selected player could not be confidently recovered from ${lost.toStringAsFixed(1)} s.',
+            ),
+            if (canRetry) TextButton(onPressed: analyzeAgain, child: const Text('Analyze again')),
+          ],
+          for (final moment in (analysis['review_moments'] as List? ?? const []))
+            ListTile(
+              title: Text(switch (moment['kind']) {
+                'marked' => 'Marked moment',
+                'movement' => 'Movement to review',
+                _ => 'Pose snapshot',
+              }),
+              subtitle: Text(
+                '${(moment['time_s'] as num).toStringAsFixed(1)} s'
+                '${(moment['observations'] as List).any((o) => o['status'] == 'observed') ? '' : ' · Pose unavailable'}',
+              ),
+              onTap: () => seekCoachMoment((moment['time_s'] as num).toDouble()),
+            ),
+        ],
+      ),
     );
   }
 }

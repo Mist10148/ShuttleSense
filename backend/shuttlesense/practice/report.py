@@ -20,16 +20,17 @@ log = logging.getLogger(__name__)
 AI_RETRY_BASE_S = 1.0
 
 
-async def _generate_guide(provider, prompt):
+async def _generate_guide(provider, prompt, system):
     from shuttlesense.coach.llm import ChatError
 
     try:
-        return await provider.generate_json(SYSTEM, prompt, ReportChoice)
+        return await provider.generate_json(system, prompt, ReportChoice)
     except ChatError as exc:
         if exc.status not in (429, 503) or "key was rejected" in exc.detail:
             raise
         await asyncio.sleep(AI_RETRY_BASE_S * (1 + random.random() * 0.2))
-        return await provider.generate_json(SYSTEM, prompt, ReportChoice)
+        return await provider.generate_json(system, prompt, ReportChoice)
+
 
 GUIDANCE = {
     "overhead_reach": {
@@ -131,10 +132,13 @@ async def create_practice_report(
     events: list[dict] | None = None,
     analysis_notes: list[dict] | None = None,
     session_context: dict | None = None,
+    general_moments: list[dict] | None = None,
 ) -> PracticeReport:
     from collections import Counter
 
     context = session_context or {}
+    general = general_moments is not None
+    catalog = {"camera_view": GUIDANCE["camera_view"]} if general else GUIDANCE
     event_counts = Counter(
         event.get("stroke") or "unclassified"
         for event in (events or [])
@@ -146,6 +150,13 @@ async def create_practice_report(
         "unobserved_frames": context.get("unobserved_frames", 0),
         "stopped_early": context.get("stopped_early", False),
     }
+    if general:
+        overview.update(
+            analysis_kind="general",
+            frames_before_selection=context.get("frames_before_selection", 0),
+            tracked_frames=context.get("tracked_frames", 0),
+            tracking_lost_from_s=context.get("tracking_lost_from_s"),
+        )
     if context.get("fps") and context.get("processed_frames") is not None:
         overview["duration_s"] = round(context["processed_frames"] / context["fps"], 2)
     evidence = {}
@@ -193,9 +204,25 @@ async def create_practice_report(
             ),
             "provenance": "automatic",
         }
+    for moment in sorted(general_moments or [], key=lambda item: item["kind"] != "marked"):
+        for item in moment["observations"]:
+            if (
+                item["status"] == "observed"
+                and item["value"] is not None
+                and in_video(moment["time_s"])
+            ):
+                evidence[item["id"]] = {
+                    **item,
+                    "frame": moment["frame"],
+                    "moment_kind": moment["kind"],
+                }
     if not evidence:
         return PracticeReport(
-            summary="Not enough visible pose evidence to assess the marked attempts.",
+            summary=(
+                "Not enough visible pose evidence to review this video."
+                if general
+                else "Not enough visible pose evidence to assess the marked attempts."
+            ),
             session_overview=overview,
             fallback_reason="insufficient_evidence",
         )
@@ -207,8 +234,9 @@ async def create_practice_report(
     selected = list(evidence)[:10]
     guidance_ids = [
         key
-        for key, item in GUIDANCE.items()
-        if item["rule"] is not None and any(evidence[e]["rule"] == item["rule"] for e in selected)
+        for key, item in catalog.items()
+        if (general and item["rule"] is None)
+        or any(evidence[e]["rule"] == item["rule"] for e in selected)
     ][:3]
     generated_by = "rules"
     overall = None
@@ -222,6 +250,8 @@ async def create_practice_report(
             knowledge_by_id = {}
             if retriever is not None:
                 topics = {f"{a.stroke} overhead technique drills" for a in attempts}
+                if general:
+                    topics.add("badminton practice movement overhead reach arm shadow drills")
                 topics.update(
                     f"{note.get('stroke') or 'badminton'} {note.get('rule', '')} technique drills"
                     for note in (analysis_notes or [])
@@ -266,14 +296,22 @@ async def create_practice_report(
                         }
                         for event in eligible_events
                     ],
-                    "guidance": GUIDANCE,
+                    "guidance": catalog,
                     "rules_based": {"evidence_ids": selected, "guidance_ids": guidance_ids},
                     "badminton_knowledge": knowledge,
                 }
             )
-            choice = await _generate_guide(provider, prompt)
+            system = SYSTEM
+            if general:
+                system += (
+                    " This is general practice. State what the camera captured separately from "
+                    "advice. Left and right are body sides only. Do not infer the racket hand, "
+                    "stroke type, contact, or a technique fault. A pose snapshot is a still "
+                    "observation, not evidence that a swing occurred."
+                )
+            choice = await _generate_guide(provider, prompt, system)
             if any(key not in evidence for key in choice.evidence_ids) or any(
-                key not in GUIDANCE for key in choice.guidance_ids
+                key not in catalog for key in choice.guidance_ids
             ):
                 raise ValueError("provider returned unsupported IDs")
             if not choice.evidence_ids:
@@ -281,7 +319,7 @@ async def create_practice_report(
             proposed_evidence = list(dict.fromkeys(choice.evidence_ids))
             proposed_guidance = list(dict.fromkeys(choice.guidance_ids))
             for key in proposed_guidance:
-                rule = GUIDANCE[key]["rule"]
+                rule = catalog[key]["rule"]
                 if rule is not None and not any(
                     evidence[e]["rule"] == rule for e in proposed_evidence
                 ):
@@ -347,21 +385,28 @@ async def create_practice_report(
                 fallback_reason = "key_rejected"
             else:
                 fallback_reason = "unavailable"
-    return PracticeReport(
-        summary=(
+    if general:
+        summary = (
+            f"{len(general_moments or [])} review moments; "
+            f"{total_evidence} usable pose measurements."
+        )
+    else:
+        summary = (
             f"{len(attempts)} analyzed moments; "
             f"{total_evidence} pose measurements and analysis notes."
-        ),
+        )
+    return PracticeReport(
+        summary=summary,
         evidence=[evidence[key] for key in selected],
         guidance=[
             {
                 "id": key,
-                **GUIDANCE[key],
+                **catalog[key],
                 "moments": sorted(
                     {
                         evidence[e]["moment_s"]
                         for e in selected
-                        if evidence[e]["rule"] == GUIDANCE[key]["rule"]
+                        if evidence[e]["rule"] == catalog[key]["rule"]
                     }
                 ),
             }

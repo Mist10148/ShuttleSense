@@ -141,6 +141,9 @@ def health(request: Request, settings: Annotated[Settings, Depends(get_settings)
         practice_watch=not settings.fake_pipeline and "pose" in request.app.state.available_stages,
         practice_court_watch=not settings.fake_pipeline
         and "pose" in request.app.state.available_stages,
+        practice_general=settings.practice_general
+        and not settings.fake_pipeline
+        and "pose" in request.app.state.available_stages,
     )
 
 

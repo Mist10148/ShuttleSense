@@ -19,6 +19,7 @@ from shuttlesense.schema import Player
 
 
 class PracticeSetup(BaseModel):
+    analysis_kind: Literal["stroke"] = Field(default="stroke", exclude=True)
     video_id: str
     stroke: Stroke
     arm: Arm
@@ -35,6 +36,29 @@ class PracticeSetup(BaseModel):
         validate_bbox(self.selected_bbox)
         self.attempt_seconds.sort()
         return self
+
+
+class GeneralPracticeSetup(BaseModel):
+    analysis_kind: Literal["general"]
+    video_id: str
+    selected_bbox: tuple[float, float, float, float]
+    selection_frame: int = Field(ge=0)
+    review_seconds: list[float] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def valid(self) -> GeneralPracticeSetup:
+        validate_bbox(self.selected_bbox)
+        if any(not math.isfinite(t) or t < 0 for t in self.review_seconds):
+            raise ValueError("review times must be finite and non-negative")
+        if len(set(self.review_seconds)) != len(self.review_seconds):
+            raise ValueError("review times must be distinct")
+        return self
+
+    def validate_segment(self, fps: float, frames: int) -> None:
+        if not math.isfinite(fps) or fps <= 0 or not 0 <= self.selection_frame < frames:
+            raise ValueError("selection frame is outside the video or video timing is invalid")
+        if any(not self.selection_frame <= round(t * fps) < frames for t in self.review_seconds):
+            raise ValueError("review times must be between the selection frame and the video end")
 
 
 def validate_bbox(box: tuple[float, float, float, float]) -> None:

@@ -209,9 +209,13 @@ class _CoachGuidePanelState extends State<CoachGuidePanel> {
   );
 
   String _observation(Json item) {
-    final label = item['rule'] != null && '${item['id']}'.startsWith('analysis-note-')
-        ? 'Automated analysis note'
-        : 'Pose observation';
+    final label = switch (item['moment_kind']) {
+      'marked' => 'Marked pose observation',
+      'movement' => 'Movement observation',
+      'snapshot' => 'Pose snapshot',
+      _ when '${item['id']}'.startsWith('analysis-note-') => 'Automated analysis note',
+      _ => 'Pose observation',
+    };
     final value = [item['value'], item['unit']].where((part) => part != null).join(' ');
     return '$label: ${item['description']}${value.isEmpty ? '' : ' ($value)'}';
   }

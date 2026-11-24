@@ -44,6 +44,36 @@ def _scale_person(p: Player, sx: float, sy: float) -> Player:
     )
 
 
+def configure_watch_pose(detector, watch, device, batch_size):
+    """Apply Watch's pose provider and crop batching independently of court geometry."""
+    provider = watch.get("player_provider", "cuda")
+    provider_factory = getattr(detector, "with_provider", None)
+    split_detector = bool(watch.get("split_detector", False))
+    diagnostics = None
+    if provider == "cuda" and detector is not None:
+        active = "cuda" if str(device).startswith("cuda") else "cpu"
+        diagnostics = {
+            "requested": provider,
+            "models": {
+                name: {"requested": active, "active": active} for name in ("detector", "pose")
+            },
+        }
+    if (provider != "cuda" or split_detector) and provider_factory is not None:
+        detector = provider_factory(
+            provider, batch_size, int(watch.get("pose_opt_batch", 4)), split_detector
+        )
+        diagnostics = detector.provider_diagnostics
+    raw = detector
+    batch_factory = getattr(raw, "with_batch", None)
+    if batch_size > 1 and batch_factory is not None:
+        detector = (
+            batch_factory(batch_size, True)
+            if watch.get("pose_crop_lookup")
+            else batch_factory(batch_size)
+        )
+    return detector, raw, diagnostics
+
+
 def enable_watch_player_continuity(perception: Perception) -> None:
     """Enable Watch-only outside-court tracking when model-based pose is available."""
     tracker = getattr(perception, "tracker", None)
@@ -101,27 +131,12 @@ def enable_watch_player_continuity(perception: Perception) -> None:
                 perception.track_provider_diagnostics["fallback_reason"] = str(exc)
                 if not watch.get("track_gpu_window", False):
                     perception.track_gpu_window = None
-        provider = watch.get("player_provider", "cuda")
-        provider_factory = getattr(getattr(perception, "detect", None), "with_provider", None)
-        split_detector = bool(watch.get("split_detector", False))
-        if provider == "cuda" and getattr(perception, "available", {}).get("pose"):
-            active = "cuda" if str(perception.device).startswith("cuda") else "cpu"
-            perception.provider_diagnostics = {
-                "requested": provider,
-                "models": {
-                    name: {"requested": active, "active": active} for name in ("detector", "pose")
-                },
-            }
-        if (provider != "cuda" or split_detector) and provider_factory is not None:
-            perception.detect = provider_factory(
-                provider, batch_size, int(watch.get("pose_opt_batch", 4)), split_detector
-            )
-            perception.provider_diagnostics = perception.detect.provider_diagnostics
-        factory = getattr(getattr(perception, "detect", None), "with_batch", None)
-        raw_detect = getattr(perception, "detect", None)
+        perception.detect, raw_detect, diagnostics = configure_watch_pose(
+            perception.detect, watch, perception.device, batch_size
+        )
+        if diagnostics is not None:
+            perception.provider_diagnostics = diagnostics
         use_lookup = bool(watch.get("pose_crop_lookup", False))
-        if batch_size > 1 and factory is not None:
-            perception.detect = factory(batch_size, True) if use_lookup else factory(batch_size)
         mode = watch.get("candidate_filter", "off")
         watch_factory = getattr(raw_detect, "with_watch", None)
         if mode in ("shadow", "filter") and watch_factory and tracker is not None:

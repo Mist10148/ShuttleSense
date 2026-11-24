@@ -165,6 +165,36 @@ void main() {
     expect(find.text('Coaching ready'), findsOneWidget);
   });
 
+  testWidgets('general practice submits a selected player without match setup', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('solo.mp4', 1000)]);
+    final api = _GeneralPracticeApi();
+    await pumpScreen(tester, const PracticeScreen(), size: laptop, api: api);
+    await tester.tap(find.text('Choose practice video'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Keep your whole body'), findsOneWidget);
+    expect(find.text('Court calibration'), findsNothing);
+    expect(find.text('Choose singles or doubles'), findsNothing);
+    expect(find.textContaining('racket arm', findRichText: true), findsOneWidget);
+    final image = find.byType(Image).first;
+    await tester.ensureVisible(image);
+    await tester.pump();
+    await tester.tapAt(tester.getTopLeft(image) + const Offset(30, 30));
+    final start = find.text('Confirm and analyze');
+    await tester.ensureVisible(start);
+    await tester.pump();
+    await tester.tap(start);
+    await tester.pump();
+    await tester.pump();
+    expect(api.setup, {
+      'analysis_kind': 'general',
+      'video_id': 'vid1',
+      'selection_frame': 0,
+      'selected_bbox': [0.0, 0.0, 700.0, 650.0],
+      'review_seconds': [],
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final size in [laptop, phone]) {
     testWidgets('coaching panel follows video responsively at $size', (tester) async {
       final api = _SlowGuide();
@@ -283,6 +313,41 @@ class _PracticeWatchApi extends FakeApiClient {
         'bbox': [0, 0, 700, 650],
       },
     ],
+  };
+}
+
+class _GeneralPracticeApi extends _PracticeWatchApi {
+  Map<String, dynamic>? setup;
+
+  @override
+  Future<Map<String, dynamic>> practiceWatchPlayers(String videoId, int frame) async => {
+    ...await practicePlayers(videoId, frame),
+    'frame': frame,
+  };
+
+  @override
+  Future<Health> health() async => const Health(
+    version: '1',
+    schemaVersion: '1',
+    device: 'cpu',
+    authRequired: false,
+    stages: [],
+    practiceVideo: true,
+    practiceGeneral: true,
+  );
+
+  @override
+  Future<Map<String, dynamic>> startPractice(Map<String, dynamic> setup) async {
+    this.setup = setup;
+    return practiceStatus('job1');
+  }
+
+  @override
+  Future<Map<String, dynamic>> practiceStatus(String id) async => {
+    'id': id,
+    'video_id': 'vid1',
+    'status': 'queued',
+    'practice_setup': setup,
   };
 }
 

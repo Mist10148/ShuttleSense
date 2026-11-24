@@ -87,36 +87,23 @@ class SelectedPlayerTracker:
         return player
 
 
-def assess_attempt(
-    player: Player | None,
-    stroke: Stroke,
-    arm: Arm,
-    moment_s: float,
-    min_score: float = 0.5,
-    provenance: Literal["user_marked", "automatic"] = "user_marked",
-) -> AttemptEvidence:
-    """Measure image-space positions at a user-marked instant without assigning fault.
+ARM_JOINTS = {"left": (5, 7, 9), "right": (6, 8, 10)}
 
-    Existing match rules assume confirmed contact, so this function does not reuse their
-    pass/fail labels or their thresholds for a shadow swing.
-    """
-    if not np.isfinite(moment_s) or moment_s < 0:
-        raise ValueError("attempt time must be finite and non-negative")
-    if stroke not in ("clear", "smash", "drop") or arm not in ("left", "right"):
-        raise ValueError("unsupported stroke or racket arm")
-    side = {"left": (5, 7, 9), "right": (6, 8, 10)}[arm]
-    kps = player.keypoints if player is not None else []
 
-    def point(index: int) -> np.ndarray | None:
-        if index >= len(kps):
-            return None
-        p = np.asarray(kps[index], dtype=float)
-        if p.shape != (3,) or not np.isfinite(p).all() or p[2] < min_score:
-            return None
-        return p[:2]
+def pose_point(player: Player | None, index: int, min_score: float = 0.5) -> np.ndarray | None:
+    if player is None or index >= len(player.keypoints):
+        return None
+    point = np.asarray(player.keypoints[index], dtype=float)
+    if point.shape != (3,) or not np.isfinite(point).all() or point[2] < min_score:
+        return None
+    return point[:2]
 
-    shoulder, elbow, wrist = (point(i) for i in side)
-    head = point(0)
+
+def arm_observations(
+    player: Player | None, arm: Arm, moment_s: float, min_score: float = 0.5
+) -> list[Observation]:
+    shoulder, elbow, wrist = (pose_point(player, i, min_score) for i in ARM_JOINTS[arm])
+    head = pose_point(player, 0, min_score)
     observations = []
     if wrist is not None and head is not None and player is not None and player.bbox[3] > 0:
         margin = float((head[1] - wrist[1]) / player.bbox[3])
@@ -165,6 +152,23 @@ def assess_attempt(
                 description="A required joint is missing or the image geometry is degenerate.",
             )
         )
+    return observations
+
+
+def assess_attempt(
+    player: Player | None,
+    stroke: Stroke,
+    arm: Arm,
+    moment_s: float,
+    min_score: float = 0.5,
+    provenance: Literal["user_marked", "automatic"] = "user_marked",
+) -> AttemptEvidence:
+    """Measure image-space positions at a user-marked instant without assigning fault."""
+    if not np.isfinite(moment_s) or moment_s < 0:
+        raise ValueError("attempt time must be finite and non-negative")
+    if stroke not in ("clear", "smash", "drop") or arm not in ("left", "right"):
+        raise ValueError("unsupported stroke or racket arm")
+    observations = arm_observations(player, arm, moment_s, min_score)
     for observation in observations:
         observation.provenance = provenance
     limitation = (

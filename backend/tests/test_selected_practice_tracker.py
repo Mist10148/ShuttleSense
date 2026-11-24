@@ -98,3 +98,44 @@ def test_initial_detection_miss_does_not_replace_the_selected_person():
     assert tracker.update([opponent], scene((opponent, blue))) is None
     assert tracker.update([selected], scene((selected, red))) is None
     assert tracker.update([selected], scene((selected, red))) is selected
+
+
+def test_seeded_torso_continuity_distinguishes_box_overlap_from_ambiguous_crossing():
+    def with_torso(x):
+        p = person(x)
+        p.keypoints = [(0, 0, 0)] * 17
+        for i, dx, y in ((5, 6, 15), (6, 14, 15), (11, 6, 27), (12, 14, 27)):
+            p.keypoints[i] = (x + dx, y, 0.95)
+        return p
+
+    target = with_torso(5)
+    separate, overlap, ambiguous = (with_torso(x) for x in (35, 15, 7))
+    red = (0, 0, 255)
+    tracker = SelectedIdentityTracker(target.bbox)
+    assert (
+        tracker.lock_selection([target, separate], scene((target, red), (separate, red))) is target
+    )
+    assert tracker.update([target, overlap], scene((target, red), (overlap, red))) is target
+    assert tracker.update([target, ambiguous], scene((target, red), (ambiguous, red))) is None
+    assert tracker.update([ambiguous], scene((ambiguous, red))) is None
+
+
+def test_rival_trajectory_preserves_the_target_when_nearby_torsos_almost_overlap():
+    def posed(x):
+        player = person(x)
+        player.keypoints = [(0, 0, 0)] * 17
+        for i, dx, y in ((5, 6, 15), (6, 14, 15), (11, 6, 27), (12, 14, 27)):
+            player.keypoints[i] = (x + dx, y, 0.95)
+        return player
+
+    target, rival = posed(5), posed(25)
+    red = (0, 0, 255)
+    tracker = SelectedIdentityTracker(target.bbox)
+    assert tracker.lock_selection([target, rival], scene((target, red), (rival, red))) is target
+    for x in (21, 17, 11):
+        rival = posed(x)
+        assert tracker.update([rival, target], scene((target, red), (rival, red))) is target
+
+    close = posed(7)
+    assert tracker.update([close, target], scene((target, red), (close, red))) is None
+    assert tracker.update([close], scene((close, red))) is None

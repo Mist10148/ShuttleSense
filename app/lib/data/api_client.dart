@@ -145,10 +145,16 @@ class ApiClient {
 
   String sourceVideoUrl(String videoId) => urlWithToken('/videos/$videoId/source');
 
-  Future<Json> practicePlayers(String videoId, int frame) => _call(
+  Future<Json> practicePlayers(String videoId, int frame) =>
+      _practicePlayers(videoId, frame, watchGrid: false);
+
+  Future<Json> practiceWatchPlayers(String videoId, int frame) =>
+      _practicePlayers(videoId, frame, watchGrid: true);
+
+  Future<Json> _practicePlayers(String videoId, int frame, {required bool watchGrid}) => _call(
     () async => (await _dio.get<Json>(
       '/practice/videos/$videoId/players',
-      queryParameters: {'frame': frame},
+      queryParameters: {'frame': frame, if (watchGrid) 'watch_grid': true},
       options: Options(receiveTimeout: const Duration(minutes: 5)),
     )).data!,
   );

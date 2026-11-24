@@ -1,5 +1,21 @@
 # AI Coach: recorded single-player practice
 
+## Court-free general practice preview
+
+To try general practice, set `SHUTTLESENSE_PRACTICE_GENERAL=1` in the backend's environment and restart the backend and app. This is opt-in until the tracker has been compared with the existing court-based path on annotated practice clips.
+
+Upload a steady, well-lit clip, select yourself on a clear frame, and optionally mark moments to review. The whole player and racket arm should stay in frame. General practice follows the selected person without court corners, match format, or stroke and arm labels. It measures visible wrist height and elbow angle in the image. Motion peaks suggest moments to replay. If there is no reliable peak, one clear frame can be shown as a pose snapshot. No stroke or contact is classified.
+
+The video and report preserve gaps if the selected person cannot be tracked confidently. Overall Summary, Detailed Analysis, and Follow-up Questions use only the saved observations from this video. Older stroke-specific sessions still open with their original controls.
+
+General practice uses Watch's recorded-video frame sizing, pose settings, and export. The player picker shows a frame that the analysis will process. If the initial selection cannot be confirmed, choose a clearer frame and select yourself again.
+
+When players cross, the tracker uses nearby players' motion to help keep the selected identity. A dashed **Temporarily obscured** box can appear for up to 0.25 seconds in the preview and saved video. It shows the last confirmed position, and those frames do not contribute pose measurements or coaching evidence.
+
+The general request to `POST /practice/sessions` includes `analysis_kind: "general"`, `video_id`, `selection_frame`, `selected_bbox`, and optional `review_seconds`. The backend advertises the enabled preview with `practice_general` on `GET /health`.
+
+## Stroke-specific practice
+
 AI Coach analyzes a recorded clip using the same calibrated player tracker as Watch & Analyze. Version 1 supports a user-selected player, racket arm, and overhead clear, smash or drop. It can process shadow swings without a shuttle. It uses selected-player detection and 2D pose. When shuttle tracking is available, it also proposes hit events and uses the match-trained CNN with the Watch evidence guard; predictions are estimates and require review. Shadow practice can still use manually marked attempts.
 
 ## Setup and workflow

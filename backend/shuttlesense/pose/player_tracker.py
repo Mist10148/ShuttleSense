@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -38,6 +39,58 @@ def _same_person_pose(a: Player, b: Player, *, iou_min: float, pose_max: float) 
     )
 
 
+Candidate = TypeVar("Candidate")
+
+
+def unique_player_poses(
+    ranked: Iterable[Candidate],
+    pose_of: Callable[[Candidate], Player],
+    *,
+    iou_min: float,
+    pose_max: float,
+    group: Callable[[Candidate], str] = lambda _: "",
+) -> list[Candidate]:
+    unique: list[Candidate] = []
+    for candidate in ranked:
+        if not any(
+            group(candidate) == group(kept)
+            and _same_person_pose(
+                pose_of(candidate), pose_of(kept), iou_min=iou_min, pose_max=pose_max
+            )
+            for kept in unique
+        ):
+            unique.append(candidate)
+    return unique
+
+
+def box_center(box):
+    x, y, w, h = box
+    return np.array((x + w / 2, y + h / 2))
+
+
+def torso_center(player: Player) -> np.ndarray | None:
+    """Image anchor unaffected by a racket arm or leg extending a detection box."""
+    points = [
+        (x, y)
+        for i, (x, y, score) in enumerate(player.keypoints)
+        if i in (5, 6, 11, 12) and score >= 0.3 and np.isfinite((x, y)).all()
+    ]
+    return np.mean(points, axis=0) if len(points) >= 3 else None
+
+
+def box_step_limit(cfg, missing):
+    return min(
+        float(cfg.get("reacquire_max_box_fraction", 1.2)),
+        float(cfg.get("max_step_box_fraction", 0.6))
+        + missing * float(cfg.get("reacquire_box_step_per_frame", 0.1)),
+    )
+
+
+def has_match_tie(cost, alternatives, margin):
+    """Use the same ambiguity margin for candidates and competing tracks."""
+    return any(other - cost < margin for other in alternatives)
+
+
 @dataclass
 class Track:
     pos: np.ndarray | None = None
@@ -60,6 +113,7 @@ class CourtPlayerTracker:
 
     def __init__(self, cfg: dict[str, Any], court: str, court_size: tuple[float, float]):
         self.court, self.court_size = court, court_size
+        self.image_cfg = cfg
         self.confirm = max(1, int(cfg.get("confirmation_frames", 3)))
         self.max_step = float(cfg.get("max_step_m", 0.5))
         self.max_box_step = float(cfg.get("max_step_box_fraction", 0.6))
@@ -145,17 +199,13 @@ class CourtPlayerTracker:
 
         # RTMPose can return several near-identical poses for one far-side person during
         # overlap. They are not independent people and must not create a false match tie.
-        unique = []
-        for candidate in sorted(candidates, key=lambda c: (c[3], c[0].score), reverse=True):
-            if not any(
-                candidate[4] == kept[4]
-                and _same_person_pose(
-                    candidate[0], kept[0], iou_min=self.duplicate_iou, pose_max=self.duplicate_pose
-                )
-                for kept in unique
-            ):
-                unique.append(candidate)
-        candidates = unique
+        candidates = unique_player_poses(
+            sorted(candidates, key=lambda c: (c[3], c[0].score), reverse=True),
+            lambda c: c[0],
+            iou_min=self.duplicate_iou,
+            pose_max=self.duplicate_pose,
+            group=lambda c: c[4],
+        )
 
         output: dict[str, Player | None] = dict.fromkeys(self.slots)
         used: set[int] = set()
@@ -168,9 +218,7 @@ class CourtPlayerTracker:
             # A player can move while occluded. Widen the matching gate gradually, not
             # on the first missed frame, and keep it bounded to prevent instant jumps.
             allowed_step = min(self.max_gap_step, self.max_step + track.missing * self.gap_step)
-            allowed_box_step = min(
-                self.max_gap_box_step, self.max_box_step + track.missing * self.gap_box_step
-            )
+            allowed_box_step = box_step_limit(self.image_cfg, track.missing)
             for j, (person, pos, hist, inside, side, spread) in enumerate(candidates):
                 if not track.locked and not inside:
                     continue
@@ -187,10 +235,10 @@ class CourtPlayerTracker:
                     continue
                 dist = float(np.linalg.norm(pos - track.pos))
                 if track.bbox is not None:
-                    x, y, w, h = track.bbox
-                    nx, ny, nw, nh = person.bbox
-                    box_dist = np.hypot(nx + nw / 2 - x - w / 2, ny + nh / 2 - y - h / 2)
-                    if box_dist > allowed_box_step * max(h, nh, 1):
+                    box_dist = float(
+                        np.linalg.norm(box_center(person.bbox) - box_center(track.bbox))
+                    )
+                    if box_dist > allowed_box_step * max(track.bbox[3], person.bbox[3], 1):
                         continue
                 appearance = appearance_distance(track.hist, hist)
                 far_continuity = (
@@ -255,9 +303,7 @@ class CourtPlayerTracker:
             track = self.slots[name]
             alternatives = [c for c, n, k in pairs if n == name and k != j and k not in used]
             rivals = [c for c, n, k in pairs if k == j and n != name and n not in matched]
-            ambiguous = (alternatives and min(alternatives) - cost < self.ambiguity * limit) or (
-                rivals and min(rivals) - cost < self.ambiguity * limit
-            )
+            ambiguous = has_match_tie(cost, (*alternatives, *rivals), self.ambiguity * limit)
             if track.locked and ambiguous:
                 continue
             p, pos, hist, inside, _, _ = candidates[j]
