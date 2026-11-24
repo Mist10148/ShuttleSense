@@ -179,7 +179,8 @@ abstract final class AppTheme {
       TextStyle(fontFamily: fontFamily, fontSize: 14, fontWeight: FontWeight.w600),
     );
     const size = WidgetStatePropertyAll(Size(64, kMinTouchTarget));
-    Color disabledInk(Color c) => c.withValues(alpha: 0.45);
+    // Muted but still readable on the sunk disabled face.
+    Color disabledInk(Color c) => c.withValues(alpha: 0.55);
     WidgetStateProperty<Color> ink(Color c) => WidgetStateProperty.resolveWith(
       (s) => s.contains(WidgetState.disabled) ? disabledInk(c) : c,
     );
@@ -226,9 +227,25 @@ abstract final class AppTheme {
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: tactileButtonStyle(
-          TactileButtonKind.primary,
-        ).copyWith(minimumSize: size, textStyle: label, foregroundColor: ink(t.onPrimary)),
+        style: tactileButtonStyle(TactileButtonKind.primary).copyWith(
+          minimumSize: size,
+          textStyle: label,
+          // Disabled: the label in the button's own blue, readable on its pale tint.
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.disabled)
+                ? (brightness == Brightness.dark
+                      ? Color.lerp(t.primary, Colors.white, 0.5)!.withValues(alpha: 0.85)
+                      : t.primaryDeep.withValues(alpha: 0.7))
+                : t.onPrimary,
+          ),
+          iconColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.disabled)
+                ? (brightness == Brightness.dark
+                      ? Color.lerp(t.primary, Colors.white, 0.5)!.withValues(alpha: 0.85)
+                      : t.primaryDeep.withValues(alpha: 0.7))
+                : t.onPrimary,
+          ),
+        ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: tactileButtonStyle(

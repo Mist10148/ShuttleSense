@@ -115,12 +115,23 @@ class TactileButtonSurface extends StatelessWidget {
     final focused = states.contains(WidgetState.focused);
     final shape = BorderRadius.circular(radius);
 
+    final dark = Theme.of(context).brightness == Brightness.dark;
     BoxDecoration decoration;
     if (disabled) {
-      decoration = BoxDecoration(
-        color: kind == TactileButtonKind.ghost ? null : t.recess.withValues(alpha: 0.6),
-        borderRadius: shape,
-      );
+      decoration = switch (kind) {
+        // Still recognisably the main action, just not ready: a soft blue tint and edge.
+        TactileButtonKind.primary => BoxDecoration(
+          color: t.primary.withValues(alpha: dark ? 0.20 : 0.13),
+          borderRadius: shape,
+          border: Border.all(color: t.primary.withValues(alpha: dark ? 0.40 : 0.30)),
+        ),
+        // Sunk into the surface (an inner shadow is painted below), so it reads as "not now".
+        TactileButtonKind.secondary => BoxDecoration(
+          color: t.recess.withValues(alpha: dark ? 0.9 : 0.75),
+          borderRadius: shape,
+        ),
+        TactileButtonKind.ghost => BoxDecoration(borderRadius: shape),
+      };
     } else {
       switch (kind) {
         case TactileButtonKind.primary:
@@ -165,24 +176,31 @@ class TactileButtonSurface extends StatelessWidget {
         case TactileButtonKind.secondary:
           // A light key that stands clear of the card: a top-lit face, a fine edge and a
           // short drop shadow, so it does not melt into the surface behind it.
-          final dark = Theme.of(context).brightness == Brightness.dark;
+          // A clearer edge and a face a touch cooler than the card, so the key never
+          // melts into a white card.
           final edge = t.flat
               ? t.rim
               : (dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFF112D4E).withValues(alpha: 0.14));
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : const Color(0xFF112D4E).withValues(alpha: 0.22));
           decoration = BoxDecoration(
-            gradient: pressed ? null : raisedGradient(t),
+            gradient: pressed
+                ? null
+                : LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [t.raisedTop, Color.lerp(t.raisedBottom, t.recess, 0.35)!],
+                  ),
             color: pressed ? t.recess : null,
             borderRadius: shape,
-            border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.45) : edge),
+            border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.5) : edge),
             boxShadow: pressed
                 ? null
                 : [
                     BoxShadow(
                       color: t.shade,
-                      blurRadius: hovered ? 14 : 8,
-                      offset: Offset(0, hovered ? 6 : 3),
+                      blurRadius: hovered ? 14 : 10,
+                      offset: Offset(0, hovered ? 6 : 4),
                     ),
                     BoxShadow(
                       color: t.highlight.withValues(alpha: t.highlight.a * 0.8),
@@ -217,8 +235,10 @@ class TactileButtonSurface extends StatelessWidget {
         child: child,
       ),
     );
-    // A pressed secondary button sinks: an inner shadow along its top-left edge.
-    if (pressed && kind != TactileButtonKind.primary && !disabled) {
+    // A pressed secondary button sinks: an inner shadow along its top-left edge. A disabled
+    // one stays sunk.
+    if ((pressed && kind != TactileButtonKind.primary && !disabled) ||
+        (disabled && kind == TactileButtonKind.secondary)) {
       surface = CustomPaint(
         foregroundPainter: InsetPainter(
           radius: radius,
@@ -1166,6 +1186,7 @@ class DepthSegmented<T> extends StatelessWidget {
     this.onSelectionChanged,
     this.emptySelectionAllowed = false,
     this.compact = false,
+    this.wrapLabels = false,
   });
 
   final List<ButtonSegment<T>> segments;
@@ -1175,6 +1196,10 @@ class DepthSegmented<T> extends StatelessWidget {
 
   /// Smaller text and padding for tight rows.
   final bool compact;
+
+  /// Labels may take two centred lines (a taller tray) instead of being cut short: for a
+  /// narrow space where the text must stay full size.
+  final bool wrapLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -1205,7 +1230,7 @@ class DepthSegmented<T> extends StatelessWidget {
     );
     return IntrinsicWidth(
       child: SizedBox(
-        height: kMinTouchTarget,
+        height: wrapLabels ? 64 : kMinTouchTarget,
         child: Stack(
           children: [
             Positioned.fill(
@@ -1244,6 +1269,7 @@ class DepthSegmented<T> extends StatelessWidget {
                         segment: s,
                         chosen: i == index,
                         compact: compact,
+                        wrap: wrapLabels,
                         onTap: onSelectionChanged == null || !s.enabled
                             ? null
                             : () {
@@ -1277,11 +1303,13 @@ class _DepthSegment<T> extends StatelessWidget {
     required this.compact,
     required this.onTap,
     required this.style,
+    this.wrap = false,
   });
 
   final ButtonSegment<T> segment;
   final bool chosen;
   final bool compact;
+  final bool wrap;
   final VoidCallback? onTap;
   final TextStyle? style;
 
@@ -1303,9 +1331,10 @@ class _DepthSegment<T> extends StatelessWidget {
           Flexible(
             child: DefaultTextStyle.merge(
               style: style,
-              maxLines: 1,
+              maxLines: wrap ? 2 : 1,
               overflow: TextOverflow.ellipsis,
-              softWrap: false,
+              softWrap: wrap,
+              textAlign: TextAlign.center,
               child: segment.label!,
             ),
           ),
