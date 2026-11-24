@@ -18,6 +18,7 @@ import '../../results/widgets/stroke_timeline.dart';
 import '../live_controller.dart';
 import '../live_screen.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 
 /// The running live session: camera, calls, scoreboard and coach panel (moved out of
 /// live_screen.dart so each file stays readable).
@@ -190,7 +191,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Match won by ${playerLabel(record.score!.matchWinner!)}',
+                'Match won by ${context.sideLabel(record.score!.matchWinner!)}',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               if (!_coach) const Text('Undo to change the result.'),
@@ -351,7 +352,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
                 child: Text(
-                  '${formatClock(hit.timeS)} · ${playerLabel(hit.who)}'
+                  '${formatClock(hit.timeS)} · ${context.sideLabel(hit.who)}'
                   ' · ${kStrokeLabels[hit.stroke] ?? 'Unclassified'}',
                 ),
               ),
