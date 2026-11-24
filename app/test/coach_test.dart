@@ -13,6 +13,7 @@ import 'package:shuttlesense_app/features/results/widgets/line_call_banner.dart'
 import 'package:shuttlesense_app/features/results/widgets/results_layout.dart';
 import 'package:shuttlesense_app/features/results/widgets/session_summary.dart';
 import 'package:shuttlesense_app/shared/disclaimers.dart';
+import 'package:shuttlesense_app/shared/widgets/surfaces.dart';
 
 import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
@@ -48,19 +49,26 @@ Widget host(Widget child) => MaterialApp(
 void main() {
   group('mode picker', () {
     for (final MapEntry(key: name, value: size) in kSizes.entries) {
-      testWidgets('$name: picking a mode saves it and goes to Analyze', (tester) async {
+      testWidgets('$name: Upload is disabled and an available mode can still be picked', (
+        tester,
+      ) async {
         final visited = await pumpScreen(
           tester,
           const ModeScreen(),
           size: size,
-          prefs: {'ui.mode': 'live'},
+          prefs: {'ui.mode': 'upload'},
         );
-        expect(find.text('Last used'), findsOneWidget);
+        final upload = find.widgetWithText(PastelActionCard, 'Upload clip');
+        expect(tester.widget<PastelActionCard>(upload).enabled, isFalse);
+        expect(find.descendant(of: upload, matching: find.text('Disabled')), findsOneWidget);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.text('Upload clip'));
+        await tester.ensureVisible(find.text('Go live'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Go live'));
         await tester.pumpAndSettle();
         final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getString('ui.mode'), 'upload');
+        expect(prefs.getString('ui.mode'), 'live');
+        expect(find.text('Last used'), findsOneWidget);
         // In pumpScreen '/' is this screen, so going home shows it again with the new pick.
         expect(visited, isEmpty);
       });

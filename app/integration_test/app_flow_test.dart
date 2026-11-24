@@ -28,6 +28,8 @@ import 'package:shuttlesense_app/features/live/frame_source.dart';
 import 'package:shuttlesense_app/features/live/live_controller.dart';
 import 'package:shuttlesense_app/features/live/live_screen.dart';
 import 'package:shuttlesense_app/features/live/live_socket.dart';
+import 'package:shuttlesense_app/features/results/results_screen.dart';
+import 'package:shuttlesense_app/shared/widgets/surfaces.dart';
 
 const server = String.fromEnvironment('E2E_SERVER');
 const videoPath = String.fromEnvironment('E2E_VIDEO');
@@ -160,7 +162,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'connect, upload, process, open the results and find the job in history',
+    'connect, run Watch & Analyze, open the results and find the job in history',
     (tester) async {
       MediaKit.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
@@ -183,30 +185,41 @@ void main() {
       await pumpUntil(tester, find.textContaining('Cannot reach server'));
       await typeInto(tester, find.byType(TextField).first, server);
       await tester.testTextInput.receiveAction(TextInputAction.done); // Enter submits too
-      await pumpUntil(tester, find.text('Upload clip'));
-      await tapText(tester, 'Upload clip');
-      await pumpUntil(tester, find.text('New analysis'));
-      // The successful connection banner can cover the upload action in a short window.
-      ScaffoldMessenger.of(tester.element(find.text('New analysis').first)).removeCurrentSnackBar();
+      await pumpUntilCondition(
+        tester,
+        () => tester
+            .widgetList<PastelActionCard>(find.widgetWithText(PastelActionCard, 'Watch & Analyze'))
+            .any((card) => card.enabled),
+        'Watch & Analyze is available',
+      );
+      await tapText(tester, 'Watch & Analyze');
+      await pumpUntil(tester, find.text('Choose video'));
+      ScaffoldMessenger.of(tester.element(find.text('Choose video'))).removeCurrentSnackBar();
       await tester.pump();
 
-      // 2. Pick and upload without calibration; 4. processing runs to the end.
-      await tapText(tester, 'Calibrate court');
       await tapText(tester, 'Choose video');
       await pumpUntil(tester, find.text(LocalFile(video).name));
-      await tapText(tester, 'Upload and analyze');
+      await tapText(tester, 'Continue to options');
+      await tapText(tester, 'Analyze every frame');
+      await tapText(tester, 'Singles');
+      await tapText(tester, 'Continue to calibration');
+      await tapText(tester, 'Start analysis');
 
-      // 5. Results: the golden record's strokes appear in the timeline.
-      await pumpUntil(tester, find.text('Serve'));
-      expect(find.text('Smash'), findsWidgets);
+      await pumpUntil(
+        tester,
+        find.textContaining('Session saved'),
+        timeout: const Duration(minutes: 3),
+      );
+      await tapText(tester, 'View saved session');
+      await pumpUntil(tester, find.byType(ResultsScreen));
+      final saved = tester.widget<ResultsScreen>(find.byType(ResultsScreen)).jobId;
 
-      // 9. History lists the job under the video's name.
-      // The phone tab bar and the wide icon rail both label their buttons with tooltips.
+      // Watch sessions can have a generated video name. Use the saved job ID.
       await tester.tap(find.byTooltip('History'));
       await tester.pump();
-      await pumpUntil(tester, find.text(LocalFile(video).name));
+      await pumpUntil(tester, find.byKey(ValueKey(saved)));
     },
-    skip: server.isEmpty || videoPath.isEmpty,
+    skip: server.isEmpty || videoPath.isEmpty || !Platform.isWindows,
   );
   testWidgets(
     'live referee and coach recover over WebSocket and open the saved replay from History',

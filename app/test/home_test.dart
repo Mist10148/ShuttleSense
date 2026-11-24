@@ -5,9 +5,9 @@ import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
 
 void main() {
-  testWidgets('first run offers the first upload', (tester) async {
+  testWidgets('first run offers the available analysis modes', (tester) async {
     await pumpScreen(tester, const HomeScreen(), api: FakeApiClient(jobs: []));
-    expect(find.text('Upload your first rally'), findsOneWidget);
+    expect(find.text('Choose an analysis mode'), findsOneWidget);
     expect(find.text('Recent analyses'), findsNothing);
   });
 
@@ -15,6 +15,6 @@ void main() {
     await pumpScreen(tester, const HomeScreen());
     expect(find.text('Recent analyses'), findsOneWidget);
     expect(find.text('rally01.mp4'), findsWidgets);
-    expect(find.text('Upload your first rally'), findsNothing);
+    expect(find.text('Choose an analysis mode'), findsNothing);
   });
 }

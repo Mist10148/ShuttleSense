@@ -59,13 +59,17 @@ class ModeChoices extends ConsumerWidget {
           color: p.lavender,
           icon: Icons.upload_file,
           title: 'Upload clip',
-          description: detailed
+          description: !uploadClipEnabled
+              ? 'Use Watch & Analyze for recorded clips.'
+              : detailed
               ? 'Pick a recorded rally. The server processes it and shows full results, '
                     'line calls and coaching notes.'
               : 'Analyze a recorded rally.',
-          footnote: detailed ? 'You need: a recorded video file (MP4, MOV or AVI)' : null,
-          badge: lastUsed(AppMode.upload),
-          onTap: () => pick(AppMode.upload),
+          footnote: detailed && uploadClipEnabled
+              ? 'You need: a recorded video file (MP4, MOV or AVI)'
+              : null,
+          badge: uploadClipEnabled ? lastUsed(AppMode.upload) : 'Disabled',
+          onTap: uploadClipEnabled ? () => pick(AppMode.upload) : null,
         ),
         PastelActionCard(
           color: p.sky,

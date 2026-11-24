@@ -108,7 +108,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                       key: ValueKey(('practice', ref.watch(practiceSessionProvider))),
                     ),
                     AppMode.live when ref.watch(liveAvailableProvider) => const LiveScreen(),
-                    _ => const UploadScreen(),
+                    _ when uploadClipEnabled => const UploadScreen(),
+                    _ => const ModeScreen(),
                   },
                 ),
                 routes: [
@@ -123,6 +124,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   ),
                   GoRoute(
                     path: 'videos/:videoId/calibrate',
+                    redirect: (_, _) => uploadClipEnabled ? null : Routes.mode,
                     builder: (context, state) =>
                         CalibrationScreen(videoId: state.pathParameters['videoId']!),
                   ),

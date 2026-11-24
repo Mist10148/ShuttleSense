@@ -2,10 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'server_config.dart';
 
-/// Upload a clip (offline) or go live with a camera (F18).
+/// The legacy upload mode remains readable from saved preferences.
 enum AppMode { upload, live, watch, practice }
 
-/// The last mode the user picked; saved on the device. Upload until one is picked.
+/// Gates the legacy Upload Clip screen and its setup route without removing them.
+const uploadClipEnabled = false;
+
+/// The last mode the user picked. The router handles an unavailable or unset mode.
 class AppModeNotifier extends Notifier<AppMode> {
   static const _key = 'ui.mode';
 
