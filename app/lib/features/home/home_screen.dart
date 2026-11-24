@@ -187,9 +187,18 @@ class _RecentRow extends ConsumerWidget {
             : Routes.job(job.id),
       ),
       child: ListRow(
+        // The same icon and pastel as the job's mode card.
         leading: IconChip(
-          icon: job.isLive ? Icons.videocam_outlined : Icons.movie_outlined,
-          background: job.isLive ? p.sky : p.lavender,
+          icon: job.mode == 'practice'
+              ? Icons.sports_tennis
+              : job.isLive
+              ? Icons.videocam_outlined
+              : Icons.movie_outlined,
+          background: job.mode == 'practice'
+              ? p.peach
+              : job.isLive
+              ? p.sky
+              : p.lavender,
         ),
         title: title,
         subtitle:

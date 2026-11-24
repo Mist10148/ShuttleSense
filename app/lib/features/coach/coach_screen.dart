@@ -12,6 +12,7 @@ import '../../shared/disclaimers.dart';
 import '../../shared/widgets/message_view.dart';
 import 'source_chips.dart';
 import '../../ui/depth.dart';
+import '../../shared/widgets/helper_text.dart';
 
 /// One turn of the general coach conversation, with the knowledge it cited.
 class CoachTurn {
@@ -212,10 +213,7 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                           if (state.error != null)
                             Padding(
                               padding: const EdgeInsets.only(top: Spacing.sm),
-                              child: Text(
-                                state.error!,
-                                style: TextStyle(color: theme.colorScheme.error),
-                              ),
+                              child: HelperText(state.error!, error: true),
                             ),
                         ],
                       ),
@@ -274,31 +272,49 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
   }
 }
 
+/// One message of a coach conversation, in the same bubble style as the results chat: yours
+/// in ink on the right, the coach's in lavender on the left, the corner nearest the speaker
+/// kept tight. [footer] goes under the text (moment links).
 class CoachBubble extends StatelessWidget {
-  const CoachBubble({super.key, required this.turn});
+  const CoachBubble({super.key, required this.turn, this.footer});
 
   final CoachTurn turn;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final p = AppPalette.of(context);
     final user = turn.message.fromUser;
+    const round = Radius.circular(Radii.lg);
+    const tail = Radius.circular(Radii.sm);
     return Align(
       alignment: user ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
-        child: Card(
-          color: user ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+        child: Container(
           margin: const EdgeInsets.symmetric(vertical: Spacing.xs),
+          decoration: BoxDecoration(
+            color: user ? p.ink : p.lavender,
+            borderRadius: BorderRadius.only(
+              topLeft: round,
+              topRight: round,
+              bottomLeft: user ? round : tail,
+              bottomRight: user ? tail : round,
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(Spacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Semantics(
                   label: user ? 'You asked' : 'Coach answered',
-                  child: SelectableText(turn.message.text),
+                  child: SelectableText(
+                    turn.message.text,
+                    style: user ? TextStyle(color: p.onInk) : null,
+                  ),
                 ),
+                if (footer != null) ...[const SizedBox(height: Spacing.sm), footer!],
                 if (turn.sources.isNotEmpty) ...[
                   const SizedBox(height: Spacing.sm),
                   SourceChips(sources: turn.sources),

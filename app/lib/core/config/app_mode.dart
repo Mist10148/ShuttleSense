@@ -22,3 +22,16 @@ class AppModeNotifier extends Notifier<AppMode> {
 }
 
 final appModeProvider = NotifierProvider<AppModeNotifier, AppMode>(AppModeNotifier.new);
+
+/// Bumped to start a fresh AI Coach screen (a new video). The Analyze tab keeps its screen
+/// alive, so without this choosing AI Coach again would show the last session.
+class PracticeSessionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void next() => state++;
+}
+
+final practiceSessionProvider = NotifierProvider<PracticeSessionNotifier, int>(
+  PracticeSessionNotifier.new,
+);

@@ -25,6 +25,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/step_indicator.dart';
 import '../../shared/widgets/surfaces.dart';
 import '../calibration/calibration_screen.dart';
+import '../mode/mode_screen.dart';
 import '../upload/upload_controller.dart';
 import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
@@ -824,9 +825,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         key: ValueKey(step),
         title: 'Watch & Analyze',
         maxWidth: step == _WatchSetupStep.calibration ? 1200 : 720,
-        actions: [
-          TextButton(onPressed: () => context.go(Routes.mode), child: const Text('Change mode')),
-        ],
+        actions: const [ChangeModeButton()],
         children: [
           if (!supported)
             const Text('This backend does not support Watch & Analyze.')
@@ -1001,16 +1000,18 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text('Confirm the match format:'),
-      Wrap(
-        spacing: Spacing.sm,
-        children: [
-          for (final format in ['singles', 'doubles'])
-            ChoiceChip(
-              label: Text(format == 'singles' ? 'Singles' : 'Doubles'),
-              selected: matchType == format,
-              onSelected: setupBusy ? null : (_) => setState(() => matchType = format),
-            ),
+      DepthSegmented<String>(
+        segments: const [
+          ButtonSegment(value: 'singles', label: Text('Singles')),
+          ButtonSegment(value: 'doubles', label: Text('Doubles')),
         ],
+        selected: {?matchType},
+        emptySelectionAllowed: true,
+        onSelectionChanged: setupBusy
+            ? null
+            : (values) {
+                if (values.isNotEmpty) setState(() => matchType = values.first);
+              },
       ),
     ],
   );
@@ -1184,9 +1185,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
     return PageScaffold(
       title: 'Watch & Analyze',
       maxWidth: 900,
-      actions: [
-        TextButton(onPressed: () => context.go(Routes.mode), child: const Text('Change mode')),
-      ],
+      actions: const [ChangeModeButton()],
       children: [
         if (realTime && videoController != null)
           framed(
@@ -1295,7 +1294,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         const SizedBox(height: Spacing.lg),
         if (!stopping && started && error == null)
           Wrap(
-            spacing: 8,
+            spacing: Spacing.sm,
+            runSpacing: Spacing.sm,
             children: [
               FilledButton(
                 onPressed: realTime && player == null
@@ -1361,8 +1361,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
             },
             child: const Text('Try again'),
           ),
-        if (error != null)
-          Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        if (error != null) HelperText(error!, error: true),
       ],
     );
   }

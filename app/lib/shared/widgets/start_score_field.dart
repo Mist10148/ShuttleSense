@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/tokens.dart';
 import 'tactile.dart';
+import 'helper_text.dart';
 
 typedef StartScore = ({int near, int far});
 
@@ -92,7 +93,7 @@ class _StartScoreFieldState extends State<StartScoreField> {
           if (problem != null)
             Padding(
               padding: const EdgeInsets.only(top: Spacing.sm),
-              child: Text(problem, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: HelperText(problem, error: true),
             ),
         ],
       ],

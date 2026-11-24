@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/core/theme/app_theme.dart';
 import 'package:shuttlesense_app/features/practice/coach_guide_panel.dart';
 
 void main() {
@@ -7,6 +8,7 @@ void main() {
     double? sought;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: SingleChildScrollView(
             child: CoachGuidePanel(
@@ -62,6 +64,7 @@ void main() {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: CoachGuidePanel(
             loading: false,
@@ -84,6 +87,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
           child: Scaffold(
@@ -107,6 +111,7 @@ void main() {
   testWidgets('rate limited AI does not duplicate rules-based guidance', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: CoachGuidePanel(
             loading: false,
@@ -141,6 +146,7 @@ void main() {
     late VoidCallback changeVersion;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: SingleChildScrollView(
             child: StatefulBuilder(

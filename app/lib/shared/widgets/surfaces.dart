@@ -398,22 +398,57 @@ class PastelActionCard extends StatelessWidget {
 /// Lays [children] out in as many equal columns as fit at [minWidth] each, up to
 /// [maxColumns]: three on a laptop, two on a tablet, one on a phone.
 class CardGrid extends StatelessWidget {
-  const CardGrid({super.key, required this.children, this.minWidth = 340, this.maxColumns = 3});
+  const CardGrid({
+    super.key,
+    required this.children,
+    this.minWidth = 340,
+    this.maxColumns = 3,
+    this.equalHeight = false,
+  });
 
   final List<Widget> children;
   final double minWidth;
   final int maxColumns;
 
+  /// Every card in a row as tall as the tallest. Only for cards of plain text and icons
+  /// (it measures intrinsic heights).
+  final bool equalHeight;
+
+  /// Columns for [count] cards when [fit] fit across: the most that leave no lonely card on
+  /// a last row (4 cards: 4 across, else 2 × 2, never 3 + 1).
+  static int columnsFor(int count, int fit) {
+    if (count <= fit) return count.clamp(1, fit);
+    for (var c = fit; c > 1; c--) {
+      if (count % c == 0) return c;
+    }
+    return fit;
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final columns = (box.maxWidth / minWidth).floor().clamp(1, maxColumns);
-      final width = (box.maxWidth - Spacing.lg * (columns - 1)) / columns;
-      return Wrap(
+      final fit = (box.maxWidth / minWidth).floor().clamp(1, maxColumns);
+      final columns = columnsFor(children.length, fit);
+      // Rows of cards; with [equalHeight] a longer description never leaves a ragged edge.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: Spacing.lg,
-        runSpacing: Spacing.lg,
-        children: [for (final c in children) SizedBox(width: width, child: c)],
+        children: [
+          for (var start = 0; start < children.length; start += columns)
+            _row([
+              for (var i = start; i < start + columns; i++) ...[
+                if (i > start) const SizedBox(width: Spacing.lg),
+                Expanded(child: i < children.length ? children[i] : const SizedBox.shrink()),
+              ],
+            ]),
+        ],
       );
     },
   );
+
+  Widget _row(List<Widget> cells) => equalHeight
+      ? IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: cells),
+        )
+      : Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells);
 }

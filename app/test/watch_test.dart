@@ -275,7 +275,14 @@ void main() {
       isNotNull,
     );
     await _tapSetup(tester, 'Back to options');
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Doubles')).selected, isTrue);
+    expect(
+      tester
+          .widget<DepthSegmented<String>>(
+            find.ancestor(of: find.text('Doubles'), matching: find.byType(DepthSegmented<String>)),
+          )
+          .selected,
+      {'doubles'},
+    );
     expect(find.textContaining('Playback waits for every normalized frame'), findsOneWidget);
     await tester.ensureVisible(find.text('Suggest automatically'));
     await tester.pumpAndSettle();
@@ -450,7 +457,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Singles'));
     await tester.pump();
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Singles')).selected, isTrue);
+    expect(
+      tester
+          .widget<DepthSegmented<String>>(
+            find.ancestor(of: find.text('Singles'), matching: find.byType(DepthSegmented<String>)),
+          )
+          .selected,
+      {'singles'},
+    );
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start analysis')).onPressed,
       isNotNull,

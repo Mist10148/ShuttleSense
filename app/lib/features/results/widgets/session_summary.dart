@@ -1,3 +1,4 @@
+import '../../../shared/widgets/notice.dart';
 import '../../../shared/widgets/courtside_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,17 +265,10 @@ class MomentChips extends StatelessWidget {
   final ValueChanged<Moment> onSeek;
 
   @override
+  // The same play-from pill as every other moment link in the app.
   Widget build(BuildContext context) => Wrap(
-    spacing: 6,
-    runSpacing: 4,
-    children: [
-      for (final m in moments)
-        ActionChip(
-          avatar: const Icon(Icons.play_arrow, size: 16),
-          label: Text(m.label),
-          tooltip: 'Play from ${m.label}',
-          onPressed: () => onSeek(m),
-        ),
-    ],
+    spacing: Spacing.xs + 2,
+    runSpacing: Spacing.xs + 2,
+    children: [for (final m in moments) TimePill(label: m.label, onTap: () => onSeek(m))],
   );
 }

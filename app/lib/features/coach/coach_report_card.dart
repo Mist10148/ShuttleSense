@@ -8,6 +8,7 @@ import '../../data/models/clip_record.dart';
 import '../../data/models/coach.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../results/widgets/session_summary.dart';
+import '../../shared/widgets/helper_text.dart';
 
 /// GET /jobs/{id}/coach/report, and POST to write it again (D42).
 class CoachReportController extends AutoDisposeFamilyAsyncNotifier<CoachReport, String> {
@@ -75,9 +76,9 @@ class CoachReportCard extends ConsumerWidget {
                 fps: fps,
                 onSeek: onSeek,
               ),
-              AsyncValue(:final Object error) => Text(
+              AsyncValue(:final Object error) => HelperText(
                 error is ApiException ? error.message : 'Could not load the report: $error',
-                style: TextStyle(color: theme.colorScheme.error),
+                error: true,
               ),
               _ => const Padding(
                 padding: EdgeInsets.all(Spacing.md),
