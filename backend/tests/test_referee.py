@@ -228,3 +228,22 @@ def test_an_out_call_must_agree_with_the_half_it_landed_on() -> None:
     assert rally_winner(long_far, "far", 6.7) == "near"  # a referee's own call still counts
     wide_near = Landing(x_m=-0.8, y_m=3.0, in_court=False, confidence=0.9)
     assert rally_winner(wide_near, "far", 6.7, check_side=True) == "near"
+
+
+def test_line_calls_use_the_match_court() -> None:
+    """A doubles match is called on the doubles lines even when line_call says singles."""
+    from shuttlesense import analytics, hits
+    from shuttlesense.config import load_config
+    from shuttlesense.referee import run as referee_run
+    from shuttlesense.stage import StageContext
+    from shuttlesense.stream.synthetic import synthetic_record
+
+    base = load_config()
+    for court in ("singles", "doubles"):
+        record, _ = synthetic_record()
+        config = {**base, "court": court}
+        ctx = StageContext(video_path=None, out_dir=None, config=config)
+        hits.run(record, ctx)
+        analytics.run(record, ctx)
+        out = referee_run(record, ctx)
+        assert out.line_calls and all(c.court == court for c in out.line_calls)

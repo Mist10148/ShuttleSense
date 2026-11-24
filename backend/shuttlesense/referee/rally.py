@@ -251,6 +251,7 @@ def build_events(record: ClipRecord) -> list[RallyEvent]:
 def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     """Fill rallies[], line_calls[], rally_events[], hits[].rally_index, rally_state, score."""
     from shuttlesense.analytics.stage import count_strokes
+    from shuttlesense.config import court_type
     from shuttlesense.court import image_to_court
     from shuttlesense.referee.linecalls import line_call_config, make_line_call
     from shuttlesense.referee.scoring import apply_rallies, flag_service, match_config
@@ -270,7 +271,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     )
 
     size = record.court.court_size_m if record.court else None
-    line_cfg = line_call_config(cfg)
+    # Singles or doubles lines follow the match (the job's court), whatever line_call says.
+    line_cfg = {**line_call_config(cfg), "court": court_type(ctx.config)}
     rallies, calls = [], []
     for index, seg in enumerate(segments):
         hits_in = [h for h in record.hits if seg.start <= h.frame <= seg.end]
