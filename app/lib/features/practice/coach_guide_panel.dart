@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -109,25 +111,42 @@ class _CoachGuidePanelState extends State<CoachGuidePanel> {
         spacing: Spacing.md,
         children: [
           _header(context, widget.report?['generated_by'] as String?),
-          // The three views across the panel at full text size: icons when there is room,
-          // two-line labels when the panel is narrow (never shrunk to small print).
+          // The three views on one line at a readable 13 px. Icons are added when they fit
+          // with every label whole; only a phone-narrow panel takes two-line labels.
           LayoutBuilder(
-            builder: (context, box) => SizedBox(
-              width: box.maxWidth,
-              child: DepthSegmented<_Section>(
-                wrapLabels: box.maxWidth < 470,
-                segments: [
-                  for (final item in _Section.values)
-                    ButtonSegment(
-                      value: item,
-                      icon: box.maxWidth >= 600 ? Icon(item.icon) : null,
-                      label: Text(item.label),
-                    ),
-                ],
-                selected: {section},
-                onSelectionChanged: (s) => setState(() => section = s.first),
-              ),
-            ),
+            builder: (context, box) {
+              final style = Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontSize: 13, fontWeight: FontWeight.w600);
+              final widest = [
+                for (final item in _Section.values)
+                  (TextPainter(
+                    text: TextSpan(text: item.label, style: style),
+                    textDirection: TextDirection.ltr,
+                    textScaler: MediaQuery.textScalerOf(context),
+                  )..layout()).width,
+              ].reduce(math.max);
+              // Each segment: label, 24 dp padding, and with an icon 16 + 6 more; tray 8.
+              final withIcons = (widest + 24 + 22) * _Section.values.length + 8 <= box.maxWidth;
+              final oneLine = (widest + 24) * _Section.values.length + 8 <= box.maxWidth;
+              return SizedBox(
+                width: box.maxWidth,
+                child: DepthSegmented<_Section>(
+                  compact: true,
+                  wrapLabels: !oneLine,
+                  segments: [
+                    for (final item in _Section.values)
+                      ButtonSegment(
+                        value: item,
+                        icon: withIcons ? Icon(item.icon) : null,
+                        label: Text(item.label),
+                      ),
+                  ],
+                  selected: {section},
+                  onSelectionChanged: (s) => setState(() => section = s.first),
+                ),
+              );
+            },
           ),
           ..._status(context),
           AnimatedSwitcher(

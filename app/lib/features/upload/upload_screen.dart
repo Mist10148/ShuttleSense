@@ -8,7 +8,6 @@ import '../../core/router/app_router.dart';
 import '../../data/models/job.dart';
 import '../../data/repositories/analysis_repository.dart';
 import '../../shared/widgets/page_scaffold.dart';
-import '../../shared/widgets/surfaces.dart';
 import '../mode/mode_screen.dart';
 import '../../data/models/health.dart';
 import '../../shared/widgets/dependent_switch.dart';
@@ -365,7 +364,7 @@ class VideoFileRow extends StatelessWidget {
     final theme = Theme.of(context);
     final info = Row(
       children: [
-        IconChip(icon: Icons.movie_outlined, background: p.mint),
+        const IconWell(icon: Icons.movie_outlined, size: 44, iconSize: 22),
         const SizedBox(width: Spacing.md),
         Expanded(
           child: Column(
@@ -389,23 +388,28 @@ class VideoFileRow extends StatelessWidget {
       ],
     );
     final buttons = Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions);
-    // The actions sit beside the name when there is room, else under it (a phone).
-    return LayoutBuilder(
-      builder: (context, box) => actions.isEmpty
-          ? info
-          : box.maxWidth >= 480
-          ? Row(
-              children: [
-                Expanded(child: info),
-                const SizedBox(width: Spacing.sm),
-                buttons,
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: Spacing.sm,
-              children: [info, buttons],
-            ),
+    // The chosen file sits in a recessed tray, like the drop zone it replaces; the actions
+    // sit beside the name when there is room, else under it (a phone).
+    return InsetBox(
+      radius: Radii.lg,
+      padding: const EdgeInsets.all(Spacing.md),
+      child: LayoutBuilder(
+        builder: (context, box) => actions.isEmpty
+            ? info
+            : box.maxWidth >= 480
+            ? Row(
+                children: [
+                  Expanded(child: info),
+                  const SizedBox(width: Spacing.sm),
+                  buttons,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: Spacing.sm,
+                children: [info, buttons],
+              ),
+      ),
     );
   }
 }
