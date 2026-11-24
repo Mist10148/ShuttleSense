@@ -103,7 +103,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => Consumer(
                   builder: (context, ref, _) => switch (ref.watch(appModeProvider)) {
                     AppMode.watch => const WatchScreen(),
-                    AppMode.practice => const PracticeScreen(),
+                    // A fresh screen per session, so AI Coach starts on a new video.
+                    AppMode.practice => PracticeScreen(
+                      key: ValueKey(('practice', ref.watch(practiceSessionProvider))),
+                    ),
                     AppMode.live when ref.watch(liveAvailableProvider) => const LiveScreen(),
                     _ => const UploadScreen(),
                   },

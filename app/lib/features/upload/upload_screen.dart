@@ -157,7 +157,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               if (file == null)
                 VideoDropZone(actions: pickButtons)
               else ...[
-                _FileRow(
+                VideoFileRow(
                   name: file.name,
                   details: details.join(' · '),
                   warn: upload.large || upload.tooLong,
@@ -291,9 +291,13 @@ String _minutes(double seconds) {
 
 /// The empty video slot: a dashed outline with what the server accepts and the pick buttons.
 class VideoDropZone extends StatelessWidget {
-  const VideoDropZone({super.key, required this.actions});
+  const VideoDropZone({super.key, required this.actions, this.title, this.detail});
 
   final List<Widget> actions;
+
+  /// Override the default rally wording (the AI Coach asks for a practice video).
+  final String? title;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -310,11 +314,16 @@ class VideoDropZone extends StatelessWidget {
             children: [
               const IconWell(icon: Icons.movie_outlined, size: 44, iconSize: 22),
               const SizedBox(height: Spacing.sm),
-              Text('Choose a rally video', style: text.titleMedium, textAlign: TextAlign.center),
+              Text(
+                title ?? 'Choose a rally video',
+                style: text.titleMedium,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: Spacing.xs),
               Text(
-                'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
-                'Best results from a phone on a tripod, elevated and behind the baseline.',
+                detail ??
+                    'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
+                        'Best results from a phone on a tripod, elevated and behind the baseline.',
                 style: text.bodySmall?.copyWith(color: p.text2),
                 textAlign: TextAlign.center,
               ),
@@ -335,8 +344,10 @@ class VideoDropZone extends StatelessWidget {
 
 /// The chosen video: name, length and size (in the error colour past a server limit), and
 /// the Replace button.
-class _FileRow extends StatelessWidget {
-  const _FileRow({
+/// A chosen video: a tinted icon, the file name, its details, and actions (change it).
+class VideoFileRow extends StatelessWidget {
+  const VideoFileRow({
+    super.key,
     required this.name,
     required this.details,
     required this.warn,
@@ -352,7 +363,7 @@ class _FileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     final theme = Theme.of(context);
-    return Row(
+    final info = Row(
       children: [
         IconChip(icon: Icons.movie_outlined, background: p.mint),
         const SizedBox(width: Spacing.md),
@@ -360,7 +371,12 @@ class _FileRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis),
+              Text(
+                name,
+                style: theme.textTheme.titleMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               Text(
                 details,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -370,9 +386,26 @@ class _FileRow extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: Spacing.sm),
-        Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions),
       ],
+    );
+    final buttons = Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: actions);
+    // The actions sit beside the name when there is room, else under it (a phone).
+    return LayoutBuilder(
+      builder: (context, box) => actions.isEmpty
+          ? info
+          : box.maxWidth >= 480
+          ? Row(
+              children: [
+                Expanded(child: info),
+                const SizedBox(width: Spacing.sm),
+                buttons,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Spacing.sm,
+              children: [info, buttons],
+            ),
     );
   }
 }
