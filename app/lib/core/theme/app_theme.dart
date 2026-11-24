@@ -355,6 +355,12 @@ abstract final class AppTheme {
         focusedBorder: noBorder.copyWith(borderSide: BorderSide(color: t.primary, width: 2)),
       ),
       listTileTheme: ListTileThemeData(shape: control),
+      // Hover and press washes: a faint tint of the accent, never a grey slab that looks cut
+      // off at a widget's edge.
+      hoverColor: t.primary.withValues(alpha: 0.05),
+      focusColor: t.primary.withValues(alpha: 0.10),
+      highlightColor: t.primary.withValues(alpha: 0.06),
+      splashColor: t.primary.withValues(alpha: 0.08),
       // An expanded section is pushed in: it sinks into a well while open.
       expansionTileTheme: ExpansionTileThemeData(
         backgroundColor: t.recess,

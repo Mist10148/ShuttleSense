@@ -194,18 +194,20 @@ class TactileButtonSurface extends StatelessWidget {
             color: pressed ? t.recess : null,
             borderRadius: shape,
             border: Border.all(color: hovered ? t.primary.withValues(alpha: 0.5) : edge),
+            // Light from above: a soft shadow straight down and a tight contact shadow, no
+            // glow on the far side (that read as a smudge around small keys).
             boxShadow: pressed
                 ? null
                 : [
                     BoxShadow(
-                      color: t.shade,
-                      blurRadius: hovered ? 14 : 10,
-                      offset: Offset(0, hovered ? 6 : 4),
+                      color: t.shade.withValues(alpha: t.shade.a * 0.75),
+                      blurRadius: hovered ? 14 : 9,
+                      offset: Offset(0, hovered ? 5 : 3),
                     ),
                     BoxShadow(
-                      color: t.highlight.withValues(alpha: t.highlight.a * 0.8),
-                      blurRadius: 6,
-                      offset: const Offset(-2, -2),
+                      color: t.shade.withValues(alpha: t.shade.a * 0.45),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
                     ),
                   ],
           );
@@ -220,17 +222,17 @@ class TactileButtonSurface extends StatelessWidget {
       decoration = decoration.copyWith(border: Border.all(color: t.primary, width: 2));
     }
 
-    final (bevelLight, bevelDark) = bevelColors(context);
     final raised = !disabled && !pressed && kind != TactileButtonKind.ghost;
     Widget surface = AnimatedContainer(
       duration: still ? Duration.zero : Duration(milliseconds: pressed ? 60 : 160),
       curve: const Cubic(0.2, 0.8, 0.2, 1),
       decoration: decoration,
       child: CustomPaint(
+        // A thin lit top edge on raised keys (no dark lip on the light ones).
         foregroundPainter: raised
             ? (kind == TactileButtonKind.primary
                   ? _TopLightPainter(radius: radius)
-                  : BevelPainter(radius: radius, light: bevelLight, dark: bevelDark))
+                  : _TopLightPainter(radius: radius, top: dark ? 0.10 : 0.9, bottom: 0))
             : null,
         child: child,
       ),
@@ -1130,9 +1132,12 @@ class Tray extends StatelessWidget {
 
 /// A single hairline of light along the top edge of a key, fading out down the sides.
 class _TopLightPainter extends CustomPainter {
-  const _TopLightPainter({required this.radius});
+  const _TopLightPainter({required this.radius, this.top = 0.4, this.bottom = 0.22});
 
   final double radius;
+
+  /// Opacity of the white top edge and the dark bottom edge.
+  final double top, bottom;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1146,10 +1151,10 @@ class _TopLightPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.white.withValues(alpha: 0.4),
+            Colors.white.withValues(alpha: top),
             Colors.white.withValues(alpha: 0),
             Colors.black.withValues(alpha: 0),
-            Colors.black.withValues(alpha: 0.22),
+            Colors.black.withValues(alpha: bottom),
           ],
           stops: const [0, 0.4, 0.7, 1],
         ).createShader(rect),
@@ -1157,7 +1162,8 @@ class _TopLightPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TopLightPainter old) => old.radius != radius;
+  bool shouldRepaint(_TopLightPainter old) =>
+      old.radius != radius || old.top != top || old.bottom != bottom;
 }
 
 /// A recessed tray that holds a row of segments (a segmented control): the options sit in
@@ -1371,5 +1377,74 @@ class _DepthSegment<T> extends StatelessWidget {
     if (onTap == null) child = Opacity(opacity: segment.enabled ? 0.5 : 0.4, child: child);
     if (segment.tooltip != null) child = Tooltip(message: segment.tooltip, child: child);
     return child;
+  }
+}
+
+/// A checkbox in the depth style: an empty box is a small well pressed into the surface; a
+/// ticked one is a raised blue key with a white tick. Keeps a 48 dp tap target.
+class DepthCheckbox extends StatelessWidget {
+  const DepthCheckbox({super.key, required this.value, required this.onChanged, this.label});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  /// What a screen reader announces with the state.
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TactileTokens.of(context);
+    final enabled = onChanged != null;
+    const size = 24.0;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final box = AnimatedSwitcher(
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 160),
+      child: value
+          ? Container(
+              key: const ValueKey(true),
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(7),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color.lerp(t.primary, Colors.white, 0.08)!, t.primaryDeep],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.primaryDeep.withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(Icons.check_rounded, size: 18, color: t.onPrimary),
+            )
+          : const InsetBox(
+              key: ValueKey(false),
+              width: size,
+              height: size,
+              radius: 7,
+              padding: EdgeInsets.zero,
+              child: SizedBox.shrink(),
+            ),
+    );
+    return Semantics(
+      checked: value,
+      enabled: enabled,
+      label: label,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: InkResponse(
+          onTap: enabled ? () => onChanged!(!value) : null,
+          radius: 22,
+          child: SizedBox.square(
+            dimension: kMinTouchTarget,
+            child: Center(child: box),
+          ),
+        ),
+      ),
+    );
   }
 }
