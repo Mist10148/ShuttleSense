@@ -75,7 +75,9 @@ async def watch_video(ws: WebSocket, token: str | None = None) -> None:
         if meta is None or source is None:
             raise ValueError("video not found")
         reader = await asyncio.to_thread(
-            open_watch_video, source, manager.state.jobs.config,
+            open_watch_video,
+            source,
+            manager.state.jobs.config,
         )
         corners = start.get("corners")
         if corners is not None:

@@ -6,6 +6,7 @@ import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/message_view.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 
 /// Seeking lands this long before the hit so the swing is visible.
 const kSeekLead = Duration(milliseconds: 500);
@@ -45,10 +46,10 @@ class TimelineFilters extends StatelessWidget {
         children: [
           // The same size as the section tabs beside it.
           DepthSegmented<String?>(
-            segments: const [
-              ButtonSegment(value: null, label: Text('Both')),
-              ButtonSegment(value: 'near', label: Text('Near')),
-              ButtonSegment(value: 'far', label: Text('Far')),
+            segments: [
+              const ButtonSegment(value: null, label: Text('Both')),
+              ButtonSegment(value: 'near', label: Text(context.sideLabel('near'))),
+              ButtonSegment(value: 'far', label: Text(context.sideLabel('far'))),
             ],
             selected: {f.player},
             onSelectionChanged: (v) => filter.value = (player: v.first, stroke: f.stroke),
@@ -265,7 +266,7 @@ class _HitRow extends StatelessWidget {
     final t = TactileTokens.of(context);
     final text = Theme.of(context).textTheme;
     final stroke = kStrokeLabels[hit.stroke] ?? 'Unclassified';
-    final player = playerLabel(hit.who);
+    final player = context.sideLabel(hit.who);
     final details = [
       if (hit.confidence != null) '${(hit.confidence! * 100).round()}%',
       if (hit.speedKmh != null) '~${hit.speedKmh!.round()} km/h (est.)',
@@ -453,7 +454,7 @@ class _HitDetails extends StatelessWidget {
         children: [
           Text(
             '${kStrokeLabels[hit.stroke] ?? 'Unclassified'} · '
-            '${playerLabel(hit.who)} player · ${formatClock(hit.timeS)}',
+            '${context.sideLabel(hit.who)} player · ${formatClock(hit.timeS)}',
             style: theme.textTheme.titleMedium,
           ),
           if (hit.uncertain)

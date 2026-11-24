@@ -402,6 +402,42 @@ void main() {
     expect(tester.widget<CornerCanvas>(find.byType(CornerCanvas)).corners, hasLength(1));
   });
 
+  testWidgets('a format picked by mistake can be changed on the calibration step', (tester) async {
+    FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
+    await pumpScreen(
+      tester,
+      const WatchScreen(),
+      size: laptop,
+      api: FakeApiClient(),
+      overrides: [
+        healthProvider.overrideWith(
+          (ref) async => const Health(
+            version: '1',
+            schemaVersion: '1',
+            device: 'cpu',
+            authRequired: false,
+            stages: [],
+            watchVideo: true,
+          ),
+        ),
+      ],
+    );
+    await _uploadAndOpenOptions(tester);
+    await tester.ensureVisible(find.text('Singles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Singles'));
+    await tester.pumpAndSettle();
+    await _tapSetup(tester, 'Continue to calibration');
+    await tester.ensureVisible(find.text('Doubles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Doubles'));
+    await tester.pumpAndSettle();
+    final format = tester.widget<DepthSegmented<String>>(
+      find.ancestor(of: find.text('Doubles'), matching: find.byType(DepthSegmented<String>)),
+    );
+    expect(format.selected, {'doubles'});
+  });
+
   testWidgets('automatic suggestion requires confirmation and can be overridden', (tester) async {
     FilePickerPlatform.instance = FakeFilePicker([FakePickedFile('rally.mp4', 1000)]);
     final api = _SuggestionApi();

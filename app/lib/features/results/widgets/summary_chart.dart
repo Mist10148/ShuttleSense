@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../data/models/job.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../data/models/court_view.dart';
 
 /// F13: stroke distribution per player as grouped bars, plus hits and peak speed.
 class SummaryChart extends StatelessWidget {
@@ -56,7 +57,7 @@ class SummaryChart extends StatelessWidget {
               label: [
                 for (final c in classes)
                   '${kStrokeLabels[c]}: '
-                      '${[for (final p in players) '${playerLabel(p).toLowerCase()} ${count(p, c)}'].join(', ')}',
+                      '${[for (final p in players) '${context.sideLabel(p).toLowerCase()} ${count(p, c)}'].join(', ')}',
               ].join('; '),
               excludeSemantics: true,
               child: SizedBox(
@@ -108,7 +109,7 @@ class SummaryChart extends StatelessWidget {
             spacing: 16,
             children: [
               for (final (side, label, color) in [
-                for (final p in players) (p, playerLabel(p), colors.forPlayer(p)),
+                for (final p in players) (p, context.sideLabel(p), colors.forPlayer(p)),
               ])
                 Row(
                   mainAxisSize: MainAxisSize.min,

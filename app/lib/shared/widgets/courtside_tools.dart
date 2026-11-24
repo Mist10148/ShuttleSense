@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/clip_record.dart';
+import '../../data/models/court_view.dart';
 
 class CoachPlayerFilter extends StatelessWidget {
   const CoachPlayerFilter({
@@ -33,7 +34,7 @@ class CoachPlayerFilter extends StatelessWidget {
                 ? null
                 : Icon(Icons.circle, size: 12, color: colors.forPlayer(value)),
             showCheckmark: value == null,
-            label: Text(value == null ? 'Both' : playerLabel(value)),
+            label: Text(value == null ? 'Both' : context.sideLabel(value)),
             selected: player == value,
             onSelected: (_) => onChanged(value),
           ),
@@ -227,7 +228,7 @@ Future<PracticeGoal?> editPracticeGoal(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, update) => AlertDialog(
-        title: Text('Practice goal · ${player == null ? 'Both' : playerLabel(player)}'),
+        title: Text('Practice goal · ${player == null ? 'Both' : context.sideLabel(player)}'),
         content: TextFormField(
           initialValue: text,
           autofocus: true,
@@ -273,7 +274,7 @@ class PracticeGoalCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '${goal.source == 'cue' ? 'Pinned practice cue' : 'Personal practice goal'} · ${goal.player == null ? 'Both' : playerLabel(goal.player!)}',
+            '${goal.source == 'cue' ? 'Pinned practice cue' : 'Personal practice goal'} · ${goal.player == null ? 'Both' : context.sideLabel(goal.player!)}',
           ),
           Text(goal.text, style: Theme.of(context).textTheme.titleLarge),
           Text(goal.completed ? 'Completed · self-reported' : 'Active goal'),

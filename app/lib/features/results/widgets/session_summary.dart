@@ -8,6 +8,7 @@ import '../../../shared/disclaimers.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 
 /// Seek requests from other screens (chat citations) to a job's results player.
 final seekRequestProvider = StateProvider.family<Moment?, String>((ref, jobId) => null);
@@ -108,7 +109,7 @@ class _SessionSummaryState extends State<SessionSummary> {
             children: [
               Text('Session recap', style: theme.textTheme.titleLarge),
               if (record.score?.matchWinner != null)
-                Text('Match won by ${playerLabel(record.score!.matchWinner!)}'),
+                Text('Match won by ${context.sideLabel(record.score!.matchWinner!)}'),
               if (record.score != null)
                 Text(
                   'Games won: ${record.score!.gamesWon.near}–${record.score!.gamesWon.far}',
@@ -164,7 +165,7 @@ class _SessionSummaryState extends State<SessionSummary> {
           if (top.isEmpty)
             Text(
               _player != null
-                  ? 'No repeated pattern was identified for ${playerLabel(_player!)}.'
+                  ? 'No repeated pattern was identified for ${context.sideLabel(_player!)}.'
                   : coaching == null
                   ? 'Session notes appear once strokes are classified.'
                   : 'Not enough evidence of a repeated pattern in this session.',

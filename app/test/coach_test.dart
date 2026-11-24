@@ -49,7 +49,7 @@ Widget host(Widget child) => MaterialApp(
 void main() {
   group('mode picker', () {
     for (final MapEntry(key: name, value: size) in kSizes.entries) {
-      testWidgets('$name: Upload is disabled and an available mode can still be picked', (
+      testWidgets('$name: Upload is hidden and an available mode can still be picked', (
         tester,
       ) async {
         final visited = await pumpScreen(
@@ -58,9 +58,9 @@ void main() {
           size: size,
           prefs: {'ui.mode': 'upload'},
         );
-        final upload = find.widgetWithText(PastelActionCard, 'Upload clip');
-        expect(tester.widget<PastelActionCard>(upload).enabled, isFalse);
-        expect(find.descendant(of: upload, matching: find.text('Disabled')), findsOneWidget);
+        // Upload clip is switched off: only Watch & Analyze, Go live and AI Coach are offered.
+        expect(find.text('Upload clip'), findsNothing);
+        expect(find.byType(PastelActionCard), findsNWidgets(3));
         expect(tester.takeException(), isNull);
         await tester.ensureVisible(find.text('Go live'));
         await tester.pumpAndSettle();

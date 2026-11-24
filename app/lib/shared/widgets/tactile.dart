@@ -223,11 +223,25 @@ class TactileButtonSurface extends StatelessWidget {
     }
 
     final raised = !disabled && !pressed && kind != TactileButtonKind.ghost;
-    Widget surface = AnimatedContainer(
+    // A pressed secondary button sinks: an inner shadow along its top-left edge. A disabled
+    // one stays sunk. The shadow sits on the face, under the label, so the text stays crisp.
+    final sunk =
+        (pressed && kind != TactileButtonKind.primary && !disabled) ||
+        (disabled && kind == TactileButtonKind.secondary);
+    final Widget surface = AnimatedContainer(
       duration: still ? Duration.zero : Duration(milliseconds: pressed ? 60 : 160),
       curve: const Cubic(0.2, 0.8, 0.2, 1),
       decoration: decoration,
       child: CustomPaint(
+        painter: sunk
+            ? InsetPainter(
+                radius: radius,
+                fill: const LinearGradient(colors: [Colors.transparent, Colors.transparent]),
+                shade: t.innerShade,
+                light: t.innerLight,
+                depth: 2.5,
+              )
+            : null,
         // A thin lit top edge on raised keys (no dark lip on the light ones).
         foregroundPainter: raised
             ? (kind == TactileButtonKind.primary
@@ -237,21 +251,6 @@ class TactileButtonSurface extends StatelessWidget {
         child: child,
       ),
     );
-    // A pressed secondary button sinks: an inner shadow along its top-left edge. A disabled
-    // one stays sunk.
-    if ((pressed && kind != TactileButtonKind.primary && !disabled) ||
-        (disabled && kind == TactileButtonKind.secondary)) {
-      surface = CustomPaint(
-        foregroundPainter: InsetPainter(
-          radius: radius,
-          fill: const LinearGradient(colors: [Colors.transparent, Colors.transparent]),
-          shade: t.innerShade,
-          light: t.innerLight,
-          depth: 2.5,
-        ),
-        child: surface,
-      );
-    }
     return AnimatedContainer(
       duration: still ? Duration.zero : Duration(milliseconds: pressed ? 60 : 160),
       curve: const Cubic(0.2, 0.8, 0.2, 1),

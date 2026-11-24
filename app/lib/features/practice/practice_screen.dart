@@ -31,6 +31,7 @@ import '../../core/config/app_mode.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/smooth_scroll.dart';
+import '../../shared/widgets/court_view_field.dart';
 import '../calibration/calibration_screen.dart' show Corner, CornerCanvas;
 import '../watch/court_geometry.dart' show fullToSingles, singlesToFull, FullCourtPreview;
 
@@ -951,8 +952,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: Spacing.md,
                     children: [
-                      const Text(
-                        'Mark the four outer court corners: near left, near right, far right, far left. AI Coach uses Watch player tracking.',
+                      const CourtViewField(),
+                      Text(
+                        'Mark the four outer court corners: '
+                        '${cornerOrderFor(ref.watch(courtViewProvider))}. AI Coach uses Watch '
+                        'player tracking.',
                       ),
                       const Text(
                         'Choose the format played in the video. Doubles tracks both players on each side.',
@@ -1007,6 +1011,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                       // The frame at its own shape and the full width: no empty margins.
                       SizedBox(
                         child: CornerCanvas(
+                          cornerNames: cornerNamesFor(ref.watch(courtViewProvider)),
                           image: NetworkImage(
                             ref.read(apiClientProvider).frameUrl(info.id, selectionFrame),
                           ),
