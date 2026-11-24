@@ -186,6 +186,7 @@ stages:
       homography_err_m: 0.05    # line position error from the corner taps
       tracking_err_px: 4.0      # shuttle position error in pixels, scaled to meters per landing
       min_band_m: 0.05          # uncertainty band never narrower than this
+      max_out_m: 2.0            # a rest farther outside (BWF 2 m surround) is uncertain
 
   render:
     enabled: true

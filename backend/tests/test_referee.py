@@ -206,3 +206,15 @@ def test_a_detection_that_never_moved_is_not_a_landing() -> None:
     segs = segment_rallies(visible, xy, [2], CFG)
     assert len(segs) == 1 and segs[0].closed and segs[0].landing_frame is None
     assert segs[0].end == 9  # ended by the rest rule, not by losing the shuttle
+
+
+def test_a_shuttle_held_by_a_player_is_not_a_landing() -> None:
+    from shuttlesense.referee.rally import held_by_player
+    from shuttlesense.schema import ClipRecord, Frame, Player, Players
+
+    box = Player(bbox=(100.0, 200.0, 60.0, 200.0))
+    frames = [Frame(frame=0, players=Players(near=box))]
+    record = ClipRecord(clip_id="c", fps=30, width=1280, height=720, num_frames=1, frames=frames)
+    assert held_by_player(record, 0, np.array([130.0, 260.0]))  # at hand height
+    assert not held_by_player(record, 0, np.array([130.0, 390.0]))  # at the feet: on the floor
+    assert not held_by_player(record, 0, np.array([400.0, 260.0]))  # away from the player

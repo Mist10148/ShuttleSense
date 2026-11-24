@@ -37,6 +37,9 @@ DEFAULTS: dict[str, Any] = {
     "homography_err_m": 0.05,  # corner taps a few pixels off move the lines this much
     "tracking_err_px": 4.0,  # TrackNetV3 is counted correct within 4 px
     "min_band_m": 0.05,
+    # BWF asks for 2 m of clear floor around the court: a rest farther out than this is
+    # more likely a false detection (stands, boards) than a shuttle hit out (D33).
+    "max_out_m": 2.0,
 }
 
 OVERRIDES_FILE = "line_call_overrides.json"
@@ -117,6 +120,24 @@ def call_landing(
     return call, margin, rounded, uncertain
 
 
+def implausible(
+    point_m: Sequence[float],
+    margin: float,
+    call: Call,
+    size: Sequence[float],
+    band_m: float,
+    cfg: dict[str, Any],
+) -> bool:
+    """Whether a landing cannot be trusted to decide a rally, whatever its margin (D33).
+
+    A rest far beyond the court surround is more likely a false detection than a shot, and
+    an IN landing within the band of the net leaves the half (so the winner) unknown.
+    """
+    if margin < -float(cfg.get("max_out_m", DEFAULTS["max_out_m"])):
+        return True
+    return call == "in" and abs(float(point_m[1]) - size[1] / 2) < band_m
+
+
 def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Bounds, bool]:
     """(area the rally's last shot had to land in, whether that is a service court)."""
     size = record.court.court_size_m if record.court else COURT_SIZE_M
@@ -141,6 +162,9 @@ def make_line_call(
     h = np.asarray(record.court.homography) if record.court else None
     band = uncertainty_band(cfg, h, point_m)
     call, margin, confidence, uncertain = call_landing(point_m, bounds, band)
+    size = record.court.court_size_m if record.court else COURT_SIZE_M
+    if implausible(point_m, margin, call, size, band, cfg):
+        confidence, uncertain = min(confidence, 0.499), True
     return LineCall(
         id=0,
         rally_index=rally.index,

@@ -134,3 +134,18 @@ def test_migrated_1_0_record_gets_line_calls() -> None:
     record = load_record(json.dumps(data))
     assert [c.call for c in record.line_calls] == ["in"]
     assert [e.type for e in record.rally_events][:2] == ["rally_start", "hit"]
+
+
+def test_implausible_landings_never_decide_a_rally() -> None:
+    from shuttlesense.referee.linecalls import line_call_config, make_line_call
+
+    record = _record(2.0)
+    rally, cfg = record.rallies[0], line_call_config(None)
+    clear_out = make_line_call(record, rally, 20, (2.6, 14.0), cfg)
+    assert clear_out.call == "out" and not clear_out.uncertain  # a shot just long is a call
+    stands = make_line_call(record, rally, 20, (2.6, 13.4 + 3.0), cfg)
+    assert stands.call == "out" and stands.uncertain and stands.confidence < 0.5
+    on_net = make_line_call(record, rally, 20, (2.6, 6.72), cfg)
+    assert on_net.call == "in" and on_net.uncertain  # which half is unknown
+    mid_half = make_line_call(record, rally, 20, (2.6, 8.0), cfg)
+    assert mid_half.call == "in" and not mid_half.uncertain

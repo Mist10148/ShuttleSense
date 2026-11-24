@@ -117,6 +117,27 @@ def _rest_after(
     return None
 
 
+HELD_BOX_SHARE = 0.6  # a rest in the top 60 % of a player's box is in a hand, not on the floor
+
+
+def held_by_player(record: ClipRecord, frame: int, px: np.ndarray) -> bool:
+    """Whether the resting shuttle at image point `px` sits high in a player's box.
+
+    A shuttle held before the next serve, or caught, is still but off the floor, and the
+    court homography only holds on the floor: its projection would be a bogus landing.
+    """
+    if not 0 <= frame < len(record.frames):
+        return False
+    x, y = float(px[0]), float(px[1])
+    for player in record.frames[frame].players.slots().values():
+        if player is None:
+            continue
+        bx, by, bw, bh = player.bbox
+        if bx <= x <= bx + bw and by <= y <= by + HELD_BOX_SHARE * bh:
+            return True
+    return False
+
+
 def segment_rallies(
     visible: np.ndarray,
     xy: np.ndarray,
@@ -227,8 +248,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
 
     if not record.hits:
         raise StageSkipped("no hits, so no rallies")
-    # Frame counts in the config are for 30 fps.
-    # Pixel distances are for 720p.
+    # Frame counts in the config are for 30 fps, pixel distances for 720p.
     cfg = scaled_pixels(scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps), record.height)
     xy, visible = track_arrays(record)
     segments = segment_rallies(
@@ -248,11 +268,14 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             h.rally_index = index
         rally = Rally(index=index, start_frame=seg.start, end_frame=seg.end)
         point = None
-        if seg.closed and seg.landing_frame is not None and record.court is not None:
-            point = image_to_court(np.asarray(record.court.homography), xy[[seg.landing_frame]])[0]
+        landing = seg.landing_frame if seg.closed else None
+        if landing is not None and held_by_player(record, landing, xy[landing]):
+            landing = None  # in a hand, not on the floor: the user decides the rally
+        if landing is not None and record.court is not None:
+            point = image_to_court(np.asarray(record.court.homography), xy[[landing]])[0]
         # A point near the homography's horizon maps to inf/NaN, which JSON cannot hold.
-        if point is not None and np.isfinite(point).all():
-            call = make_line_call(record, rally, seg.landing_frame, point, line_cfg)
+        if landing is not None and point is not None and np.isfinite(point).all():
+            call = make_line_call(record, rally, landing, point, line_cfg)
             call.id = len(calls)
             calls.append(call)
             x_m, y_m = call.landing_xy
