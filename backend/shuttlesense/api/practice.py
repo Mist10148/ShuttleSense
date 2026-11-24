@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from shuttlesense.api.coach_routes import CoachChatRequest, Turn
 from shuttlesense.api.routes import StorageDep, _video_or_404, require_token
 from shuttlesense.io import read_frame
 from shuttlesense.pose.estimator import load_detector
@@ -205,8 +209,6 @@ def _current_analysis_notes(data: dict) -> list[dict]:
 
 
 def _completed_practice(job_id: str, request: Request, storage):
-    import json
-
     job = request.app.state.jobs.get(job_id)
     if job is None or job.mode != "practice":
         raise HTTPException(status_code=404, detail="session not found")
@@ -269,12 +271,28 @@ async def practice_analysis(job_id: str, request: Request, storage: StorageDep):
     return {**data, "rules_report": rules.model_dump()}
 
 
+def _cached_practice_report(cache_path, revision):
+    from shuttlesense.practice.report import PracticeReport
+
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        if cached["version"] == 8 and cached["source_mtime_ns"] == revision:
+            return PracticeReport.model_validate(cached["report"]).model_dump()
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def _with_context_version(job_id, revision, report):
+    payload = json.dumps([job_id, revision, report], sort_keys=True, separators=(",", ":"))
+    return {**report, "context_version": hashlib.sha256(payload.encode()).hexdigest()}
+
+
 async def _practice_report(job_id: str, request: Request, storage, refresh: bool = False):
     import asyncio
-    import json
 
     from shuttlesense.atomic import atomic_write_text
-    from shuttlesense.practice.report import PracticeReport, create_practice_report
+    from shuttlesense.practice.report import create_practice_report
 
     state = request.app.state
     if not hasattr(state, "practice_report_locks"):
@@ -285,13 +303,9 @@ async def _practice_report(job_id: str, request: Request, storage, refresh: bool
         cache_path = storage.job_dir(job_id) / "practice_report.json"
         provider = state.coach_provider
         if not refresh:
-            try:
-                cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                report = PracticeReport.model_validate(cached["report"])
-                if cached.get("version") == 8 and cached["source_mtime_ns"] == mtime:
-                    return report.model_dump(), mtime
-            except (OSError, ValueError, KeyError, TypeError):
-                pass
+            cached = _cached_practice_report(cache_path, mtime)
+            if cached is not None:
+                return _with_context_version(job_id, mtime, cached), mtime
         observations, visible_events, visible_notes, context = _practice_report_inputs(data)
         report = await create_practice_report(
             observations, provider, state.coach.retriever, visible_events, visible_notes, context
@@ -313,7 +327,7 @@ async def _practice_report(job_id: str, request: Request, storage, refresh: bool
                     }
                 ),
             )
-        return report.model_dump(), mtime
+        return _with_context_version(job_id, mtime, report.model_dump()), mtime
 
 
 @router.get("/sessions/{job_id}/report")
@@ -326,6 +340,68 @@ async def practice_report(job_id: str, request: Request, storage: StorageDep):
 async def refresh_practice_report(job_id: str, request: Request, storage: StorageDep):
     report, _ = await _practice_report(job_id, request, storage, refresh=True)
     return report
+
+
+class PracticeChatRequest(CoachChatRequest):
+    context_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    history: list[Turn] = Field(default_factory=list, max_length=12)
+
+
+@router.post("/sessions/{job_id}/chat")
+async def practice_chat(
+    job_id: str, body: PracticeChatRequest, request: Request, storage: StorageDep
+) -> StreamingResponse:
+    from shuttlesense.coach.llm import ChatError
+    from shuttlesense.practice.followup import answer
+
+    state = request.app.state
+    jobs = state.jobs
+
+    def current_report():
+        with jobs.job_lock(job_id):
+            _, data, revision = _completed_practice(job_id, request, storage)
+            cache_path = storage.job_dir(job_id) / "practice_report.json"
+            cached = _cached_practice_report(cache_path, revision)
+            if (
+                cached is None
+                or _with_context_version(job_id, revision, cached)["context_version"]
+                != body.context_version
+            ):
+                raise HTTPException(status_code=409, detail="Analysis changed. Reload the guide.")
+            return cached, data.get("fps")
+
+    report, fps = current_report()
+    if not report["evidence"]:
+        raise HTTPException(status_code=409, detail="There is not enough evidence in this video.")
+    provider = state.coach_provider
+    if provider is None:
+        raise HTTPException(status_code=503, detail="No AI coach provider is configured.")
+    state.practice_chat_limits.start_answer()
+
+    async def events():
+        try:
+            async for event in answer(
+                provider,
+                state.coach.retriever,
+                report,
+                body.message.strip(),
+                [turn.model_dump() for turn in body.history],
+                state.settings.coach_top_k,
+                fps,
+            ):
+                if event["type"] == "done":
+                    current_report()
+                yield f"data: {json.dumps(event)}\n\n"
+        except (ChatError, HTTPException) as exc:
+            status = exc.status if isinstance(exc, ChatError) else exc.status_code
+            event = {"type": "error", "status": status, "detail": exc.detail}
+            yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            state.practice_chat_limits.end_answer()
+
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+    )
 
 
 @router.get("/sessions/{job_id}/result")

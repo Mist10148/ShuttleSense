@@ -121,6 +121,7 @@ def create_app(
         index_path = settings.storage_dir / "coach_index.npz"
         app.state.coach = Coach(provider, Retriever(provider, index_path))
         app.state.coach_limits = CoachLimits()
+        app.state.practice_chat_limits = CoachLimits()
         app.state.chat_answering = {}  # job id -> monotonic start of the answer streaming
         app.state.live = LiveManager(
             app.state, fake=settings.fake_pipeline, ttl_s=settings.live_session_ttl_s

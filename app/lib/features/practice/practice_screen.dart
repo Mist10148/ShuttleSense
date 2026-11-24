@@ -34,6 +34,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   Map<String, dynamic>? job, result, guide;
   String? guideError;
   int guideRevision = 0;
+  int conversationEpoch = 0;
+  final coachPanelKey = GlobalKey();
+  final coachVideoKey = GlobalKey();
+  bool savedAnalysisPending = false;
   List<List<double>> candidates = [];
   List<double>? selected;
   int selectionFrame = 0;
@@ -107,6 +111,9 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         guide = null;
         guideError = null;
         guideRevision++;
+        eventsDirty = false;
+        savedAnalysisPending = false;
+        loadingReport = false;
         selectionFrame = 0;
         courtCorners.clear();
         courtMessage = null;
@@ -511,20 +518,57 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     try {
       final api = ref.read(apiClientProvider);
       final id = job!['id'] as String;
-      await api.savePracticeEvents(id, result!['events'] as List);
-      final updated = await api.practiceAnalysis(id);
-      if (mounted) {
-        setState(() {
-          result = updated;
-          eventsDirty = false;
-          guide = null;
-        });
-        unawaited(loadGuide(id));
-      }
+      final saved = await api.savePracticeEvents(id, result!['events'] as List);
+      if (!mounted) return;
+      setState(() => result = saved);
+      await reloadSavedAnalysis(id);
     } catch (e) {
       if (mounted) setState(() => error = '$e');
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> reloadSavedAnalysis(String id) async {
+    ++guideRevision;
+    setState(() {
+      busy = true;
+      error = null;
+      eventsDirty = false;
+      conversationEpoch++;
+      savedAnalysisPending = true;
+      loadingReport = false;
+      guide = null;
+      guideError = null;
+    });
+    try {
+      final updated = await ref.read(apiClientProvider).practiceAnalysis(id);
+      if (!mounted || job?['id'] != id) return;
+      updated.putIfAbsent('events', () => <dynamic>[]);
+      setState(() {
+        result = updated;
+        savedAnalysisPending = false;
+      });
+      unawaited(loadGuide(id));
+    } catch (e) {
+      if (mounted && job?['id'] == id) setState(() => guideError = '$e');
+    } finally {
+      if (mounted && job?['id'] == id) setState(() => busy = false);
+    }
+  }
+
+  void seekCoachMoment(double seconds) {
+    final playback = player;
+    if (playback == null) return;
+    unawaited(playback.seek(Duration(milliseconds: (seconds * 1000).round())));
+    final videoContext = coachVideoKey.currentContext;
+    if (videoContext != null) {
+      unawaited(
+        Scrollable.ensureVisible(
+          videoContext,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        ),
+      );
     }
   }
 
@@ -923,22 +967,51 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           const SizedBox(height: Spacing.lg),
           LayoutBuilder(
             builder: (context, constraints) {
-              final videoView = videoController == null
-                  ? const AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Center(child: Text('Opening rendered video...')),
-                    )
-                  : AspectRatio(
-                      aspectRatio: info!.aspectRatio,
-                      child: Video(controller: videoController!),
-                    );
+              final videoView = KeyedSubtree(
+                key: coachVideoKey,
+                child: videoController == null
+                    ? const AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Center(child: Text('Opening rendered video...')),
+                      )
+                    : AspectRatio(
+                        aspectRatio: info!.aspectRatio,
+                        child: Video(controller: videoController!),
+                      ),
+              );
               final panel = CoachGuidePanel(
+                key: coachPanelKey,
                 report: guide,
+                rulesReport: savedAnalysisPending
+                    ? null
+                    : result?['rules_report'] as Map<String, dynamic>?,
+                unavailableObservations: [
+                  for (final attempt in (result?['observations'] as List? ?? const []))
+                    for (final item in (attempt['observations'] as List? ?? const []))
+                      if (item is Map<String, dynamic> && item['status'] == 'unavailable') item,
+                ],
                 loading: loadingReport,
                 error: guideError,
                 stale: eventsDirty,
-                onRetry: () => loadGuide(job!['id'] as String, refresh: true),
-                onSeek: (seconds) => player?.seek(Duration(milliseconds: (seconds * 1000).round())),
+                savedAnalysisPending: savedAnalysisPending,
+                conversationEpoch: conversationEpoch,
+                canAsk:
+                    ref.watch(healthProvider).valueOrNull?.chatAvailable ??
+                    ['gemini', 'claude'].contains(guide?['generated_by']),
+                onRetry: () => savedAnalysisPending
+                    ? reloadSavedAnalysis(job!['id'] as String)
+                    : loadGuide(job!['id'] as String, refresh: true),
+                onReload: () => reloadSavedAnalysis(job!['id'] as String),
+                onAsk: (question, version, history, cancel) => ref
+                    .read(apiClientProvider)
+                    .practiceChat(
+                      job!['id'] as String,
+                      question,
+                      contextVersion: version,
+                      history: history,
+                      cancelToken: cancel,
+                    ),
+                onSeek: seekCoachMoment,
               );
               if (constraints.maxWidth >= 850) {
                 return Row(
@@ -997,26 +1070,32 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                   'lift',
                   'serve',
                 ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                onChanged: (value) => setState(() {
-                  event['stroke'] = value;
-                  event['confirmed'] = true;
-                  eventsDirty = true;
-                }),
+                onChanged: busy || savedAnalysisPending
+                    ? null
+                    : (value) => setState(() {
+                        event['stroke'] = value;
+                        event['confirmed'] = true;
+                        eventsDirty = true;
+                      }),
               ),
               leading: Checkbox(
                 value: event['confirmed'] == true,
-                onChanged: (value) => setState(() {
-                  event['confirmed'] = value;
-                  eventsDirty = true;
-                }),
+                onChanged: busy || savedAnalysisPending
+                    ? null
+                    : (value) => setState(() {
+                        event['confirmed'] = value;
+                        eventsDirty = true;
+                      }),
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline),
                 tooltip: 'Remove event',
-                onPressed: () => setState(() {
-                  (result!['events'] as List).remove(event);
-                  eventsDirty = true;
-                }),
+                onPressed: busy || savedAnalysisPending
+                    ? null
+                    : () => setState(() {
+                        (result!['events'] as List).remove(event);
+                        eventsDirty = true;
+                      }),
               ),
               onTap: () =>
                   player?.seek(Duration(milliseconds: ((event['time_s'] as num) * 1000).round())),
@@ -1025,17 +1104,19 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             spacing: 12,
             children: [
               OutlinedButton(
-                onPressed: () => setState(() {
-                  final seconds = (player?.state.position.inMilliseconds ?? 0) / 1000;
-                  (result!['events'] as List).add({
-                    'id': 'manual-${DateTime.now().microsecondsSinceEpoch}',
-                    'time_s': seconds,
-                    'stroke': stroke,
-                    'source': 'manual',
-                    'confirmed': true,
-                  });
-                  eventsDirty = true;
-                }),
+                onPressed: busy || savedAnalysisPending
+                    ? null
+                    : () => setState(() {
+                        final seconds = (player?.state.position.inMilliseconds ?? 0) / 1000;
+                        (result!['events'] as List).add({
+                          'id': 'manual-${DateTime.now().microsecondsSinceEpoch}',
+                          'time_s': seconds,
+                          'stroke': stroke,
+                          'source': 'manual',
+                          'confirmed': true,
+                        });
+                        eventsDirty = true;
+                      }),
                 child: const Text('Add event at playback position'),
               ),
               FilledButton(
@@ -1050,46 +1131,6 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             const Text(
               'The selected player was not confidently tracked in some frames; those moments are excluded from player analysis.',
             ),
-          if (result!['rules_report'] is Map) ...[
-            const SizedBox(height: 16),
-            Text('Coaching report', style: Theme.of(context).textTheme.titleLarge),
-            const Text('Rules-based guidance'),
-            Text('${(result!['rules_report'] as Map)['summary'] ?? ''}'),
-            for (final item in (((result!['rules_report'] as Map)['evidence'] as List?) ?? []))
-              ListTile(
-                title: Text(
-                  '${item['description']}${item['value'] == null ? '' : ' ${item['value']} ${item['unit'] ?? ''}'}',
-                ),
-                subtitle: Text('${item['moment_s']} s'),
-                onTap: item['moment_s'] is num
-                    ? () => player?.seek(
-                        Duration(milliseconds: ((item['moment_s'] as num) * 1000).round()),
-                      )
-                    : null,
-              ),
-            for (final item in (((result!['rules_report'] as Map)['guidance'] as List?) ?? []))
-              ListTile(
-                title: Text('${item['text']}'),
-                subtitle: Text('${item['source']}'),
-                onTap: (item['moments'] as List? ?? []).isEmpty
-                    ? null
-                    : () => player?.seek(
-                        Duration(
-                          milliseconds: (((item['moments'] as List).first as num) * 1000).round(),
-                        ),
-                      ),
-              ),
-            for (final attempt in ((result!['observations'] as List?) ?? []))
-              for (final observation in ((attempt['observations'] as List?) ?? []))
-                if (observation['status'] == 'unavailable')
-                  ListTile(
-                    title: Text('Unavailable: ${observation['description']}'),
-                    subtitle: Text('${observation['moment_s']} s'),
-                    onTap: () => player?.seek(
-                      Duration(milliseconds: ((observation['moment_s'] as num) * 1000).round()),
-                    ),
-                  ),
-          ],
         ],
         if (error != null)
           Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),

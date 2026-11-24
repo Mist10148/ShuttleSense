@@ -113,8 +113,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(path: 'mode', builder: (context, state) => const ModeScreen()),
                   GoRoute(
                     path: 'practice/:jobId',
-                    builder: (context, state) =>
-                        PracticeScreen(jobId: state.pathParameters['jobId']!),
+                    builder: (context, state) {
+                      final jobId = state.pathParameters['jobId']!;
+                      return PracticeScreen(key: ValueKey(jobId), jobId: jobId);
+                    },
                   ),
                   GoRoute(
                     path: 'videos/:videoId/calibrate',

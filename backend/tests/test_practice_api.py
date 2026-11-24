@@ -264,6 +264,7 @@ def test_analysis_is_immediate_and_edited_events_invalidate_stale_notes(tmp_path
     from shuttlesense.api.main import create_app
     from shuttlesense.api.models import Job
     from shuttlesense.api.settings import Settings
+    from shuttlesense.coach.llm import ChatError
     from shuttlesense.practice.evidence import assess_attempt
     from shuttlesense.practice.report import ReportChoice
     from shuttlesense.schema import ClipRecord, Frame, Players
@@ -271,10 +272,23 @@ def test_analysis_is_immediate_and_edited_events_invalidate_stale_notes(tmp_path
     class Provider:
         name = "gemini"
         calls = 0
+        stream_calls = 0
+        on_stream = None
+        error = None
 
         async def generate_json(self, system, prompt, schema):
             self.calls += 1
             return ReportChoice(evidence_ids=["attempt-1-observation-1"])
+
+        async def stream(self, system, messages):
+            self.stream_calls += 1
+            assert '"stroke": "clear"' in system or '"stroke": "smash"' in system
+            assert messages[-1] == {"role": "user", "text": "Why review this clear?"}
+            if self.error:
+                raise self.error
+            yield "Review the reach [t=0.1s] [t=42s] [kb:made_up#nothing]."
+            if self.on_stream:
+                self.on_stream()
 
     points = [(0.0, 0.0, 0.0)] * 17
     for i, point in {0: (5, 4, 0.9), 6: (5, 8, 0.9), 8: (6, 6, 0.9), 10: (7, 3, 0.9)}.items():
@@ -337,7 +351,38 @@ def test_analysis_is_immediate_and_edited_events_invalidate_stale_notes(tmp_path
         assert analysis.json()["rules_report"]["generated_by"] == "rules"
         assert analysis.json()["rules_report"]["evidence"]
         assert provider.calls == 0
-        assert client.get(f"/practice/sessions/{job_id}/report").json()["generated_by"] == "gemini"
+        report = client.get(f"/practice/sessions/{job_id}/report").json()
+        assert report["generated_by"] == "gemini"
+        chat_path = f"/practice/sessions/{job_id}/chat"
+        question = {
+            "message": "Why review this clear?",
+            "context_version": report["context_version"],
+        }
+
+        def ask(body):
+            response = client.post(chat_path, json=body)
+            assert response.status_code == 200
+            return [
+                json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+
+        assert (
+            client.post(chat_path, json={**question, "context_version": "0" * 64}).status_code
+            == 409
+        )
+        assert client.post(f"/practice/sessions/{'b' * 12}/chat", json=question).status_code == 404
+        assert provider.stream_calls == 0
+        done = ask(question)[-1]
+        assert done["type"] == "done"
+        assert [moment["frame"] for moment in done["message"]["citations"]] == [1]
+        assert "[t=42s]" not in done["message"]["text"]
+        assert "[kb:made_up#nothing]" not in done["message"]["text"]
+        assert done["sources"] == []
+        provider.error = ChatError("Quota exhausted", 429)
+        assert ask(question)[-1] == {"type": "error", "status": 429, "detail": "Quota exhausted"}
+        provider.error = None
         assert client.get(f"/practice/sessions/{job_id}/report").status_code == 200
         assert provider.calls == 1
         assert client.post(f"/practice/sessions/{job_id}/report").status_code == 200
@@ -345,13 +390,25 @@ def test_analysis_is_immediate_and_edited_events_invalidate_stale_notes(tmp_path
         corrected = {**event, "stroke": "smash", "confirmed": True}
         updated = client.put(f"/practice/sessions/{job_id}/events", json={"events": [corrected]})
         assert updated.status_code == 200 and updated.json()["analysis_notes"] == []
+        assert client.post(chat_path, json=question).status_code == 409
         report = client.get(f"/practice/sessions/{job_id}/report").json()
         assert all(item["stroke"] == "smash" for item in report["evidence"])
         assert provider.calls == 3
+        provider.on_stream = (folder / "practice_report.json").unlink
+        events = ask({**question, "context_version": report["context_version"]})
+        assert [event["type"] for event in events] == ["delta", "error"]
+        assert events[-1]["status"] == 409
+        provider.on_stream = None
         updated = client.put(f"/practice/sessions/{job_id}/events", json={"events": []})
         assert updated.status_code == 200 and updated.json()["analysis_notes"] == []
         report = client.get(f"/practice/sessions/{job_id}/report").json()
         assert report["evidence"] == [] and provider.calls == 3
+        assert (
+            client.post(
+                chat_path, json={**question, "context_version": report["context_version"]}
+            ).status_code
+            == 409
+        )
         data["unobserved_indices"] = [1]
         (folder / "practice.json").write_text(json.dumps(data), encoding="utf8")
         report = client.get(f"/practice/sessions/{job_id}/report").json()
