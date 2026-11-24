@@ -21,6 +21,7 @@ import '../upload/upload_controller.dart';
 import 'live_controller.dart';
 import 'widgets/live_view.dart';
 import '../../shared/widgets/helper_text.dart';
+import '../../shared/widgets/court_view_field.dart';
 
 export 'widgets/live_coach_panel.dart';
 export 'widgets/live_status.dart';
@@ -115,7 +116,10 @@ class LiveScreen extends ConsumerWidget {
                       jobId: state.savedJobId,
                       onNewSession: controller.openCamera,
                     ),
-                    _ => LiveView(state: state),
+                    _ => CourtSides(
+                      names: SideNames.fromCorners(state.courtCorners),
+                      child: LiveView(state: state),
+                    ),
                   },
                 ),
               ],
@@ -251,9 +255,9 @@ class _ReadyView extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Put the ${state.cameraLabel.toLowerCase()} on a tripod, high and behind a '
-            'baseline, with the whole court in view. Calibrate the court for the minimap, '
-            'speed and line calls.',
+            'Put the ${state.cameraLabel.toLowerCase()} on a tripod, high, behind a '
+            'baseline or level with the net at the side, with the whole court in view. '
+            'Calibrate the court for the minimap, speed and line calls.',
           ),
           const Text('Without court calibration, player detection is disabled.'),
           const Text('For best accuracy, keep the camera fixed and do not pan or zoom.'),
@@ -269,12 +273,15 @@ class _ReadyView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const CourtViewField(),
           StartScoreField(
+            sides: SideNames.forView(ref.watch(courtViewProvider)),
             value: ref.watch(liveStartScoreProvider),
             doubles: ref.watch(liveMatchSetupProvider).doubles,
             onChanged: (s) => ref.read(liveStartScoreProvider.notifier).state = s,
           ),
           MatchSetupField(
+            sides: SideNames.forView(ref.watch(courtViewProvider)),
             value: ref.watch(liveMatchSetupProvider),
             onChanged: ref.read(liveMatchSetupProvider.notifier).set,
             showCourt: true,
@@ -283,6 +290,7 @@ class _ReadyView extends ConsumerWidget {
           if (ref.watch(liveMatchSetupProvider).bestOf == 3 &&
               (ref.watch(healthProvider).valueOrNull?.supportsCourtside ?? false))
             StartGamesField(
+              sides: SideNames.forView(ref.watch(courtViewProvider)),
               value: ref.watch(liveStartGamesProvider),
               doubles: ref.watch(liveMatchSetupProvider).doubles,
               onChanged: (g) => ref.read(liveStartGamesProvider.notifier).state = g,
@@ -369,21 +377,27 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
     final size = widget.state.stillSize!;
     final next = _corners.length < 4 ? _corners.length : null;
     final convex = isConvex(_corners);
+    final view = ref.watch(courtViewProvider);
     return Column(
       children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(Spacing.md, Spacing.md, Spacing.md, 0),
+          child: CourtViewField(),
+        ),
         Padding(
           padding: const EdgeInsets.all(Spacing.md),
           child: Row(
             children: [
-              CornerDiagram(next: next),
+              CornerDiagram(next: next, view: view),
               const SizedBox(width: Spacing.md),
               Expanded(
                 child: Text(
                   next == null
                       ? (convex
                             ? 'All 4 corners set. Drag to adjust, then go live.'
-                            : 'The corners cross over. Drag them into order.')
-                      : 'Tap the ${kCornerNames[next]} corner of the singles court '
+                            : 'The corners cross over. Drag them into order: '
+                                  '${cornerOrderFor(view)}.')
+                      : 'Tap the ${cornerNamesFor(view)[next]} corner of the singles court '
                             '(${next + 1} of 4), also for doubles.',
                 ),
               ),
@@ -397,6 +411,7 @@ class _CalibrateViewState extends ConsumerState<_CalibrateView> {
         ),
         Expanded(
           child: CornerCanvas(
+            cornerNames: cornerNamesFor(view),
             image: MemoryImage(widget.state.still!),
             width: size.width,
             height: size.height,

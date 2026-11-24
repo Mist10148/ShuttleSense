@@ -1,9 +1,9 @@
 import 'tactile.dart';
 import 'package:flutter/material.dart';
 
-import '../../data/models/clip_record.dart';
 import '../../data/models/match_setup.dart';
 import '../../core/theme/tokens.dart';
+import '../../data/models/court_view.dart';
 
 export '../../data/models/match_setup.dart';
 
@@ -15,7 +15,11 @@ class MatchSetupField extends StatelessWidget {
     required this.onChanged,
     this.showCourt = false,
     this.showChangeEnds = false,
+    this.sides = SideNames.ends,
   });
+
+  /// What the two ends are called (Near / Far, or Left / Right for a side-on camera).
+  final SideNames sides;
 
   final MatchSetup value;
   final ValueChanged<MatchSetup> onChanged;
@@ -42,7 +46,7 @@ class MatchSetupField extends StatelessWidget {
     );
     final server = value.firstServer;
     final receiverSide = server == 'near' ? 'far' : 'near';
-    String sideName(String side) => playerLabel(side);
+    String sideName(String side) => sides.side(side);
     Widget partner({
       required String side,
       required String? selected,
@@ -77,10 +81,10 @@ class MatchSetupField extends StatelessWidget {
         row(
           'First server',
           DepthSegmented<String>(
-            segments: const [
-              ButtonSegment(value: '', label: Text('Unknown')),
-              ButtonSegment(value: 'near', label: Text('Near')),
-              ButtonSegment(value: 'far', label: Text('Far')),
+            segments: [
+              const ButtonSegment(value: '', label: Text('Unknown')),
+              ButtonSegment(value: 'near', label: Text(sides.near)),
+              ButtonSegment(value: 'far', label: Text(sides.far)),
             ],
             selected: {server ?? ''},
             onSelectionChanged: (s) =>
@@ -139,8 +143,11 @@ class MatchSetupField extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: Spacing.xs),
             child: Text(
-              'Player 1 is the one on the left when play starts. With both set, the app '
-              'follows who serves and receives each rally.',
+              sides.sideOn
+                  ? 'Player 1 is the one further from the camera when play starts. With both '
+                        'set, the app follows who serves and receives each rally.'
+                  : 'Player 1 is the one on the left when play starts. With both set, the app '
+                        'follows who serves and receives each rally.',
               style: theme.textTheme.bodySmall,
             ),
           ),

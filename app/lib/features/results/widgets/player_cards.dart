@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/tactile.dart';
+import '../../../data/models/court_view.dart';
 import 'court_minimap.dart' show HeatGrid;
 
 /// How far and how fast a player moved, from the court positions in the record.
@@ -86,9 +87,12 @@ class PlayerCards extends StatelessWidget {
     final i = frameIndex.clamp(0, record.frames.length - 1);
     final colors = PlayerColors.of(context);
     // Doubles: a card for each of the four players, partners side by side.
+    final sides = CourtSides.of(context);
     final players = record.isDoubles
-        ? [('near_1', 'Near 1'), ('near_2', 'Near 2'), ('far_1', 'Far 1'), ('far_2', 'Far 2')]
-        : [('near', 'Near player'), ('far', 'Far player')];
+        ? [
+            for (final id in const ['near_1', 'near_2', 'far_1', 'far_2']) (id, sides.player(id)),
+          ]
+        : [('near', '${sides.near} player'), ('far', '${sides.far} player')];
     Widget card((String, String) p) => _Card(
       name: p.$2,
       color: colors.forPlayer(p.$1),

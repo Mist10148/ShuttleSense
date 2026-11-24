@@ -31,6 +31,7 @@ import '../upload/upload_screen.dart' show VideoDropZone;
 import 'court_geometry.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import '../../shared/widgets/court_view_field.dart';
 
 const bool _watchProfile = bool.fromEnvironment('WATCH_PROFILE');
 
@@ -853,13 +854,20 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
       SectionCard(
         title: '1. Rally video',
         child: info == null
-            ? VideoDropZone(
-                actions: [
-                  FilledButton.tonalIcon(
-                    onPressed: setupBusy ? null : pick,
-                    icon: const Icon(Icons.video_library_outlined),
-                    label: const Text('Choose video'),
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  VideoDropZone(
+                    actions: [
+                      FilledButton.tonalIcon(
+                        onPressed: setupBusy ? null : pick,
+                        icon: const Icon(Icons.video_library_outlined),
+                        label: const Text('Choose video'),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: Spacing.md),
+                  const CameraTips(),
                 ],
               )
             : Row(
@@ -1019,13 +1027,15 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
   Widget _calibrationStep(VideoInfo info, Health health) {
     final validCorners = fullToSingles(corners) != null;
     final next = corners.length < 4 ? corners.length : null;
+    final view = ref.watch(courtViewProvider);
     final instruction = HelperText(
       next != null
-          ? 'Tap the ${kCornerNames[next].toLowerCase()} outer corner (${next + 1} of 4). '
+          ? 'Tap the ${cornerNamesFor(view)[next].toLowerCase()} outer corner (${next + 1} of 4). '
                 'Use the outer sidelines for both singles and doubles.'
           : validCorners
           ? 'All four corners are set. Drag them until the blue lines match the court.'
-          : 'The corners cross. Drag them into order around the court.',
+          : 'The corners cross. Drag them into order around the court: '
+                '${cornerOrderFor(view)}.',
       error: next == null && !validCorners,
     );
     final canvas = AppCard(
@@ -1035,6 +1045,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(Radii.md),
           child: CornerCanvas(
+            cornerNames: cornerNamesFor(view),
             image: NetworkImage(ref.read(apiClientProvider).frameUrl(info.id, 0)),
             width: info.width,
             height: info.height,
@@ -1066,11 +1077,15 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: Spacing.sm,
         children: [
-          if (wide) ...[Center(child: CornerDiagram(next: next)), instruction],
-          if (matchType == null || autoMode)
-            _matchChoices()
-          else
-            Text('Match format: ${matchType == 'singles' ? 'Singles' : 'Doubles'}'),
+          const CourtViewField(),
+          if (wide) ...[
+            Center(
+              child: CornerDiagram(next: next, view: view),
+            ),
+            instruction,
+          ],
+          // Always changeable here, so a misclick in Options can be put right.
+          _matchChoices(),
           OutlinedButton.icon(
             onPressed: matchType == null || setupBusy ? null : detectCourt,
             icon: detectingCourt
@@ -1150,7 +1165,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> {
                   child: Row(
                     spacing: Spacing.md,
                     children: [
-                      CornerDiagram(next: next),
+                      CornerDiagram(next: next, view: view),
                       Expanded(child: instruction),
                     ],
                   ),

@@ -20,6 +20,7 @@ import '../upload/upload_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/helper_text.dart';
 import '../../shared/widgets/data_display.dart';
+import '../../shared/widgets/court_view_field.dart';
 
 typedef Corner = ({double x, double y});
 
@@ -156,17 +157,38 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: CornerDiagram(next: _next, size: const Size(96, 128)),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const CourtViewField(),
+                        const SizedBox(height: Spacing.lg),
+                        Center(
+                          child: CornerDiagram(
+                            next: _next,
+                            view: _view,
+                            size: _view == CourtView.side
+                                ? const Size(150, 96)
+                                : const Size(96, 128),
+                          ),
+                        ),
+                        const SizedBox(height: Spacing.lg),
+                        _instruction(),
+                        const SizedBox(height: Spacing.md),
+                        for (var i = 0; i < 4; i++)
+                          _CornerStep(
+                            index: i,
+                            name: cornerNamesFor(_view)[i],
+                            done: i < _corners.length,
+                            next: i == _next,
+                          ),
+                        const SizedBox(height: Spacing.md),
+                        _help(),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: Spacing.lg),
-                _instruction(),
-                const SizedBox(height: Spacing.md),
-                for (var i = 0; i < 4; i++)
-                  _CornerStep(index: i, done: i < _corners.length, next: i == _next),
-                const SizedBox(height: Spacing.md),
-                _help(),
-                const Spacer(),
                 ..._footer(),
               ],
             ),
@@ -180,9 +202,11 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
   Widget _narrow(VideoInfo info) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      const CourtViewField(dense: true),
+      const SizedBox(height: Spacing.sm),
       Row(
         children: [
-          CornerDiagram(next: _next),
+          CornerDiagram(next: _next, view: _view),
           const SizedBox(width: Spacing.md),
           Expanded(child: _instruction()),
         ],
@@ -210,6 +234,7 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(Radii.md),
               child: _VideoFrameCanvas(
+                view: _view,
                 info: info,
                 frame: _frame,
                 corners: _corners,
@@ -246,6 +271,8 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
     ),
   );
 
+  CourtView get _view => ref.watch(courtViewProvider);
+
   Widget _instruction() {
     final next = _next;
     final crossed = next == null && !isConvex(_corners);
@@ -253,9 +280,9 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
       next == null
           ? (crossed
                 ? 'The corners cross over. Drag them so they go around the '
-                      'court in order: near left, near right, far right, far left.'
+                      'court in order: ${cornerOrderFor(_view)}.'
                 : 'All 4 corners set. Drag a corner to adjust, then start.')
-          : 'Tap the ${kCornerNames[next]} corner of the singles court '
+          : 'Tap the ${cornerNamesFor(_view)[next]} corner of the singles court '
                 '(${next + 1} of 4), also for doubles. Pinch or scroll to zoom.',
       style: crossed ? TextStyle(color: Theme.of(context).colorScheme.error) : null,
     );
@@ -285,9 +312,15 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
 /// One line of the corner checklist: a brand-green check once set, a filled ring for the
 /// corner to tap next.
 class _CornerStep extends StatelessWidget {
-  const _CornerStep({required this.index, required this.done, required this.next});
+  const _CornerStep({
+    required this.index,
+    required this.name,
+    required this.done,
+    required this.next,
+  });
 
   final int index;
+  final String name;
   final bool done;
   final bool next;
 
@@ -308,7 +341,7 @@ class _CornerStep extends StatelessWidget {
           ),
           const SizedBox(width: Spacing.sm),
           Text(
-            '${index + 1}. ${kCornerNames[index]}',
+            '${index + 1}. $name',
             style: next ? text.titleSmall : text.bodyMedium?.copyWith(color: p.text2),
           ),
         ],
@@ -319,21 +352,28 @@ class _CornerStep extends StatelessWidget {
 
 /// Court sketch highlighting the corner to tap next.
 class CornerDiagram extends StatelessWidget {
-  const CornerDiagram({super.key, required this.next, this.size = const Size(44, 60)});
+  const CornerDiagram({super.key, required this.next, this.view = CourtView.end, Size? size})
+    : size = size ?? (view == CourtView.side ? const Size(72, 46) : const Size(44, 60));
 
-  /// Index into [kCornerNames], or null when all corners are set.
+  /// Index into [cornerNamesFor], or null when all corners are set.
   final int? next;
+  final CourtView view;
   final Size size;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
-      label: next == null ? 'All corners set' : 'Next corner: ${kCornerNames[next!]}',
+      label: next == null ? 'All corners set' : 'Next corner: ${cornerNamesFor(view)[next!]}',
       child: SizedBox.fromSize(
         size: size,
         child: CustomPaint(
-          painter: _DiagramPainter(next: next, line: scheme.outline, accent: scheme.primary),
+          painter: _DiagramPainter(
+            next: next,
+            view: view,
+            line: scheme.outline,
+            accent: scheme.primary,
+          ),
         ),
       ),
     );
@@ -341,29 +381,44 @@ class CornerDiagram extends StatelessWidget {
 }
 
 class _DiagramPainter extends CustomPainter {
-  _DiagramPainter({required this.next, required this.line, required this.accent});
+  _DiagramPainter({
+    required this.next,
+    required this.view,
+    required this.line,
+    required this.accent,
+  });
 
   final int? next;
+  final CourtView view;
   final Color line;
   final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Seen from behind the near baseline: near side wider, at the bottom.
-    final pts = [
-      Offset(2, size.height - 2),
-      Offset(size.width - 2, size.height - 2),
-      Offset(size.width * 0.8, 2),
-      Offset(size.width * 0.2, 2),
-    ];
+    final side = view == CourtView.side;
+    // Behind the near baseline: near side wider, at the bottom. Side-on: the court runs
+    // across, the camera's sideline (front) wider at the bottom, the net upright.
+    final pts = side
+        ? [
+            Offset(size.width * 0.12, 2),
+            Offset(2, size.height - 2),
+            Offset(size.width - 2, size.height - 2),
+            Offset(size.width * 0.88, 2),
+          ]
+        : [
+            Offset(2, size.height - 2),
+            Offset(size.width - 2, size.height - 2),
+            Offset(size.width * 0.8, 2),
+            Offset(size.width * 0.2, 2),
+          ];
     final paint = Paint()
       ..color = line
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(Path()..addPolygon(pts, true), paint);
     canvas.drawLine(
-      Offset(size.width * 0.1, size.height / 2),
-      Offset(size.width * 0.9, size.height / 2),
+      side ? Offset(size.width / 2, 2) : Offset(size.width * 0.1, size.height / 2),
+      side ? Offset(size.width / 2, size.height - 2) : Offset(size.width * 0.9, size.height / 2),
       paint,
     );
     for (var i = 0; i < 4; i++) {
@@ -372,12 +427,14 @@ class _DiagramPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DiagramPainter old) => old.next != next || old.accent != accent;
+  bool shouldRepaint(_DiagramPainter old) =>
+      old.next != next || old.view != view || old.accent != accent;
 }
 
 /// A frame of an uploaded video, fetched from the server.
 class _VideoFrameCanvas extends ConsumerWidget {
   const _VideoFrameCanvas({
+    required this.view,
     required this.info,
     required this.frame,
     required this.corners,
@@ -385,6 +442,7 @@ class _VideoFrameCanvas extends ConsumerWidget {
     required this.onMove,
   });
 
+  final CourtView view;
   final VideoInfo info;
   final int frame;
   final List<Corner> corners;
@@ -401,6 +459,7 @@ class _VideoFrameCanvas extends ConsumerWidget {
       width: info.width,
       height: info.height,
       corners: corners,
+      cornerNames: cornerNamesFor(view),
       onTap: onTap,
       onMove: onMove,
     );
@@ -419,7 +478,11 @@ class CornerCanvas extends StatefulWidget {
     required this.onTap,
     required this.onMove,
     this.overlayPainter,
+    this.cornerNames = kCornerNames,
   });
+
+  /// The corner names, for the handles' screen-reader labels.
+  final List<String> cornerNames;
 
   /// Optional preview painted in image coordinates, before the corner handles.
   final CustomPainter Function(double scale)? overlayPainter;
@@ -554,7 +617,7 @@ class _CornerCanvasState extends State<CornerCanvas> {
                           width: kHandleRadius * 2,
                           height: kHandleRadius * 2,
                           child: Semantics(
-                            label: '${kCornerNames[i]} corner handle',
+                            label: '${widget.cornerNames[i]} corner handle',
                             // Raw pointer events, so the handle moves even though the zoomable
                             // viewer around it also listens for drags (panning is off meanwhile).
                             child: Listener(

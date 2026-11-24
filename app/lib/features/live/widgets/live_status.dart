@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
 import '../../../shared/widgets/shuttle_speed.dart';
 import '../live_controller.dart';
+import '../../../data/models/court_view.dart';
 
 /// The newest hit: stroke, player and speed, the live "callout".
 class HitCallout extends StatelessWidget {
@@ -16,7 +17,7 @@ class HitCallout extends StatelessWidget {
     final colors = PlayerColors.of(context);
     final stroke = kStrokeLabels[hit.stroke] ?? 'Hit';
     final speed = hit.speedKmh == null ? '' : ' · ${hit.speedKmh!.round()} km/h (est.)';
-    final side = playerLabel(hit.who);
+    final side = context.sideLabel(hit.who);
     return Padding(
       padding: const EdgeInsets.only(top: Spacing.sm),
       child: Semantics(

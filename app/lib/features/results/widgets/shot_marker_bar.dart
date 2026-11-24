@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/clip_record.dart';
+import '../../../data/models/court_view.dart';
 import 'stroke_timeline.dart' show formatClock;
 
 /// One labelled mark on the [ShotMarkerBar].
@@ -38,6 +39,7 @@ List<ShotMark> shotMarks(
   required PlayerColors players,
   required StatusColors status,
   required Color accent,
+  SideNames sides = SideNames.ends,
 }) {
   final current = record.hitAt(frameIndex);
   return [
@@ -48,7 +50,7 @@ List<ShotMark> shotMarks(
         label: kStrokeLabels[h.stroke] ?? 'Hit',
         color: h.id == current?.id ? accent : players.forPlayer(h.who),
         description:
-            '${kStrokeLabels[h.stroke] ?? 'Unclassified'}, ${playerLabel(h.who)} player, '
+            '${kStrokeLabels[h.stroke] ?? 'Unclassified'}, ${sides.player(h.who)} player, '
             '${formatClock(h.timeS)}',
         current: h.id == current?.id,
       ),
@@ -97,6 +99,7 @@ class ShotMarkerBar extends StatelessWidget {
       players: PlayerColors.of(context),
       status: StatusColors.of(context),
       accent: a.accentInk,
+      sides: CourtSides.of(context),
     );
     final last = record.numFrames <= 1 ? 1 : record.numFrames - 1;
     final progress = (frameIndex / last).clamp(0.0, 1.0);

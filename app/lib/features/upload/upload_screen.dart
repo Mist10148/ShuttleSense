@@ -21,6 +21,7 @@ import 'upload_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import '../../shared/widgets/court_view_field.dart';
 
 /// C2 / FR-C2: pick a rally video, choose overlays, upload with progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -168,6 +169,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     error: true,
                   ),
               ],
+              const SizedBox(height: Spacing.md),
+              const CameraTips(),
             ],
           ),
         ),
@@ -192,6 +195,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   'stay empty, and Court outline, Minimap, Speed, Scoreboard and the Referee '
                   'layer are off.',
                   warning: true,
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: Spacing.sm),
+                  child: CourtViewField(),
                 ),
               DependentSwitch(
                 title: 'Referee layer (beta)',
@@ -208,6 +216,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               ),
               if (options.calibrate && options.referee)
                 StartScoreField(
+                  sides: SideNames.forView(ref.watch(courtViewProvider)),
                   key: ObjectKey(file), // a new clip starts from 0-0 again
                   value: options.startScore,
                   doubles: options.match.doubles,
@@ -215,6 +224,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 ),
               if (options.calibrate && options.referee)
                 MatchSetupField(
+                  sides: SideNames.forView(ref.watch(courtViewProvider)),
                   value: options.match,
                   onChanged: notifier.setMatch,
                   showCourt: true,
@@ -322,7 +332,7 @@ class VideoDropZone extends StatelessWidget {
               Text(
                 detail ??
                     'Singles or doubles rally, MP4/MOV/AVI, up to ${kMaxDurationS ~/ 60} minutes. '
-                        'Best results from a phone on a tripod, elevated and behind the baseline.',
+                        'Best results from a phone on a tripod, raised, behind a baseline or at the side.',
                 style: text.bodySmall?.copyWith(color: p.text2),
                 textAlign: TextAlign.center,
               ),
