@@ -349,3 +349,22 @@ def test_the_landing_is_where_the_shuttle_lies_not_its_first_resting_detection()
     cfg = scaled_pixels({**CFG, "stationary_frames_end": 20}, 720)
     seg = segment_rallies(np.ones(n, dtype=int), xy, [2, 15], cfg)[0]
     assert seg.landing_frame == 30 and seg.landing_px == (600.0, 400.0)
+
+
+def test_a_shuttle_behind_a_player_at_the_net_is_not_held() -> None:
+    """The box of a player at the net covers the floor just past it; with the wrists seen,
+    only a shuttle at a hand is held."""
+    from shuttlesense.referee.rally import held_by_player
+    from shuttlesense.schema import ClipRecord, Frame, Player, Players
+
+    kps = [(0.0, 0.0, 0.0)] * 17
+    kps[9] = (110.0, 300.0, 0.9)  # left wrist
+    kps[10] = (150.0, 310.0, 0.9)  # right wrist
+    box = Player(bbox=(100.0, 200.0, 60.0, 200.0), keypoints=kps)
+    frames = [Frame(frame=0, players=Players(near=box))]
+    record = ClipRecord(clip_id="c", fps=30, width=1280, height=720, num_frames=1, frames=frames)
+    assert held_by_player(record, 0, np.array([145.0, 300.0]))  # in the right hand
+    assert not held_by_player(record, 0, np.array([130.0, 215.0]))  # on the floor behind
+    faint = [(x, y, 0.1 if i in (9, 10) else s) for i, (x, y, s) in enumerate(kps)]
+    record.frames[0].players.near = box.model_copy(update={"keypoints": faint})
+    assert held_by_player(record, 0, np.array([130.0, 215.0]))  # wrists unseen: as before

@@ -264,13 +264,20 @@ def _rest_after(
 
 
 HELD_BOX_SHARE = 0.6  # a rest in the top 60 % of a player's box is in a hand, not on the floor
+HELD_WRIST_SHARE = 0.25  # ...and, when the wrists are seen, this close to one (x box height)
+WRISTS = (9, 10)  # COCO left and right wrist
+MIN_WRIST_SCORE = 0.3
 
 
 def held_by_player(record: ClipRecord, frame: int, px: np.ndarray) -> bool:
-    """Whether the resting shuttle at image point `px` sits high in a player's box.
+    """Whether the resting shuttle at image point `px` is in a player's hand.
 
     A shuttle held before the next serve, or caught, is still but off the floor, and the
-    court homography only holds on the floor: its projection would be a bogus landing.
+    court homography only holds on the floor: its projection would be a bogus landing. It
+    sits high in the player's box. A player's box also covers the floor behind them in the
+    image, though: a player at the net hides the floor just past it, where net shots land.
+    So when the player's wrists are seen, the shuttle must also be near one (D48); with no
+    wrist seen, high in the box is enough, as before.
     """
     if not 0 <= frame < len(record.frames):
         return False
@@ -279,7 +286,16 @@ def held_by_player(record: ClipRecord, frame: int, px: np.ndarray) -> bool:
         if player is None:
             continue
         bx, by, bw, bh = player.bbox
-        if bx <= x <= bx + bw and by <= y <= by + HELD_BOX_SHARE * bh:
+        if not (bx <= x <= bx + bw and by <= y <= by + HELD_BOX_SHARE * bh):
+            continue
+        wrists = [
+            (kx, ky)
+            for i, (kx, ky, score) in enumerate(player.keypoints)
+            if i in WRISTS and score >= MIN_WRIST_SCORE
+        ]
+        if not wrists:
+            return True
+        if min(np.hypot(x - kx, y - ky) for kx, ky in wrists) <= HELD_WRIST_SHARE * bh:
             return True
     return False
 
