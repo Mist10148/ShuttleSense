@@ -178,3 +178,27 @@ def test_undoing_an_override_restores_the_serve_decided_winner() -> None:
     remaining = undo_last_decision(record, None, overrides)
     assert remaining == [] and record.line_calls[0].override is None
     assert record.rallies[0].winner == "near"
+
+
+def test_the_rally_review_says_how_the_serve_decided_it() -> None:
+    from shuttlesense.referee.scoring import apply_corrections
+    from shuttlesense.schema import ScoreCorrection
+    from shuttlesense.stream.synthetic import PlannedRally
+
+    scored = _played("serve")
+    assert scored.rallies[0].review == (
+        "Scored for near from the next serve: no landing call decided it"
+    )
+    assert scored.rallies[1].review is None  # its own landing decided it
+    withheld = _played("serve", lose_landing=False, plan_second=PlannedRally(
+        "far", 2, (2.5, 3.0), ("serve", "clear")))  # fmt: skip
+    assert withheld.rallies[0].review == (
+        "The landing gives the rally to near, but far served next"
+    )
+    # Once the user decides the rally, the note has done its job.
+    from datetime import UTC, datetime
+
+    fix = ScoreCorrection(rally_index=0, winner_before=None, winner_after="near",
+                          at=datetime.now(UTC))  # fmt: skip
+    apply_corrections(withheld, [fix])
+    assert withheld.rallies[0].winner == "near" and withheld.rallies[0].review is None

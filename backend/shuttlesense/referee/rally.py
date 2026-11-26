@@ -429,6 +429,31 @@ def decide_winner(
     return by_landing if by_landing == by_serve else None
 
 
+def referee_review(record: ClipRecord, rally: Rally) -> str | None:
+    """Why the user should look at how this rally was decided, from the record alone (D47).
+
+    A rally scored from the next serve, or withheld because its landing and the next serve
+    disagree, says so. A rally the user decided (override or winner correction) does not.
+    """
+    if record.court is None:
+        return None
+    corrections = record.score.corrections if record.score is not None else []
+    if any(c.kind == "winner" and c.rally_index == rally.index for c in corrections):
+        return None
+    if any(c.rally_index == rally.index and c.override is not None for c in record.line_calls):
+        return None
+    following = next((r for r in record.rallies if r.index == rally.index + 1), None)
+    by_serve = next_serve_side(record, rally, following, None)
+    if by_serve is None:
+        return None
+    by_landing = landing_winner(record, rally)
+    if by_landing is None and rally.winner == by_serve:
+        return f"Scored for {by_serve} from the next serve: no landing call decided it"
+    if by_landing is not None and by_landing != by_serve and rally.winner is None:
+        return f"The landing gives the rally to {by_landing}, but {by_serve} served next"
+    return None
+
+
 def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None:
     """Set every rally's automated winner from its landing and the next serve.
 

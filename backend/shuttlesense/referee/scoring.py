@@ -205,12 +205,17 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
     The order itself comes from the rally winners; this only asks the user to check a rally
     when pose disagrees: the serve was credited to the other partner, or the server's feet
     were not in the service court their side's score calls for. Nothing is changed.
+
+    Every rally starts from the referee's own note (a point from the next serve, or one
+    withheld because the landing and the next serve disagree, D47); the service notes
+    above replace it.
     """
+    from shuttlesense.referee.rally import referee_review
     from shuttlesense.schema import COURT_SIZE_M, side_of, slot_attr
 
     width = (record.court.court_size_m if record.court else COURT_SIZE_M)[0]
     for rally in record.rallies:
-        rally.review = None
+        rally.review = referee_review(record, rally)
     if record.score is None:
         return
     # The score before each rally comes from the same match steps that set server_id, so
