@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/coach_reply.dart';
 import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/tokens.dart';
@@ -309,10 +310,9 @@ class CoachBubble extends StatelessWidget {
               children: [
                 Semantics(
                   label: user ? 'You asked' : 'Coach answered',
-                  child: SelectableText(
-                    turn.message.text,
-                    style: user ? TextStyle(color: p.onInk) : null,
-                  ),
+                  child: user
+                      ? SelectableText(turn.message.text, style: TextStyle(color: p.onInk))
+                      : CoachReply(turn.message.text),
                 ),
                 if (footer != null) ...[const SizedBox(height: Spacing.sm), footer!],
                 if (turn.sources.isNotEmpty) ...[

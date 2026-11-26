@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/widgets/coach_reply.dart';
 import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
@@ -379,10 +380,9 @@ class _Bubble extends StatelessWidget {
               children: [
                 Semantics(
                   label: user ? 'You asked' : 'Coach answered',
-                  child: SelectableText(
-                    message.text,
-                    style: user ? TextStyle(color: p.onInk) : null,
-                  ),
+                  child: user
+                      ? SelectableText(message.text, style: TextStyle(color: p.onInk))
+                      : CoachReply(message.text),
                 ),
                 if (message.citations.isNotEmpty) ...[
                   const SizedBox(height: Spacing.sm),
