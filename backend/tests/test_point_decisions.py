@@ -26,6 +26,23 @@ CASES = [
     ("singles", "clear", None, (-0.5, 6.72), "observed", None),
     ("singles", "clear", None, (1, 10), "sparse", None),
     ("singles", "clear", None, (1, 10), "inpaint", None),
+    # A shot that never crosses the net lands in on the hitter's own half: the hitter loses.
+    ("singles", "clear", None, (2.5, 4.0), "observed", "far"),
+    ("doubles", "clear", None, (2.5, 4.0), "observed", "far"),
+    # The side alleys are in for doubles rallies and out for singles.
+    ("singles", "clear", None, (-0.25, 10), "observed", "far"),
+    ("doubles", "clear", None, (-0.25, 10), "observed", "near"),
+    ("doubles", "clear", None, (-0.9, 10), "observed", "far"),
+    # Serves: doubles is short (long service line 0.76 m in) and wide; singles long and narrow.
+    ("singles", "serve", 1.5, (4.0, 13.0), "observed", "near"),
+    ("doubles", "serve", 1.5, (4.0, 13.0), "observed", "far"),
+    ("doubles", "serve", 1.5, (4.0, 12.0), "observed", "near"),
+    ("doubles", "serve", 1.5, (5.5, 10.0), "observed", "near"),
+    ("singles", "serve", 1.5, (5.5, 10.0), "observed", "far"),
+    # A doubles server nobody located could have served to either box: no point.
+    ("doubles", "serve", None, (4.0, 12.0), "observed", None),
+    # Wrong diagonal: a serve into the box straight ahead is a fault.
+    ("singles", "serve", 1.5, (1.0, 10.0), "observed", "far"),
 ]
 
 
@@ -35,7 +52,9 @@ def decide(court, stroke, server_x, landing, evidence, tmp_path):
     frame, side, _ = truth["hits"][0]
     record.hits = [Hit(id=0, frame=frame, time_s=frame / record.fps, player=side, stroke=stroke)]
     if server_x is not None:
-        record.frames[frame].court_positions = CourtPositions(near=(server_x, 2))
+        # In doubles the partner stands behind the server, on the same side of the centre.
+        partner = (server_x, 1) if court == "doubles" else None
+        record.frames[frame].court_positions = CourtPositions(near=(server_x, 2), near_2=partner)
     rest = truth["landings"][0]
     if evidence == "sparse":
         for i in range(rest, len(record.frames)):
