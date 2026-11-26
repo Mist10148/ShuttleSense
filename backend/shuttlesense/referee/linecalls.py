@@ -179,12 +179,22 @@ def candidate_bounds(
         serve = hits[0]
         frame = record.frames[serve.frame] if serve.frame < len(record.frames) else None
         pos = frame.court_positions if frame else None
-        server = getattr(pos, serve.player_attr, None) if pos else None
-        if server is not None and np.isfinite(server).all():
-            h = np.asarray(record.court.homography) if record.court else None
-            if abs(server[0] - size[0] / 2) > _axis_bands(cfg, h, server)[0]:
-                return (service_bounds(serve.player, server[0], court, size),)
-        return tuple(service_bounds(serve.player, x, court, size) for x in (0.0, size[0]))
+        slots = (serve.player_attr,)
+        if court == "doubles" and serve.hitter is None:
+            slots = (serve.player, f"{serve.player}_2")
+        h = np.asarray(record.court.homography) if record.court else None
+        boxes = []
+        for slot in slots:
+            server = getattr(pos, slot, None)
+            if (
+                server is None
+                or not np.isfinite(server).all()
+                or abs(server[0] - size[0] / 2) <= _axis_bands(cfg, h, server)[0]
+            ):
+                # Even one unlocated candidate could have served from either side.
+                return tuple(service_bounds(serve.player, x, court, size) for x in (0.0, size[0]))
+            boxes.append(service_bounds(serve.player, server[0], court, size))
+        return tuple(dict.fromkeys(boxes))
     return (play_bounds(court, size),)
 
 
