@@ -321,3 +321,19 @@ def test_a_brief_miss_then_a_rest_elsewhere_or_after_rising_is_not_a_landing() -
     unobserved = set(range(60, 64))
     segs = segment_rallies(visible, xy, [2, 20], cfg, unobserved=unobserved)
     assert segs[0].landing_frame is None
+
+
+def test_a_rest_is_measured_from_where_the_shuttle_lies_not_its_first_detection() -> None:
+    """A bounce 5 px off, then a rest that jitters 3 px: the old rule, anchored on one
+    detection, kept restarting; the rest is found and starts where the shuttle lies."""
+    n = 80
+    xy = moving(n)
+    rng = np.random.default_rng(1)
+    xy[30] = [605.0, 395.0]  # the bounce
+    xy[31:] = np.array([600.0, 400.0]) + rng.uniform(-3, 3, size=(n - 31, 2))
+    xy[31:, 0] = np.minimum(xy[31:, 0], 601.0)  # always > 6 px from the bounce point
+    from shuttlesense.referee.rally import scaled_pixels
+
+    cfg = scaled_pixels({**CFG, "stationary_frames_end": 20}, 720)  # rest radius 6 px
+    segs = segment_rallies(np.ones(n, dtype=int), xy, [2, 15], cfg)
+    assert len(segs) == 1 and segs[0].closed and segs[0].landing_frame == 31

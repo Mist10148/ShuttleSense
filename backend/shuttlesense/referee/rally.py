@@ -59,6 +59,47 @@ def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
     return out
 
 
+class _RestRun:
+    """Consecutive detections of a shuttle at rest (D48).
+
+    A detection belongs to the rest when it lies within `radius` of the rest's first
+    detection (the D45 rule) or of the median of the rest so far. The median keeps a rest
+    whose first detection was taken mid-bounce, or which jitters or slides a few pixels,
+    from restarting again and again. A moving shuttle still breaks the run: the median lags
+    behind it by more than the radius within a few frames.
+    """
+
+    def __init__(self, radius: float) -> None:
+        self.radius = radius
+        self.frames: list[int] = []
+        self.points: list[np.ndarray] = []
+
+    def reset(self) -> None:
+        self.frames, self.points = [], []
+
+    def add(self, frame: int, point: np.ndarray) -> None:
+        """Add a detection; one that fits neither the start nor the median starts anew."""
+        point = np.asarray(point, dtype=float)
+        if self.points and not (
+            np.linalg.norm(point - self.points[0]) <= self.radius
+            or np.linalg.norm(point - self.centre()) <= self.radius
+        ):
+            self.reset()
+        self.frames.append(frame)
+        self.points.append(point)
+
+    @property
+    def start(self) -> int | None:
+        return self.frames[0] if self.frames else None
+
+    def centre(self) -> np.ndarray:
+        return np.median(np.asarray(self.points), axis=0)
+
+    @property
+    def count(self) -> int:
+        return len(self.points)
+
+
 def _approached(
     visible: np.ndarray, xy: np.ndarray, rest: int, first: int, cfg: dict[str, Any]
 ) -> bool:
@@ -136,8 +177,7 @@ def _relocated_rest(
     seen = [j for j in range(max(0, last_visible - lookback), last_visible + 1) if visible[j]]
     if len(seen) < 3 or xy[seen[-1]][1] - xy[seen[0]][1] <= 0:
         return None  # not seen coming down: it may have flown out of the frame
-    observations = 0
-    rest_start: int | None = None
+    rest = _RestRun(radius)
     missing = 0
     for i in range(last_visible + 1, min(len(visible), last_visible + lost + extra + 1)):
         if i in unobserved:
@@ -145,15 +185,13 @@ def _relocated_rest(
         if not visible[i]:
             missing += 1
             if missing > MAX_MISSED_AT_REST:
-                rest_start = None
+                rest.reset()
             continue
         missing = 0
-        if rest_start is None or np.linalg.norm(xy[i] - xy[rest_start]) > radius:
-            rest_start, observations = i, 0
-        observations += 1
-        if observations >= still:
-            close = np.linalg.norm(xy[rest_start] - xy[last_visible]) <= near
-            return rest_start if close else None
+        rest.add(i, xy[i])
+        if rest.count >= still:
+            close = np.linalg.norm(rest.centre() - xy[last_visible]) <= near
+            return rest.start if close else None
     return None
 
 
@@ -177,37 +215,37 @@ def _rest_after(
 
     End rules: the shuttle stays invisible for lost_frames_end frames (end = last visible
     frame, landing unknown unless it was resting), or its detections stay within
-    rest_radius_px of where it settled for stationary_frames_end frames (end = landing =
-    first resting frame). The radius, not a per-frame step, absorbs tracker jitter, and a
-    missed detection or two while resting does not restart the count. A lost shuttle gives
-    no landing call (it may have left the frame, so the user decides that rally) unless it
-    is found lying where it fell (_relocated_rest). A rest that did not follow a flight
-    (_approached) also ends the rally without a landing.
+    rest_radius_px of where it settled (their median, _RestRun) for stationary_frames_end
+    frames (end = landing = first resting frame). The radius, not a per-frame step,
+    absorbs tracker jitter, and a missed detection or two while resting does not restart
+    the count. A lost shuttle gives no landing call (it may have left the frame, so the
+    user decides that rally) unless it is found lying where it fell (_relocated_rest). A
+    rest that did not follow a flight (_approached) also ends the rally without a landing.
     """
     lost = int(cfg.get("lost_frames_end", 30))
     still = int(cfg.get("stationary_frames_end", 20))
     radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
     last_visible, missing = frame, 0
-    observations = 0
-    rest_start: int | None = None
+    rest = _RestRun(radius)
     for i in range(frame, stop):
         if i in unobserved:
             # No observation is neither a lost shuttle nor evidence of a stationary one.
-            missing, rest_start = 0, None
+            missing = 0
+            rest.reset()
             continue
         if not visible[i]:
             missing += 1
             if missing > MAX_MISSED_AT_REST:
-                rest_start = None
+                rest.reset()
             if missing >= lost:
                 return last_visible, _relocated_rest(visible, xy, last_visible, cfg, unobserved)
             continue
         missing = 0
         last_visible = i
-        if rest_start is None or np.linalg.norm(xy[i] - xy[rest_start]) > radius:
-            rest_start, observations = i, 0
-        observations += 1
-        if observations >= still:
+        rest.add(i, xy[i])
+        if rest.count >= still:
+            rest_start = rest.start
+            assert rest_start is not None
             if _approached(visible, xy, rest_start, frame, cfg) or _fell_into(
                 visible, xy, rest_start, frame, cfg, unobserved
             ):
