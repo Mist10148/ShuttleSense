@@ -40,6 +40,7 @@
 - [x] Handle clips that start mid-rally (first rally has no serve) and end mid-rally (last rally open: `end_frame = num_frames - 1`, winner null).
 - [x] (Nov 25, D45) The rest rule uses a radius instead of a per-frame step: detections within `rest_radius_px` (6 px at 720p, scaled by the frame height) of where the shuttle settled, with up to two missed detections, so tracker jitter on HD footage no longer hides landings. A rest needs a flight into it (`min_approach_px` within `approach_frames`); a detection that never moved ends the rally without a landing.
 - [x] (Nov 25, D46) A shuttle lost while falling and found still within `relocate_px` of its last flight point, settling within `lost_frames_end` + `relocate_extra_frames`, gives a landing at its first resting frame; the rally still ends at the loss.
+- [x] (Nov 26, D48) The last rally ends where the shuttle settled when the clip or live session ends sooner than `stationary_frames_end` after it came down (`end_rest_frames`, 8 at 30 fps, after a flight and with the shuttle staying put). A rest is measured against its median as well as its first detection, the landing is the median of the rest, and a shuttle high in a player's box is held only near a seen wrist.
 
 **Tests** (`tests/test_referee.py`): `test_two_rallies_separated_by_pause`, `test_rally_ends_when_shuttle_stationary`, `test_clip_starting_mid_rally`.
 
