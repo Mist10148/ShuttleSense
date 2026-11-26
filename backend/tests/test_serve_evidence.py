@@ -91,3 +91,50 @@ def test_serve_evidence_can_be_switched_off_and_needs_the_next_rally() -> None:
     assert next_serve_side(record, first, second, {"serve_inference": {"enabled": False}}) is None
     assert next_serve_side(record, first, None, {}) is None
     assert next_serve_side(record, second, first, {}) is None
+
+
+def _played(first_stroke: str, *, lose_landing: bool = True) -> ClipRecord:
+    """Two synthetic rallies through the hits and referee stages. Near wins the first (it
+    lands in on the far half) and serves the second; the first's landing is lost from view
+    when `lose_landing`, as on broadcast footage where the falling shuttle is hidden."""
+    from shuttlesense import analytics, hits, referee
+    from shuttlesense.config import load_config
+    from shuttlesense.stage import StageContext
+    from shuttlesense.stream.synthetic import PlannedRally, planned_strokes, synthetic_record
+
+    plan = (
+        PlannedRally("near", 3, (2.0, 10.0), ("serve", "clear", "smash")),
+        PlannedRally("near", 2, (2.5, 11.0), (first_stroke, "clear")),
+    )
+    record, truth = synthetic_record(plan)
+    if lose_landing:
+        first_landing = truth["landings"][0]
+        for f in record.frames[first_landing : truth["starts"][1]]:
+            f.shuttle = f.shuttle.model_copy(update={"visible": 0, "x": None, "y": None})
+    ctx = StageContext(video_path=None, out_dir=None, config=load_config())
+    hits.run(record, ctx)
+    strokes = planned_strokes(truth)
+    for h in record.hits:
+        h.stroke, h.confidence = strokes.get(h.frame), 0.9
+    analytics.run(record, ctx)
+    return referee.run(record, ctx)
+
+
+def test_a_rally_lost_from_view_is_scored_from_the_next_serve() -> None:
+    record = _played("serve")
+    first = record.rallies[0]
+    assert first.landing is None and first.winner == "near"
+    assert record.rallies[0].score_after is not None
+    assert (record.rallies[0].score_after.near, record.rallies[0].score_after.far) == (1, 0)
+
+
+def test_a_rally_lost_from_view_waits_for_the_user_without_a_clear_serve() -> None:
+    """The next rally opens with a lift, not a serve: a rally split by a lift out of the
+    frame looks like this, so nobody scores."""
+    record = _played("lift")
+    assert record.rallies[0].landing is None and record.rallies[0].winner is None
+
+
+def test_a_seen_landing_still_decides_its_rally() -> None:
+    record = _played("lift", lose_landing=False)
+    assert record.rallies[0].landing is not None and record.rallies[0].winner == "near"

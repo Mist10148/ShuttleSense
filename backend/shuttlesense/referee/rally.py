@@ -367,6 +367,44 @@ def next_serve_side(
     return serve.player
 
 
+def landing_winner(record: ClipRecord, rally: Rally) -> PlayerSide | None:
+    """The automated winner from the rally's landing alone (D45 guards included)."""
+    from shuttlesense.schema import COURT_SIZE_M
+
+    size = record.court.court_size_m if record.court else COURT_SIZE_M
+    hits = rally_hits(record, rally)
+    last = hits[-1].player if hits else None
+    return rally_winner(rally.landing, last, size[1] / 2, check_side=True)
+
+
+def decide_winner(
+    record: ClipRecord, rally: Rally, next_rally: Rally | None, cfg: dict[str, Any] | None
+) -> PlayerSide | None:
+    """The automated winner from the landing and the next serve together (D47).
+
+    The landing decides when it can. A rally it cannot decide (no landing seen, lost, held,
+    uncertain, implausible) is decided by a clear next serve.
+    """
+    by_landing = landing_winner(record, rally)
+    if by_landing is not None:
+        return by_landing
+    return next_serve_side(record, rally, next_rally, cfg)
+
+
+def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None:
+    """Set every rally's automated winner from its landing and the next serve.
+
+    The winner is recomputed from the record each time, never read from rally.winner, so
+    this can run again as rallies are added (live). The user's line-call overrides and
+    score corrections are applied after it by their callers and still win.
+    """
+    if record.court is None:
+        return  # no court, no automated decisions (the stage needs one)
+    rallies = sorted(record.rallies, key=lambda r: r.index)
+    for rally, following in zip(rallies, [*rallies[1:], None], strict=True):
+        rally.winner = decide_winner(record, rally, following, cfg)
+
+
 def build_events(record: ClipRecord) -> list[RallyEvent]:
     """The rally timeline (start, hits, landing, end, score) in frame order."""
     fps = record.fps or 1.0
@@ -442,9 +480,6 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             rally.landing = Landing(
                 x_m=x_m, y_m=y_m, in_court=call.call == "in", confidence=call.confidence
             )
-        last = hits_in[-1].player if hits_in else None
-        if size and seg.closed:
-            rally.winner = rally_winner(rally.landing, last, size[1] / 2, check_side=True)
         rallies.append(rally)
 
     for f in record.frames:
@@ -452,6 +487,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         f.rally_state = "in_play" if inside else "between_rallies"
     record.rallies = rallies
     record.line_calls = calls
+    if size:
+        # The landing decides each rally it can; the next serve decides the rest (D47).
+        apply_serve_evidence(record, cfg)
     count_strokes(record)
     start = ScorePair(**ctx.config.get("start_score", {}) or {})
     match = match_config(ctx.config)
