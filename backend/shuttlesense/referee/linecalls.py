@@ -123,7 +123,6 @@ def call_landing(
 def implausible(
     point_m: Sequence[float],
     margin: float,
-    call: Call,
     size: Sequence[float],
     band_m: float,
     cfg: dict[str, Any],
@@ -131,11 +130,11 @@ def implausible(
     """Whether a landing cannot be trusted to decide a rally, whatever its margin (D45).
 
     A rest far beyond the court surround is more likely a false detection than a shot, and
-    an IN landing within the band of the net leaves the half (so the winner) unknown.
+    a landing within the band of the net leaves the half (so the winner) unknown.
     """
     if margin < -float(cfg.get("max_out_m", DEFAULTS["max_out_m"])):
         return True
-    return call == "in" and abs(float(point_m[1]) - size[1] / 2) < band_m
+    return abs(float(point_m[1]) - size[1] / 2) < band_m
 
 
 def candidate_bounds(
@@ -172,7 +171,7 @@ def make_line_call(
     disagreement = any(result[0] != call or result[3] for result in candidates)
     size = record.court.court_size_m if record.court else COURT_SIZE_M
     court_margin = signed_margin(point_m, play_bounds(court, size))
-    if disagreement or implausible(point_m, court_margin, call, size, band, cfg):
+    if disagreement or implausible(point_m, court_margin, size, band, cfg):
         confidence, uncertain = min(confidence, 0.499), True
     return LineCall(
         id=0,

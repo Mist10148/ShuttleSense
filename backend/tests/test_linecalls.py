@@ -182,3 +182,21 @@ def test_service_box_uncertainty_and_rear_strip(server_x, side):
     serve.stroke = "clear"
     deep = landing(1, 13, "doubles")
     assert deep.call == "in" and not deep.uncertain
+
+
+def test_wide_landing_level_with_net_stays_undecided_after_undo():
+    from shuttlesense.referee.scoring import apply_corrections, undo_last_decision
+
+    record = _record(-0.5)
+    rally = record.rallies[0]
+    rally.landing.y_m = 6.72
+    record.line_calls = derive_from_rallies(record)
+    call = record.line_calls[0]
+    assert call.call == "out" and call.uncertain
+    decision = LineCallOverrideIn(rally_index=0, call="out", at=datetime.now(UTC))
+    for _ in range(2):
+        apply_overrides(record, [decision])
+        apply_corrections(record, [])
+        assert (record.score.near, record.score.far) == (0, 1)
+    assert undo_last_decision(record, overrides=[decision]) == []
+    assert rally.winner is None and (record.score.near, record.score.far) == (0, 0)
