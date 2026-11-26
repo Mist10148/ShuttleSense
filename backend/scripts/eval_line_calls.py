@@ -48,7 +48,7 @@ import numpy as np
 from shuttlesense.config import BACKEND_DIR
 from shuttlesense.court.homography import image_to_court
 from shuttlesense.court.lines import play_bounds
-from shuttlesense.referee.linecalls import bounds_for, signed_margin
+from shuttlesense.referee.linecalls import DEFAULTS, candidate_bounds, signed_margin
 from shuttlesense.schema import load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
@@ -153,7 +153,7 @@ def read_predicted(path: Path) -> list[dict[str, Any]]:
             "uncertain": None if c is None else c.uncertain,
             "margin_cm": None if c is None else c.margin_cm,
             "court": court,
-            "bounds": bounds_for(record, r, court)[0],
+            "areas": candidate_bounds(record, r, court, DEFAULTS),
         })  # fmt: skip
     return out
 
@@ -201,7 +201,8 @@ def evaluate(
         true_margin = None
         if t["landing"] is not None:
             bounds = p.get("bounds") or play_bounds(p["court"]) if p else play_bounds("singles")
-            true_margin = signed_margin(t["landing"], bounds) * 100
+            areas = p.get("areas", (bounds,)) if p else (bounds,)
+            true_margin = max(signed_margin(t["landing"], area) for area in areas) * 100
         rows.append({
             "end_s": round(t["end_s"], 3),
             "matched": p is not None,

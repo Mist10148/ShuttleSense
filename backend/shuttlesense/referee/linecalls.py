@@ -138,8 +138,10 @@ def implausible(
     return call == "in" and abs(float(point_m[1]) - size[1] / 2) < band_m
 
 
-def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Bounds, bool]:
-    """(area the rally's last shot had to land in, whether that is a service court)."""
+def candidate_bounds(
+    record: ClipRecord, rally: Rally, court: CourtType, cfg: dict[str, Any]
+) -> tuple[Bounds, ...]:
+    """Plausible receiving areas for the last stroke of the rally."""
     size = record.court.court_size_m if record.court else COURT_SIZE_M
     hits = [h for h in record.hits if h.rally_index == rally.index] or [
         h for h in record.hits if rally.start_frame <= h.frame <= rally.end_frame
@@ -149,21 +151,28 @@ def bounds_for(record: ClipRecord, rally: Rally, court: CourtType) -> tuple[Boun
         frame = record.frames[serve.frame] if serve.frame < len(record.frames) else None
         pos = frame.court_positions if frame else None
         server = getattr(pos, serve.player_attr, None) if pos else None
-        if server is not None:
-            return service_bounds(serve.player, server[0], court, size), True
-    return play_bounds(court, size), False
+        if server is not None and np.isfinite(server).all():
+            h = np.asarray(record.court.homography) if record.court else None
+            if abs(server[0] - size[0] / 2) > uncertainty_band(cfg, h, server):
+                return (service_bounds(serve.player, server[0], court, size),)
+        return tuple(service_bounds(serve.player, x, court, size) for x in (0.0, size[0]))
+    return (play_bounds(court, size),)
 
 
 def make_line_call(
     record: ClipRecord, rally: Rally, frame: int, point_m: Sequence[float], cfg: dict[str, Any]
 ) -> LineCall:
     court: CourtType = cfg["court"]
-    bounds, _ = bounds_for(record, rally, court)
+    areas = candidate_bounds(record, rally, court, cfg)
     h = np.asarray(record.court.homography) if record.court else None
     band = uncertainty_band(cfg, h, point_m)
-    call, margin, confidence, uncertain = call_landing(point_m, bounds, band)
+    candidates = [call_landing(point_m, bounds, band) for bounds in areas]
+    # Use the most inclusive box for the provisional call and its displayed margin.
+    call, margin, confidence, uncertain = max(candidates, key=lambda result: result[1])
+    disagreement = any(result[0] != call or result[3] for result in candidates)
     size = record.court.court_size_m if record.court else COURT_SIZE_M
-    if implausible(point_m, margin, call, size, band, cfg):
+    court_margin = signed_margin(point_m, play_bounds(court, size))
+    if disagreement or implausible(point_m, court_margin, call, size, band, cfg):
         confidence, uncertain = min(confidence, 0.499), True
     return LineCall(
         id=0,

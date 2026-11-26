@@ -149,3 +149,36 @@ def test_implausible_landings_never_decide_a_rally() -> None:
     assert on_net.call == "in" and on_net.uncertain  # which half is unknown
     mid_half = make_line_call(record, rally, 20, (2.6, 8.0), cfg)
     assert mid_half.call == "in" and not mid_half.uncertain
+
+
+@pytest.mark.parametrize("server_x", [None, 2.60, 3.5])
+@pytest.mark.parametrize("side", ["near", "far"])
+def test_service_box_uncertainty_and_rear_strip(server_x, side):
+    from shuttlesense.referee.linecalls import make_line_call
+
+    record = _record(1)
+    serve = record.hits[0]
+    serve.player, serve.stroke = side, "serve"
+    record.hits = [serve]
+    pos = CourtPositions()
+    setattr(pos, side, (server_x, 1 if side == "near" else 12) if server_x else None)
+    record.frames[serve.frame].court_positions = pos
+    rally = record.rallies[0]
+
+    def landing(x, y, court):
+        return make_line_call(record, rally, 20, (x, y if side == "near" else 13.4 - y),
+                              {**DEFAULTS, "court": court})
+
+    legal = landing(1, 11, "singles")
+    assert legal.call == "in" and legal.uncertain == (server_x != 3.5)
+    wrong = landing(4, 11, "singles")
+    assert wrong.uncertain == (server_x != 3.5)
+    if server_x == 3.5:
+        assert wrong.call == "out"
+    short = landing(1, 7.5, "singles")
+    assert short.call == "out" and not short.uncertain
+    deep = landing(1, 13, "doubles")
+    assert deep.call == "out" and not deep.uncertain
+    serve.stroke = "clear"
+    deep = landing(1, 13, "doubles")
+    assert deep.call == "in" and not deep.uncertain
