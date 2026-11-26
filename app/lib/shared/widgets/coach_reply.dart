@@ -8,22 +8,34 @@ class CoachReply extends StatelessWidget {
 
   static final _heading = RegExp(r'^ {0,3}(#{1,6})\s+(.+)$');
   static final _item = RegExp(r'^([ \t]*)([-+*]|\d{1,9}[.)])\s+(.+)$');
-  static final _emphasis = RegExp(r'(\*\*|__)(?=\S)(.+?)\1|(\*|_)(?=\S)(.+?)\3');
+  // Consume escaped punctuation as one token, including inside an emphasized run.
+  static final _escape = RegExp(r'\\([!-/:-@\x5b-\x60{-~])');
+  static final _inline = RegExp(
+    '${_escape.pattern}'
+    r'|(?<!\*)(\*{1,2})(?!\*)(?=\S)((?:\\.|[^\\\n])+?)(?<=\S)\2(?!\*)'
+    r'|(?<![\p{L}\p{N}_])(_{1,2})(?!_)(?=\S)((?:\\.|[^\\\n])+?)(?<=\S)\4(?![\p{L}\p{N}_])',
+    unicode: true,
+  );
 
   static Widget _text(String text, [TextStyle? style]) {
     final spans = <TextSpan>[];
     var position = 0;
-    for (final match in _emphasis.allMatches(text)) {
+    for (final match in _inline.allMatches(text)) {
       spans.add(TextSpan(text: text.substring(position, match.start)));
-      final bold = match.group(1) != null;
-      spans.add(
-        TextSpan(
-          text: match.group(bold ? 2 : 4),
-          style: bold
-              ? const TextStyle(fontWeight: FontWeight.bold)
-              : const TextStyle(fontStyle: FontStyle.italic),
-        ),
-      );
+      if (match[1] != null) {
+        spans.add(TextSpan(text: match[1]));
+      } else {
+        final marker = match[2] ?? match[4]!;
+        final content = match[3] ?? match[5]!;
+        spans.add(
+          TextSpan(
+            text: content.replaceAllMapped(_escape, (escape) => escape[1]!),
+            style: marker.length == 2
+                ? const TextStyle(fontWeight: FontWeight.bold)
+                : const TextStyle(fontStyle: FontStyle.italic),
+          ),
+        );
+      }
       position = match.end;
     }
     if (spans.isEmpty) return Text(text, style: style);

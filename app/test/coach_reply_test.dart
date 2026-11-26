@@ -13,6 +13,27 @@ import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
 
 void main() {
+  testWidgets('coach preserves identifiers and escaped delimiters alongside emphasis', (
+    tester,
+  ) async {
+    const source =
+        r'near_side_score far__side__score \*tap\* \_here\_ '
+        r'**near_side_score** and _soft_ and *a \*single\* cue*.';
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: CoachReply(source))));
+    final text = tester.widget<Text>(
+      find.descendant(of: find.byType(CoachReply), matching: find.byType(Text)),
+    );
+    final span = text.textSpan! as TextSpan;
+    expect(
+      span.toPlainText(),
+      'near_side_score far__side__score *tap* _here_ near_side_score and soft and a *single* cue.',
+    );
+    final styled = span.children!.whereType<TextSpan>().where((s) => s.style != null);
+    expect(styled.map((s) => s.text), ['near_side_score', 'soft', 'a *single* cue']);
+    expect(styled.first.style!.fontWeight, FontWeight.bold);
+    expect(styled.last.style!.fontStyle, FontStyle.italic);
+  });
+
   for (final practice in [false, true]) {
     testWidgets('formatted reply seeks its citation in ${practice ? "practice" : "results"}', (
       tester,
