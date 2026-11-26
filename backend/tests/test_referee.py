@@ -337,3 +337,15 @@ def test_a_rest_is_measured_from_where_the_shuttle_lies_not_its_first_detection(
     cfg = scaled_pixels({**CFG, "stationary_frames_end": 20}, 720)  # rest radius 6 px
     segs = segment_rallies(np.ones(n, dtype=int), xy, [2, 15], cfg)
     assert len(segs) == 1 and segs[0].closed and segs[0].landing_frame == 31
+
+
+def test_the_landing_is_where_the_shuttle_lies_not_its_first_resting_detection() -> None:
+    from shuttlesense.referee.rally import scaled_pixels
+
+    n = 80
+    xy = moving(n)
+    xy[30] = [604.0, 397.0]  # first resting detection, still settling, 5 px off
+    xy[31:] = [600.0, 400.0]
+    cfg = scaled_pixels({**CFG, "stationary_frames_end": 20}, 720)
+    seg = segment_rallies(np.ones(n, dtype=int), xy, [2, 15], cfg)[0]
+    assert seg.landing_frame == 30 and seg.landing_px == (600.0, 400.0)

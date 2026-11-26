@@ -156,8 +156,8 @@ def _relocated_rest(
     last_visible: int,
     cfg: dict[str, Any],
     unobserved: set[int],
-) -> int | None:
-    """The landing frame of a shuttle lost as it fell and then found lying where it fell.
+) -> tuple[int, np.ndarray] | None:
+    """(landing frame, image point) of a shuttle lost as it fell and found lying where it fell.
 
     Small, fast and often hidden by a player or the net, a falling shuttle is commonly
     missed for a second and found again on the floor. That is a landing when (D46):
@@ -191,7 +191,7 @@ def _relocated_rest(
         rest.add(i, xy[i])
         if rest.count >= still:
             close = np.linalg.norm(rest.centre() - xy[last_visible]) <= near
-            return rest.start if close else None
+            return (int(rest.frames[0]), rest.centre()) if close else None
     return None
 
 
@@ -201,6 +201,9 @@ class Segment:
     end: int
     closed: bool  # False when the clip ends mid-rally
     landing_frame: int | None  # where the shuttle came to rest, if seen
+    # Where it lies in the image: the median of its resting detections, steadier than the
+    # first resting frame, which may be taken mid-bounce (D48).
+    landing_px: tuple[float, float] | None = None
 
 
 def _rest_after(
@@ -210,8 +213,9 @@ def _rest_after(
     stop: int,
     cfg: dict[str, Any],
     unobserved: set[int],
-) -> tuple[int, int | None] | None:
-    """First rally end in [frame, stop): (end frame, landing frame) or None if play goes on.
+) -> tuple[int, int | None, np.ndarray | None] | None:
+    """First rally end in [frame, stop): (end frame, landing frame, landing image point) or
+    None if play goes on.
 
     End rules: the shuttle stays invisible for lost_frames_end frames (end = last visible
     frame, landing unknown unless it was resting), or its detections stay within
@@ -238,7 +242,8 @@ def _rest_after(
             if missing > MAX_MISSED_AT_REST:
                 rest.reset()
             if missing >= lost:
-                return last_visible, _relocated_rest(visible, xy, last_visible, cfg, unobserved)
+                found = _relocated_rest(visible, xy, last_visible, cfg, unobserved)
+                return (last_visible, *found) if found else (last_visible, None, None)
             continue
         missing = 0
         last_visible = i
@@ -249,8 +254,8 @@ def _rest_after(
             if _approached(visible, xy, rest_start, frame, cfg) or _fell_into(
                 visible, xy, rest_start, frame, cfg, unobserved
             ):
-                return rest_start, rest_start
-            return rest_start, None
+                return rest_start, rest_start, rest.centre()
+            return rest_start, None, None
     return None
 
 
@@ -309,8 +314,9 @@ def segment_rallies(
             if rest is not None and k + 1 < len(hits) and hits[k + 1] - rest[0] < lost:
                 rest = None
             if rest is not None:
-                end, landing = rest
-                segments.append(Segment(start, end, True, landing))
+                end, landing, px = rest
+                spot = None if px is None else (float(px[0]), float(px[1]))
+                segments.append(Segment(start, end, True, landing, spot))
                 k += 1
                 break
             if k + 1 >= len(hits):
@@ -568,10 +574,11 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         rally = Rally(index=index, start_frame=seg.start, end_frame=seg.end)
         point = None
         landing = seg.landing_frame if seg.closed else None
-        if landing is not None and held_by_player(record, landing, xy[landing]):
+        spot = np.asarray(seg.landing_px if seg.landing_px is not None else xy[landing or 0])
+        if landing is not None and held_by_player(record, landing, spot):
             landing = None  # in a hand, not on the floor: the user decides the rally
         if landing is not None and record.court is not None:
-            point = image_to_court(np.asarray(record.court.homography), xy[[landing]])[0]
+            point = image_to_court(np.asarray(record.court.homography), spot[None, :])[0]
         # A point near the homography's horizon maps to inf/NaN, which JSON cannot hold.
         if landing is not None and point is not None and np.isfinite(point).all():
             call = make_line_call(record, rally, landing, point, line_cfg)
