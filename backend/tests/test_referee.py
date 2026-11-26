@@ -277,3 +277,17 @@ def test_a_shuttle_found_somewhere_else_or_after_rising_is_not_a_landing() -> No
     assert far_away[0].end == 52 and far_away[0].landing_frame is None
     rising = _lost_while_falling((462.0, 166.0), falling=False)
     assert segment_rallies(visible, rising, [2, 20, 91], cfg)[0].landing_frame is None
+
+
+def test_sparse_detections_do_not_substitute_for_observations() -> None:
+    cfg = {**CFG, "stationary_frames_end": 6, "lost_frames_end": 30,
+           "relocate_still_frames": 6}
+    xy = _lost_while_falling((462.0, 238.0))
+    for rest_at in (53, 83):
+        visible = np.ones(len(xy), dtype=bool)
+        visible[53:] = False
+        xy[rest_at:] = (462.0, 238.0)
+        visible[rest_at:rest_at + 12:3] = True
+        assert segment_rallies(visible, xy, [2], cfg)[0].landing_frame is None
+        visible[rest_at + 10:rest_at + 12] = True
+        assert segment_rallies(visible, xy, [2], cfg)[0].landing_frame == rest_at

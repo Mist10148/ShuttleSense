@@ -104,6 +104,7 @@ def _relocated_rest(
     seen = [j for j in range(max(0, last_visible - lookback), last_visible + 1) if visible[j]]
     if len(seen) < 3 or xy[seen[-1]][1] - xy[seen[0]][1] <= 0:
         return None  # not seen coming down: it may have flown out of the frame
+    observations = 0
     rest_start: int | None = None
     missing = 0
     for i in range(last_visible + 1, min(len(visible), last_visible + lost + extra + 1)):
@@ -115,12 +116,12 @@ def _relocated_rest(
                 rest_start = None
             continue
         missing = 0
-        if rest_start is not None and np.linalg.norm(xy[i] - xy[rest_start]) <= radius:
-            if i - rest_start + 1 >= still:
-                close = np.linalg.norm(xy[rest_start] - xy[last_visible]) <= near
-                return rest_start if close else None
-        else:
-            rest_start = i
+        if rest_start is None or np.linalg.norm(xy[i] - xy[rest_start]) > radius:
+            rest_start, observations = i, 0
+        observations += 1
+        if observations >= still:
+            close = np.linalg.norm(xy[rest_start] - xy[last_visible]) <= near
+            return rest_start if close else None
     return None
 
 
@@ -155,6 +156,7 @@ def _rest_after(
     still = int(cfg.get("stationary_frames_end", 20))
     radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
     last_visible, missing = frame, 0
+    observations = 0
     rest_start: int | None = None
     for i in range(frame, stop):
         if i in unobserved:
@@ -170,13 +172,13 @@ def _rest_after(
             continue
         missing = 0
         last_visible = i
-        if rest_start is not None and np.linalg.norm(xy[i] - xy[rest_start]) <= radius:
-            if i - rest_start + 1 >= still:
-                if _approached(visible, xy, rest_start, frame, cfg):
-                    return rest_start, rest_start
-                return rest_start, None
-        else:
-            rest_start = i
+        if rest_start is None or np.linalg.norm(xy[i] - xy[rest_start]) > radius:
+            rest_start, observations = i, 0
+        observations += 1
+        if observations >= still:
+            if _approached(visible, xy, rest_start, frame, cfg):
+                return rest_start, rest_start
+            return rest_start, None
     return None
 
 
