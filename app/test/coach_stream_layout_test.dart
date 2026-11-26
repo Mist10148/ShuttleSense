@@ -41,7 +41,7 @@ void main() {
     await font.load();
   });
   const answer =
-      '## Footwork\n\nWatch the **shuttle**.\n'
+      '## Footwork\n\nRead near_side_score and **recover**.\n'
       '1. Recover to base before your opponent strikes the shuttle again.\n'
       '  - Turn early\n    Keep balanced\n\n    Hold your finish.\n\n'
       '## Replay\n\nCheck the next contact [t=2.5s]';
@@ -79,13 +79,19 @@ void main() {
       } else {
         await tester.testTextInput.receiveAction(TextInputAction.send);
       }
-      events.add({'type': 'delta', 'text': '## Footwork\n\nWatch the **shut'});
+      final split = answer.indexOf('recover**') + 'recover*'.length;
+      events.add({'type': 'delta', 'text': answer.substring(0, split)});
       await tester.pump();
       await tester.pump();
-      expect(find.text('Watch the **shut'), findsOneWidget);
+      expect(find.text('Read near_side_score and **recover*'), findsOneWidget);
       if (!practice) {
         expect(find.widgetWithText(SelectableText, 'Why **here**?'), findsOneWidget);
       }
+      events.add({'type': 'delta', 'text': answer.substring(split)});
+      await tester.pump();
+      await tester.pump();
+      final formatted = find.text('Read near_side_score and recover.', findRichText: true);
+      expect(formatted, findsOneWidget);
       expect(tester.takeException(), isNull);
       events.add({
         'type': 'done',
@@ -98,7 +104,10 @@ void main() {
           ],
         },
       });
+      await tester.pump();
       unawaited(events.close());
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
       await tester.pumpAndSettle();
       if (practice) {
         expect(find.widgetWithText(SelectableText, 'Why **here**?'), findsOneWidget);
@@ -107,6 +116,14 @@ void main() {
         find.ancestor(of: find.text('Replay'), matching: find.byType(SelectionArea)),
         findsOneWidget,
       );
+      expect(formatted, findsOneWidget);
+      final heading = find.ancestor(
+        of: find.text('Replay'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.header == true,
+        ),
+      );
+      expect(heading, findsOneWidget);
       final nested = find.text('Turn early\nKeep balanced\n\nHold your finish.');
       expect(tester.getTopLeft(nested).dx, greaterThan(tester.getTopLeft(find.text('1.')).dx));
       expect(find.text('Replay'), findsOneWidget);
