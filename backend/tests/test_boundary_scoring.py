@@ -77,3 +77,21 @@ def test_singular_projection_stays_pending():
     record.court.homography = np.zeros((3, 3)).tolist()
     call = make_line_call(record, record.rallies[0], 30, (1, 10), DEFAULTS)
     assert call.uncertain and call.confidence < 0.5
+
+
+def test_tracking_disk_crossing_projective_horizon_stays_pending():
+    record = score_landing(1, 10)
+    # The landing projects to pixel (0, 0); its horizon is only two pixels away.
+    h = np.array([[1, 0, 1], [0, 1, 10], [0.5, 0, 1]])
+    record.court.homography = h.tolist()
+    call = make_line_call(record, record.rallies[0], 30, (1, 10), DEFAULTS)
+    assert call.uncertain and call.confidence < 0.5
+
+
+def test_diagonal_tracking_error_can_cross_baseline():
+    record = score_landing(1, 10)
+    # Each image axis alone moves the landing 24 cm in depth. A diagonal
+    # four-pixel displacement moves it 34 cm, enough to cross the baseline.
+    record.court.homography = [[0.01, 0, 0], [0.06, 0.06, 0], [0, 0, 1]]
+    call = make_line_call(record, record.rallies[0], 30, (2, 13.1), DEFAULTS)
+    assert call.call == "in" and call.uncertain and call.confidence < 0.5
