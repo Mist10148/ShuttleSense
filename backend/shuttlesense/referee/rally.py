@@ -77,6 +77,38 @@ def _approached(
     return bool((np.linalg.norm(xy[lo:rest][seen] - xy[rest], axis=1) >= far).any())
 
 
+def _fell_into(
+    visible: np.ndarray,
+    xy: np.ndarray,
+    rest: int,
+    first: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
+) -> bool:
+    """Whether the rest at `rest` follows a short gap in which the shuttle fell into it.
+
+    The approach window only looks approach_frames back, so a shuttle missed for longer
+    than that as it fell (but less than lost_frames_end, so the lost rule never ran) and
+    then found lying still had no flight before its rest. It is a landing on the same
+    terms as a shuttle lost for longer (D46): it was coming down when last seen and it lies
+    within relocate_px of that point. A gap with unobserved frames proves nothing.
+    """
+    before = np.flatnonzero(visible[first:rest]) + first
+    if not len(before) or rest - before[-1] <= 1:
+        return False
+    last = int(before[-1])
+    if rest - last > int(cfg.get("lost_frames_end", 30)):
+        return False
+    if any(i in unobserved for i in range(last + 1, rest)):
+        return False
+    lookback = int(cfg.get("approach_frames", FALLING_FRAMES))
+    seen = [j for j in range(max(first, last - lookback), last + 1) if visible[j]]
+    if len(seen) < 3 or xy[seen[-1]][1] - xy[seen[0]][1] <= 0:
+        return False
+    near = float(cfg.get("relocate_px", RELOCATE_PX))
+    return bool(np.linalg.norm(xy[rest] - xy[last]) <= near)
+
+
 def _relocated_rest(
     visible: np.ndarray,
     xy: np.ndarray,
@@ -176,7 +208,9 @@ def _rest_after(
             rest_start, observations = i, 0
         observations += 1
         if observations >= still:
-            if _approached(visible, xy, rest_start, frame, cfg):
+            if _approached(visible, xy, rest_start, frame, cfg) or _fell_into(
+                visible, xy, rest_start, frame, cfg, unobserved
+            ):
                 return rest_start, rest_start
             return rest_start, None
     return None

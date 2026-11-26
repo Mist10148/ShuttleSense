@@ -290,3 +290,34 @@ def test_sparse_detections_do_not_substitute_for_observations() -> None:
         assert segment_rallies(visible, xy, [2], cfg)[0].landing_frame is None
         visible[rest_at + 10 : rest_at + 12] = True
         assert segment_rallies(visible, xy, [2], cfg)[0].landing_frame == rest_at
+
+
+def _missed_while_falling(gap: int, rest_at: tuple[float, float], falling: bool = True):
+    """A shuttle falling to frame 52, missed for `gap` frames, then lying at `rest_at`."""
+    xy = _lost_while_falling(rest_at, falling)
+    xy[53 + gap :] = rest_at
+    visible = np.ones(len(xy), dtype=int)
+    visible[53 : 53 + gap] = 0
+    return visible, xy
+
+
+def test_a_shuttle_missed_briefly_as_it_fell_is_still_a_landing() -> None:
+    """Missed for longer than the approach window but shorter than the lost rule: the rest
+    had no flight right before it, yet it is where the shuttle fell."""
+    cfg = {**CFG, "lost_frames_end": 30, "stationary_frames_end": 6}
+    for gap in (12, 18, 25):
+        visible, xy = _missed_while_falling(gap, (462.0, 238.0))
+        segs = segment_rallies(visible, xy, [2, 20], cfg)
+        assert segs[0].closed and segs[0].landing_frame == 53 + gap, gap
+
+
+def test_a_brief_miss_then_a_rest_elsewhere_or_after_rising_is_not_a_landing() -> None:
+    cfg = {**CFG, "lost_frames_end": 30, "stationary_frames_end": 6}
+    visible, xy = _missed_while_falling(18, (200.0, 400.0))
+    assert segment_rallies(visible, xy, [2, 20], cfg)[0].landing_frame is None
+    visible, xy = _missed_while_falling(18, (462.0, 166.0), falling=False)
+    assert segment_rallies(visible, xy, [2, 20], cfg)[0].landing_frame is None
+    visible, xy = _missed_while_falling(18, (462.0, 238.0))
+    unobserved = set(range(60, 64))
+    segs = segment_rallies(visible, xy, [2, 20], cfg, unobserved=unobserved)
+    assert segs[0].landing_frame is None
