@@ -7,7 +7,7 @@ class CoachReply extends StatelessWidget {
   final String source;
 
   static final _heading = RegExp(r'^ {0,3}(#{1,6})\s+(.+)$');
-  static final _item = RegExp(r'^\s*([-+*]|\d{1,9}[.)])\s+(.+)$');
+  static final _item = RegExp(r'^([ \t]*)([-+*]|\d{1,9}[.)])\s+(.+)$');
   static final _emphasis = RegExp(r'(\*\*|__)(?=\S)(.+?)\1|(\*|_)(?=\S)(.+?)\3');
 
   static Widget _text(String text, [TextStyle? style]) {
@@ -54,26 +54,46 @@ class CoachReply extends StatelessWidget {
         continue;
       }
       final item = _item.firstMatch(line);
-      final body = [item?[2] ?? line];
+      final body = [item?[3] ?? line];
       while (index < lines.length &&
-          lines[index].trim().isNotEmpty &&
           !_heading.hasMatch(lines[index]) &&
           !_item.hasMatch(lines[index])) {
+        if (lines[index].trim().isEmpty) {
+          // An indented paragraph after a blank line still belongs to this item.
+          var next = index;
+          while (next < lines.length && lines[next].trim().isEmpty) {
+            next++;
+          }
+          if (item == null ||
+              next == lines.length ||
+              _heading.hasMatch(lines[next]) ||
+              _item.hasMatch(lines[next]) ||
+              lines[next].length - lines[next].trimLeft().length <= item[1]!.length) {
+            break;
+          }
+          body.add('');
+          index = next;
+        }
         body.add(lines[index++].trim());
       }
-      final content = _text(body.join(' '));
+      final content = _text(body.join('\n').replaceAll('\\\n', '\n'));
       if (item == null) {
         blocks.add(content);
       } else {
-        final marker = item[1]!;
+        final marker = item[2]!;
+        // Cap indentation so long replies still have room on a phone.
+        final indent = item[1]!.replaceAll('\t', '    ').length.clamp(0, 8);
         blocks.add(
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(marker.length == 1 ? '•' : marker),
-              const SizedBox(width: 8),
-              Expanded(child: content),
-            ],
+          Padding(
+            padding: EdgeInsetsDirectional.only(start: indent * 8.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(marker.length == 1 ? '•' : marker),
+                const SizedBox(width: 8),
+                Expanded(child: content),
+              ],
+            ),
           ),
         );
       }
