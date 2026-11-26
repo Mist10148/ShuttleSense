@@ -286,6 +286,87 @@ def rally_winner(
     return "far" if last_hitter == "near" else "near"
 
 
+# Next-serve evidence (D47). BWF Law 7: the side that wins a rally scores and serves the
+# next one, so a serve seen after a rally says who won it. Defaults for
+# stages.referee.serve_inference; times are in seconds, so they need no fps scaling.
+SERVE_DEFAULTS: dict[str, Any] = {
+    "enabled": True,
+    "min_confidence": 0.6,  # the stroke model's confidence that the first hit is a serve
+    # A lift that leaves the frame is back within about 1.5 s, so a shorter pause before a
+    # "serve" is more likely the same rally split in two than a new rally.
+    "min_pause_s": 2.0,
+    # Game intervals (60 s at 11 in the deciding game, 120 s between games) can come with a
+    # change of ends, which would put the winner on the other side of the image.
+    "max_pause_s": 30.0,
+    "position_margin_m": 0.6,  # tolerance on the server's feet when checking where they stand
+}
+
+
+def serve_config(cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """stages.referee.serve_inference merged over the defaults."""
+    return {**SERVE_DEFAULTS, **((cfg or {}).get("serve_inference") or {})}
+
+
+def rally_hits(record: ClipRecord, rally: Rally) -> list[Any]:
+    """The rally's hits in frame order (by rally_index, else by its frames)."""
+    hits = [h for h in record.hits if h.rally_index == rally.index] or [
+        h for h in record.hits if rally.start_frame <= h.frame <= rally.end_frame
+    ]
+    return sorted(hits, key=lambda h: h.frame)
+
+
+def _serving_position(record: ClipRecord, serve: Any, margin: float) -> bool:
+    """Whether the server stands where a server can: on their own half, between the short
+    service line and the baseline, within the doubles sidelines (lines widened by margin).
+    An unknown position does not count against the serve."""
+    from shuttlesense.court.lines import DOUBLES_SIDE_ALLEY_M, SHORT_SERVICE_FROM_NET_M
+    from shuttlesense.schema import COURT_SIZE_M
+
+    if not 0 <= serve.frame < len(record.frames):
+        return True
+    pos = record.frames[serve.frame].court_positions
+    xy = getattr(pos, serve.player_attr, None) if pos is not None else None
+    if xy is None or not np.isfinite(xy).all():
+        return True
+    w, length = record.court.court_size_m if record.court else COURT_SIZE_M
+    x, y = float(xy[0]), float(xy[1])
+    if not -DOUBLES_SIDE_ALLEY_M - margin <= x <= w + DOUBLES_SIDE_ALLEY_M + margin:
+        return False
+    short = length / 2 - SHORT_SERVICE_FROM_NET_M
+    if serve.player == "near":
+        return -margin <= y <= short + margin
+    return length - short - margin <= y <= length + margin
+
+
+def next_serve_side(
+    record: ClipRecord, rally: Rally, next_rally: Rally | None, cfg: dict[str, Any] | None
+) -> PlayerSide | None:
+    """The side that served the rally after `rally`, when that serve is clear (D47).
+
+    Only a serve the referee can stand behind counts: the next rally's first hit is
+    classified a serve with min_confidence, it comes min_pause_s to max_pause_s after this
+    rally ended, the server stands in a serving position when their feet are located, and
+    in doubles the credited partner is on the serving side. Anything else gives None.
+    """
+    sc = serve_config(cfg)
+    if not sc["enabled"] or next_rally is None or next_rally.index != rally.index + 1:
+        return None
+    hits = rally_hits(record, next_rally)
+    if not hits:
+        return None
+    serve = hits[0]
+    if serve.stroke != "serve" or (serve.confidence or 0.0) < float(sc["min_confidence"]):
+        return None
+    pause_s = (serve.frame - rally.end_frame) / (record.fps or 30.0)
+    if not float(sc["min_pause_s"]) <= pause_s <= float(sc["max_pause_s"]):
+        return None
+    if serve.hitter is not None and not serve.hitter.startswith(serve.player):
+        return None
+    if not _serving_position(record, serve, float(sc["position_margin_m"])):
+        return None
+    return serve.player
+
+
 def build_events(record: ClipRecord) -> list[RallyEvent]:
     """The rally timeline (start, hits, landing, end, score) in frame order."""
     fps = record.fps or 1.0
