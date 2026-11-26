@@ -38,7 +38,7 @@ class PlannedRally:
 DEFAULT_PLAN = (
     PlannedRally("near", 3, (2.0, 10.0), ("serve", "clear", "smash")),
     PlannedRally("near", 4, (5.75, 3.0), ("serve", "lift", "clear", "drop")),
-    PlannedRally("far", 3, (5.15, 10.5), ("serve", "clear", "smash")),
+    PlannedRally("near", 3, (5.15, 10.5), ("serve", "clear", "smash")),
 )
 
 SHOT_FRAMES = 18  # flight time between hits

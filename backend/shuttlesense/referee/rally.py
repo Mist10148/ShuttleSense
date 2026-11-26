@@ -383,12 +383,16 @@ def decide_winner(
     """The automated winner from the landing and the next serve together (D47).
 
     The landing decides when it can. A rally it cannot decide (no landing seen, lost, held,
-    uncertain, implausible) is decided by a clear next serve.
+    uncertain, implausible) is decided by a clear next serve. When both are there and
+    disagree, one of them is wrong (a misplaced landing, a missed hit, a serve credited to
+    the wrong side), so nobody is awarded and the user decides: a wrong point is worse
+    than an unscored one (D45).
     """
     by_landing = landing_winner(record, rally)
-    if by_landing is not None:
-        return by_landing
-    return next_serve_side(record, rally, next_rally, cfg)
+    by_serve = next_serve_side(record, rally, next_rally, cfg)
+    if by_landing is None or by_serve is None:
+        return by_landing or by_serve
+    return by_landing if by_landing == by_serve else None
 
 
 def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None:

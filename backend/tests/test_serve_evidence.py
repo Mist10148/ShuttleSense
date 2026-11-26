@@ -93,7 +93,9 @@ def test_serve_evidence_can_be_switched_off_and_needs_the_next_rally() -> None:
     assert next_serve_side(record, second, first, {}) is None
 
 
-def _played(first_stroke: str, *, lose_landing: bool = True) -> ClipRecord:
+def _played(
+    first_stroke: str, *, lose_landing: bool = True, plan_second: object = None
+) -> ClipRecord:
     """Two synthetic rallies through the hits and referee stages. Near wins the first (it
     lands in on the far half) and serves the second; the first's landing is lost from view
     when `lose_landing`, as on broadcast footage where the falling shuttle is hidden."""
@@ -104,7 +106,7 @@ def _played(first_stroke: str, *, lose_landing: bool = True) -> ClipRecord:
 
     plan = (
         PlannedRally("near", 3, (2.0, 10.0), ("serve", "clear", "smash")),
-        PlannedRally("near", 2, (2.5, 11.0), (first_stroke, "clear")),
+        plan_second or PlannedRally("near", 2, (2.5, 11.0), (first_stroke, "clear")),
     )
     record, truth = synthetic_record(plan)
     if lose_landing:
@@ -138,3 +140,16 @@ def test_a_rally_lost_from_view_waits_for_the_user_without_a_clear_serve() -> No
 def test_a_seen_landing_still_decides_its_rally() -> None:
     record = _played("lift", lose_landing=False)
     assert record.rallies[0].landing is not None and record.rallies[0].winner == "near"
+
+
+def test_a_landing_and_a_next_serve_that_disagree_award_nobody() -> None:
+    """Near's shot lands in on the far half, yet far serves next: one of the two is wrong."""
+    from shuttlesense.stream.synthetic import PlannedRally
+
+    agree = _played("serve", lose_landing=False)
+    assert agree.rallies[0].winner == "near"
+    record = _played("serve", lose_landing=False, plan_second=PlannedRally(
+        "far", 2, (2.5, 3.0), ("serve", "clear")))  # fmt: skip
+    assert record.rallies[0].landing is not None and record.rallies[0].landing.in_court
+    assert record.rallies[0].winner is None
+    assert (record.rallies[0].score_after.near, record.rallies[0].score_after.far) == (0, 0)

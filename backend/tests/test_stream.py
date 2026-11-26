@@ -85,11 +85,11 @@ def test_override_and_correction_rescore() -> None:
     assert live.rallies[uncertain.rally_index].winner is None
     events = a.override(uncertain.id, "out")
     assert events[0]["line_call"]["override"]["call"] == "out"
-    # The far player hit the last shot of that rally out.
-    assert a.record.rallies[uncertain.rally_index].winner == "near"
-    assert events[1]["score"]["near"] == 3
+    # The near player (who served it, having won the rally before) hit the last shot out.
+    assert a.record.rallies[uncertain.rally_index].winner == "far"
+    assert (events[1]["score"]["near"], events[1]["score"]["far"]) == (2, 1)
     a.correct(0, "far")
-    assert (a.record.score.near, a.record.score.far) == (2, 1)
+    assert (a.record.score.near, a.record.score.far) == (1, 2)
     with pytest.raises(KeyError):
         a.override(99, "in")
 
