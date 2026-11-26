@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 SCHEMA_VERSION = "1.7"
 
@@ -346,6 +346,9 @@ class PracticeGoal(BaseModel):
 
 
 class ClipRecord(BaseModel):
+    # Frame indices filled by the tracker during this analysis pass.
+    _estimated_shuttle_frames: set[int] = PrivateAttr(default_factory=set)
+
     schema_version: str = SCHEMA_VERSION
     clip_id: str
     mode: Mode = "upload"

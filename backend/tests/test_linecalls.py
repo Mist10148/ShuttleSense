@@ -166,8 +166,9 @@ def test_service_box_uncertainty_and_rear_strip(server_x, side):
     rally = record.rallies[0]
 
     def landing(x, y, court):
-        return make_line_call(record, rally, 20, (x, y if side == "near" else 13.4 - y),
-                              {**DEFAULTS, "court": court})
+        return make_line_call(
+            record, rally, 20, (x, y if side == "near" else 13.4 - y), {**DEFAULTS, "court": court}
+        )
 
     legal = landing(1, 11, "singles")
     assert legal.call == "in" and legal.uncertain == (server_x != 3.5)

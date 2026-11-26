@@ -266,13 +266,13 @@ class StreamAnalyzer:
             return
         cfg = self.config.get("stages", {}).get("tracking", {})
         scale = (window.height or 720) / 720
-        xy, visible, _ = rectify(
+        xy, visible, source = rectify(
             np.nan_to_num(xy),
             visible,
             max_gap=int(cfg.get("max_gap_frames", 8)),
             outlier_px=float(cfg.get("outlier_px", 80)) * scale,
         )
-        apply_track(window, xy, visible)
+        apply_track(window, xy, visible, source)
 
     def _run_stages(self, window: ClipRecord) -> None:
         from shuttlesense import analytics, feedback, hits, referee, strokes

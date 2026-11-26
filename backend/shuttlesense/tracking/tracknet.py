@@ -295,8 +295,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         if reader is not None and cfg.get("precomputed_space", "source") == "source":
             step = reader.step
             scale = (reader.width / reader.source.width, reader.height / reader.source.height)
-        xy, visible = read_tracking_csv(path, n, step=step, scale=scale)
-        source = ["net" if v else "" for v in visible]
+        source = [""] * n
+        xy, visible = read_tracking_csv(path, n, step=step, scale=scale, sources=source)
     else:
         try:
             import torch  # noqa: F401
@@ -311,7 +311,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         xy, visible, max_gap=cfg.get("max_gap_frames", 8), outlier_px=cfg.get("outlier_px", 80)
     )
     source = [source[i] if post_source[i] == "net" else post_source[i] for i in range(n)]
-    apply_track(record, xy, visible)
+    apply_track(record, xy, visible, source)
     write_tracking_csv(ctx.out_dir / "tracking.csv", xy, visible, source)
     ctx.progress(1.0)
     return record

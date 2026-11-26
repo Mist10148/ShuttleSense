@@ -363,8 +363,13 @@ def rectify(
     return filled_xy, filled, source
 
 
-def apply_track(record: ClipRecord, xy: np.ndarray, visible: np.ndarray) -> ClipRecord:
+def apply_track(
+    record: ClipRecord, xy: np.ndarray, visible: np.ndarray, source: list[str] | None = None
+) -> ClipRecord:
     """Write the trajectory into record.frames[].shuttle."""
+    record._estimated_shuttle_frames = {
+        i for i, kind in enumerate(source or ()) if kind in {"interp", "inpaint"}
+    }
     for i, frame in enumerate(record.frames[: len(visible)]):
         if visible[i]:
             frame.shuttle = Shuttle(x=round(float(xy[i][0]), 1), y=round(float(xy[i][1]), 1),
@@ -393,6 +398,7 @@ def read_tracking_csv(
     *,
     step: int = 1,
     scale: tuple[float, float] = (1.0, 1.0),
+    sources: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Read a TrackNetV3-style CSV (Frame/Visibility/X/Y or frame/visible/x/y columns).
 
@@ -411,6 +417,8 @@ def read_tracking_csv(
             i = source_frame // step
             if 0 <= i < num_frames:
                 visible[i] = int(float(row.get("visible", row.get("visibility", 0))))
+                if sources is not None:
+                    sources[i] = row.get("source") or ("net" if visible[i] else "")
                 xy[i] = float(row["x"]) * scale[0], float(row["y"]) * scale[1]
     return xy, visible
 

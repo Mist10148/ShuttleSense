@@ -327,6 +327,8 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     # Frame counts in the config are for 30 fps, pixel distances for 720p.
     cfg = scaled_pixels(scaled(ctx.stage_config("referee"), FRAME_KEYS, record.fps), record.height)
     xy, visible = track_arrays(record)
+    for i in record._estimated_shuttle_frames:
+        visible[i] = 0
     segments = segment_rallies(
         visible,
         np.nan_to_num(xy),
