@@ -34,6 +34,9 @@ RELOCATE_PX = 40.0  # the rest is at most this far from the last point of the fl
 RELOCATE_STILL_FRAMES = 6  # ...and stays put this long
 RELOCATE_EXTRA_FRAMES = 15  # it must settle within lost_frames_end + this after the loss
 FALLING_FRAMES = 8  # frames before the loss that must show the shuttle coming down
+# A shuttle that settles before the clip ends (D48): nothing can follow the last frame, so a
+# shorter rest than stationary_frames_end is enough to call it.
+END_REST_FRAMES = 8
 # stages.referee keys that count frames.
 FRAME_KEYS = (
     "stationary_frames_end",
@@ -41,6 +44,7 @@ FRAME_KEYS = (
     "approach_frames",
     "relocate_still_frames",
     "relocate_extra_frames",
+    "end_rest_frames",
 )
 PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px")
 
@@ -280,6 +284,54 @@ def held_by_player(record: ClipRecord, frame: int, px: np.ndarray) -> bool:
     return False
 
 
+def _settled_at_end(
+    visible: np.ndarray,
+    xy: np.ndarray,
+    frame: int,
+    n: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
+) -> tuple[int, np.ndarray] | None:
+    """(landing frame, image point) when the last rally's shuttle settles before the clip ends.
+
+    stationary_frames_end (20 frames) rules out a rest followed by another hit, but a clip,
+    or a live session stopped, a moment after the shuttle came down has nothing after it, so
+    the last rally stayed open and nobody scored (D48). Here a rest of end_rest_frames
+    observations is enough when it follows a flight (_approached, _fell_into), and every
+    later detection to the end of the clip stays within relocate_px of it. A rest the shuttle
+    leaves was not a landing; any unobserved frame after the hit gives nothing.
+    """
+    need = int(cfg.get("end_rest_frames", END_REST_FRAMES))
+    radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
+    near = float(cfg.get("relocate_px", RELOCATE_PX))
+    if any(i in unobserved for i in range(frame, n)):
+        return None
+    rest = _RestRun(radius)
+    missing = 0
+    for i in range(frame, n):
+        if not visible[i]:
+            missing += 1
+            if missing > MAX_MISSED_AT_REST:
+                rest.reset()
+            continue
+        missing = 0
+        rest.add(i, xy[i])
+        if rest.count < need:
+            continue
+        start = rest.frames[0]
+        if not (
+            _approached(visible, xy, start, frame, cfg)
+            or _fell_into(visible, xy, start, frame, cfg, unobserved)
+        ):
+            return None  # a detection that never moved
+        centre = rest.centre()
+        later = [j for j in range(i + 1, n) if visible[j]]
+        if all(np.linalg.norm(xy[j] - centre) <= near for j in later):
+            return start, centre
+        rest.reset()  # it moved on: not where the rally ended
+    return None
+
+
 def segment_rallies(
     visible: np.ndarray,
     xy: np.ndarray,
@@ -292,8 +344,9 @@ def segment_rallies(
 
     A rally starts at a hit following a pause of at least lost_frames_end frames (or at
     frame 0 when the clip starts with the shuttle already in play) and ends when the
-    shuttle is lost or rests on the floor after its last hit. A rally still going at the
-    end of the clip is left open.
+    shuttle is lost or rests on the floor after its last hit. The last rally also ends where
+    the shuttle settled before the clip ended (_settled_at_end); one still going at the end
+    of the clip is left open.
     """
     n = len(visible)
     hits = sorted(h for h in hits if 0 <= h < n)
@@ -320,7 +373,12 @@ def segment_rallies(
                 k += 1
                 break
             if k + 1 >= len(hits):
-                segments.append(Segment(start, n - 1, False, None))
+                settled = _settled_at_end(visible, xy, hits[k], n, cfg, unobserved or set())
+                if settled is not None:
+                    at, px = settled
+                    segments.append(Segment(start, at, True, at, (float(px[0]), float(px[1]))))
+                else:
+                    segments.append(Segment(start, n - 1, False, None))
                 k += 1
                 break
             k += 1  # next hit continues the same rally

@@ -184,6 +184,7 @@ stages:
     relocate_px: 40.0           # at 720p: lost while falling, found still this close = landing
     relocate_still_frames: 6    # ...still for this many frames
     relocate_extra_frames: 15   # ...settled within lost_frames_end + this after the loss
+    end_rest_frames: 8          # the last rally: a rest this long before the clip ends lands
     line_call:                 # F20, docs/PRD.md: automated calls, never official
       court: singles            # singles | doubles lines
       homography_err_m: 0.05    # line position error from the corner taps
