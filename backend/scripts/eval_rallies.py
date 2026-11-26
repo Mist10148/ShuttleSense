@@ -19,6 +19,10 @@ A labelled rally is correct when one predicted rally (used once) starts and ends
 rallies the predicted winner is compared with the label, and the predicted score sequence
 (score_after per rally) is compared with the one implied by the labelled winners, scored
 from --start-score with referee.apply_rallies.
+
+Each predicted rally from a record.json also says what decided it (D47): its landing, the
+next serve, withheld (the landing and the next serve disagree) or undecided. The report
+gives the count and winner accuracy per source, so a source that gives false points shows.
 """
 
 from __future__ import annotations
@@ -36,6 +40,17 @@ from shuttlesense.schema import Rally, ScorePair, load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 SIDES = ("near", "far")
+SOURCES = ("landing", "serve", "withheld", "undecided")
+
+
+def decided_by(rally: Rally) -> str:
+    """What decided a predicted rally, from its review note and winner (D47)."""
+    review = rally.review or ""
+    if review.startswith("Scored for ") and "from the next serve" in review:
+        return "serve"
+    if review.startswith("The landing gives the rally to "):
+        return "withheld"
+    return "undecided" if rally.winner is None else "landing"
 
 
 def _rows(path: Path) -> list[dict[str, str]]:
@@ -74,6 +89,7 @@ def read_predicted(path: Path) -> list[dict[str, Any]]:
                 "end_s": r.end_frame / fps,
                 "winner": r.winner,
                 "score": None if r.score_after is None else [r.score_after.near, r.score_after.far],
+                "decided_by": decided_by(r),
             }
             for r in record.rallies
         ]
@@ -85,6 +101,7 @@ def read_predicted(path: Path) -> list[dict[str, Any]]:
             "end_s": float(r["end_s"]),
             "winner": _side(r.get("winner")),
             "score": [int(r["score_near"]), int(r["score_far"])] if has_score else None,
+            "decided_by": None,  # rallies.csv does not say
         })  # fmt: skip
     return out
 
@@ -136,6 +153,7 @@ def evaluate_clip(
             "winner_pred": None if p is None else p["winner"],
             "score_true": scores[j],
             "score_pred": None if p is None else p["score"],
+            "decided_by": None if p is None else p.get("decided_by"),
         })  # fmt: skip
     judged = [r for r in rows if r["pred"] is not None and r["winner_true"]]
     winners_ok = sum(1 for r in judged if r["winner_pred"] == r["winner_true"])
@@ -151,8 +169,29 @@ def evaluate_clip(
         "score_sequence_pred": [p["score"] for p in predicted],
         "final_score_true": true_final,
         "final_score_pred": pred_scores[-1] if pred_scores else None,
+        "by_source": by_source(rows),
         "rallies": rows,
     }
+
+
+def by_source(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """{source: {rallies, judged, correct, accuracy}} over matched rallies with a source.
+
+    For landing and serve, accuracy is the share of awarded points that went to the right
+    side; withheld and undecided rallies award nothing, so theirs is None.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for source in SOURCES:
+        mine = [r for r in rows if r["pred"] is not None and r.get("decided_by") == source]
+        judged = [r for r in mine if r["winner_true"] and r["winner_pred"]]
+        correct = sum(1 for r in judged if r["winner_pred"] == r["winner_true"])
+        out[source] = {
+            "rallies": len(mine),
+            "judged": len(judged),
+            "correct": correct,
+            "accuracy": correct / len(judged) if judged else None,
+        }
+    return out
 
 
 def _score(s: list[int] | None) -> str:
@@ -185,6 +224,14 @@ def to_markdown(results: dict[str, dict[str, Any]], tolerance_s: float, overall:
         f"{_pct(overall['winner_accuracy'])} | |",
         "",
     ]
+    sources = overall.get("by_source")
+    if sources and any(v["rallies"] for v in sources.values()):
+        lines += ["| Decided by | Rallies | Judged | Correct | Accuracy |",
+                  "| --- | ---: | ---: | ---: | ---: |"]  # fmt: skip
+        for source, v in sources.items():
+            lines.append(f"| {source} | {v['rallies']} | {v['judged']} | {v['correct']} | "
+                         f"{_pct(v['accuracy'])} |")  # fmt: skip
+        lines.append("")
     for name, r in results.items():
         lines += [f"## {name}", "", "| # | Label (s) | Predicted (s) | Winner (true / pred) | "
                   "Score (true / pred) |", "| ---: | --- | --- | --- | --- |"]  # fmt: skip
@@ -212,6 +259,7 @@ def pooled(results: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "matched": matched,
         "boundary_accuracy": matched / truth if truth else 0.0,
         "winner_accuracy": ok / len(judged) if judged else None,
+        "by_source": by_source([row for r in results.values() for row in r["rallies"]]),
     }
 
 

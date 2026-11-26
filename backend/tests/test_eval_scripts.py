@@ -489,3 +489,22 @@ def test_box_labels_give_id_switches_and_idf1(tmp_path: Path) -> None:
     args = argparse.Namespace(tolerance=3, rally_tolerance=1.0, max_step_m=1.5, min_iou=0.5)
     assert eval_doubles.evaluate(record, labels, args)["idf1"] is None
     assert eval_doubles.evaluate(record, labels, args, path)["id_switches"] == 2
+
+
+def test_eval_rallies_reports_what_decided_each_point(tmp_path: Path) -> None:
+    eval_rallies = load_script("eval_rallies")
+    record = load_golden()  # one rally, frames 0-55 at 30 fps, won by near
+    record.rallies[0].review = "Scored for near from the next serve: no landing call decided it"
+    pred_path = tmp_path / "record.json"
+    pred_path.write_text(record.model_dump_json(), encoding="utf-8")
+    gt = write_csv(tmp_path / "rally01.csv", ["start_s", "end_s", "winner"],
+                   [[0.5, 2.5, "far"]])  # fmt: skip
+    predicted = eval_rallies.read_predicted(pred_path)
+    assert predicted[0]["decided_by"] == "serve"
+    result = eval_rallies.evaluate_clip(predicted, eval_rallies.read_rally_labels(gt))
+    assert result["by_source"]["serve"] == {"rallies": 1, "judged": 1, "correct": 0,
+                                            "accuracy": 0.0}  # fmt: skip
+    assert result["by_source"]["landing"]["rallies"] == 0
+    results = {"rally01": result}
+    md = eval_rallies.to_markdown(results, 1.0, eval_rallies.pooled(results))
+    assert "| serve | 1 | 1 | 0 | 0.0% |" in md
