@@ -79,6 +79,7 @@
 - [x] Optional starting score from the job request (`POST /jobs` field `start_score`, API change) for clips that start mid-game.
 - [x] Fill `rallies[].winner`, `score_after`, and `record.score`.
 - [x] (Nov 25, D45) An automated OUT must agree with the half it landed on: when the last detected hitter is on that half (a missed hit), nobody is awarded and the user decides. A referee's override is not checked.
+- [x] (Nov 26, D47) A rally the landing cannot decide (lost, held, uncertain, implausible) goes to a clear next serve: the side that wins a rally serves the next one (BWF Law 7). The serve must be classified with confidence >= 0.6, come 2 to 30 s after the rally, and be made from a serving position. A landing and a clear serve that disagree award nobody, and the rally's review says why.
 
 **Tests.** Existing `test_bwf_game_winner`; add `test_out_shot_loses_rally`, `test_in_shot_wins_rally`, `test_score_sequence`, `test_deuce_to_30`.
 
