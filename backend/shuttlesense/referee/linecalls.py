@@ -72,32 +72,42 @@ def signed_margin(point_m: Sequence[float], bounds: Bounds) -> float:
     return -float(np.hypot(dx, dy))
 
 
-def meters_per_pixel(h: np.ndarray, point_m: Sequence[float]) -> float:
-    """How far one image pixel moves a point on the court plane, near `point_m`."""
-    from shuttlesense.court import court_to_image, image_to_court
+def _tracking_extent(h: np.ndarray, point_m: Sequence[float], radius: float) -> np.ndarray:
+    """Bound the court x/y displacements over a disk of image tracking error."""
+    h = np.asarray(h, dtype=float)
+    point = np.asarray(point_m, dtype=float)
+    try:
+        image = np.linalg.solve(h, [*point, 1.0])
+    except (ValueError, np.linalg.LinAlgError):
+        return np.full(2, np.inf)
+    if not np.isfinite(image).all() or image[2] == 0:
+        return np.full(2, np.inf)
+    # In homogeneous coordinates a pixel perturbation changes both numerator and
+    # denominator. If the disk reaches the horizon there is no finite error bound.
+    denominator = abs(1 / image[2]) - radius * np.linalg.norm(h[2, :2])
+    if denominator <= 0 or not np.isfinite(denominator):
+        return np.full(2, np.inf)
+    slopes = h[:2, :2] - point[:, None] * h[2, :2]
+    return radius * np.linalg.norm(slopes, axis=1) / denominator
 
-    px = court_to_image(h, np.array([point_m], dtype=float))[0]
-    probes = np.array([px, px + (1.0, 0.0), px + (0.0, 1.0)])
-    court = image_to_court(h, probes)
-    if not np.isfinite(court).all():
-        return float("inf")
-    return float((np.linalg.norm(court[1] - court[0]) + np.linalg.norm(court[2] - court[0])) / 2)
+
+def meters_per_pixel(h: np.ndarray, point_m: Sequence[float]) -> float:
+    """Largest court-axis displacement bound for one pixel at this landing."""
+    return float(max(_tracking_extent(h, point_m, 1.0)))
+
+
+def _axis_bands(cfg, h, point_m) -> np.ndarray:
+    tracking = np.zeros(2)
+    if h is not None and point_m is not None:
+        tracking = _tracking_extent(h, point_m, float(cfg["tracking_err_px"]))
+    return np.maximum(cfg["min_band_m"], np.hypot(cfg["homography_err_m"], tracking))
 
 
 def uncertainty_band(
     cfg: dict[str, Any], h: np.ndarray | None = None, point_m: Sequence[float] | None = None
 ) -> float:
-    """Half-width in meters of the band around a line where a call is uncertain.
-
-    Calibration and tracking errors are independent, so they add in quadrature. Tracking
-    error is in pixels and grows in meters toward the far baseline, where a pixel covers
-    more court.
-    """
-    tracking_m = 0.0
-    if h is not None and point_m is not None:
-        tracking_m = float(cfg["tracking_err_px"]) * meters_per_pixel(h, point_m)
-    band = float(np.hypot(float(cfg["homography_err_m"]), tracking_m))
-    return max(float(cfg["min_band_m"]), band)
+    """Conservative scalar band for callers that do not specify a line direction."""
+    return float(max(_axis_bands(cfg, h, point_m)))
 
 
 def call_landing(
@@ -118,6 +128,26 @@ def call_landing(
     if uncertain and rounded >= 0.5:  # just inside the band must not round up to certain
         rounded = 0.499
     return call, margin, rounded, uncertain
+
+
+def _boundary_call(point_m, bounds, bands) -> tuple[Call, float, float, bool]:
+    margin = signed_margin(point_m, bounds)
+    call = "in" if margin >= 0 else "out"
+    if not np.isfinite(bands).all():
+        return call, margin, 0.0, True
+    x, y = point_m
+    left, right, near, far = bounds
+    # Inside requires clearance from every edge. Outside needs only one edge
+    # that the entire error region is beyond. Keep the displayed margin in metres.
+    clearances = (min(x - left, right - x), min(y - near, far - y))
+    ratios = [
+        distance / band if band > 0 else (np.inf if distance >= 0 else -np.inf)
+        for distance, band in zip(clearances, bands, strict=True)
+    ]
+    ratio = abs(min(ratios))
+    uncertain = ratio < 1
+    confidence = round(min(1.0, 0.5 * ratio), 3)
+    return call, margin, min(confidence, 0.499) if uncertain else confidence, uncertain
 
 
 def implausible(
@@ -152,7 +182,7 @@ def candidate_bounds(
         server = getattr(pos, serve.player_attr, None) if pos else None
         if server is not None and np.isfinite(server).all():
             h = np.asarray(record.court.homography) if record.court else None
-            if abs(server[0] - size[0] / 2) > uncertainty_band(cfg, h, server):
+            if abs(server[0] - size[0] / 2) > _axis_bands(cfg, h, server)[0]:
                 return (service_bounds(serve.player, server[0], court, size),)
         return tuple(service_bounds(serve.player, x, court, size) for x in (0.0, size[0]))
     return (play_bounds(court, size),)
@@ -164,14 +194,14 @@ def make_line_call(
     court: CourtType = cfg["court"]
     areas = candidate_bounds(record, rally, court, cfg)
     h = np.asarray(record.court.homography) if record.court else None
-    band = uncertainty_band(cfg, h, point_m)
-    candidates = [call_landing(point_m, bounds, band) for bounds in areas]
+    bands = _axis_bands(cfg, h, point_m)
+    candidates = [_boundary_call(point_m, bounds, bands) for bounds in areas]
     # Use the most inclusive box for the provisional call and its displayed margin.
     call, margin, confidence, uncertain = max(candidates, key=lambda result: result[1])
     disagreement = any(result[0] != call or result[3] for result in candidates)
     size = record.court.court_size_m if record.court else COURT_SIZE_M
     court_margin = signed_margin(point_m, play_bounds(court, size))
-    if disagreement or implausible(point_m, court_margin, size, band, cfg):
+    if disagreement or implausible(point_m, court_margin, size, bands[1], cfg):
         confidence, uncertain = min(confidence, 0.499), True
     return LineCall(
         id=0,
