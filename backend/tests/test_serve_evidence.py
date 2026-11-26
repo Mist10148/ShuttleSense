@@ -94,7 +94,11 @@ def test_serve_evidence_can_be_switched_off_and_needs_the_next_rally() -> None:
 
 
 def _played(
-    first_stroke: str, *, lose_landing: bool = True, plan_second: object = None
+    first_stroke: str,
+    *,
+    lose_landing: bool = True,
+    plan_first: object = None,
+    plan_second: object = None,
 ) -> ClipRecord:
     """Two synthetic rallies through the hits and referee stages. Near wins the first (it
     lands in on the far half) and serves the second; the first's landing is lost from view
@@ -105,7 +109,7 @@ def _played(
     from shuttlesense.stream.synthetic import PlannedRally, planned_strokes, synthetic_record
 
     plan = (
-        PlannedRally("near", 3, (2.0, 10.0), ("serve", "clear", "smash")),
+        plan_first or PlannedRally("near", 3, (2.0, 10.0), ("serve", "clear", "smash")),
         plan_second or PlannedRally("near", 2, (2.5, 11.0), (first_stroke, "clear")),
     )
     record, truth = synthetic_record(plan)
@@ -153,3 +157,24 @@ def test_a_landing_and_a_next_serve_that_disagree_award_nobody() -> None:
     assert record.rallies[0].landing is not None and record.rallies[0].landing.in_court
     assert record.rallies[0].winner is None
     assert (record.rallies[0].score_after.near, record.rallies[0].score_after.far) == (0, 0)
+
+
+def test_undoing_an_override_restores_the_serve_decided_winner() -> None:
+    """An uncertain landing scored from the next serve, overridden, then the override undone."""
+    from datetime import UTC, datetime
+
+    from shuttlesense.referee.linecalls import LineCallOverrideIn, apply_overrides
+    from shuttlesense.referee.scoring import apply_corrections, undo_last_decision
+    from shuttlesense.stream.synthetic import PlannedRally
+
+    record = _played("serve", lose_landing=False, plan_first=PlannedRally(
+        "near", 3, (5.15, 10.5), ("serve", "clear", "smash")))  # fmt: skip
+    call = record.line_calls[0]
+    assert call.uncertain and record.rallies[0].winner == "near"  # from the next serve
+    overrides = [LineCallOverrideIn(rally_index=0, call="out", at=datetime.now(UTC))]
+    apply_overrides(record, overrides)
+    apply_corrections(record, [])
+    assert record.rallies[0].winner == "far"  # near hit the last shot out
+    remaining = undo_last_decision(record, None, overrides)
+    assert remaining == [] and record.line_calls[0].override is None
+    assert record.rallies[0].winner == "near"

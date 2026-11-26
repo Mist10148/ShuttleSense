@@ -279,11 +279,14 @@ def apply_overrides(record: ClipRecord, overrides: Sequence[LineCallOverrideIn])
 
 
 def clear_override(record: ClipRecord, rally_index: int) -> None:
-    """Put a rally's call back to the automated one after its override is taken back."""
-    from shuttlesense.referee.rally import rally_winner
+    """Put a rally's call back to the automated one after its override is taken back.
+
+    The winner goes back to the automated decision, landing and next serve together (D47),
+    with the default serve settings since the record does not keep the job's config.
+    """
+    from shuttlesense.referee.rally import decide_winner
 
     rallies = {r.index: r for r in record.rallies}
-    size = record.court.court_size_m if record.court else COURT_SIZE_M
     for call in record.line_calls:
         if call.rally_index != rally_index or call.override is None:
             continue
@@ -293,6 +296,4 @@ def clear_override(record: ClipRecord, rally_index: int) -> None:
             continue
         rally.landing.in_court = call.call == "in"
         rally.landing.confidence = call.confidence
-        hits = [h for h in record.hits if h.rally_index == rally.index]
-        last = hits[-1].player if hits else None
-        rally.winner = rally_winner(rally.landing, last, size[1] / 2, check_side=True)
+        rally.winner = decide_winner(record, rally, rallies.get(rally_index + 1), None)
