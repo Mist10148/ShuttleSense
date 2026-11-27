@@ -83,6 +83,7 @@ flutter:
     - assets/fonts/OFL.txt
     # Theme assets from Wonderboard (docs/THEMES.md, "Asset provenance").
     - assets/skins/backrooms/
+    - assets/skins/denia/
   fonts:
     - family: Outfit
       fonts:
