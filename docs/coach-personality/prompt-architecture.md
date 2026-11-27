@@ -170,7 +170,7 @@ seems to be in crisis or unsafe, encourage them to contact local emergency servi
 someone they trust right away. Then help with any badminton part of the question.
 ```
 
-What does **not** change: `SAFETY_REPLY` is still sent first, verbatim, by code. The overlay only shapes the text that follows it. The distress path is planned to add a fixed, localisable support line, written by the team and not by the model; see [security-privacy.md](security-privacy.md#wellbeing).
+What does **not** change: `SAFETY_REPLY` is still sent first, verbatim, by code. The overlay only shapes the text that follows it. *As built (D57):* self-harm and suicide words get a fixed `CRISIS_REPLY` first, also from code, with placeholder wording. The distress path was planned to add a fixed, localisable support line, written by the team and not by the model; see [security-privacy.md](security-privacy.md#wellbeing).
 
 ## Token budget
 
@@ -198,8 +198,8 @@ Against a system prompt that already holds up to 24 000 characters of digest (`c
 | Job chat | `api/models.py` `ChatRequest` | add `personality: PersonalityConfig \| None = None` |
 | | `api/routes.py` `chat()` (~L679) | pass `body.personality` to `answer()`; save `personality_label` on the assistant `ChatMessage` |
 | General coach | `api/coach_routes.py` `CoachChatRequest` (~L71) | add the same field; pass through |
-| Practice follow-up | `api/practice.py` `PracticeChatRequest` (~L394) | inherits the field from `CoachChatRequest` (as built) |
-| | `practice/followup.py` | append `build_personality_block()` to its `SYSTEM` + context (*not yet: needs its owner, D55*) |
+| Practice follow-up | `api/practice.py` `PracticeChatRequest` (~L394) | inherits the field from `CoachChatRequest`; the route passes it on and labels the answer (as built, D58) |
+| | `practice/followup.py` | append `build_personality_block()` after its saved context, plus the crisis line and serious mode (*as built, D58*) |
 | Core | `coach/chat.py` | `{cue_limit}` placeholder in `_RULES`; `personality` kwarg; serious detection |
 | Router | `coach/router.py` | *As built:* no new label; `personality/serious.py` holds the distress words, and `answer()` never declines them as off topic (D56) |
 | Health | `api/routes.py` `/health` | `coach_personality: true` so older backends are detected |

@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-> **Status (Nov 27):** P0–P5 are built on `experimental-themes`. P6 has its eval script; the live run, the fixed crisis line and the practice follow-up wait (see [Phase 14](../phases/phase-14-coach-personality.md)).
+> **Status (Nov 27):** P0–P5 are built on `experimental-themes`. P6: the practice follow-up (D58), the placeholder crisis line (D57) and the eval script are built; see the eval report for the live run (see [Phase 14](../phases/phase-14-coach-personality.md)).
 
 The work is split into phases that can each be merged on their own. Every phase leaves the app working, and the coach sounds exactly as it does today until a player picks something. The task cards live in [Phase 14](../phases/phase-14-coach-personality.md). This page shows the order, the dependencies and the risks.
 
@@ -30,9 +30,9 @@ About 15 working days for one developer. P0–P2 alone (about 5.5 days) deliver 
 
 | Dependency | Needed by | Note |
 | --- | --- | --- |
-| Lead UI/UX review (Limpin) | P2, P3 | new Settings card and `Slider` theme line in `AppTheme._build` (same rule as D49) |
+| Lead UI/UX review (Limpin), waived Nov 27 | P2, P3 | new Settings card and `Slider` theme line in `AppTheme._build` (same rule as D49) |
 | Coach owner review | P0, P1 | `_RULES` gains a placeholder; `answer()` signature changes |
-| Approved crisis-support wording and resources | P6 (distress line) | a team decision with care; until then distress triggers serious mode only |
+| Approved crisis-support wording and resources | P6 (distress line) | placeholder wording approved for this branch (D57); localised resources before release |
 | A file save/share package (e.g. `file_saver` or `share_plus`) | P4 | check licence and platforms in TECH_STACK.md |
 | Provider structured output | P5 | already used by `coach/report.py` |
 
