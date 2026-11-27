@@ -689,6 +689,7 @@ async def chat(
     from shuttlesense.coach.chat import ChatError, ChatSettings
     from shuttlesense.coach.chat import answer as coach_answer
     from shuttlesense.coach.digest import build_digest
+    from shuttlesense.coach.personality import label_for as personality_label
 
     coach = request.app.state.coach
     if coach.provider is None:
@@ -740,8 +741,11 @@ async def chat(
             async for event in coach_answer(
                 coach, question.text, history, chat_settings, digest=digest, record=record,
                 load_history=lambda: coach.history.summaries(storage, jobs),
+                personality=body.personality,
             ):  # fmt: skip
                 if event["type"] == "done":
+                    if label := personality_label(body.personality):
+                        event["message"]["personality_label"] = label
                     answer = ChatMessage.model_validate(event["message"])
                     await asyncio.to_thread(_save_chat, storage, jobs, job_id, [question, answer])
                 yield f"data: {json.dumps(event)}\n\n"

@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from shuttlesense.coach.personality.models import PersonalityConfig
 from shuttlesense.schema import (
     Call,
     CourtType,
@@ -59,6 +60,8 @@ class ChatRequest(BaseModel):
     """POST /jobs/{id}/chat."""
 
     message: str = Field(min_length=1, max_length=1000)
+    # How the coach should talk (D50); absent means the default coach.
+    personality: PersonalityConfig | None = None
 
     @field_validator("message")
     @classmethod
