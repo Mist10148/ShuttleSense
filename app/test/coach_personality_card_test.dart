@@ -54,6 +54,15 @@ void main() {
     expect(_c(tester).read(personalityProvider).activeId, 'preset:default');
   });
 
+  testWidgets('the Undo note goes away by itself', (tester) async {
+    await pumpScreen(tester, _card, api: FakeApiClient(health: _health()), size: laptop);
+    await _tap(tester, find.byKey(const ValueKey('coach-preset-witty')));
+    expect(find.text('Coach is now Witty'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(find.text('Coach is now Witty'), findsNothing);
+  });
+
   testWidgets('Custom and Customize open the personality page', (tester) async {
     final visited = await pumpScreen(
       tester,

@@ -43,6 +43,7 @@ class ProfilesSection extends ConsumerWidget {
             content: Text('Deleted "${p.name}"'),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(label: 'Undo', onPressed: () => notifier.undoDelete(removed)),
+            persist: false,
           ),
         );
     }

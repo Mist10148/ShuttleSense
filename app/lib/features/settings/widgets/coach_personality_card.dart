@@ -42,6 +42,8 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
         SnackBar(
           content: Text('Coach is now $label'),
           action: SnackBarAction(label: 'Undo', onPressed: () => notifier.activate(before)),
+          // Goes away by itself: an action would otherwise keep it up on every screen.
+          persist: false,
         ),
       );
   }
