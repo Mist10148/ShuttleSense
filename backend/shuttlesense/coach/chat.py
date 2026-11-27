@@ -27,7 +27,7 @@ from shuttlesense.coach.personality import (
     cue_limit,
     is_serious,
 )
-from shuttlesense.coach.personality.serious import DISTRESS
+from shuttlesense.coach.personality.serious import CRISIS, CRISIS_NOTE, CRISIS_REPLY, DISTRESS
 from shuttlesense.coach.personality.serious import OVERLAY as SERIOUS_OVERLAY
 from shuttlesense.coach.router import Route, route
 from shuttlesense.coach.session_docs import (
@@ -347,8 +347,10 @@ async def answer(
         routed = await route(question, coach.provider, job_bound=record is not None)
     prefix = ""
     # Someone in distress is never told "badminton only": the coach answers, calmly (D52).
-    distress = bool(DISTRESS.search(question))
-    if distress and routed.intent == "off_topic":
+    crisis = bool(CRISIS.search(question))
+    distress = crisis or bool(DISTRESS.search(question))
+    # Self-harm words get the fixed support line, not the injury reply (D57).
+    if crisis or (distress and routed.intent == "off_topic"):
         routed = Route(intent="knowledge", source=routed.source)
     if routed.intent == "off_topic":
         text = OFF_TOPIC_REPLY
@@ -375,6 +377,9 @@ async def answer(
             yield {"type": "delta", "text": text}
             yield _done(text, [], [])
             return
+    if crisis:
+        prefix = CRISIS_REPLY
+        yield {"type": "delta", "text": prefix}
     if routed.intent == "safety":
         prefix = SAFETY_REPLY
         yield {"type": "delta", "text": prefix}
@@ -396,7 +401,9 @@ async def answer(
     if routed.intent == "history" and not past:
         system += "\nNo comparable finished sessions were retrieved."
     system += _section("Badminton knowledge", knowledge)
-    if prefix:
+    if crisis:
+        system += CRISIS_NOTE
+    elif prefix:
         system += (
             "\n\nThe app has already told the player it cannot assess injuries and that they "
             "should see a qualified professional. Do not repeat that; answer only the "
