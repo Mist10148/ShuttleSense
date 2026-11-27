@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/audio/skin_sounds.dart';
+import '../../../core/theme/skins/denia_art.dart';
 import '../../../shared/widgets/skin/skin_paint.dart';
 import 'denia_plan.dart';
 import 'skin_switch.dart';
@@ -83,8 +84,19 @@ class _DeniaSwitchOverlayState extends ConsumerState<DeniaSwitchOverlay>
                     kind: widget.kind,
                     bubbles: bubbles,
                     seed: widget.run.seed,
+                    extraPops: [
+                      if (widget.kind != DeniaSwitchKind.leave)
+                        (
+                          DeniaCard.outAt(plan) + 60,
+                          size.center(Offset.zero),
+                          220.0,
+                          DeniaBubblesPainter.rims[widget.kind.dark ? 2 : 0],
+                        ),
+                    ],
                   ),
                 ),
+                if (widget.kind != DeniaSwitchKind.leave)
+                  DeniaCard(t: t, plan: plan, dark: widget.kind.dark),
               ],
             );
           },
@@ -406,4 +418,97 @@ class DeniaBubblesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DeniaBubblesPainter old) => old.t != t;
+}
+
+/// The card in the middle of the switch (deniaSwitch.ts:93-108): Denia's sticker and a pill,
+/// "Denia · Stagecraft" (Light) or "Denia · Breakdown" (Dark). It bounces in when the theme
+/// changes and pops away with the bubbles.
+class DeniaCard extends StatelessWidget {
+  const DeniaCard({super.key, required this.t, required this.plan, required this.dark});
+
+  final double t;
+  final DeniaPlan plan;
+  final bool dark;
+
+  static int inAt(DeniaPlan p) => math.max(0, p.applyAt - 220);
+  static int outAt(DeniaPlan p) => p.popTo - 120;
+
+  static const _bounce = Cubic(0.2, 0.8, 0.3, 1.2);
+
+  /// Scale, rotation (degrees) and opacity at [t] ms.
+  static (double, double, double) poseAt(double t, DeniaPlan p) {
+    final a = inAt(p).toDouble(), b = outAt(p).toDouble();
+    if (t < a) return (0.3, -8, 0);
+    if (t < a + 200) {
+      final e = _bounce.transform((t - a) / 200);
+      return (0.3 + 0.78 * e, -8 + 11 * e, e.clamp(0.0, 1.0));
+    }
+    if (t < a + 330) {
+      final e = (t - a - 200) / 130;
+      return (1.08 - 0.08 * e, 3 - 3 * e, 1);
+    }
+    if (t < b) return (1, 0, 1);
+    if (t < b + 160) {
+      final e = Curves.easeIn.transform((t - b) / 160);
+      return (1 + 0.18 * e, 0, 1 - e);
+    }
+    return (1.18, 0, 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (scale, deg, opacity) = poseAt(t, plan);
+    if (opacity <= 0) return const SizedBox.shrink();
+    final vmin = MediaQuery.sizeOf(context).shortestSide;
+    final art = DeniaArtCatalog.switchArt(dark: dark);
+    return Center(
+      child: Opacity(
+        opacity: opacity,
+        child: Transform.rotate(
+          angle: deg * math.pi / 180,
+          child: Transform.scale(
+            scale: scale,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  art.asset,
+                  width: math.min(240, vmin * 0.36),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 6),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? const Color.fromRGBO(37, 24, 51, .92)
+                        : const Color.fromRGBO(255, 255, 255, .92),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: dark ? const Color(0xFFC98BFF) : const Color(0xFFE58FB6),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    child: Text(
+                      dark ? 'Denia · Breakdown' : 'Denia · Stagecraft',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        color: dark ? const Color(0xFFF3E9F7) : const Color(0xFF8A3559),
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
