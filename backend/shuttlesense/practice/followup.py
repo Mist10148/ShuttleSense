@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from shuttlesense.coach.chat import SAFETY_REPLY, _done, validate_citations, validate_sources
 from shuttlesense.coach.index import Chunk
 from shuttlesense.coach.llm import Refused
+from shuttlesense.coach.personality import build_personality_block, is_serious
+from shuttlesense.coach.personality.serious import CRISIS, CRISIS_REPLY, DISTRESS
+from shuttlesense.coach.personality.serious import OVERLAY as SERIOUS_OVERLAY
 from shuttlesense.coach.router import keyword_route
 from shuttlesense.schema import Moment
 
@@ -24,7 +28,10 @@ SYSTEM = (
 )
 
 
-async def answer(provider, retriever, report, question, history, top_k, fps):
+async def answer(provider, retriever, report, question, history, top_k, fps, personality=None):
+    if CRISIS.search(question):  # D57: the fixed support line, before the injury check
+        yield _done(CRISIS_REPLY, [], [])
+        return
     if keyword_route(question, job_bound=True).intent == "safety":
         yield _done(SAFETY_REPLY, [], [])
         return
@@ -72,6 +79,11 @@ async def answer(provider, retriever, report, question, history, top_k, fps):
             "or a technique fault. Distinguish the measured pose from coaching suggestions."
         )
     system += f"\n\nSaved practice context:\n{json.dumps(context, ensure_ascii=False)}"
+    # D50-D52: how the coach talks, after the rules and data; serious mode when it matters.
+    seen = [SimpleNamespace(role=t["role"], text=t["text"]) for t in history]
+    system += build_personality_block(personality, serious=is_serious(None, question, seen))
+    if DISTRESS.search(question) and (personality is None or personality.is_default()):
+        system += "\n\n" + SERIOUS_OVERLAY
     turns = [{"role": turn["role"], "text": turn["text"][:2000]} for turn in history]
     turns.append({"role": "user", "text": question})
     parts: list[str] = []
