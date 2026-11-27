@@ -401,6 +401,7 @@ async def practice_chat(
     job_id: str, body: PracticeChatRequest, request: Request, storage: StorageDep
 ) -> StreamingResponse:
     from shuttlesense.coach.llm import ChatError
+    from shuttlesense.coach.personality import label_for
     from shuttlesense.practice.followup import answer
 
     state = request.app.state
@@ -437,9 +438,12 @@ async def practice_chat(
                 [turn.model_dump() for turn in body.history],
                 state.settings.coach_top_k,
                 fps,
+                personality=body.personality,
             ):
                 if event["type"] == "done":
                     current_report()
+                    if label := label_for(body.personality):  # D58
+                        event["message"]["personality_label"] = label
                 yield f"data: {json.dumps(event)}\n\n"
         except (ChatError, HTTPException) as exc:
             status = exc.status if isinstance(exc, ChatError) else exc.status_code

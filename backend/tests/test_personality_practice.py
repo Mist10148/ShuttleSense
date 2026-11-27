@@ -4,6 +4,7 @@ prompt, the answer is labelled, the default is unchanged, and safety comes first
 from __future__ import annotations
 
 import asyncio
+import json
 
 from shuttlesense.coach.chat import SAFETY_REPLY
 from shuttlesense.coach.index import Retriever
@@ -69,3 +70,46 @@ def test_distress_gets_serious_mode_in_the_follow_up():
     fake, _ = _ask("I feel hopeless about this clear")
     assert "## This moment is serious" in fake.streams[0]["system"]
 
+
+def test_practice_route_passes_the_personality_and_labels_the_answer(monkeypatch, tmp_path):
+    """The route hands the request's personality to answer() and labels the done event."""
+    from shuttlesense.api import practice
+    from shuttlesense.practice import followup
+
+    seen = {}
+
+    async def fake_answer(*args, personality=None):
+        seen["personality"] = personality
+        yield {"type": "done", "message": {"role": "assistant", "text": "ok", "at": "x"}}
+
+    monkeypatch.setattr(followup, "answer", fake_answer)
+    report = {**REPORT, "context_version": "a" * 64}
+    monkeypatch.setattr(practice, "_completed_practice", lambda *a: (None, {"fps": 10}, 1))
+    monkeypatch.setattr(practice, "_cached_practice_report", lambda *a: report)
+    monkeypatch.setattr(practice, "_with_context_version", lambda *a: report)
+
+    from fastapi.testclient import TestClient
+
+    from shuttlesense.api.main import create_app
+    from shuttlesense.api.settings import Settings
+
+    app = create_app(Settings(storage_dir=tmp_path / "s", device="cpu", coach_provider="off"))
+    with TestClient(app) as client:
+        app.state.coach_provider = FakeProvider()
+        body = {
+            "message": "Why review this clear?",
+            "context_version": "a" * 64,
+            "personality": {"preset": "stoic", "label": "Calm"},
+        }
+        res = client.post(f"/practice/sessions/{'a' * 12}/chat", json=body)
+        assert res.status_code == 200
+        done = [json.loads(x[6:]) for x in res.text.splitlines() if x.startswith("data: ")][-1]
+        assert done["message"]["personality_label"] == "Calm"
+        assert seen["personality"].preset == "stoic"
+        res = client.post(
+            f"/practice/sessions/{'a' * 12}/chat",
+            json={"message": "Again?", "context_version": "a" * 64},
+        )
+        done = [json.loads(x[6:]) for x in res.text.splitlines() if x.startswith("data: ")][-1]
+        assert "personality_label" not in done["message"]
+        assert seen["personality"] is None
