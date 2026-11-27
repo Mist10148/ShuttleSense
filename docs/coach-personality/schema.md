@@ -162,3 +162,62 @@ Response (validated before it leaves the server):
 ```
 
 The app turns it into a draft profile (`source: "generated"`): `attributes` become `overrides` against `basePreset`, and only values that differ are kept. See [generator.md](generator.md).
+
+## Versioning
+
+| Thing | Version field | Bumped when |
+| --- | --- | --- |
+| Stored document | `schemaVersion` | a field is renamed, removed or changes meaning |
+| Request object | `personality.v` | the backend must interpret a field differently |
+| Export file | `schemaVersion` (same as stored) | as stored |
+| Preset registry | not versioned; ids are permanent | — |
+
+Adding an optional field does **not** bump a version: readers ignore unknown keys and fill missing ones with defaults.
+
+## Migration
+
+The app migrates on load, the same idea as the backend's `schema.migrate()` for clip records (D19):
+
+```text
+load coach.personality
+  ├─ missing                → defaults (activeProfileId = "preset:default"), nothing written
+  ├─ not valid JSON         → keep a copy under coach.personality.corrupt, use defaults, show a one-time notice
+  ├─ schemaVersion > known  → read-only mode: use what can be read, do not write, show "made by a newer version"
+  └─ schemaVersion < known  → run migrations v→v+1 in order, write back, keep the old copy under coach.personality.v{n}
+then, per profile:
+  basePreset unknown        → "default", and a note on the profile ("Preset no longer available")
+  override key unknown      → dropped
+  value out of range        → clamped 0–100
+  enum value unknown        → that preference reset to its default
+  duplicate id or name      → id regenerated / name suffixed " (2)"
+activeProfileId dangling    → "preset:default"
+```
+
+Each step is a pure function `Map → Map` with a unit test that feeds the previous version's fixture.
+
+**Backend.** The backend stores no profiles. The only persisted personality data is the optional `personality_label` on job chat messages in `record.json`. It is added as an optional field (default `null`), so existing records need no migration and older apps ignore it.
+
+## Import and export
+
+**Export** writes a `.json` file in the `exportFile` shape: one profile, or all of them, with or without the global identity (a checkbox, off by default, because it contains the player's nickname). On web it downloads; on mobile and desktop it uses the platform share or save dialog.
+
+```json
+{
+  "format": "shuttlesense.coach-personality",
+  "schemaVersion": 1,
+  "exportedAt": "2026-11-27T10:00:00Z",
+  "app": "ShuttleSense 1.x",
+  "profiles": [ { "id": "p_7f3a9k2x", "name": "Footwork bootcamp", "basePreset": "bold", "…": "…" } ]
+}
+```
+
+**Import** (file picker or paste):
+
+1. Reject files over 64 KB or that are not JSON.
+2. Check `format` and `schemaVersion`; migrate older versions as above; refuse newer ones with a clear message.
+3. Validate every profile against the schema; invalid profiles are listed with the reason and skipped, valid ones continue.
+4. Run the same text checks as the editor ([security-privacy.md](security-privacy.md#sanitization)) on names, vocabulary and instructions. Profiles that trip the injection heuristics are imported **with a warning badge**, not silently.
+5. Regenerate ids, suffix clashing names, set `source: "imported"`.
+6. Show a preview list ("3 profiles will be added") before anything is saved. Import never changes the active profile.
+
+Import is local only: nothing is sent to the backend until the profile is used in a chat.
