@@ -84,6 +84,8 @@ flutter:
     # Theme assets from Wonderboard (docs/THEMES.md, "Asset provenance").
     - assets/skins/backrooms/
     - assets/skins/denia/
+    # Third-party character art and fan art: remove before any public release.
+    - assets/skins/denia/pics/
   fonts:
     - family: Outfit
       fonts:
