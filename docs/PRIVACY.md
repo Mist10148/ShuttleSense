@@ -30,6 +30,10 @@ The digest also states the match result (best of, per-game scores, games won, wi
 
 Google's handling of Gemini API data is described in the Gemini API terms (paid and free tiers differ: on the free tier Google may use prompts to improve its products), and Anthropic's in its commercial terms and privacy policy. The session chat history is saved in the clip record (`chat.messages`) on your backend and deleted with the job; the coaching report is cached as `storage/jobs/<id>/coach_report.json` and deleted with the job. The general coach conversation is not stored on the backend.
 
+### Coach personality
+
+How the coach talks is chosen in Settings > AI Coach ([COACH_PERSONALITY.md](COACH_PERSONALITY.md)). The settings and saved profiles stay on your device (`coach.personality`); they are never stored on the backend. When you ask a question, the active personality goes with it to the backend and, as part of the coach's instructions, to Gemini or Claude: the preset, slider and option choices, and anything you typed yourself (the coach's name, what it calls you, your instructions and words). The backend saves only the personality's name with each job chat answer. **Describe it, AI drafts it** sends only the description you typed, and only when you press the button. Export copies your profiles to the clipboard; the names and language are included only if you tick the box.
+
 ## Not medical or professional advice
 
 Form notes and chat answers are heuristic guidance from pose rules, not professional coaching. The chat refuses to diagnose injuries; see a qualified professional for pain or injury.

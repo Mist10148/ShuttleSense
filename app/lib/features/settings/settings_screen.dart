@@ -140,6 +140,10 @@ class SettingsScreen extends ConsumerWidget {
                 'API. No video, frames or images are sent.',
               ),
               const _Bullet('Delete an analysis, or its video too, from History.'),
+              const _Bullet(
+                'A coach personality you pick (and any names or instructions you add) goes '
+                'with your questions to the coach.',
+              ),
               const SizedBox(height: Spacing.sm),
               Wrap(
                 spacing: Spacing.sm,
