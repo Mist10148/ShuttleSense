@@ -136,7 +136,7 @@ async def _one(coach: Coach, preset: str, scenario) -> dict:
     }
 
 
-async def run(presets: list[str], numbers: set[int]) -> list[dict]:
+async def run(presets: list[str], numbers: set[int], pause: float = 0.0) -> list[dict]:
     settings = Settings()
     provider = create_provider(settings)
     if provider is None:
@@ -147,7 +147,13 @@ async def run(presets: list[str], numbers: set[int]) -> list[dict]:
         for scenario in sorted(SCENARIOS, key=lambda s: s[0]):
             if numbers and scenario[0] not in numbers:
                 continue
-            rows.append(await _one(coach, preset, scenario))
+            row = await _one(coach, preset, scenario)
+            # A free-tier key hits its per-minute limit quickly: wait and try once more.
+            if any("rate limit" in c for c in row["checks"]):
+                await asyncio.sleep(60)
+                row = await _one(coach, preset, scenario)
+            rows.append(row)
+            await asyncio.sleep(pause)
             print(f"{preset:14} {rows[-1]['scenario']:20} {rows[-1]['checks'] or 'ok'}")
     return rows
 
@@ -181,10 +187,11 @@ def main() -> int:
     parser.add_argument("--presets", default=",".join(p.id for p in PRESETS))
     parser.add_argument("--scenarios", default="")
     parser.add_argument("--out", default="")
+    parser.add_argument("--pause", type=float, default=4.0, help="seconds between answers")
     args = parser.parse_args()
     presets = [p.strip() for p in args.presets.split(",") if p.strip()]
     numbers = {int(n) for n in args.scenarios.split(",") if n.strip()}
-    rows = asyncio.run(run(presets, numbers))
+    rows = asyncio.run(run(presets, numbers, args.pause))
     settings = Settings()
     text = report(rows, settings.active_provider or "none")
     if args.out:
