@@ -42,6 +42,7 @@ class Health(BaseModel):
     stroke_models: list[str] = Field(default_factory=list)
     chat_available: bool = False  # a Claude API key is configured on this backend
     chat_max_messages: int = 0  # questions allowed per session
+    coach_personality: bool = True  # chat requests take a personality object (D50)
     watch_video: bool = True
     watch_match_type: bool = True
     watch_realtime: bool = True

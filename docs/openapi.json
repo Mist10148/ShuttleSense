@@ -1044,6 +1044,11 @@
             "title": "Chat Max Messages",
             "type": "integer"
           },
+          "coach_personality": {
+            "default": true,
+            "title": "Coach Personality",
+            "type": "boolean"
+          },
           "device": {
             "title": "Device",
             "type": "string"

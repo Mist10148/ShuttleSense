@@ -93,3 +93,8 @@ def test_general_chat_uses_the_personality(tmp_path):
         assert "## Your communication style: Mentor" in system
         assert 'Your name in this app is "Kai".' in system
         assert "Call me champ." in system
+
+
+def test_health_says_personalities_are_supported(tmp_path):
+    with _client(tmp_path, FakeProvider()) as client:
+        assert client.get("/health").json()["coach_personality"] is True
