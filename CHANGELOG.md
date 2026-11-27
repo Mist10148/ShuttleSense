@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — AI Coach personality, plan only (branch `experimental-themes`)
+
+Design and documentation only; no app or backend behaviour changes yet (D50–D53, [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md), [Phase 14](docs/phases/phase-14-coach-personality.md)).
+
+### Added
+
+- **Personality design:** 17 coach presets (Default to Cute & Shy, plus Custom), each with a description, icon, attribute vector, prompt fragment, serious-mode note and sample replies.
+- **Customization plan:** ten attribute sliders with intensity bands, communication preferences (name, pronouns, nickname, length, explanation level, emoji, humour, language, vocabulary and more), custom instructions, saved profiles, import and export, and an AI-assisted generator.
+- **Architecture:** a layered prompt builder that keeps the coach's rules first, treats player-written text as untrusted, and switches every personality to a serious register for pain, injury and distress.
+- **Specs:** JSON Schema for profiles and export files, UI wireframes, security and privacy analysis, a test and evaluation plan, and a phased roadmap.
+
 ## Unreleased — experimental themes (branch `experimental-themes`)
 
 Needs a review from the lead UI/UX developer before merge (D49, [docs/THEMES.md](docs/THEMES.md)).
