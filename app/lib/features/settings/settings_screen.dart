@@ -14,6 +14,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/status_pill.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import 'widgets/theme_picker_card.dart';
 
 /// Settings grouped as Connection, Appearance, Notifications, Privacy & data and About. The
 /// analysis mode is not here: the mode chooser on the Analyze tab is its one home.
@@ -109,6 +110,8 @@ class SettingsScreen extends ConsumerWidget {
             onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
           ),
         ),
+        const SizedBox(height: Spacing.lg),
+        const ThemePickerCard(),
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Notifications',
