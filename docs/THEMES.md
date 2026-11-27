@@ -154,6 +154,10 @@ A colour iris grows from where the user tapped and covers the screen when the th
 
 Everything passes through a soft limiter and a 1.6 s reverb at 0.32 wet. Wonderboard's reverb is a convolution, which is too slow in Dart, so a Schroeder reverb stands in.
 
+## Light and Dark
+
+Settings > Appearance and the sun/moon button on the navigation rail set Light, Dark or System. Classic follows it directly. Denia has a light and a dark side, so the same switch moves it between Denia (Light) and Denia (Dark), with the usual switch animation; System follows the device's brightness. Backrooms is light only: choosing Dark there keeps Backrooms and shows a short note (D54). The listener lives in `SkinFxHost`, so the rail button itself is unchanged.
+
 ## Accessibility and performance
 
 - **Reduced motion, or "Switch animation" off:** no overlay and no sound; the theme changes at once.
@@ -161,6 +165,7 @@ Everything passes through a soft limiter and a 1.6 s reverb at 0.32 wet. Wonderb
 - **High contrast:** every theme collapses to flat borders, as Classic does (`TactileTokens.asFlat`), and the decoration is hidden.
 - **Painting cost:** tiles (wallpaper, grain, pattern) are recorded once as pictures and drawn behind a `RepaintBoundary`, so the backdrop does not repaint when pages scroll. Stickers hold still.
 - **Cancelling:** only one switch runs at a time. A newer change cancels the running one and stops its sound, including the Backrooms hum.
+- **First sound on the web:** browsers block sound until the page has been used, and only allow playback that starts inside a user gesture. The first tap anywhere plays 50 ms of silence (`SkinSounds.unlock`), so the first switch is heard.
 - **Route transitions:** with page fills clear, a page pushed over another shows both for the length of the transition. The wide layout already worked this way.
 
 ## Asset provenance
@@ -193,10 +198,25 @@ Everything passes through a soft limiter and a 1.6 s reverb at 0.32 wet. Wonderb
 
 ## Known limits
 
-- `ui/depth.dart` and `shared/widgets/tactile.dart` hardcode some shadow alphas by brightness. Every theme maps to light or dark, so they still fit, but a theme that wants different depth strength would need those alphas moved into tokens.
-- The navigation rail's sun/moon button still flips Classic's light/dark only.
-- `/styleguide` previews Classic only.
-- Where a browser blocks sound until the page has been used, the first switch can be silent.
+- `ui/depth.dart` and `shared/widgets/tactile.dart` hardcode some shadow alphas by brightness. Every theme maps to light or dark, so they still fit, but a theme that wants different depth strength would need those alphas moved into tokens. Both files belong to another developer, so this is left as a [proposed change](#proposed-change-depth-strength-tokens) for them.
+- `/styleguide` itself still previews Classic only (its theme lines belong to the lead UI/UX developer); `/styleguide/themes` shows every theme instead.
+
+## Proposed change: depth strength tokens
+
+For the owner of `ui/depth.dart` and `shared/widgets/tactile.dart`. Today these alphas are picked by brightness:
+
+| File | Use | Light | Dark |
+| --- | --- | --- | --- |
+| depth.dart `InsetBox` | inner shade / inner light | 0.20 / 0.90 | 0.55 / 0.06 |
+| depth.dart `DepthCard` | outer shade / highlight | 0.22 / 0.85 | 0.65 / 0.03 |
+| depth.dart `DepthCard` selected | shade / highlight | 0.18 / 0.80 | 0.55 / 0.05 |
+| depth.dart `DepthCard` face tint | shade over the plate | 0.04 | 0.00 |
+| depth.dart `IconWell` | highlight, tone fill | 0.80, 0.14 | 0.04, 0.16 |
+| depth.dart `DepthGroove` | shade / highlight | 0.14 / 0.90 | 0.60 / 0.05 |
+| tactile.dart secondary edge, top light, sheen, gloss | edge, light, sheen, gloss | 0.22, 0.90, 0.45, 0.55 | 0.12, 0.10, 0.05, 0.06 |
+| tactile.dart `bevelColors` | light / shade | white / `#8E9DB5`@0.45 | white@0.06 / black@0.35 |
+
+Proposal: a `DepthStrength` value with one field per row (`wellShade`, `wellLight`, `cardShade`, `cardLight`, …), `DepthStrength.light` and `.dark` holding exactly the numbers above, and a `strength` field on `DepthTheme` (and `TactileTokens`) defaulting to the one for its brightness. Every widget reads `d.strength.cardShade` instead of `dark ? 0.65 : 0.22`. Classic does not change by a pixel; a theme bundle can then pass its own values. `test/skin_tokens_test.dart` would check that Classic's strengths equal today's.
 
 ## References
 
