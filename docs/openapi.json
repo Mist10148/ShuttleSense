@@ -89,6 +89,17 @@
             "title": "Citations",
             "type": "array"
           },
+          "personality_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personality Label"
+          },
           "role": {
             "enum": [
               "user",

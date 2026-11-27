@@ -294,6 +294,8 @@ class ChatMessage(BaseModel):
     text: str
     at: datetime
     citations: list[Moment] = Field(default_factory=list)
+    # The coach personality an answer was written in (D50); absent for the default coach.
+    personality_label: str | None = _omit_none()
 
 
 class Chat(BaseModel):
