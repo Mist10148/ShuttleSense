@@ -128,3 +128,15 @@ def test_distress_switches_to_serious_mode():
     system = fake.streams[0]["system"]
     assert "## This moment is serious" in system
     assert "banter lightly" not in system
+
+
+def test_distress_is_never_declined_as_off_topic():
+    # The router (model or keywords) may call it off topic; the coach still answers, calmly,
+    # with or without a personality.
+    for personality in (None, PersonalityConfig(preset="witty")):
+        fake = FakeProvider(["That sounds really hard."], {"_RouteOut": {"intent": "off_topic"}})
+        events = asyncio.run(
+            _run(_coach(fake), "I feel hopeless, nothing matters anymore", personality=personality)
+        )
+        assert events[-1]["message"]["text"] != OFF_TOPIC_REPLY
+        assert "## This moment is serious" in fake.streams[0]["system"]
