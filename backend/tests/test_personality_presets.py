@@ -51,3 +51,17 @@ def test_guardrails_are_written_into_the_risky_presets():
     assert "romantic" in REGISTRY["cute_shy"].fragment
     assert "pain" in REGISTRY["bold"].fragment
     assert "safe" in REGISTRY["creative"].fragment
+
+
+def test_the_app_copy_of_the_presets_is_up_to_date():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "export_presets.py"
+    spec = importlib.util.spec_from_file_location("export_presets", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.OUT.read_text(encoding="utf-8") == module.export(), (
+        "run python scripts/export_presets.py"
+    )
+    assert "fragment" not in module.export()  # prompts stay on the server
