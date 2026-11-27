@@ -1,15 +1,25 @@
 # Changelog
 
-## Unreleased — AI Coach personality, plan only (branch `experimental-themes`)
+## Unreleased — AI Coach personality (branch `experimental-themes`)
 
-Design and documentation only; no app or backend behaviour changes yet (D50–D53, [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md), [Phase 14](docs/phases/phase-14-coach-personality.md)).
+Needs a review from the lead UI/UX developer before merge (D50–D53, D55, D56, [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md)).
 
 ### Added
 
-- **Personality design:** 17 coach presets (Default to Cute & Shy, plus Custom), each with a description, icon, attribute vector, prompt fragment, serious-mode note and sample replies.
-- **Customization plan:** ten attribute sliders with intensity bands, communication preferences (name, pronouns, nickname, length, explanation level, emoji, humour, language, vocabulary and more), custom instructions, saved profiles, import and export, and an AI-assisted generator.
-- **Architecture:** a layered prompt builder that keeps the coach's rules first, treats player-written text as untrusted, and switches every personality to a serious register for pain, injury and distress.
-- **Specs:** JSON Schema for profiles and export files, UI wireframes, security and privacy analysis, a test and evaluation plan, and a phased roadmap.
+- **Settings > AI Coach:** 17 coach personalities (Default to Cute & Shy, plus Custom), picked with one tap, with Undo, a description and sample replies to a technique and a setback question.
+- **Coach personality page** (Settings > AI Coach > Customize): ten attribute sliders with bands and resets, response length, explanation level, emoji, humour style, pushback, initiative and emotion, the coach's name and pronouns, what it calls you, reply language, your own instructions and words, and Save/Discard.
+- **Profiles:** up to 20 saved personalities to use, edit, rename, duplicate, delete (with Undo), export and import.
+- **Describe it, AI drafts it:** a description becomes a draft personality to review before saving; without the AI, the app drafts one from keywords.
+- **In the coach:** the chosen personality goes with every question in session chat and the general coach; the app bar shows it and switches it, and a change keeps the conversation with a "Coach is now …" line.
+- **Backend:** a personality block built from the validated settings, after the coach's rules and data; the player's own words in a delimited, style-only block; serious mode for pain, injury and distress; `POST /coach/personality/generate`; `coach_personality` on `/health`; `personality_label` on answers.
+
+### Fixed
+
+- **Distress is never off topic:** a player who says they feel hopeless after a loss gets a calm answer instead of "I can only help with badminton" (D56).
+
+### Not included
+
+- The practice follow-up does not use the personality yet, the fixed crisis support line waits for approved wording, and the scenario eval has not completed on a live model.
 
 ## Unreleased — experimental themes (branch `experimental-themes`)
 
