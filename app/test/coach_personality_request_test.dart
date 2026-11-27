@@ -12,7 +12,7 @@ import 'package:shuttlesense_app/features/coach_personality/personality_notifier
 import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
 
-Health _health() => Health(
+Health _health() => const Health(
   version: '0.1.0',
   schemaVersion: '1.7',
   device: 'cpu',
