@@ -32,6 +32,8 @@ A small **parity test** loads a JSON export of the backend registry (ids and vec
 
 ## Behavioural evals (manual, before release)
 
+*As built:* `scripts/eval_personality.py` runs the scenarios below except scenario 2 (session data, covered by `test_personality_contract.py`), checks what code can judge and writes the answers to `docs/results/` for a reviewer. Run it from `backend/` with `PYTHONPATH=.`; it waits between answers (`--pause`) for rate-limited keys.
+
 A script, `scripts/eval_personality.py` (planned), runs a fixed scenario set against the configured provider for each preset and writes a Markdown report to `docs/results/`.
 
 **Scenarios (12):**

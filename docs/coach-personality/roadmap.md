@@ -1,5 +1,7 @@
 # Implementation roadmap
 
+> **Status (Nov 27):** P0–P5 are built on `experimental-themes`. P6 has its eval script; the live run, the fixed crisis line and the practice follow-up wait (see [Phase 14](../phases/phase-14-coach-personality.md)).
+
 The work is split into phases that can each be merged on their own. Every phase leaves the app working, and the coach sounds exactly as it does today until a player picks something. The task cards live in [Phase 14](../phases/phase-14-coach-personality.md). This page shows the order, the dependencies and the risks.
 
 ```text

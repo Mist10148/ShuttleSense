@@ -187,7 +187,7 @@ Against a system prompt that already holds up to 24 000 characters of digest (`c
 
 ## Caching
 
-- **Claude** (`AnthropicProvider`): the system prompt is sent as a cached block today. The plan splits it into two blocks — layer 1 with `cache_control`, then layers 2–5 — so the rules prefix is reused across players and personalities. With no personality the request is unchanged.
+- **Claude** (`AnthropicProvider`): the system prompt is sent as one cached block. *As built (D55):* it is not split. The personality block comes after the per-request data, so the prefix a follow-up question can reuse is the same as before.
 - **Gemini** (`GeminiProvider`): implicit caching keys on the prompt prefix; putting the static layer first gives it the best chance. No explicit cache is planned.
 - **Fake** (`FakeProvider`): records the full `system` string, so tests assert on the block directly.
 
@@ -198,10 +198,10 @@ Against a system prompt that already holds up to 24 000 characters of digest (`c
 | Job chat | `api/models.py` `ChatRequest` | add `personality: PersonalityConfig \| None = None` |
 | | `api/routes.py` `chat()` (~L679) | pass `body.personality` to `answer()`; save `personality_label` on the assistant `ChatMessage` |
 | General coach | `api/coach_routes.py` `CoachChatRequest` (~L71) | add the same field; pass through |
-| Practice follow-up | `api/practice.py` `PracticeChatRequest` (~L394) | add the same field |
-| | `practice/followup.py` | append `build_personality_block()` to its `SYSTEM` + context |
+| Practice follow-up | `api/practice.py` `PracticeChatRequest` (~L394) | inherits the field from `CoachChatRequest` (as built) |
+| | `practice/followup.py` | append `build_personality_block()` to its `SYSTEM` + context (*not yet: needs its owner, D55*) |
 | Core | `coach/chat.py` | `{cue_limit}` placeholder in `_RULES`; `personality` kwarg; serious detection |
-| Router | `coach/router.py` | optional `distress` label (keyword list first, as with safety) |
+| Router | `coach/router.py` | *As built:* no new label; `personality/serious.py` holds the distress words, and `answer()` never declines them as off topic (D56) |
 | Health | `api/routes.py` `/health` | `coach_personality: true` so older backends are detected |
 
 All new request fields are optional. An app talking to an older backend sends `personality`, which pydantic ignores today (`extra` is not forbidden), and the coach answers in its usual voice. `/health` lets the app show "This server doesn't support personalities yet" instead of silently ignoring the choice.
