@@ -10,6 +10,7 @@ import 'personality_switcher_sheet.dart';
 import 'presets.dart';
 import 'widgets/attribute_sliders.dart';
 import 'widgets/collapsible_section.dart';
+import 'widgets/generator_section.dart';
 import 'widgets/instructions_section.dart';
 import 'widgets/names_section.dart';
 import 'widgets/personality_preview.dart';
@@ -118,6 +119,19 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
       ..showSnackBar(SnackBar(content: Text('Saved. Coach is now ${saved.name}.')));
   }
 
+  /// Loads an unsaved draft (from the generator) into the editor; Save creates it.
+  Future<void> loadDraft(PersonalityProfile profile) async {
+    if (!await confirmDiscard()) return;
+    final notifier = ref.read(personalityProvider.notifier);
+    setState(() {
+      target = profile.id;
+      original = notifier
+          .draftFrom(basePreset: profile.basePreset)
+          .copyWith(id: profile.id, name: profile.name);
+      draft = profile;
+    });
+  }
+
   void discard() => setState(() {
     draft = original;
     global = originalGlobal;
@@ -202,6 +216,12 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
         onInstructions: (s) => update(draft.copyWith(instructions: s)),
         onVocabulary: (v) => update(draft.copyWith(vocabulary: v)),
       ),
+    ),
+    CollapsibleSection(
+      key: const ValueKey('section-generator'),
+      title: 'Describe it, AI drafts it',
+      icon: Icons.auto_awesome_outlined,
+      child: GeneratorSection(enabled: !readOnly, onDraft: loadDraft),
     ),
   ];
 

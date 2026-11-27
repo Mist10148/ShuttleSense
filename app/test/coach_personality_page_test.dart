@@ -3,10 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/data/api_client.dart';
 import 'package:shuttlesense_app/features/coach_personality/coach_personality_screen.dart';
 import 'package:shuttlesense_app/features/coach_personality/personality_models.dart';
 import 'package:shuttlesense_app/features/coach_personality/personality_notifier.dart';
 
+import 'fakes/fake_api_client.dart';
 import 'helpers.dart';
 
 ProviderContainer _c(WidgetTester tester) =>
@@ -162,6 +164,43 @@ void main() {
     expect(_page(tester).draft.instructions, 'Be strict.');
     await _tap(tester, find.byTooltip('Remove kill'));
     expect(_page(tester).draft.vocabulary.preferred, isEmpty);
+  });
+
+  testWidgets('an AI draft is reviewed, then edited and saved as a profile', (tester) async {
+    final api = FakeApiClient();
+    await pumpScreen(tester, const CoachPersonalityScreen(), size: tablet, api: api);
+    await _tap(tester, find.byTooltip('Show Describe it, AI drafts it'));
+    await tester.enterText(find.byKey(const ValueKey('generator-text')), 'calm and strict');
+    await tester.pumpAndSettle();
+    await _tap(tester, find.byKey(const ValueKey('generator-go')));
+    expect(api.calls, contains('generatePersonality calm and strict'));
+    expect(find.text('Generated draft. Review it before saving.'), findsOneWidget);
+    expect(find.text("• 'Older' was read as calm and experienced."), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('review-use')));
+    final draft = _page(tester).draft;
+    expect(draft.name, 'Quiet Taskmaster');
+    expect(draft.basePreset, 'stoic');
+    expect(draft.preferences.emoji, EmojiUsage.none);
+    expect(_c(tester).read(personalityProvider).profiles, isEmpty); // not until Save
+    await _tap(tester, find.byKey(const ValueKey('personality-save')));
+    final saved = _c(tester).read(personalityProvider).profiles.single;
+    expect(saved.source, ProfileSource.generated);
+    expect(_c(tester).read(personalityProvider).activeId, saved.id);
+  });
+
+  testWidgets('a failed draft explains itself and offers one without AI', (tester) async {
+    final api = FakeApiClient()..personalityError = ApiException('The coach is off');
+    await pumpScreen(tester, const CoachPersonalityScreen(), size: tablet, api: api);
+    await _tap(tester, find.byTooltip('Show Describe it, AI drafts it'));
+    await tester.enterText(find.byKey(const ValueKey('generator-text')), 'funny and short');
+    await tester.pumpAndSettle();
+    await _tap(tester, find.byKey(const ValueKey('generator-go')));
+    expect(find.byKey(const ValueKey('generator-error')), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('generator-offline')));
+    expect(find.text('Made without AI: check the sliders.'), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('review-use')));
+    expect(_page(tester).draft.overrides[PersonalityAttr.humor], greaterThan(50));
+    expect(_page(tester).dirty, isTrue);
   });
 
   for (final MapEntry(key: name, value: size) in kSizes.entries) {
