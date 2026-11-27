@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import 'skins/skin_bundle.dart';
 import 'skins/skin_decor.dart';
 import 'tokens.dart';
 
@@ -98,6 +99,19 @@ abstract final class AppTheme {
     StatusColors.dark,
     AppPalette.dark,
     highContrast: highContrast,
+  );
+
+  /// A theme other than Classic (docs/THEMES.md): the same tactile recipe in its own tones.
+  static ThemeData fromBundle(SkinBundle b, {bool highContrast = false}) => _build(
+    b.brightness,
+    b.players,
+    b.status,
+    b.palette,
+    highContrast: highContrast,
+    tactile: b.tactile,
+    analysis: b.analysis,
+    depth: b.depth,
+    decor: b.decor,
   );
 
   /// The brief's type scale: light display figures, regular headings, 14 body, 11 captions.
