@@ -4,6 +4,10 @@
 tracks the live recovery, referee review and coach recap changes, plus the device
 and model evidence the team needs for release.
 
+**Experimental, planned (Nov 27).** [Phase 14 — AI Coach personality](phases/phase-14-coach-personality.md)
+plans selectable coach personalities on the `experimental-themes` branch. Only its design
+task is done, and its 12 tasks are not counted in the totals below until it is merged.
+
 The plan covers 14 phases (0–13) and **162 tasks**. The phase files document owners,
 implementation, tests and acceptance criteria. Published GitHub issues use
 `[T<id>] <title>` and link to their phase and owner. Phases 12 and 13 are tracked
@@ -25,6 +29,7 @@ in their phase files.
 | 11 | [Selectable stroke models](phases/phase-11-stroke-models.md) | Nov 14 – Nov 17 | 13 | CNN, LSTM and Random Forest can be picked per job, each with trained weights and measured accuracy; Nov 14 review findings fixed with tests |
 | 12 | [Courtside referee and coach](phases/phase-12-courtside.md) | Nov 14 | 8 | Live referee and coach review findings fixed with tests; join mid-match, let, fault, retirement, one Undo; code-only steps of Phases 2, 4 and 9 done |
 | 13 | [Courtside depth](phases/phase-13-courtside-depth.md) | Nov 15 | 8 | Command recovery, review history, interval clock, goals and recap verified courtside |
+| 14 | [AI Coach personality](phases/phase-14-coach-personality.md) *(experimental, planned)* | from Nov 27 | 12 | 17 presets, customization, profiles and generator pass the acceptance criteria and the behavioural eval |
 
 The original schedule targeted Nov 18 for feature freeze and Nov 20 for the final
 demo. Phase 13 extends the feature scope. Release acceptance follows the
@@ -126,6 +131,7 @@ flowchart LR
     P12 --> P7
     P12 --> P13[Phase 13<br/>courtside depth]
     P13 --> P7
+    P12 --> P14[Phase 14<br/>coach personality]
 ```
 
 Phases overlap on purpose: the app (Phase 4) is built against the stub and fake pipelines (T1.10) while models are still being trained.
@@ -755,4 +761,5 @@ acceptance criteria. Code for these tasks is on `main` with tests.
 | [11](phases/phase-11-stroke-models.md) | T11.1 Research + decisions · T11.2 BST feature import · T11.3 Model registry · T11.4 LSTM · T11.5 Random Forest · T11.6 Training + comparison · T11.7 Stroke model per job (API) · T11.8 Stroke model selector (app) · T11.9 CLI flag · T11.10 Live job fixes · T11.11 API fixes · T11.12 Windows re-render + test notifier · T11.13 Docs sweep + link check |
 | [12](phases/phase-12-courtside.md) | T12.1 Referee decision fixes · T12.2 Coach fixes · T12.3 Mid-match start, reasons, retirement · T12.4 Match stats exports · T12.5 App live and scoreboard fixes · T12.6 Courtside app controls · T12.7 Earlier code-only steps · T12.8 Docs |
 | [13](phases/phase-13-courtside-depth.md) | T13.1 Phase reconciliation · T13.2 Command deduplication + reconnect recovery · T13.3 Decision history · T13.4 Interval clock · T13.5 Practice goals · T13.6 Recap + exports · T13.7 Courtside layout + accessibility · T13.8 Heuristic claims + release evidence |
+| [14](phases/phase-14-coach-personality.md) | T14.1 Research + design · T14.2 Preset registry · T14.3 Prompt builder + serious mode · T14.4 Chat requests · T14.5 Distress route + label · T14.6 App storage · T14.7 Settings card · T14.8 Personality page · T14.9 Profiles + import/export · T14.10 Generator · T14.11 Evals · T14.12 Privacy + API docs |
 | [7](phases/phase-7-release.md) | T7.1 Phone footage labels · T7.2 Phone evaluation · T7.3 Final metrics · T7.4 E2E test · T7.5 Bug fixes · T7.6 Release builds · T7.7 Tag v1.0.0 · T7.8 README final · T7.9 Slides + evaluation · T7.10 Backup video · T7.11 Rehearsal · T7.12 Docs = shipped · T7.13 License audit · T7.14 Release checklist |
