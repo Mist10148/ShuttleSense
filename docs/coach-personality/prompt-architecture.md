@@ -148,3 +148,60 @@ system += build_personality_block(personality, serious=serious)
 ```
 
 `cue_limit(cfg)` fills the `{cue_limit}` placeholder in `_RULES` (3 when there is no config).
+
+## Serious mode
+
+The serious-mode overlay applies to every personality, including Custom, when any of these is true for the current turn:
+
+1. The router's intent is `safety` (keyword or model), which already triggers `SAFETY_REPLY`.
+2. The question or the last two user turns match the **distress list**: words about self-harm, hopelessness, abuse, eating, panic, or "I want to quit everything" style statements. The list is planned as `serious.py` keywords plus a router label `distress`.
+3. The player's own message asks for seriousness ("be serious", "no jokes").
+4. The previous assistant turn in this conversation was in serious mode and the player continues on the same topic (one-turn carry-over, so the coach does not snap back to jokes mid-topic).
+
+The overlay text:
+
+```text
+## This moment is serious
+The player has mentioned pain, injury, health or something difficult. For this answer:
+no jokes, sarcasm, teasing, banter, catchphrases or emojis. Be calm, plain and kind.
+Keep your name and language. Do not diagnose or suggest treatment; encourage a
+qualified professional (doctor, physiotherapist) for pain or injury. If the player
+seems to be in crisis or unsafe, encourage them to contact local emergency services or
+someone they trust right away. Then help with any badminton part of the question.
+```
+
+What does **not** change: `SAFETY_REPLY` is still sent first, verbatim, by code. The overlay only shapes the text that follows it. The distress path is planned to add a fixed, localisable support line, written by the team and not by the model; see [security-privacy.md](security-privacy.md#wellbeing).
+
+## Token budget
+
+| Part | Budget | Typical |
+| --- | --- | --- |
+| Preset frame + fragment | 200 tokens | 120–170 |
+| Adjustments (≤ 10 descriptors) | 150 | 0–60 |
+| Preferences | 150 | 0–80 |
+| User block (1000 chars + vocabulary) | 350 | 0–300 |
+| Closing reminder | 60 | 55 |
+| **Total** | **~900 max** | **~200–400** |
+
+Against a system prompt that already holds up to 24 000 characters of digest (`chat_max_digest_chars`), the personality adds at most about 4–5%. The builder logs a warning and drops the user block's vocabulary first, then truncates instructions, if the block exceeds 3 600 characters.
+
+## Caching
+
+- **Claude** (`AnthropicProvider`): the system prompt is sent as a cached block today. The plan splits it into two blocks — layer 1 with `cache_control`, then layers 2–5 — so the rules prefix is reused across players and personalities. With no personality the request is unchanged.
+- **Gemini** (`GeminiProvider`): implicit caching keys on the prompt prefix; putting the static layer first gives it the best chance. No explicit cache is planned.
+- **Fake** (`FakeProvider`): records the full `system` string, so tests assert on the block directly.
+
+## Per-surface integration
+
+| Surface | File | Change |
+| --- | --- | --- |
+| Job chat | `api/models.py` `ChatRequest` | add `personality: PersonalityConfig \| None = None` |
+| | `api/routes.py` `chat()` (~L679) | pass `body.personality` to `answer()`; save `personality_label` on the assistant `ChatMessage` |
+| General coach | `api/coach_routes.py` `CoachChatRequest` (~L71) | add the same field; pass through |
+| Practice follow-up | `api/practice.py` `PracticeChatRequest` (~L394) | add the same field |
+| | `practice/followup.py` | append `build_personality_block()` to its `SYSTEM` + context |
+| Core | `coach/chat.py` | `{cue_limit}` placeholder in `_RULES`; `personality` kwarg; serious detection |
+| Router | `coach/router.py` | optional `distress` label (keyword list first, as with safety) |
+| Health | `api/routes.py` `/health` | `coach_personality: true` so older backends are detected |
+
+All new request fields are optional. An app talking to an older backend sends `personality`, which pydantic ignores today (`extra` is not forbidden), and the coach answers in its usual voice. `/health` lets the app show "This server doesn't support personalities yet" instead of silently ignoring the choice.
