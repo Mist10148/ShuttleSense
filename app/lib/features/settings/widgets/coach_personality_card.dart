@@ -65,11 +65,6 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
     return SectionCard(
       title: 'AI Coach',
       icon: Icons.forum_outlined,
-      trailing: TextButton(
-        key: const ValueKey('coach-customize'),
-        onPressed: () => context.push(Routes.coachPersonality),
-        child: const Text('Customize'),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -170,6 +165,14 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
             key: ValueKey('coach-preview-${preset.id}'),
             preset: preset,
             edited: active != null,
+          ),
+          const SizedBox(height: Spacing.sm),
+          // Below the content, not in the card's title row, so it fits at large text sizes.
+          OutlinedButton.icon(
+            key: const ValueKey('coach-customize'),
+            onPressed: () => context.push(Routes.coachPersonality),
+            icon: const Icon(Icons.tune),
+            label: const Text('Customize'),
           ),
           const SizedBox(height: Spacing.sm),
           Text(

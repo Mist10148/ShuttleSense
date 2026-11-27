@@ -3,6 +3,7 @@ import 'dart:ui' show Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/features/coach_personality/coach_personality_screen.dart';
 import 'package:shuttlesense_app/features/chat/chat_screen.dart';
 import 'package:shuttlesense_app/features/connect/connect_screen.dart';
 import 'package:shuttlesense_app/features/history/history_screen.dart';
@@ -31,6 +32,7 @@ void main() {
     'upload': const UploadScreen(),
     'history': const HistoryScreen(),
     'settings': const SettingsScreen(),
+    'coach personality': const CoachPersonalityScreen(),
   };
 
   for (final MapEntry(key: name, value: screen) in screens.entries) {

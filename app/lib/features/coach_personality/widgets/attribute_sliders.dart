@@ -126,7 +126,9 @@ class _AttributeSlider extends StatelessWidget {
                   child: Text(attr.label, style: text.titleSmall),
                 ),
               ),
-              Text('$value · $band', style: text.labelLarge),
+              Flexible(
+                child: Text('$value · $band', style: text.labelLarge, textAlign: TextAlign.end),
+              ),
               SizedBox(
                 width: kMinInteractiveDimension,
                 child: changed
@@ -167,13 +169,13 @@ class _AttributeSlider extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(attr.low, style: muted)),
-              Text('$presetLabel: $presetValue', style: muted),
               const SizedBox(width: Spacing.sm),
               Expanded(
                 child: Text(attr.high, style: muted, textAlign: TextAlign.end),
               ),
             ],
           ),
+          if (changed) Text('$presetLabel default: $presetValue', style: muted),
           if (hint != null)
             Padding(
               padding: const EdgeInsets.only(top: Spacing.xs),
