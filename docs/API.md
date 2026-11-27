@@ -98,6 +98,8 @@ Liveness and capability check used by the connect screen.
 }
 ```
 
+`coach_personality` (true on backends with [coach personalities](COACH_PERSONALITY.md)) says the chat routes use a `personality` object; an older backend leaves it out and ignores the object.
+
 `stroke_models` lists the stroke classifiers whose weights and packages are installed on this
 server, in menu order: `cnn` (1D CNN), `lstm`, `rf` (Random Forest) and `ensemble` (the three averaged, listed only when all three are installed; [D37](DECISIONS.md)). It is checked on every
 call. The app disables a model that is not listed.
@@ -333,6 +335,22 @@ The answer comes from the RAG coach ([D42](DECISIONS.md)): the question is class
 ### `POST /coach/chat`
 
 The general coach, not tied to one job ([D42](DECISIONS.md)): technique, tactics, rules, drills and progress across the finished jobs on this backend. Body `{"message": "Am I improving?", "history": [{"role": "user", "text": "..."}, {"role": "assistant", "text": "..."}]}`: `message` 1 to 1000 characters, `history` the earlier turns of this conversation (at most 40; the app keeps them, the server stores nothing). The answer streams as Server-Sent Events with the same `delta`, `done` (with `sources`) and `error` events as `POST /jobs/{job_id}/chat`; `citations` is always empty, since there is no video to seek. `503` without a Gemini or Claude API key, `409` while another general question is being answered, `429` after 10 questions in a minute, `422` for an empty, blank or too long message.
+
+### Coach personality
+
+Both chat routes take an optional `personality` object next to `message` ([D50](DECISIONS.md), [docs/coach-personality/schema.md](coach-personality/schema.md#request-object-app--backend)):
+
+```json
+{"v": 1, "preset": "mentor", "overrides": {"humor": 70}, "preferences": {"responseLength": "concise", "emoji": "none"},
+ "identity": {"coachName": "Kai", "coachPronouns": "they/them", "playerNickname": "Mo", "language": "auto"},
+ "vocabulary": {"preferred": ["kill"], "avoid": [], "catchphrases": []}, "instructions": "Be strict about footwork.", "label": "Footwork bootcamp"}
+```
+
+It changes how the answer is worded, never the rules, the data or the fixed replies. Unknown presets and options fall back to their defaults and attributes are clamped to 0-100; instructions over 1000 characters, names over 24, more than 20 words or 5 expressions, or a coach name that is a professional title are a `422`. Without the object the coach is exactly as before. The `done` event's `message` then carries `personality_label` (the profile or preset name), which job chat also saves in `record.chat.messages`. The practice follow-up accepts the field but does not use it yet.
+
+### `POST /coach/personality/generate`
+
+A draft personality from the player's description, for review in the app ([D53](DECISIONS.md), [generator.md](coach-personality/generator.md)). Body `{"description": "A calm coach, strict about footwork", "basePreset": null}` (1 to 500 characters). Returns `{"name", "description", "basePreset", "attributes": {ten 0-100 values}, "preferences": {only those stated}, "instructions", "notes": [...]}`, validated and cleaned on the server; nothing is saved. `503` without a Gemini or Claude key, `409` while another draft is being made, `429` after 5 drafts in a minute, `502` when the model gave no usable draft, `504` after 20 s, `422` for an empty or too long description.
 
 ### `GET /jobs/{job_id}/coach/report`
 
