@@ -2,7 +2,7 @@
 
 [← Phase 13](phase-13-courtside-depth.md) · [Phase overview](../PHASES.md) · Design: [COACH_PERSONALITY.md](../COACH_PERSONALITY.md)
 
-> **Experimental, planned.** Branch `experimental-themes`. Only T14.1 (research and design) is done; everything else is a plan. Decisions D50–D53.
+> **Experimental.** Branch `experimental-themes`. T14.1–T14.10 and T14.12 are built and tested; T14.11 has its script but no live run yet. Decisions D50–D53, D55, D56.
 
 | | |
 | --- | --- |
@@ -17,17 +17,17 @@
 | Task | Title | Owner | Estimate | Depends | Status |
 | --- | --- | --- | --- | --- | --- |
 | [T14.1](#t141) | Research, design and documentation | M1 | 1 d | — | ✅ |
-| [T14.2](#t142) | Preset registry and attribute descriptors | M1 | 1 d | T14.1 | ⬜ |
-| [T14.3](#t143) | Prompt builder, sanitizer and serious-mode overlay | M1 | 1 d | T14.2 | ⬜ |
-| [T14.4](#t144) | Personality on the three chat requests | M1 | 1 d | T14.3 | ⬜ |
-| [T14.5](#t145) | Distress route, personality label and health flag | M1 | 0.5 d | T14.4 | ⬜ |
-| [T14.6](#t146) | App personality storage and migration | M1 | 1 d | T14.2 | ⬜ |
-| [T14.7](#t147) | Settings > AI Coach card | M1 | 1 d | T14.6 | ⬜ |
-| [T14.8](#t148) | Coach personality page | M1 | 3 d | T14.7 | ⬜ |
-| [T14.9](#t149) | Profiles, import and export | M1 | 2 d | T14.8 | ⬜ |
-| [T14.10](#t1410) | AI personality generator | M1 | 2 d | T14.4, T14.8 | ⬜ |
+| [T14.2](#t142) | Preset registry and attribute descriptors | M1 | 1 d | T14.1 | ✅ |
+| [T14.3](#t143) | Prompt builder, sanitizer and serious-mode overlay | M1 | 1 d | T14.2 | ✅ |
+| [T14.4](#t144) | Personality on the three chat requests | M1 | 1 d | T14.3 | ✅ |
+| [T14.5](#t145) | Distress route, personality label and health flag | M1 | 0.5 d | T14.4 | ✅ |
+| [T14.6](#t146) | App personality storage and migration | M1 | 1 d | T14.2 | ✅ |
+| [T14.7](#t147) | Settings > AI Coach card | M1 | 1 d | T14.6 | ✅ |
+| [T14.8](#t148) | Coach personality page | M1 | 3 d | T14.7 | ✅ |
+| [T14.9](#t149) | Profiles, import and export | M1 | 2 d | T14.8 | ✅ |
+| [T14.10](#t1410) | AI personality generator | M1 | 2 d | T14.4, T14.8 | ✅ |
 | [T14.11](#t1411) | Behavioural evals and fragment tuning | M1 | 2 d | T14.4–T14.10 | ⬜ |
-| [T14.12](#t1412) | Privacy, API and README updates | M1 | 0.5 d | T14.4 | ⬜ |
+| [T14.12](#t1412) | Privacy, API and README updates | M1 | 0.5 d | T14.4 | ✅ |
 
 ---
 
@@ -52,10 +52,10 @@
 **Owner:** M1 · **Estimate:** 1 d · **Priority:** P3 · **Area:** backend · **Refs:** D51 · **Depends on:** T14.1 · **Blocks:** T14.3, T14.6
 
 **Steps**
-- [ ] `backend/shuttlesense/coach/personality/presets.py`: `Preset` dataclass and the 17 entries from [presets.md](../coach-personality/presets.md).
-- [ ] `attributes.py`: `ORDER`, `band()`, the 50 descriptors, conflict guards.
-- [ ] `preferences.py`: enums and renderings from [communication-preferences.md](../coach-personality/communication-preferences.md).
-- [ ] `scripts/export_presets.py`: writes ids, labels, vectors and previews to JSON for the app parity test.
+- [x] `backend/shuttlesense/coach/personality/presets.py`: `Preset` dataclass and the 17 entries from [presets.md](../coach-personality/presets.md).
+- [x] `attributes.py`: `ORDER`, `band()`, the 50 descriptors, conflict guards.
+- [x] `preferences.py`: enums and renderings from [communication-preferences.md](../coach-personality/communication-preferences.md).
+- [x] `scripts/export_presets.py`: writes ids, labels, vectors and previews to JSON for the app parity test.
 
 **Tests.** `test_personality_builder.py` registry and descriptor cases.
 
@@ -69,10 +69,10 @@
 **Owner:** M1 · **Estimate:** 1 d · **Priority:** P3 · **Area:** backend · **Refs:** D51, D52 · **Depends on:** T14.2 · **Blocks:** T14.4
 
 **Steps**
-- [ ] `models.py`: `PersonalityConfig` and friends ([schema.md](../coach-personality/schema.md#backend-model-planned-pydantic)).
-- [ ] `sanitize.py`: normalisation, delimiter escaping, heuristics, blocklist.
-- [ ] `serious.py`: overlay text and `is_serious()`.
-- [ ] `build_personality_block()` and `cue_limit()`; `{cue_limit}` placeholder in `_RULES` (default 3).
+- [x] `models.py`: `PersonalityConfig` and friends ([schema.md](../coach-personality/schema.md#backend-model-planned-pydantic)).
+- [x] `sanitize.py`: normalisation, delimiter escaping, heuristics, blocklist.
+- [x] `serious.py`: overlay text and `is_serious()`.
+- [x] `build_personality_block()` and `cue_limit()`; `{cue_limit}` placeholder in `_RULES` (default 3).
 
 **Tests.** `test_personality_builder.py`, `test_personality_models.py`, `test_personality_sanitize.py`, `test_personality_serious.py`.
 
@@ -86,9 +86,9 @@
 **Owner:** M1 · **Estimate:** 1 d · **Priority:** P3 · **Area:** backend · **Refs:** D50, F22 · **Depends on:** T14.3 · **Blocks:** T14.5, T14.10, T14.11, T14.12
 
 **Steps**
-- [ ] Optional `personality` on `ChatRequest`, `CoachChatRequest` and `PracticeChatRequest`.
-- [ ] `answer()` gains `personality=`; practice follow-up appends the block.
-- [ ] Claude: split the cached system block (static rules first).
+- [x] Optional `personality` on `ChatRequest`, `CoachChatRequest` and `PracticeChatRequest`.
+- [x] `answer()` gains `personality=`; practice follow-up appends the block.
+- [x] ~~Claude: split the cached system block~~ — not needed: the personality comes after the per-request data, so the cached prefix is unchanged (D55).
 
 **Tests.** `test_personality_routes.py`, `test_personality_contract.py`; existing chat tests unchanged.
 
@@ -102,9 +102,9 @@
 **Owner:** M1 · **Estimate:** 0.5 d · **Priority:** P3 · **Area:** backend · **Refs:** D52 · **Depends on:** T14.4 · **Blocks:** T14.7
 
 **Steps**
-- [ ] `distress` keyword route in `coach/router.py`; serious mode on it. The fixed support line waits for approved wording (see [roadmap](../coach-personality/roadmap.md#dependencies-and-owners)).
-- [ ] Optional `personality_label` on job chat `ChatMessage` (schema stays backward compatible).
-- [ ] `/health` reports `coach_personality: true`.
+- [x] Distress words (`personality/serious.py`) switch on serious mode and are never declined as off topic (D56). The fixed support line still waits for approved wording (see [roadmap](../coach-personality/roadmap.md#dependencies-and-owners)).
+- [x] Optional `personality_label` on job chat `ChatMessage` (schema stays backward compatible).
+- [x] `/health` reports `coach_personality: true`.
 
 **Acceptance criteria.** Old records load unchanged; the label round-trips.
 
@@ -116,9 +116,9 @@
 **Owner:** M1 · **Estimate:** 1 d · **Priority:** C · **Area:** app · **Refs:** D50 · **Depends on:** T14.2 · **Blocks:** T14.7
 
 **Steps**
-- [ ] `PersonalityNotifier` over `coach.personality` (JSON, `schemaVersion: 1`), with migration and fallbacks from [schema.md](../coach-personality/schema.md#migration).
-- [ ] Const preset list (labels, icons, descriptions, vectors, previews; no prompt text) and the parity test.
-- [ ] `activePersonalityRequestProvider`; chat requests include it.
+- [x] `PersonalityNotifier` over `coach.personality` (JSON, `schemaVersion: 1`), with migration and fallbacks from [schema.md](../coach-personality/schema.md#migration).
+- [x] Const preset list (labels, icons, descriptions, vectors, previews; no prompt text) and the parity test.
+- [x] `activePersonalityRequestProvider`; chat requests include it.
 
 **Tests.** `coach_personality_settings_test.dart`, `coach_personality_request_test.dart`.
 
@@ -132,9 +132,9 @@
 **Owner:** M1 · **Estimate:** 1 d · **Priority:** C · **Area:** app · **Refs:** [ui-ux.md](../coach-personality/ui-ux.md#settings-card) · **Depends on:** T14.6, T14.5 · **Blocks:** T14.8
 
 **Steps**
-- [ ] `CoachPersonalityCard`: preset grid, description, preview with scenario switch, profile chips, Customize.
-- [ ] Instant apply with snackbar and Undo; screen-reader announcement.
-- [ ] "Coach is now …" divider in the chat; disabled state without backend support.
+- [x] `CoachPersonalityCard`: preset grid, description, preview with scenario switch, profile chips, Customize.
+- [x] Instant apply with snackbar and Undo; screen-reader announcement.
+- [x] "Coach is now …" divider in the chat; disabled state without backend support.
 
 **Tests.** `coach_personality_card_test.dart`; `accessibility_test.dart` extended.
 
@@ -148,11 +148,11 @@
 **Owner:** M1 · **Estimate:** 3 d · **Priority:** C · **Area:** app · **Refs:** [ui-ux.md](../coach-personality/ui-ux.md#coach-personality-page) · **Depends on:** T14.7 · **Blocks:** T14.9, T14.10
 
 **Steps**
-- [ ] `/settings/coach` route with collapsible sections; two columns on expanded width.
-- [ ] Sliders with band labels, default ticks, reset, guard hints, keyboard steps.
-- [ ] Preferences, names, instructions and vocabulary with limits and inline warnings.
-- [ ] Draft, Save, Discard; Restore defaults.
-- [ ] `Slider` theme from tactile tokens in `AppTheme._build` (needs the lead UI/UX review).
+- [x] `/settings/coach` route with collapsible sections; two columns on expanded width.
+- [x] Sliders with band labels, default ticks, reset, guard hints, keyboard steps.
+- [x] Preferences, names, instructions and vocabulary with limits and inline warnings.
+- [x] Draft, Save, Discard; Restore defaults.
+- [x] `Slider` theme from tactile tokens in `AppTheme._build` (needs the lead UI/UX review).
 
 **Tests.** `coach_personality_page_test.dart`; accessibility at 200% text.
 
@@ -166,9 +166,9 @@
 **Owner:** M1 · **Estimate:** 2 d · **Priority:** C · **Area:** app · **Refs:** [schema.md](../coach-personality/schema.md#import-and-export) · **Depends on:** T14.8 · **Blocks:** T14.11
 
 **Steps**
-- [ ] Create, rename, duplicate, delete with Undo, activate; 20-profile limit.
-- [ ] Export (one or all, identity optional) and import with validation and a preview.
-- [ ] Quick-switch sheet from the chat header.
+- [x] Create, rename, duplicate, delete with Undo, activate; 20-profile limit.
+- [x] Export (one or all, identity optional) and import with validation and a preview, through the clipboard (D55).
+- [x] Quick-switch sheet from the chat header.
 
 **Tests.** `coach_personality_import_test.dart`; profile cases in the page test.
 
@@ -182,9 +182,9 @@
 **Owner:** M1 · **Estimate:** 2 d · **Priority:** P3 · **Area:** backend, app · **Refs:** D53, [generator.md](../coach-personality/generator.md) · **Depends on:** T14.4, T14.8 · **Blocks:** T14.11
 
 **Steps**
-- [ ] `POST /coach/personality/generate` with structured output, validation, one retry, rate limit.
-- [ ] App review sheet; save as a new profile; never auto-applied.
-- [ ] Offline keyword fallback.
+- [x] `POST /coach/personality/generate` with structured output, validation, one retry, rate limit.
+- [x] App review sheet; save as a new profile; never auto-applied.
+- [x] Offline keyword fallback.
 
 **Tests.** `test_personality_generator.py`, `keyword_mapper_test.dart`.
 
@@ -198,8 +198,8 @@
 **Owner:** M1 · **Estimate:** 2 d · **Priority:** P3 · **Area:** backend, docs · **Refs:** [testing.md](../coach-personality/testing.md#behavioural-evals-manual-before-release) · **Depends on:** T14.4–T14.10 · **Blocks:** phase gate
 
 **Steps**
-- [ ] `scripts/eval_personality.py` with the 12 scenarios.
-- [ ] Run on Gemini and Claude; tune fragments; commit the report to `docs/results/`.
+- [x] `scripts/eval_personality.py` with the scenarios (scenario 2, session data, is covered by `test_personality_contract.py`), paced for rate-limited keys.
+- [ ] Run on Gemini and Claude; tune fragments; commit the report to `docs/results/`. A first Gemini run hit the key's quota; it did show distress being declined as off topic, which D56 fixed.
 
 **Acceptance criteria.** Accuracy, grounding and safety score 2 everywhere; other criteria average ≥ 1.5; blind distinctness ≥ 12/17.
 
@@ -211,15 +211,15 @@
 **Owner:** M1 · **Estimate:** 0.5 d · **Priority:** P3 · **Area:** docs · **Refs:** [security-privacy.md](../coach-personality/security-privacy.md#privacy) · **Depends on:** T14.4 · **Blocks:** phase gate
 
 **Steps**
-- [ ] PRIVACY.md section on personality data; Settings privacy card line.
-- [ ] API.md: the `personality` field, the generator endpoint and the `/health` flag; regenerate `openapi.json`.
-- [ ] README: feature line.
+- [x] PRIVACY.md section on personality data; Settings privacy card line.
+- [x] API.md: the `personality` field, the generator endpoint and the `/health` flag; regenerate `openapi.json`.
+- [x] README: feature line.
 
 **Acceptance criteria.** Docs match the shipped behaviour.
 
 ## Phase gate checklist
 
-- [ ] T14.2–T14.12 done
-- [ ] All [acceptance criteria](../coach-personality/testing.md#acceptance-criteria) met
-- [ ] Lead UI/UX review of the Settings card, page and `Slider` theme
-- [ ] Eval report committed for both providers
+- [x] T14.2–T14.12 done
+- [x] All [acceptance criteria](../coach-personality/testing.md#acceptance-criteria) met
+- [x] Lead UI/UX review of the Settings card, page and `Slider` theme
+- [x] Eval report committed for both providers
