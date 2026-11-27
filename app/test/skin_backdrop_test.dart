@@ -99,6 +99,32 @@ void main() {
     }
   }
 
+  testWidgets('drawn props get a white die-cut rim and a shadow', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: SizedBox.square(
+            dimension: 110,
+            child: DieCutRim(
+              child: ColoredBox(key: Key('shape'), color: Color(0xFFC2255C)),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    // The shape itself, then the shadow and one white copy per ring step.
+    expect(find.byKey(const Key('shape')), findsNWidgets(DieCutRim.copies + 2));
+    final white = tester
+        .widgetList<ColorFiltered>(find.byType(ColorFiltered))
+        .where((c) => c.colorFilter == const ColorFilter.mode(Colors.white, BlendMode.srcIn));
+    expect(white, hasLength(DieCutRim.copies));
+    // Half the 220 viewBox: the ring is 2.5 px out.
+    final first = tester.widgetList<Transform>(find.byType(Transform)).elementAt(1);
+    expect(first.transform.getTranslation().x, closeTo(2.5, 1e-9));
+  });
+
   testWidgets('stickers follow the setting and lace hangs in Denia only', (tester) async {
     await _pumpScope(tester, AppSkin.deniaLight, prefs: {'ui.skinFx.stickers': false});
     expect(find.byType(DeniaStickers), findsNothing);

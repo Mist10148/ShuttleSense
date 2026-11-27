@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -120,13 +121,60 @@ class _Sticker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => art.isSvg
-      ? SvgPicture.asset(art.asset, fit: BoxFit.contain)
+      ? DieCutRim(child: SvgPicture.asset(art.asset, fit: BoxFit.contain))
       : Image.asset(
           art.asset,
           fit: BoxFit.contain,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => const SizedBox.shrink(),
         );
+}
+
+/// The white die-cut rim and soft drop shadow of the drawn Denia props. Their SVGs ask for it
+/// with a filter (alpha dilated by 5, white, then a shadow blurred 2.2 and moved down 2.5, in
+/// `#3a1f33` at 28%, all in a 220 viewBox), which flutter_svg does not draw. Here the shape is
+/// drawn again: once as the shadow, [copies] times in white around a ring of the same radius,
+/// then itself on top (docs/THEMES.md).
+class DieCutRim extends StatelessWidget {
+  const DieCutRim({super.key, required this.child, this.viewBox = 220});
+
+  final Widget child;
+
+  /// The size of the drawing's viewBox; the rim and shadow scale with the drawn size.
+  final double viewBox;
+
+  static const copies = 12;
+  static const _radius = 5.0;
+  static const _shadow = Color(0x473A1F33);
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final s = box.biggest.shortestSide.isFinite ? box.biggest.shortestSide / viewBox : 1.0;
+      final r = _radius * s;
+      Widget tinted(Color c) =>
+          ColorFiltered(colorFilter: ColorFilter.mode(c, BlendMode.srcIn), child: child);
+      return Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          Transform.translate(
+            offset: Offset(0, 2.5 * s),
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 2.2 * s, sigmaY: 2.2 * s),
+              child: tinted(_shadow),
+            ),
+          ),
+          for (var i = 0; i < copies; i++)
+            Transform.translate(
+              offset: Offset(cos(i * 2 * pi / copies) * r, sin(i * 2 * pi / copies) * r),
+              child: tinted(Colors.white),
+            ),
+          child,
+        ],
+      );
+    },
+  );
 }
 
 class _QuotePill extends StatelessWidget {
