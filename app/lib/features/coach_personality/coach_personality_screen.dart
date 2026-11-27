@@ -10,6 +10,7 @@ import 'personality_switcher_sheet.dart';
 import 'presets.dart';
 import 'widgets/attribute_sliders.dart';
 import 'widgets/collapsible_section.dart';
+import 'widgets/instructions_section.dart';
 import 'widgets/names_section.dart';
 import 'widgets/personality_preview.dart';
 import 'widgets/preferences_section.dart';
@@ -187,6 +188,19 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
         onOwn: (i) => update(draft.copyWith(identity: () => i)),
         onAddressByName: (v) =>
             update(draft.copyWith(preferences: draft.preferences.copyWith(addressByName: v))),
+      ),
+    ),
+    CollapsibleSection(
+      key: ValueKey('section-instructions-${draft.id}'),
+      title: 'Your instructions',
+      icon: Icons.edit_note,
+      badge: draft.instructions.trim().isEmpty && draft.vocabulary.isEmpty ? null : 'set',
+      child: InstructionsSection(
+        instructions: draft.instructions,
+        vocabulary: draft.vocabulary,
+        enabled: !readOnly,
+        onInstructions: (s) => update(draft.copyWith(instructions: s)),
+        onVocabulary: (v) => update(draft.copyWith(vocabulary: v)),
       ),
     ),
   ];
