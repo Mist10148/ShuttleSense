@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/widgets/tactile.dart';
 import '../../ui/depth.dart';
+import 'skins/skin_decor.dart';
 import 'tokens.dart';
 
 export 'tokens.dart';
@@ -162,9 +163,14 @@ abstract final class AppTheme {
     StatusColors status,
     AppPalette p, {
     bool highContrast = false,
+    TactileTokens? tactile,
+    AnalysisColors? analysis,
+    DepthTheme? depth,
+    SkinDecor? decor,
   }) {
     final scheme = _scheme(brightness, p, status);
-    final base = brightness == Brightness.dark ? TactileTokens.dark : TactileTokens.light;
+    final base =
+        tactile ?? (brightness == Brightness.dark ? TactileTokens.dark : TactileTokens.light);
     final t = highContrast ? base.asFlat(p.ink.withValues(alpha: 0.6)) : base;
     // Depth level 3, floating: menus, dialogs, sheets and toasts. Opaque, largest shadow.
     final floatShadow = highContrast ? Colors.transparent : t.shade;
@@ -196,9 +202,10 @@ abstract final class AppTheme {
         players,
         status,
         p,
-        brightness == Brightness.dark ? AnalysisColors.dark : AnalysisColors.light,
+        analysis ?? (brightness == Brightness.dark ? AnalysisColors.dark : AnalysisColors.light),
         t,
-        brightness == Brightness.dark ? DepthTheme.dark : DepthTheme.light,
+        depth ?? (brightness == Brightness.dark ? DepthTheme.dark : DepthTheme.light),
+        decor ?? SkinDecor.classic,
       ],
       visualDensity: VisualDensity.adaptivePlatformDensity,
       scaffoldBackgroundColor: p.page,
