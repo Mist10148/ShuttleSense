@@ -200,7 +200,7 @@ the app side. Issue #56 can be closed.
 - [x] Every screen has loading, empty and error states using `MessageView`.
 - [x] Settings: theme mode (system/light/dark) persisted; wire into `MaterialApp.themeMode`.
 - [ ] Review every screen in light and dark mode on phone and laptop.
-- [x] *Experimental, branch `experimental-themes`:* selectable themes (Backrooms, Denia Light, Denia Dark) next to Classic, saved as `ui.skin` (D49, [docs/THEMES.md](../THEMES.md)). Settings is rendered in every theme at phone, tablet and laptop sizes by `test/theme_picker_test.dart`.
+- [x] *Experimental, branch `experimental-themes`:* selectable themes (Backrooms, Denia Light, Denia Dark) next to Classic, saved as `ui.skin` (D49, [docs/THEMES.md](../THEMES.md)). Settings is rendered in every theme at phone, tablet and laptop sizes by `test/theme_picker_test.dart`. Light/Dark also moves Denia between its sides (D54), and `/styleguide/themes` shows every theme at once.
 
 **Acceptance criteria.** Screenshots of each screen in both themes attached to the PR.
 
