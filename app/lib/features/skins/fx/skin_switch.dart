@@ -144,6 +144,15 @@ class SkinSwitchController extends Notifier<SkinSwitchRun?> {
   }
 }
 
+/// The theme to switch to when the Light/Dark mode changes while [skin] is chosen (D54).
+/// Denia has a light and a dark side, so it follows the mode; Classic follows it by itself
+/// (AppSkin.themeMode); Backrooms is light only. Null means nothing to switch.
+AppSkin? skinForMode(AppSkin skin, {required bool dark}) => switch (skin) {
+  AppSkin.deniaLight when dark => AppSkin.deniaDark,
+  AppSkin.deniaDark when !dark => AppSkin.deniaLight,
+  _ => null,
+};
+
 final skinSwitchProvider = NotifierProvider<SkinSwitchController, SkinSwitchRun?>(
   SkinSwitchController.new,
 );

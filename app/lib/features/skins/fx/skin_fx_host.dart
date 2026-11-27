@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_skin.dart';
+import '../../../core/theme/theme_mode.dart';
+
 import 'backrooms_switch_overlay.dart';
 import 'denia_switch_overlay.dart';
 import 'skin_switch.dart';
@@ -27,8 +30,40 @@ class SkinFxHost extends ConsumerStatefulWidget {
 }
 
 class _SkinFxHostState extends ConsumerState<SkinFxHost> {
+  /// The Light/Dark switch (navigation rail, Settings > Appearance) also moves a theme with a
+  /// light and a dark side to the matching one; Backrooms only has a light side (D54).
+  void _followMode(ThemeMode mode) {
+    final AppSkin skin = ref.read(skinSwitchProvider)?.target ?? ref.read(appSkinProvider);
+    final dark = switch (mode) {
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
+      ThemeMode.system => MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+    };
+    final to = skinForMode(skin, dark: dark);
+    if (to != null) {
+      ref
+          .read(skinSwitchProvider.notifier)
+          .request(
+            to,
+            reduceMotion: MediaQuery.disableAnimationsOf(context),
+            origin: SkinFxHost.recentTap(),
+          );
+    } else if (skin == AppSkin.backrooms && dark) {
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Backrooms has no dark version. Pick another theme in Settings.'),
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(themeModeProvider, (prev, next) {
+      if (prev != next) _followMode(next);
+    });
     final run = ref.watch(skinSwitchProvider);
     return Listener(
       behavior: HitTestBehavior.translucent,
