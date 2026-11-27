@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — experimental themes (branch `experimental-themes`)
+
+Needs a review from the lead UI/UX developer before merge (D49, [docs/THEMES.md](docs/THEMES.md)).
+
+### Added
+
+- **Settings > Theme:** Classic, Backrooms, Denia (Light) and Denia (Dark). Each theme is a full set of tactile tokens, so raised plates, wells and keys keep their look in the new tones. Line-call and player colours stay as they are.
+- **Backrooms:** yellowed office wallpaper with plaster grain under a fluorescent ceiling light. Switching to it goes black, shows the Backrooms logo, then reveals the theme with a click and a fading hum.
+- **Denia (Light) and (Dark):** a bubble-and-star pattern, a stage light, lace, and Denia stickers at Faint, Normal or Strong. Switching plays an iris of colour, rising bubbles that pop, sparkles and a "Stagecraft" or "Breakdown" card, with synthesized chimes, a whoosh and bubble bloops.
+- **Controls:** the switch animation and its sound can each be turned off. Reduced motion skips the animation, and high contrast drops the decoration.
+
 ## Unreleased — automatic scoring
 
 ### Fixed
