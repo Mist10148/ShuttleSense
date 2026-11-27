@@ -76,6 +76,15 @@ class _DeniaSwitchOverlayState extends ConsumerState<DeniaSwitchOverlay>
                 CustomPaint(
                   painter: DeniaWashPainter(t: t, plan: plan, kind: widget.kind, origin: origin),
                 ),
+                CustomPaint(
+                  painter: DeniaBubblesPainter(
+                    t: t,
+                    plan: plan,
+                    kind: widget.kind,
+                    bubbles: bubbles,
+                    seed: widget.run.seed,
+                  ),
+                ),
               ],
             );
           },
@@ -166,4 +175,235 @@ class DeniaWashPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DeniaWashPainter old) => old.t != t || old.origin != origin;
+}
+
+/// Rising soap bubbles that pop into a ring and droplets, and four-point sparkles
+/// (deniaSwitch.ts and denia.css:41-50).
+class DeniaBubblesPainter extends CustomPainter {
+  DeniaBubblesPainter({
+    required this.t,
+    required this.plan,
+    required this.kind,
+    required this.bubbles,
+    required this.seed,
+    this.extraPops = const [],
+  });
+
+  final double t;
+  final DeniaPlan plan;
+  final DeniaSwitchKind kind;
+  final List<DeniaBubble> bubbles;
+  final int seed;
+
+  /// Pops that are not bubbles (the card's), as (at ms, centre, size, rim).
+  final List<(int, Offset, double, Color)> extraPops;
+
+  /// Bubble rims: pink, pale blue, violet.
+  static const rims = [
+    Color.fromRGBO(240, 120, 170, .9),
+    Color.fromRGBO(110, 170, 225, .9),
+    Color.fromRGBO(160, 120, 225, .9),
+  ];
+
+  static const _riseIn = Cubic(0.2, 0.7, 0.3, 1);
+  static const _riseOn = Cubic(0.3, 0.5, 0.3, 1);
+  static const _ring = Cubic(0.2, 0.7, 0.3, 1);
+  static const _drop = Cubic(0.15, 0.6, 0.4, 1);
+
+  /// Where bubble [b] is at [t] ms in a window of [size]: its centre, scale and opacity, or
+  /// null before it starts and once it has popped.
+  static (Offset, double, double)? bubbleAt(DeniaBubble b, double t, Size size) {
+    if (t < b.delay || t >= b.popAt) return null;
+    final life = math.max(200, b.popAt - b.delay);
+    final u = ((t - b.delay) / life).clamp(0.0, 1.0);
+    final rise = -(b.rise / 100) * size.height - b.size;
+    double dx, dy, scale, opacity;
+    if (u < 0.4) {
+      final e = _riseIn.transform(u / 0.4);
+      dx = b.sway * 0.4 * e;
+      dy = rise * 0.45 * e;
+      scale = 0.6 + 0.4 * e;
+      opacity = e;
+    } else if (u < 0.96) {
+      final e = _riseOn.transform((u - 0.4) / 0.56);
+      dx = b.sway * (0.4 + 0.6 * e);
+      dy = rise * (0.45 + 0.55 * e);
+      scale = 1 + 0.04 * e;
+      opacity = 1;
+    } else {
+      final e = (u - 0.96) / 0.04;
+      dx = b.sway;
+      dy = rise;
+      scale = 1.04 + 0.21 * e;
+      opacity = 1 - e;
+    }
+    final start = Offset(b.x / 100 * size.width, size.height + b.size / 2);
+    return (start + Offset(dx, dy), scale, opacity);
+  }
+
+  /// Where bubble [b] pops.
+  static Offset popPoint(DeniaBubble b, Size size) => Offset(
+    b.x / 100 * size.width + b.sway,
+    size.height - (b.rise / 100) * size.height - b.size + b.size / 2,
+  );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _sparkles(canvas, size);
+    for (final b in bubbles) {
+      final at = bubbleAt(b, t, size);
+      if (at != null) _bubble(canvas, at.$1, b.size / 2 * at.$2, rims[b.hue], at.$3);
+    }
+    for (final (i, b) in bubbles.indexed) {
+      _pop(canvas, b.popAt, popPoint(b, size), b.size, rims[b.hue], seed * 31 + i);
+    }
+    for (final (i, (at, c, s, rim)) in extraPops.indexed) {
+      _pop(canvas, at, c, s, rim, seed * 17 + 1000 + i);
+    }
+  }
+
+  void _bubble(Canvas c, Offset center, double r, Color rim, double o) {
+    if (r <= 0 || o <= 0) return;
+    final box = Rect.fromCircle(center: center, radius: r);
+    Color a(Color k) => k.withValues(alpha: k.a * o);
+    // soap film: conic-gradient(from 210deg, pink, blue, violet, gold, pink)
+    c.drawCircle(
+      center,
+      r,
+      Paint()
+        ..shader = SweepGradient(
+          colors: [
+            a(const Color.fromRGBO(255, 170, 210, .42)),
+            a(const Color.fromRGBO(180, 220, 255, .38)),
+            a(const Color.fromRGBO(205, 180, 255, .42)),
+            a(const Color.fromRGBO(255, 236, 190, .36)),
+            a(const Color.fromRGBO(255, 170, 210, .42)),
+          ],
+          transform: const GradientRotation(120 * math.pi / 180),
+        ).createShader(box),
+    );
+    // the bright edge of the film
+    c.drawCircle(
+      center,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            a(const Color(0x00FFFFFF)),
+            a(const Color.fromRGBO(255, 255, 255, .28)),
+            a(const Color.fromRGBO(255, 255, 255, .5)),
+          ],
+          stops: const [0.52, 0.72, 1],
+        ).createShader(box),
+    );
+    // the highlight, up and to the left
+    c.drawCircle(
+      center,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.36, -0.44),
+          radius: 0.99,
+          colors: [
+            a(const Color(0xFFFFFFFF)),
+            a(const Color(0xFFFFFFFF)),
+            a(const Color.fromRGBO(255, 255, 255, .55)),
+            a(const Color(0x00FFFFFF)),
+          ],
+          stops: const [0, 0.07, 0.11, 0.24],
+        ).createShader(box),
+    );
+    c.drawCircle(
+      center,
+      r - 0.75,
+      Paint()
+        ..color = a(rim)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  /// A pop at [at] ms: a ring that widens and fades, and droplets that fly out and fall.
+  void _pop(Canvas c, int at, Offset center, double size, Color rim, int dropSeed) {
+    final dt = t - at;
+    if (dt < 0 || dt > 620) return;
+    if (dt < 320) {
+      final e = _ring.transform(dt / 320);
+      c.drawCircle(
+        center,
+        size / 2 * (1 + 0.6 * e) - 1,
+        Paint()
+          ..color = rim.withValues(alpha: 0.9 * (1 - e))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
+    final r = math.Random(dropSeed);
+    final k = size > 70 ? 7 : 5;
+    for (var i = 0; i < k; i++) {
+      final ang = i / k * math.pi * 2 + r.nextDouble() * 0.6;
+      final d = size * (0.55 + r.nextDouble() * 0.45);
+      final s = 4 + r.nextDouble() * 5;
+      final dur = 420 + r.nextDouble() * 180;
+      if (dt >= dur) continue;
+      final e = _drop.transform(dt / dur);
+      final p = center + Offset(math.cos(ang) * d * e, (math.sin(ang) * d + 18) * e);
+      c.drawCircle(p, s / 2 * (1 - 0.6 * e), Paint()..color = rim.withValues(alpha: 1 - e));
+    }
+  }
+
+  /// The sparkle shape: clip-path polygon(50% 0, 61% 39%, 100% 50%, ...).
+  static Path sparkle(double s) => Path()
+    ..moveTo(0, -s / 2)
+    ..lineTo(0.11 * s, -0.11 * s)
+    ..lineTo(s / 2, 0)
+    ..lineTo(0.11 * s, 0.11 * s)
+    ..lineTo(0, s / 2)
+    ..lineTo(-0.11 * s, 0.11 * s)
+    ..lineTo(-s / 2, 0)
+    ..lineTo(-0.11 * s, -0.11 * s)
+    ..close();
+
+  void _sparkles(Canvas c, Size size) {
+    final r = math.Random(seed);
+    final count = kind == DeniaSwitchKind.leave ? 4 : (kind.isForm ? 7 : 12);
+    final dark = kind.dark;
+    final fill = dark ? const Color(0xFFF3E9F7) : const Color(0xFFFFFFFF);
+    final glow = dark
+        ? const Color.fromRGBO(201, 139, 255, .95)
+        : const Color.fromRGBO(255, 190, 225, .9);
+    for (var i = 0; i < count; i++) {
+      final x = (0.04 + r.nextDouble() * 0.92) * size.width;
+      final y = (0.06 + r.nextDouble() * 0.8) * size.height;
+      final s = 10 + r.nextDouble() * 16;
+      final dur = 520 + r.nextDouble() * 300;
+      final delay = r.nextDouble() * (plan.popTo - 300);
+      final u = (t - delay) / dur;
+      if (u <= 0 || u >= 1) continue;
+      final half = u < 0.5 ? u / 0.5 : (1 - u) / 0.5;
+      final k = Curves.easeInOut.transform(half.clamp(0.0, 1.0));
+      final spin =
+          (u < 0.5
+              ? Curves.easeInOut.transform(u / 0.5)
+              : 1 + Curves.easeInOut.transform((u - 0.5) / 0.5)) *
+          math.pi /
+          4;
+      c.save();
+      c.translate(x + s / 2, y + s / 2);
+      c.rotate(spin);
+      c.scale(k);
+      final path = sparkle(s);
+      c.drawPath(
+        path,
+        Paint()
+          ..color = glow.withValues(alpha: glow.a * k)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, dark ? 5 : 4),
+      );
+      c.drawPath(path, Paint()..color = fill.withValues(alpha: k));
+      c.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(DeniaBubblesPainter old) => old.t != t;
 }
