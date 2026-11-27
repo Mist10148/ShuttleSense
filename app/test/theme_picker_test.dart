@@ -40,6 +40,14 @@ void main() {
     expect(run?.delayMs, greaterThan(0));
   });
 
+  testWidgets('the card opens the theme gallery', (tester) async {
+    final visited = await pumpScreen(tester, _card, overrides: _quiet);
+    await tester.ensureVisible(find.byKey(const ValueKey('theme-gallery')));
+    await tester.tap(find.byKey(const ValueKey('theme-gallery')));
+    await tester.pumpAndSettle();
+    expect(visited, ['/styleguide/themes']);
+  });
+
   testWidgets('the extras are saved, and sticker settings show for Denia only', (tester) async {
     await pumpScreen(tester, _card, overrides: _quiet);
     expect(find.byKey(const ValueKey('theme-stickers')), findsNothing);

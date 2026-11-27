@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_skin.dart';
 import '../../../core/theme/skins/skin_theme.dart';
 import '../../../core/theme/tokens.dart';
@@ -69,8 +71,18 @@ class ThemePickerCard extends ConsumerWidget {
           ),
           const SizedBox(height: Spacing.md),
           Text(
-            'Light and Dark under Appearance apply to Classic. The other themes keep their own.',
+            'Light and Dark under Appearance apply to Classic and move Denia between its light '
+            'and dark sides. Backrooms is light only.',
             style: muted,
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('theme-gallery'),
+              onPressed: () => context.push(Routes.themeGallery),
+              icon: const Icon(Icons.grid_view_outlined),
+              label: const Text('Preview all themes'),
+            ),
           ),
           const SizedBox(height: Spacing.sm),
           _ThemeExtras(denia: chosen.family == SkinFamily.denia),
