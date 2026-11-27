@@ -45,7 +45,8 @@ AppSkin (enum, saved as ui.skin) ──► SkinBundle (const tokens per theme)
 - `app/lib/shared/widgets/skin/`: the painters (`backrooms_wallpaper`, `backrooms_grain`, `backrooms_light`, `denia_pattern`, `denia_stage_light`, `denia_lace`, `denia_stickers`), `SkinBackdrop` and `SkinScope`.
 - `app/lib/features/skins/fx/`: the timing plans, the switch controller (`skin_switch.dart`), the host and the Backrooms and Denia overlays.
 - `app/lib/core/audio/`: `wav_synth.dart` (a small pure-Dart synthesizer and WAV writer), `denia_synth.dart` (the Denia score), `skin_sounds.dart` (the interface) and `audio_skin_sounds.dart` (audioplayers).
-- `app/lib/features/settings/widgets/theme_picker_card.dart`: the Theme card.
+- `app/lib/features/settings/widgets/theme_picker_card.dart`: the Theme card, with a link to the gallery.
+- `app/lib/features/styleguide/theme_gallery_screen.dart`: `/styleguide/themes`, every theme side by side.
 
 **How the backdrop shows.** In Classic, every page is opaque: the shell's chassis panel fills the window on wide screens, and Scaffolds fill it on phones. For a decorated theme, `SkinScope` paints the backdrop under the router and gives the pages a `Theme` where those page-sized fills are clear: the scaffold background, `TactileTokens.chassisTop/Bottom`, `AppPalette.canvas/page/canvasGlows`, and the shell's popover shadow, which would darken the whole wall under a clear panel. The bottom navigation bar, cards, keys and dialogs keep the colours baked into their component themes, so they stay solid.
 
@@ -134,7 +135,7 @@ Denia is a character from *Wuthering Waves*. Light borrows her pink "Stagecraft"
 - **Quote pills:** about one cell in 28 shows one of Wonderboard's short lines in a pill instead.
 - **Sets:** Light and Dark use different sticker sets (`DeniaArtCatalog.setFor`).
 - **Still:** GIFs hold their first frame, as on Wonderboard's canvas.
-- **Known gap:** `flutter_svg` skips the SVG filter that draws the props' white die-cut rim, so the props show without it.
+- **Die-cut rim:** the props' SVGs draw their white rim and drop shadow with a filter (alpha dilated by 5, then a shadow blurred 2.2 and moved down 2.5 in `#3a1f33` at 28%), which `flutter_svg` skips. `DieCutRim` (`denia_stickers.dart`) draws the shape again instead: once tinted and blurred as the shadow, twelve times in white on a ring of the same radius, then itself, all scaled from the 220 viewBox.
 
 **Switch animation**:
 
