@@ -32,7 +32,7 @@ Google's handling of Gemini API data is described in the Gemini API terms (paid 
 
 ### Coach personality
 
-How the coach talks is chosen in Settings > AI Coach ([COACH_PERSONALITY.md](COACH_PERSONALITY.md)). The settings and saved profiles stay on your device (`coach.personality`); they are never stored on the backend. When you ask a question, the active personality goes with it to the backend and, as part of the coach's instructions, to Gemini or Claude: the preset, slider and option choices, and anything you typed yourself (the coach's name, what it calls you, your instructions and words). The backend saves only the personality's name with each job chat answer. **Describe it, AI drafts it** sends only the description you typed, and only when you press the button. Export copies your profiles to the clipboard; the names and language are included only if you tick the box.
+How the coach talks is chosen in Settings > AI Coach ([COACH_PERSONALITY.md](COACH_PERSONALITY.md)). The settings and saved profiles stay on your device (`coach.personality`); they are never stored on the backend. When you ask a question (session chat, the general coach or a practice follow-up), the active personality goes with it to the backend and, as part of the coach's instructions, to Gemini or Claude: the preset, slider and option choices, and anything you typed yourself (the coach's name, what it calls you, your instructions and words). The backend saves only the personality's name with each job chat answer. **Describe it, AI drafts it** sends only the description you typed, and only when you press the button. Export copies your profiles to the clipboard; the names and language are included only if you tick the box.
 
 ## Not medical or professional advice
 

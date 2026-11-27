@@ -346,7 +346,7 @@ Both chat routes take an optional `personality` object next to `message` ([D50](
  "vocabulary": {"preferred": ["kill"], "avoid": [], "catchphrases": []}, "instructions": "Be strict about footwork.", "label": "Footwork bootcamp"}
 ```
 
-It changes how the answer is worded, never the rules, the data or the fixed replies. Unknown presets and options fall back to their defaults and attributes are clamped to 0-100; instructions over 1000 characters, names over 24, more than 20 words or 5 expressions, or a coach name that is a professional title are a `422`. Without the object the coach is exactly as before. The `done` event's `message` then carries `personality_label` (the profile or preset name), which job chat also saves in `record.chat.messages`. The practice follow-up accepts the field but does not use it yet.
+It changes how the answer is worded, never the rules, the data or the fixed replies. Unknown presets and options fall back to their defaults and attributes are clamped to 0-100; instructions over 1000 characters, names over 24, more than 20 words or 5 expressions, or a coach name that is a professional title are a `422`. Without the object the coach is exactly as before. The `done` event's `message` then carries `personality_label` (the profile or preset name), which job chat also saves in `record.chat.messages`. `POST /practice/sessions/{job_id}/chat` takes the same object and labels its answer the same way (D58).
 
 ### `POST /coach/personality/generate`
 
