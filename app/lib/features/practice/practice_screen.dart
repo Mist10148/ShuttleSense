@@ -27,6 +27,7 @@ import '../upload/upload_screen.dart' show VideoDropZone, VideoFileRow;
 import '../watch/watch_screen.dart' show formatWatchElapsed, watchFrameDelay, WatchOverlay;
 import '../mode/mode_screen.dart';
 import 'coach_guide_panel.dart';
+import '../coach_personality/personality_notifier.dart';
 import '../../core/config/app_mode.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
@@ -1368,6 +1369,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                       contextVersion: version,
                       history: history,
                       cancelToken: cancel,
+                      personality: ref.read(activePersonalityRequestProvider),
                     ),
                 onSeek: seekCoachMoment,
               );
