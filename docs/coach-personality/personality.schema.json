@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Mist10148/ShuttleSense/docs/coach-personality/personality.schema.json",
+  "title": "ShuttleSense AI Coach personality",
+  "description": "Planned schema (v1) for the saved coach.personality document and for personality export files. See docs/coach-personality/schema.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/storedDocument" },
+    { "$ref": "#/$defs/exportFile" }
+  ],
+  "$defs": {
+    "storedDocument": {
+      "type": "object",
+      "required": ["schemaVersion", "profiles"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "activeProfileId": {
+          "type": ["string", "null"],
+          "pattern": "^(p_[a-z0-9]{8}|preset:(default|professional|friendly|efficient|intellectual|mentor|witty|cynical|compassionate|creative|bold|reserved|robotic|playful|stoic|cute_shy|custom))$"
+        },
+        "global": { "$ref": "#/$defs/identity" },
+        "profiles": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/profile" } }
+      }
+    },
+    "exportFile": {
+      "type": "object",
+      "required": ["format", "schemaVersion", "exportedAt", "profiles"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "const": "shuttlesense.coach-personality" },
+        "schemaVersion": { "const": 1 },
+        "exportedAt": { "type": "string", "format": "date-time" },
+        "app": { "type": "string", "maxLength": 40 },
+        "global": { "$ref": "#/$defs/identity" },
+        "profiles": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/profile" } }
+      }
+    },
+    "presetId": {
+      "enum": ["default", "professional", "friendly", "efficient", "intellectual", "mentor", "witty", "cynical", "compassionate", "creative", "bold", "reserved", "robotic", "playful", "stoic", "cute_shy", "custom"]
+    },
+    "attributeValue": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "warmth": { "$ref": "#/$defs/attributeValue" },
+        "humor": { "$ref": "#/$defs/attributeValue" },
+        "sarcasm": { "$ref": "#/$defs/attributeValue" },
+        "formality": { "$ref": "#/$defs/attributeValue" },
+        "enthusiasm": { "$ref": "#/$defs/attributeValue" },
+        "directness": { "$ref": "#/$defs/attributeValue" },
+        "empathy": { "$ref": "#/$defs/attributeValue" },
+        "creativity": { "$ref": "#/$defs/attributeValue" },
+        "assertiveness": { "$ref": "#/$defs/attributeValue" },
+        "verbosity": { "$ref": "#/$defs/attributeValue" }
+      }
+    },
+    "shortName": { "type": "string", "maxLength": 24, "pattern": "^[^<>{}\\[\\]`\\\\\\n\\r\\t]*$" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "coachName": { "anyOf": [{ "$ref": "#/$defs/shortName" }, { "type": "null" }] },
+        "coachPronouns": { "enum": ["they/them", "she/her", "he/him", "it/its", null] },
+        "playerNickname": { "anyOf": [{ "$ref": "#/$defs/shortName" }, { "type": "null" }] },
+        "language": { "type": "string", "pattern": "^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)$" }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "responseLength": { "enum": ["minimal", "concise", "balanced", "detailed", "comprehensive", "adaptive"] },
+        "explanationLevel": { "enum": ["beginner", "intermediate", "advanced", "expert", "adaptive"] },
+        "emoji": { "enum": ["none", "minimal", "moderate", "frequent", "preset"] },
+        "humorStyle": { "enum": ["none", "dry", "witty", "dark", "wholesome", "absurd", "adaptive"] },
+        "criticalThinking": { "enum": ["supportive", "balanced", "skeptical", "challenging"] },
+        "initiative": { "enum": ["reactive", "balanced", "proactive"] },
+        "emotionalExpression": { "enum": ["restrained", "natural", "expressive"] },
+        "addressStyle": { "enum": ["name", "none"] }
+      }
+    },
+    "vocabulary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preferred": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 40 } },
+        "avoid": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 40 } },
+        "catchphrases": { "type": "array", "maxItems": 5, "items": { "type": "string", "minLength": 1, "maxLength": 60 } }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "required": ["id", "name", "basePreset"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^p_[a-z0-9]{8}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "basePreset": { "$ref": "#/$defs/presetId" },
+        "overrides": { "$ref": "#/$defs/overrides" },
+        "preferences": { "$ref": "#/$defs/preferences" },
+        "identity": { "anyOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "vocabulary": { "$ref": "#/$defs/vocabulary" },
+        "instructions": { "type": "string", "maxLength": 1000 },
+        "description": { "type": "string", "maxLength": 140 },
+        "source": { "enum": ["manual", "generated", "imported"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

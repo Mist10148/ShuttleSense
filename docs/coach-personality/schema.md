@@ -9,7 +9,7 @@ Saved in `shared_preferences` under the key `coach.personality` as one JSON stri
 ```json
 {
   "schemaVersion": 1,
-  "activeProfileId": "p_7f3a",
+  "activeProfileId": "p_7f3a9k2x",
   "global": {
     "coachName": "Coach",
     "coachPronouns": null,
@@ -18,7 +18,7 @@ Saved in `shared_preferences` under the key `coach.personality` as one JSON stri
   },
   "profiles": [
     {
-      "id": "p_7f3a",
+      "id": "p_7f3a9k2x",
       "name": "Footwork bootcamp",
       "basePreset": "bold",
       "overrides": { "empathy": 60, "verbosity": 30 },

@@ -10,7 +10,7 @@ They belong to a profile, so "Match prep" can be Efficient with minimal emoji an
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `coachName` | 1–24 characters, letters, digits, spaces, `.'-` | "Coach" |
+| `coachName` | 1–24 characters, any script; no line breaks or markup characters (`< > { } [ ]`, backtick, backslash) | "Coach" |
 | `coachPronouns` | `they/them`, `she/her`, `he/him`, `it/its`, or none | none |
 
 Rendering: `Your name in this app is "{name}". If you refer to yourself in the third person, use {pronouns}.` The name never replaces "ShuttleSense coach" in fixed replies (safety, off-topic), and it may not be the name of a real public figure or claim to be a human professional ([security-privacy.md](security-privacy.md#names-and-impersonation)). The chat header shows the name with a small "AI" badge.
