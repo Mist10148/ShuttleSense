@@ -14,6 +14,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/status_pill.dart';
 import '../../core/theme/tokens.dart';
 import '../../shared/widgets/tactile.dart';
+import 'widgets/coach_personality_card.dart';
 import 'widgets/theme_picker_card.dart';
 
 /// Settings grouped as Connection, Appearance, Notifications, Privacy & data and About. The
@@ -112,6 +113,8 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: Spacing.lg),
         const ThemePickerCard(),
+        const SizedBox(height: Spacing.lg),
+        const CoachPersonalityCard(),
         const SizedBox(height: Spacing.lg),
         SectionCard(
           title: 'Notifications',
