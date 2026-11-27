@@ -10,6 +10,7 @@ import 'personality_switcher_sheet.dart';
 import 'presets.dart';
 import 'widgets/attribute_sliders.dart';
 import 'widgets/collapsible_section.dart';
+import 'widgets/names_section.dart';
 import 'widgets/personality_preview.dart';
 import 'widgets/preferences_section.dart';
 
@@ -89,21 +90,29 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
 
   Future<void> save() async {
     final notifier = ref.read(personalityProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
     if (global != originalGlobal) await notifier.setGlobal(global);
-    PersonalityProfile? saved = draft;
-    if (!draft.sameAs(original) || draft.name != original.name || isProfile) {
-      saved = await notifier.saveProfile(draft, activate: true);
+    final changed = !draft.sameAs(original) || draft.name != original.name;
+    if (!changed && !isProfile) {
+      // Only the shared names changed: the preset stays as it is.
+      if (!mounted) return;
+      setState(() => _load(target));
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Saved.')));
+      return;
     }
+    final saved = await notifier.saveProfile(draft, activate: true);
     if (!mounted) return;
     if (saved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('You have 20 profiles. Delete one to save another.')),
       );
       return;
     }
-    setState(() => _load(saved!.id));
+    setState(() => _load(saved.id));
     announceCoach(context, saved.name);
-    ScaffoldMessenger.of(context)
+    messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text('Saved. Coach is now ${saved.name}.')));
   }
@@ -163,6 +172,21 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
         prefs: draft.preferences,
         enabled: !readOnly,
         onChanged: (p) => update(draft.copyWith(preferences: p)),
+      ),
+    ),
+    CollapsibleSection(
+      key: ValueKey('section-names-${draft.id}'),
+      title: 'Names',
+      icon: Icons.badge_outlined,
+      child: NamesSection(
+        global: global,
+        own: draft.identity,
+        addressByName: draft.preferences.addressByName,
+        enabled: !readOnly,
+        onGlobal: updateGlobal,
+        onOwn: (i) => update(draft.copyWith(identity: () => i)),
+        onAddressByName: (v) =>
+            update(draft.copyWith(preferences: draft.preferences.copyWith(addressByName: v))),
       ),
     ),
   ];

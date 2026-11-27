@@ -124,6 +124,27 @@ void main() {
     expect((req['preferences'] as Map)['criticalThinking'], 'challenging');
   });
 
+  testWidgets('names are shared by default, checked, and sent', (tester) async {
+    await pumpScreen(tester, const CoachPersonalityScreen(), size: tablet);
+    await _tap(tester, find.byTooltip('Show Names'));
+    await tester.enterText(find.byKey(const ValueKey('names-coach')), 'Dr. Feet');
+    await tester.pumpAndSettle();
+    expect(find.textContaining("isn't a professional title"), findsOneWidget);
+    expect(_page(tester).global.coachName, isNull);
+    await tester.enterText(find.byKey(const ValueKey('names-coach')), 'Kai');
+    await tester.enterText(find.byKey(const ValueKey('names-nickname')), 'Mo');
+    await tester.pumpAndSettle();
+    expect(_page(tester).global.coachName, 'Kai');
+    expect(_page(tester).draft.identity, isNull);
+    await _tap(tester, find.byKey(const ValueKey('personality-save')));
+    final s = _c(tester).read(personalityProvider);
+    expect(s.global.playerNickname, 'Mo');
+    expect(s.profiles, isEmpty); // only the shared names changed
+    expect(_page(tester).target, 'preset:default');
+    final req = _c(tester).read(activePersonalityRequestProvider)!;
+    expect((req['identity'] as Map)['coachName'], 'Kai');
+  });
+
   for (final MapEntry(key: name, value: size) in kSizes.entries) {
     testWidgets('the page lays out on a $name', (tester) async {
       await pumpScreen(tester, const CoachPersonalityScreen(), size: size);
