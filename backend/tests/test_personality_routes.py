@@ -70,3 +70,26 @@ def test_job_chat_rejects_oversized_personality_text(tmp_path, tiny_video):
             json={"message": "hi", "personality": {"instructions": "x" * 1001}},
         )
         assert res.status_code == 422
+
+
+def test_general_chat_uses_the_personality(tmp_path):
+    fake = FakeProvider(["Split step as they hit."], {"_RouteOut": {"intent": "knowledge"}})
+    with _client(tmp_path, fake) as client:
+        res = client.post(
+            "/coach/chat",
+            json={
+                "message": "When should I split step?",
+                "history": [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "yo"}],
+                "personality": {
+                    "preset": "mentor",
+                    "identity": {"coachName": "Kai"},
+                    "instructions": "Call me champ.",
+                },
+            },
+        )
+        assert res.status_code == 200
+        assert _done(res)["message"]["personality_label"] == "Mentor"
+        system = fake.streams[0]["system"]
+        assert "## Your communication style: Mentor" in system
+        assert 'Your name in this app is "Kai".' in system
+        assert "Call me champ." in system

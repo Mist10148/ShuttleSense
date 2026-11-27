@@ -24,6 +24,7 @@ from shuttlesense.api.routes import (
 )
 from shuttlesense.api.settings import Settings, get_settings
 from shuttlesense.api.storage import Storage
+from shuttlesense.coach.personality.models import PersonalityConfig
 from shuttlesense.coach.report import CoachReport
 from shuttlesense.schema import ChatMessage, load_record
 
@@ -73,6 +74,9 @@ class CoachChatRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=1000)
     history: list[Turn] = Field(default_factory=list, max_length=40)
+    # How the coach should talk (D50); absent means the default coach. The practice
+    # follow-up inherits this field but does not use it yet.
+    personality: PersonalityConfig | None = None
 
     @field_validator("message")
     @classmethod
@@ -102,6 +106,7 @@ async def coach_chat(
     """General and progress questions, not tied to one job; Server-Sent Events like
     POST /jobs/{id}/chat. Answers are not saved: the app keeps the conversation."""
     from shuttlesense.coach.chat import ChatError, ChatSettings, answer
+    from shuttlesense.coach.personality import label_for
 
     coach = _coach(request)
     limits: CoachLimits = request.app.state.coach_limits
@@ -119,8 +124,15 @@ async def coach_chat(
     async def events() -> AsyncIterator[str]:
         try:
             async for event in answer(
-                coach, body.message.strip(), history, chat_settings, load_history=load_history
+                coach,
+                body.message.strip(),
+                history,
+                chat_settings,
+                load_history=load_history,
+                personality=body.personality,
             ):
+                if event["type"] == "done" and (label := label_for(body.personality)):
+                    event["message"]["personality_label"] = label
                 yield f"data: {json.dumps(event)}\n\n"
         except ChatError as exc:
             error = {"type": "error", "status": exc.status, "detail": exc.detail}

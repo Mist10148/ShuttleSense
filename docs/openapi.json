@@ -348,6 +348,16 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "personality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalityConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2457,6 +2467,16 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "personality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalityConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
