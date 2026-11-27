@@ -419,6 +419,7 @@ What is left needs footage, devices, accounts or the team: [the owner's list](do
 | [docs/SETUP.md](docs/SETUP.md) | Installing and running backend and app, weights, datasets, connecting devices |
 | [docs/PHASES.md](docs/PHASES.md) · [docs/phases/](docs/phases/) | Phase overview plus one file per phase with a detailed card for each of the 162 tasks (steps, tests, acceptance criteria) |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | What stays on your backend and exactly what the coach chat sends to the Claude API |
+| [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md) · [docs/coach-personality/](docs/coach-personality/) | *Experimental plan:* selectable AI Coach personalities: presets, customization, prompt architecture, schemas, UI, security, tests and roadmap |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release checklist: version bump, builds, signing, smoke tests, tagging |
