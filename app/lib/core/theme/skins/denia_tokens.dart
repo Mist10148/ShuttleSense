@@ -112,3 +112,113 @@ abstract final class DeniaLightTokens {
     decor: decor,
   );
 }
+
+/// Denia (Dark): her purple "Breakdown" side (Wonderboard denia.css: --bg #140D1C,
+/// --side #1C1228, --card #251833, --bd #43305A, --tx #F3E9F7, --mu #B9A3CB, --ac #C98BFF,
+/// a second pink accent #FF6FAE, the gem #8EC9F2 and gold #E2C06F). As in Classic dark, the
+/// highlight is a lighter violet rather than white, and the shade goes almost black.
+abstract final class DeniaDarkTokens {
+  static const page = Color(0xFF140D1C);
+  static const side = Color(0xFF1C1228);
+  static const card = Color(0xFF251833);
+  static const border = Color(0xFF43305A);
+  static const text = Color(0xFFF3E9F7);
+  static const muted = Color(0xFFB9A3CB);
+  static const accent = Color(0xFFC98BFF);
+  static const pink = Color(0xFFFF6FAE);
+  static const gem = Color(0xFF8EC9F2);
+  static const gold = Color(0xFFE2C06F);
+
+  static const palette = AppPalette(
+    ink: text,
+    onInk: page,
+    text2: Color(0xFFD6C6E2),
+    text3: muted,
+    surface: card,
+    surface2: Color(0xFF2D1F3D),
+    hairline: null,
+    lavender: Color(0xFF3A2A55),
+    sky: Color(0xFF1F2F4D),
+    mint: Color(0xFF1C3A33),
+    pink: Color(0xFF4A2238),
+    peach: Color(0xFF47301F),
+    brand: Color(0xFF5CC896),
+    info: gem,
+    chart: [gem, accent, pink, Color(0xFF5CC896), gold],
+    progress: [accent, pink],
+    canvas: page,
+    canvasGlows: [Color(0x40C98BFF), Color(0x2EFF6FAE), Color(0x263C6EBE)],
+    page: page,
+    shell: side,
+    cardShadow: [
+      BoxShadow(color: Color(0xB3050208), blurRadius: 26, offset: Offset(10, 12)),
+      BoxShadow(color: Color(0x12E9D5FF), blurRadius: 18, offset: Offset(-6, -6)),
+    ],
+    popoverShadow: [
+      BoxShadow(color: Color(0xCC050208), blurRadius: 40, spreadRadius: -18, offset: Offset(0, 18)),
+    ],
+  );
+
+  static const tactile = TactileTokens(
+    chassisTop: page,
+    chassisBottom: page,
+    raisedTop: Color(0xFF2A1D3A),
+    raisedBottom: Color(0xFF221730),
+    recess: Color(0xFF100A17),
+    screenTop: Color(0xFF0F0916),
+    screenBottom: Color(0xFF130C1B),
+    highlight: Color(0xFF2B1F3A),
+    shade: Color(0xCC050208),
+    innerShade: Color(0xE6040207),
+    innerLight: Color(0x14E9D5FF),
+    rim: Color(0x14E9D5FF),
+    engraved: muted,
+    engravedShadow: Color(0x99000000),
+    keyEdge: 0.35,
+    capSheen: 0.06,
+    primary: accent,
+    primaryDeep: Color(0xFFB070F0),
+    onPrimary: page,
+  );
+
+  static const depth = DepthTheme(
+    page: page,
+    bg: card,
+    well: Color(0xFF100A17),
+    shade: Color(0xFF000000),
+    hi: Color(0xFFFFFFFF),
+    accent: accent,
+    good: Color(0xFF5CC896),
+    warn: Color(0xFFE6A54A),
+    bad: Color(0xFFFF7B9C),
+    ink: text,
+    muted: muted,
+  );
+
+  static const analysis = AnalysisColors(
+    accent: pink,
+    onAccent: page,
+    accentInk: Color(0xFFFF8CC0),
+    track: Color(0xFF2D1F3D),
+  );
+
+  static const decor = SkinDecor(
+    skin: AppSkin.deniaDark,
+    lace: border,
+    accent2: pink,
+    gold: gold,
+    focus: gem,
+    pillFill: Color(0xE6251833),
+    pillRim: accent,
+    pillText: text,
+  );
+
+  static const bundle = SkinBundle(
+    brightness: Brightness.dark,
+    palette: palette,
+    tactile: tactile,
+    depth: depth,
+    analysis: analysis,
+    decor: decor,
+  );
+}
