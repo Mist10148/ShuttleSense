@@ -81,6 +81,8 @@ flutter:
   # Outfit, the app font (SIL Open Font License; static weights cut from the variable font).
   assets:
     - assets/fonts/OFL.txt
+    # Theme assets from Wonderboard (docs/THEMES.md, "Asset provenance").
+    - assets/skins/backrooms/
   fonts:
     - family: Outfit
       fonts:
