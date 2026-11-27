@@ -1,6 +1,6 @@
 # AI Coach personality
 
-> **Experimental, plan only.** This is a design for the `experimental-themes` branch. No code exists yet: the coach still has one fixed voice (`backend/shuttlesense/coach/chat.py`). Decisions: D50–D53. Implementation is tracked in [Phase 14](phases/phase-14-coach-personality.md).
+> **Experimental, built.** This lives on the `experimental-themes` branch and needs a review from the lead UI/UX developer (the Settings card, the personality page, the slider theme) before it is merged. Decisions: D50–D53, D55, D56. Progress is tracked in [Phase 14](phases/phase-14-coach-personality.md); [what was built](#what-was-built) lists where the code is and what differs from the design.
 
 ShuttleSense's coach answers questions about a recorded session (job chat), about progress and general badminton (the general coach), and about a saved practice video (practice follow-up). Today every answer comes in the same voice. This page plans a **personality system**: the player picks how the coach talks in **Settings > AI Coach**, from 17 presets, and can fine-tune it with sliders, communication preferences and their own words.
 
@@ -42,7 +42,7 @@ A personality changes **how** the coach says things. It never changes **what** t
 | --- | --- | --- |
 | Job chat (`POST /jobs/{id}/chat`) | yes | `coach/chat.py` `answer()` |
 | General coach (`POST /coach/chat`) | yes | `coach/chat.py` `answer()` |
-| Practice follow-up (`POST /practice/sessions/{id}/chat`) | yes | `practice/followup.py` |
+| Practice follow-up (`POST /practice/sessions/{id}/chat`) | not yet: its code belongs to another developer; the request already accepts the field and ignores it | `practice/followup.py` |
 | Coach report, practice report (JSON) | no: reports stay neutral | `coach/report.py`, `practice/report.py` |
 | Fixed replies (safety, off-topic, side question, refusal) | no: fixed wording | `coach/chat.py` constants |
 | Router (`coach/router.py`) | no | — |
@@ -104,6 +104,34 @@ The app stores profiles and preferences. The backend owns every word of trusted 
 | [roadmap.md](coach-personality/roadmap.md) | Phased implementation, dependencies, estimates and risks |
 | [improvements.md](coach-personality/improvements.md) | Related improvements found while inspecting the repository |
 
+## What was built
+
+**Backend** (`backend/shuttlesense/coach/personality/`):
+
+| File | What it holds |
+| --- | --- |
+| `attributes.py` | the ten attributes, bands, the 50 descriptors and the guards |
+| `presets.py` | the 17 presets: fragments, serious notes, sample replies |
+| `preferences.py` | communication preferences, their lines and the cue limit |
+| `sanitize.py` | cleaning and checking the player's text and names |
+| `serious.py` | the serious overlay and its triggers |
+| `models.py` | `PersonalityConfig`, the validated request object |
+| `__init__.py` | `build_personality_block`, `label_for`, `cue_limit` |
+| `generator.py` | the AI draft, its validation and retry |
+
+`coach/chat.py` `answer()` takes `personality=`; `POST /jobs/{id}/chat` and `POST /coach/chat` accept it, and the answer carries `personality_label` (saved on job chat messages). `POST /coach/personality/generate` drafts one. `/health` reports `coach_personality`. `scripts/export_presets.py` writes [presets.json](coach-personality/presets.json) for the app, and `scripts/eval_personality.py` runs the scenario eval.
+
+**App** (`app/lib/features/coach_personality/`): the models, the preset list, `PersonalityNotifier` (saved as `coach.personality`), the text hints, the offline keyword drafter, import and export, the chat's quick switcher, and the page `/settings/coach` with its sections in `widgets/`. The Settings card is `features/settings/widgets/coach_personality_card.dart`. The general coach shows "Coach is now …" when the voice changes mid-conversation.
+
+**What differs from the design:**
+- **Practice follow-up:** not wired yet (see Scope).
+- **Prompt caching:** the Claude system block was not split. The personality comes after the per-request data, so the cached prefix behaves exactly as before (D55).
+- **Import and export:** through the clipboard and a text dialog, so no file-picker package was added (D55).
+- **Distress:** a message in distress is never declined as off topic, and gets the serious overlay with or without a personality (D56). The fixed support line still waits for approved wording.
+- **Save** sits in a bar pinned under the page rather than in its header, so it stays in reach.
+
+**Tests:** `backend/tests/test_personality_*.py` (attributes, presets, preferences, sanitize, serious, models, builder, contract, routes, generator) and `app/test/` `personality_models_test`, `personality_presets_test`, `personality_text_test`, `coach_personality_settings_test`, `coach_personality_import_test`, `coach_personality_request_test`, `coach_personality_page_test`, `coach_personality_card_test`, plus the page in `accessibility_test`.
+
 ## Known limits
 
 - **Persona drift.** Language models hold a persona imperfectly, especially across long chats and when the player pushes back. The design reduces drift (short prose presets, a closing reminder, tests), but cannot remove it ([research](coach-personality/research.md#persona-stability)).
@@ -111,6 +139,7 @@ The app stores profiles and preferences. The backend owns every word of trusted 
 - **No accounts.** ShuttleSense has no user accounts, so profiles live on the device. They do not sync. Export and import cover moving them.
 - **No long-term memory.** The coach does not remember facts about the player between conversations. "Memory" here means saved preferences only.
 - **Provider differences.** Gemini and Claude render the same personality slightly differently. Tests check rules, not exact wording.
+- **Not yet evaluated on a live model.** The scenario eval was started on Gemini, but the key's quota ran out; it is the open part of T14.11.
 
 ## References
 
