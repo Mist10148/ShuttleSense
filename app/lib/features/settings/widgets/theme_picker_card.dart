@@ -72,8 +72,68 @@ class ThemePickerCard extends ConsumerWidget {
             'Light and Dark under Appearance apply to Classic. The other themes keep their own.',
             style: muted,
           ),
+          const SizedBox(height: Spacing.sm),
+          _ThemeExtras(denia: chosen.family == SkinFamily.denia),
         ],
       ),
+    );
+  }
+}
+
+/// The switch animation and its sound, and, for Denia, the stickers and how strongly they show.
+class _ThemeExtras extends ConsumerWidget {
+  const _ThemeExtras({required this.denia});
+
+  final bool denia;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fx = ref.watch(skinFxProvider);
+    final n = ref.read(skinFxProvider.notifier);
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TactileSwitchTile(
+          key: const ValueKey('theme-motion'),
+          title: const Text('Switch animation'),
+          subtitle: Text(
+            reduced
+                ? 'Off while your device asks for reduced motion'
+                : 'Plays when you change to or from Backrooms or Denia',
+          ),
+          value: fx.motion,
+          onChanged: n.setMotion,
+        ),
+        TactileSwitchTile(
+          key: const ValueKey('theme-sound'),
+          title: const Text('Switch sound'),
+          subtitle: const Text('The hum of Backrooms, the chimes and bubbles of Denia'),
+          value: fx.sound,
+          onChanged: fx.motion ? n.setSound : null,
+        ),
+        if (denia) ...[
+          TactileSwitchTile(
+            key: const ValueKey('theme-stickers'),
+            title: const Text('Stickers'),
+            subtitle: const Text('Denia stickers scattered behind the pages'),
+            value: fx.stickers,
+            onChanged: n.setStickers,
+          ),
+          if (fx.stickers) ...[
+            const SizedBox(height: Spacing.sm),
+            DepthSegmented<StickerStrength>(
+              key: const ValueKey('theme-sticker-strength'),
+              segments: [
+                for (final s in StickerStrength.values)
+                  ButtonSegment(value: s, label: Text(s.label)),
+              ],
+              selected: {fx.stickerStrength},
+              onSelectionChanged: (s) => n.setStickerStrength(s.first),
+            ),
+          ],
+        ],
+      ],
     );
   }
 }
