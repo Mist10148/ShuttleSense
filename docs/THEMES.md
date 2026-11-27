@@ -188,11 +188,13 @@ Settings > Appearance and the sun/moon button on the navigation rail set Light, 
 | File | What it holds |
 | --- | --- |
 | `test/skin_settings_test.dart` | the saved theme and extras, defaults and fallbacks |
-| `test/skin_tokens_test.dart` | 4.5:1 text and 3:1 edges on every surface of every theme, distinct page and plate tones, Classic data colours, every extension registered, flat in high contrast |
-| `test/skin_backdrop_test.dart` | each backdrop at phone, tablet and laptop sizes, sticker placement, the settings and high contrast, which fills turn clear |
-| `test/skin_fx_test.dart` | plans and scores against Wonderboard's, which animation each change gets, the moment the theme changes, the Settings delay, cancelling, reduced motion, motion and sound off |
+| `test/skin_tokens_test.dart` | 4.5:1 text and 3:1 edges on every surface of every theme, sliders at 3:1 on cards, distinct page and plate tones, Classic data colours, every extension registered, flat in high contrast |
+| `test/skin_backdrop_test.dart` | each backdrop at phone, tablet and laptop sizes, sticker placement, the die-cut rim, the settings and high contrast, which fills turn clear |
+| `test/skin_fx_test.dart` | plans and scores against Wonderboard's, which animation each change gets, the moment the theme changes, the Settings delay, cancelling, reduced motion, motion and sound off, the first-tap sound unlock |
 | `test/wav_synth_test.dart` | WAV headers, the ramp and filters, no clipping, whoosh direction, chime pitch |
 | `test/theme_picker_test.dart` | choosing and saving a theme, the extras, Settings in every theme at every size |
+| `test/skin_mode_follow_test.dart` | Light/Dark moves Denia between its sides, Backrooms stays with a note, Classic is left alone |
+| `test/theme_gallery_test.dart` | the gallery draws every theme at every size, with labelled panels |
 
 `pumpScreen` takes an optional `skin:` to render any screen in a theme.
 
