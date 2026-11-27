@@ -6,6 +6,8 @@ import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/theme/tokens.dart';
 import '../../data/api_client.dart';
+import '../coach_personality/personality_notifier.dart';
+import '../coach_personality/personality_switcher_sheet.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/coach.dart';
 import '../../data/repositories/analysis_repository.dart';
@@ -19,8 +21,15 @@ import '../../shared/widgets/helper_text.dart';
 class CoachTurn {
   const CoachTurn({required this.message, this.sources = const []});
 
+  /// A line in the conversation that is not a message: "Coach is now Mentor".
+  CoachTurn.notice(String text)
+    : message = ChatMessage(role: 'notice', text: text, at: DateTime.now().toUtc()),
+      sources = const [];
+
   final ChatMessage message;
   final List<CoachSource> sources;
+
+  bool get isNotice => message.role == 'notice';
 }
 
 class CoachChatState {
@@ -37,14 +46,29 @@ class CoachChatState {
 class CoachChatController extends Notifier<CoachChatState> {
   static const historyTurns = 12;
 
+  /// The personality the last answer was written in.
+  String? _answeredAs;
+
   @override
   CoachChatState build() => const CoachChatState();
 
   Future<void> send(String text) async {
     final question = text.trim();
     if (question.isEmpty || state.busy) return;
+    // A new personality applies from this answer on; the conversation stays (D50).
+    final label = ref.read(activePersonalityLabelProvider);
+    if (_answeredAs != null && _answeredAs != label && state.turns.isNotEmpty) {
+      state = CoachChatState(turns: [...state.turns, CoachTurn.notice('Coach is now $label')]);
+    }
     final earlier = [
-      for (final t in state.turns.reversed.take(historyTurns).toList().reversed)
+      for (final t
+          in state.turns
+              .where((t) => !t.isNotice)
+              .toList()
+              .reversed
+              .take(historyTurns)
+              .toList()
+              .reversed)
         <String, dynamic>{'role': t.message.role, 'text': t.message.text},
     ];
     final asked = CoachTurn(
@@ -57,7 +81,13 @@ class CoachChatController extends Notifier<CoachChatState> {
     );
     var finished = false;
     try {
-      final events = ref.read(apiClientProvider).coachChat(question, history: earlier);
+      final events = ref
+          .read(apiClientProvider)
+          .coachChat(
+            question,
+            history: earlier,
+            personality: ref.read(activePersonalityRequestProvider),
+          );
       await for (final event in events) {
         switch (event['type']) {
           case 'delta':
@@ -72,6 +102,7 @@ class CoachChatController extends Notifier<CoachChatState> {
               sources: CoachSource.listFrom(event['sources']),
             );
             state = CoachChatState(turns: [...state.turns, answer]);
+            _answeredAs = label;
             finished = true;
           case 'error':
             fail(event['detail'] as String? ?? 'The coach could not answer');
@@ -89,7 +120,9 @@ class CoachChatController extends Notifier<CoachChatState> {
   }
 
   void clear() {
-    if (!state.busy) state = const CoachChatState();
+    if (state.busy) return;
+    state = const CoachChatState();
+    _answeredAs = null;
   }
 }
 
@@ -154,6 +187,7 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
       appBar: AppBar(
         title: const Text('Coach'),
         actions: [
+          const PersonalitySwitcherButton(),
           if (state.turns.isNotEmpty)
             IconButton(
               tooltip: 'New conversation',
@@ -201,7 +235,8 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                               ],
                             ),
                           ],
-                          for (final t in state.turns) CoachBubble(turn: t),
+                          for (final t in state.turns)
+                            t.isNotice ? CoachNotice(text: t.message.text) : CoachBubble(turn: t),
                           if (state.streaming != null)
                             CoachBubble(
                               turn: CoachTurn(
@@ -322,6 +357,36 @@ class CoachBubble extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A line between turns, such as "Coach is now Mentor" after a personality change.
+class CoachNotice extends StatelessWidget {
+  const CoachNotice({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(
+      context,
+    ).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Spacing.md),
+              child: Text(text, style: style),
+            ),
+            const Expanded(child: Divider()),
+          ],
         ),
       ),
     );

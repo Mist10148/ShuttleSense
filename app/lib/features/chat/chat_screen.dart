@@ -7,6 +7,7 @@ import '../../shared/widgets/smooth_scroll.dart';
 import '../../core/responsive/breakpoints.dart';
 import '../../core/router/app_router.dart';
 import '../../data/api_client.dart';
+import '../coach_personality/personality_notifier.dart';
 import '../../data/models/clip_record.dart';
 import '../../data/models/coach.dart';
 import '../../data/repositories/analysis_repository.dart';
@@ -63,7 +64,9 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, String> {
     );
     var finished = false;
     try {
-      await for (final event in ref.read(apiClientProvider).chat(arg, question)) {
+      final personality = ref.read(activePersonalityRequestProvider);
+      final events = ref.read(apiClientProvider).chat(arg, question, personality: personality);
+      await for (final event in events) {
         switch (event['type']) {
           case 'delta':
             state = ChatState(
