@@ -200,10 +200,12 @@ class ApiClient {
     required String contextVersion,
     List<Json> history = const [],
     CancelToken? cancelToken,
+    Json? personality,
   }) => _events('/practice/sessions/$id/chat', {
     'message': question,
     'history': history,
     'context_version': contextVersion,
+    'personality': ?personality,
   }, cancelToken: cancelToken);
 
   Future<Json> savePracticeEvents(String id, List<dynamic> events) => _call(
