@@ -15,6 +15,7 @@ import 'widgets/instructions_section.dart';
 import 'widgets/names_section.dart';
 import 'widgets/personality_preview.dart';
 import 'widgets/preferences_section.dart';
+import 'widgets/profiles_section.dart';
 
 /// Settings > AI Coach > Customize: everything about how the coach talks
 /// (docs/coach-personality/ui-ux.md). Edits are a draft until Save; leaving with unsaved
@@ -222,6 +223,15 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
       title: 'Describe it, AI drafts it',
       icon: Icons.auto_awesome_outlined,
       child: GeneratorSection(enabled: !readOnly, onDraft: loadDraft),
+    ),
+    CollapsibleSection(
+      key: const ValueKey('section-profiles'),
+      title: 'Profiles',
+      icon: Icons.bookmarks_outlined,
+      badge: ref.watch(personalityProvider).profiles.isEmpty
+          ? null
+          : '${ref.watch(personalityProvider).profiles.length} saved',
+      child: ProfilesSection(enabled: !readOnly, onEdit: switchTo),
     ),
   ];
 
