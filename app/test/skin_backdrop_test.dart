@@ -1,8 +1,6 @@
 // Theme decoration (docs/THEMES.md): each backdrop renders at phone, tablet and laptop sizes,
 // stickers are placed the same way every time and apart, and the scope only clears the
 // page-sized fills of a decorated theme.
-import 'dart:ui' show Offset;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
