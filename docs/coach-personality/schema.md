@@ -1,0 +1,164 @@
+# Schemas
+
+Three shapes: what the app **stores**, what it **sends** with a chat request, and what the generator **returns**. The JSON Schema for the stored document and export file is [personality.schema.json](personality.schema.json).
+
+## Stored document (app, v1)
+
+Saved in `shared_preferences` under the key `coach.personality` as one JSON string, read synchronously in the notifier's `build()` like `ui.skin` (`app/lib/core/theme/app_skin.dart`).
+
+```json
+{
+  "schemaVersion": 1,
+  "activeProfileId": "p_7f3a",
+  "global": {
+    "coachName": "Coach",
+    "coachPronouns": null,
+    "playerNickname": "",
+    "language": "auto"
+  },
+  "profiles": [
+    {
+      "id": "p_7f3a",
+      "name": "Footwork bootcamp",
+      "basePreset": "bold",
+      "overrides": { "empathy": 60, "verbosity": 30 },
+      "preferences": {
+        "responseLength": "concise",
+        "explanationLevel": "adaptive",
+        "emoji": "none",
+        "humorStyle": "adaptive",
+        "criticalThinking": "challenging",
+        "initiative": "proactive",
+        "emotionalExpression": "natural",
+        "addressStyle": "name"
+      },
+      "identity": null,
+      "vocabulary": { "preferred": ["kill"], "avoid": [], "catchphrases": [] },
+      "instructions": "Be strict about footwork.",
+      "description": "Bold, but kinder and shorter.",
+      "source": "manual",
+      "createdAt": "2026-11-27T10:00:00Z",
+      "updatedAt": "2026-11-27T10:05:00Z"
+    }
+  ]
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `schemaVersion` | integer; current `1` |
+| `activeProfileId` | a profile id, or a **built-in id** (`"preset:witty"`) when the player picked a preset with no changes |
+| `global` | identity and language shared by profiles; a profile's `identity` object overrides it field by field |
+| `profiles` | 0–20 entries |
+| `id` | `p_` + 8 random base-36 characters; unique |
+| `name` | 1–32 characters, unique (case-insensitive) |
+| `basePreset` | one of the 17 preset ids; `custom` means "no fragment, render all descriptors" |
+| `overrides` | map of attribute name → integer 0–100; absent attributes follow the preset |
+| `preferences` | enums from [communication-preferences.md](communication-preferences.md); missing keys mean default |
+| `vocabulary` | lists with the limits in that file |
+| `instructions` | 0–1000 characters |
+| `description` | 0–140 characters, shown in the picker; never sent to the backend |
+| `source` | `manual`, `generated` or `imported` (for the UI badge and support) |
+
+**Built-in presets are not stored.** Picking "Witty" with no changes saves only `activeProfileId: "preset:witty"`. The first change to a built-in creates a profile with `basePreset: "witty"` named "Witty (custom)", so built-ins can always be restored and never drift.
+
+## Request object (app → backend)
+
+Each chat request (job chat, general coach, practice follow-up) carries the **resolved** active personality. The app merges global and profile identity before sending, so the backend never needs the whole document.
+
+```json
+{
+  "message": "Why do my smashes go into the net?",
+  "history": [],
+  "personality": {
+    "v": 1,
+    "preset": "bold",
+    "overrides": { "empathy": 60, "verbosity": 30 },
+    "preferences": { "responseLength": "concise", "emoji": "none", "criticalThinking": "challenging", "initiative": "proactive" },
+    "identity": { "coachName": "Kai", "coachPronouns": "they/them", "playerNickname": "Mo", "language": "auto" },
+    "vocabulary": { "preferred": ["kill"], "avoid": [], "catchphrases": [] },
+    "instructions": "Be strict about footwork.",
+    "label": "Footwork bootcamp"
+  }
+}
+```
+
+`personality` is optional and omitted for Default with no changes, so the request matches today's byte for byte. `label` is display only (stored on job chat messages); it never enters the prompt.
+
+### Backend model (planned, pydantic)
+
+```python
+Attr = Literal["warmth", "humor", "sarcasm", "formality", "enthusiasm",
+               "directness", "empathy", "creativity", "assertiveness", "verbosity"]
+
+class Identity(BaseModel):
+    coachName: str | None = Field(None, max_length=24, pattern=NAME_RE)
+    coachPronouns: Literal["they/them", "she/her", "he/him", "it/its"] | None = None
+    playerNickname: str | None = Field(None, max_length=24, pattern=NAME_RE)
+    language: str = Field("auto", pattern=r"^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)$")
+
+class Vocabulary(BaseModel):
+    preferred: list[constr(max_length=40)] = Field(default_factory=list, max_length=20)
+    avoid: list[constr(max_length=40)] = Field(default_factory=list, max_length=20)
+    catchphrases: list[constr(max_length=60)] = Field(default_factory=list, max_length=5)
+
+class PersonalityConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    v: int = 1
+    preset: str = "default"                 # unknown → "default" (validator)
+    overrides: dict[Attr, conint(ge=0, le=100)] = {}
+    preferences: Preferences = Preferences()  # enums; unknown values → default
+    identity: Identity = Identity()
+    vocabulary: Vocabulary = Vocabulary()
+    instructions: constr(max_length=1000) = ""
+    label: constr(max_length=32) = ""
+```
+
+**Lenient on style, strict on size.** An unknown preset or enum value falls back to the default (a newer app talking to an older backend still gets an answer). Over-long strings or lists return **422** with a clear message, because silently cutting the player's instructions would change their meaning. Out-of-range numbers are rejected by the app before sending and clamped by the backend if they arrive anyway.
+
+### App model (planned, Dart)
+
+```dart
+@immutable
+class PersonalityProfile {
+  final String id, name, basePreset, instructions, description;
+  final Map<PersonalityAttr, int> overrides;
+  final CommunicationPrefs preferences;
+  final CoachIdentity? identity;
+  final CoachVocabulary vocabulary;
+  final ProfileSource source;
+  final DateTime createdAt, updatedAt;
+  // fromJson / toJson / copyWith / ==
+}
+
+class PersonalityNotifier extends Notifier<PersonalitySettings> { … }
+final personalityProvider = NotifierProvider<PersonalityNotifier, PersonalitySettings>(…);
+final activePersonalityRequestProvider = Provider<Map<String, Object?>?>(…); // what chat sends
+```
+
+Enums are stored by `.name` and read back with `values.asNameMap()[saved] ?? fallback`, the same pattern as `AppSkin` and `StickerStrength`.
+
+## Generator I/O
+
+Request (`POST /coach/personality/generate`):
+
+```json
+{ "description": "A calm older coach who is strict about footwork and uses a little dry humour", "basePreset": null }
+```
+
+Response (validated before it leaves the server):
+
+```json
+{
+  "name": "Quiet Taskmaster",
+  "description": "Calm and strict about footwork, with dry humour.",
+  "basePreset": "stoic",
+  "attributes": { "warmth": 45, "humor": 35, "sarcasm": 30, "formality": 60, "enthusiasm": 20,
+                  "directness": 85, "empathy": 55, "creativity": 45, "assertiveness": 85, "verbosity": 40 },
+  "preferences": { "humorStyle": "dry", "emoji": "none" },
+  "instructions": "Be strict about footwork and correct it first. Keep humour dry and rare.",
+  "notes": ["'Older' was read as calm and experienced; age is not part of the style."]
+}
+```
+
+The app turns it into a draft profile (`source: "generated"`): `attributes` become `overrides` against `basePreset`, and only values that differ are kept. See [generator.md](generator.md).
