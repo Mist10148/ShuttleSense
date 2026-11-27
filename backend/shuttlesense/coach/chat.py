@@ -21,6 +21,12 @@ from typing import TYPE_CHECKING, Any
 from shuttlesense.coach.digest import Digest
 from shuttlesense.coach.index import Chunk, Retriever
 from shuttlesense.coach.llm import ChatError, Refused, describe_error
+from shuttlesense.coach.personality import (
+    PersonalityConfig,
+    build_personality_block,
+    cue_limit,
+    is_serious,
+)
 from shuttlesense.coach.router import Route, route
 from shuttlesense.coach.session_docs import (
     RULE_DRILLS,
@@ -318,9 +324,11 @@ async def answer(
     digest: Digest | None = None,
     record: ClipRecord | None = None,
     load_history: Callable[[], list[SessionSummary]] | None = None,
+    personality: PersonalityConfig | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield {"type": "delta", "text"} events, then {"type": "done", "message", "disclaimer",
-    "sources"}. Raises ChatError (shown to the user) when the provider fails."""
+    "sources"}. Raises ChatError (shown to the user) when the provider fails. [personality]
+    changes how the answer is worded, never the rules or the data (D50, D51)."""
     if coach.provider is None:
         raise ChatError("The coach is off: no Gemini or Claude API key is set.", 503)
     # A side alone answers the coach's clarification and belongs to the preceding question.
@@ -388,6 +396,13 @@ async def answer(
             "should see a qualified professional. Do not repeat that; answer only the "
             "technique or training part of the question, briefly, without diagnosing."
         )
+    if personality is not None:
+        limit = cue_limit(personality)
+        if limit != 3:
+            cues = "one concrete cue" if limit == 1 else f"{limit} concrete cues"
+            system = system.replace("at most three concrete cues", f"at most {cues}")
+        serious = is_serious(routed.intent, question, history)
+        system += build_personality_block(personality, serious=serious)
     turns = [{"role": m.role, "text": m.text} for m in history[-settings.history_messages :]]
     turns.append({"role": "user", "text": question})
     parts: list[str] = []
