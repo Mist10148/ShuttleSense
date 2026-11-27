@@ -87,6 +87,23 @@ void main() {
     }
   });
 
+  test('sliders keep 3:1 against cards in every theme, Classic too', () {
+    for (final skin in AppSkin.values) {
+      for (final b in [Brightness.light, Brightness.dark]) {
+        final theme = skinTheme(skin, brightness: b);
+        final card = theme.extension<AppPalette>()!.surface;
+        final s = theme.sliderTheme;
+        for (final c in [s.activeTrackColor!, s.thumbColor!]) {
+          expect(_contrast(c, card), greaterThanOrEqualTo(3), reason: '${skin.name} $b: $c');
+        }
+        expect(
+          _contrast(s.valueIndicatorTextStyle!.color!, s.valueIndicatorColor!),
+          greaterThanOrEqualTo(4.5),
+        );
+      }
+    }
+  });
+
   test('neumorphism needs a page and plate that differ and are not pure white or black', () {
     for (final MapEntry(key: skin, value: b) in _bundles.entries) {
       expect(b.depth.page, isNot(b.depth.bg), reason: skin.name);

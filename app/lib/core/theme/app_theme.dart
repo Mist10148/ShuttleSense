@@ -503,6 +503,25 @@ abstract final class AppTheme {
         linearTrackColor: p.surface2,
       ),
       dividerTheme: DividerThemeData(color: p.hairline ?? p.surface2),
+      // Sliders (coach personality, calibration, practice) use ink on a sunken track, like the
+      // progress bars, so they keep 3:1 against cards in every theme (docs/THEMES.md).
+      sliderTheme: SliderThemeData(
+        activeTrackColor: p.ink,
+        inactiveTrackColor: t.recess,
+        thumbColor: p.ink,
+        overlayColor: p.ink.withValues(alpha: 0.12),
+        activeTickMarkColor: p.onInk.withValues(alpha: 0.6),
+        inactiveTickMarkColor: p.ink.withValues(alpha: 0.4),
+        valueIndicatorColor: p.ink,
+        valueIndicatorTextStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: p.onInk,
+        ),
+        disabledActiveTrackColor: p.ink.withValues(alpha: 0.38),
+        disabledThumbColor: p.ink.withValues(alpha: 0.5),
+      ),
     );
   }
 }
