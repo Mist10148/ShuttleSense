@@ -6,7 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shuttlesense_app/core/notifications/job_notifier.dart';
 import 'package:shuttlesense_app/core/config/server_config.dart';
 import 'package:shuttlesense_app/core/device/screen_awake.dart';
+import 'package:shuttlesense_app/core/theme/app_skin.dart';
 import 'package:shuttlesense_app/core/theme/app_theme.dart';
+import 'package:shuttlesense_app/core/theme/skins/skin_theme.dart';
+import 'package:shuttlesense_app/features/skins/fx/skin_fx_host.dart';
+import 'package:shuttlesense_app/shared/widgets/skin/skin_scope.dart';
 import 'package:shuttlesense_app/data/repositories/analysis_repository.dart';
 
 import 'fakes/fake_api_client.dart';
@@ -35,6 +39,7 @@ Future<List<String>> pumpScreen(
   bool settle = true,
   Brightness brightness = Brightness.light,
   TextScaler textScaler = TextScaler.noScaling,
+  AppSkin? skin,
 }) async {
   setSize(tester, size);
   SharedPreferences.setMockInitialValues({'server.baseUrl': 'http://fake:8000', ...prefs});
@@ -63,11 +68,16 @@ Future<List<String>> pumpScreen(
         ...overrides,
       ],
       child: MaterialApp.router(
-        theme: brightness == Brightness.dark ? AppTheme.dark() : AppTheme.light(),
+        theme: skin != null
+            ? skinTheme(skin, brightness: brightness)
+            : brightness == Brightness.dark
+            ? AppTheme.dark()
+            : AppTheme.light(),
         routerConfig: router,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-          child: child!,
+          // a theme other than Classic paints its backdrop, as in the app (docs/THEMES.md)
+          child: skin != null ? SkinFxHost(child: SkinScope(child: child!)) : child!,
         ),
       ),
     ),
