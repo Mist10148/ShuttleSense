@@ -382,8 +382,9 @@ class FakeApiClient extends ApiClient {
   ];
 
   @override
-  Stream<Json> chat(String jobId, String message) async* {
+  Stream<Json> chat(String jobId, String message, {Json? personality}) async* {
     calls.add('chat $jobId $message');
+    personalities.add(personality);
     final error = failWith;
     if (error != null) throw error;
     for (final e in chatEvents) {
@@ -415,15 +416,55 @@ class FakeApiClient extends ApiClient {
   /// The history each coachChat() call sent.
   final coachHistories = <List<Json>>[];
 
+  /// The personality each chat() or coachChat() call sent (null for the Default coach).
+  final personalities = <Json?>[];
+
   @override
-  Stream<Json> coachChat(String message, {List<Json> history = const []}) async* {
+  Stream<Json> coachChat(
+    String message, {
+    List<Json> history = const [],
+    Json? personality,
+  }) async* {
     calls.add('coachChat $message');
     coachHistories.add(history);
+    personalities.add(personality);
     final error = failWith;
     if (error != null) throw error;
     for (final e in coachEvents) {
       yield e;
     }
+  }
+
+  /// What generatePersonality() returns (POST /coach/personality/generate, D53), or the
+  /// error it throws.
+  Json personalityDraft = {
+    'name': 'Quiet Taskmaster',
+    'description': 'Calm and strict about footwork, with dry humour.',
+    'basePreset': 'stoic',
+    'attributes': {
+      'warmth': 45,
+      'humor': 35,
+      'sarcasm': 30,
+      'formality': 60,
+      'enthusiasm': 20,
+      'directness': 85,
+      'empathy': 55,
+      'creativity': 45,
+      'assertiveness': 85,
+      'verbosity': 40,
+    }, // dart format off
+    'preferences': {'humorStyle': 'dry', 'emoji': 'none'},
+    'instructions': 'Be strict about footwork and correct it first.',
+    'notes': ["'Older' was read as calm and experienced."],
+  };
+  Object? personalityError;
+
+  @override
+  Future<Json> generatePersonality(String description, {String? basePreset}) async {
+    calls.add('generatePersonality $description');
+    final error = personalityError;
+    if (error != null) throw error;
+    return personalityDraft;
   }
 
   /// What coachReport() returns (GET /jobs/{id}/coach/report, D42).

@@ -437,13 +437,22 @@ class ApiClient {
   }
 
   /// F22: ask the coach. Yields the server-sent events of docs/API.md (delta, done, error).
-  Stream<Json> chat(String jobId, String message) =>
-      _events('/jobs/$jobId/chat', {'message': message});
+  Stream<Json> chat(String jobId, String message, {Json? personality}) =>
+      _events('/jobs/$jobId/chat', {'message': message, 'personality': ?personality});
 
   /// D42: ask the coach a general or progress question, not about one job. [history] holds
   /// the earlier turns of this conversation ({role, text}); the server does not keep them.
-  Stream<Json> coachChat(String message, {List<Json> history = const []}) =>
-      _events('/coach/chat', {'message': message, 'history': history});
+  Stream<Json> coachChat(String message, {List<Json> history = const [], Json? personality}) =>
+      _events('/coach/chat', {'message': message, 'history': history, 'personality': ?personality});
+
+  /// D53: a draft coach personality from the player's description, for review in Settings.
+  Future<Json> generatePersonality(String description, {String? basePreset}) => _call(
+    () async => (await _dio.post<Json>(
+      '/coach/personality/generate',
+      data: {'description': description, 'basePreset': ?basePreset},
+      options: Options(receiveTimeout: const Duration(seconds: 30)),
+    )).data!,
+  );
 
   /// D42: the AI coaching report of a finished job; [refresh] writes it again.
   Future<CoachReport> coachReport(String jobId, {bool refresh = false}) => _call(() async {

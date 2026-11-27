@@ -28,7 +28,7 @@ class _StreamingApi extends FakeApiClient {
   final Stream<Json> events;
 
   @override
-  Stream<Json> chat(String jobId, String message) => events;
+  Stream<Json> chat(String jobId, String message, {Json? personality}) => events;
 }
 
 void main() {
