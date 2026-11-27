@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/skins/fx/denia_plan.dart';
+import 'audio_skin_sounds.dart';
 
 /// Stops a sound that is still playing. Safe to call more than once.
 typedef StopSound = void Function();
@@ -40,4 +41,9 @@ class SilentSkinSounds implements SkinSounds {
   void stopAll() {}
 }
 
-final skinSoundsProvider = Provider<SkinSounds>((ref) => const SilentSkinSounds());
+/// The app's player; tests override it with a fake or [SilentSkinSounds].
+final skinSoundsProvider = Provider<SkinSounds>((ref) {
+  final sounds = AudioSkinSounds();
+  ref.onDispose(sounds.stopAll);
+  return sounds;
+});
