@@ -15,6 +15,7 @@ import '../../features/processing/processing_screen.dart';
 import '../../features/practice/practice_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/coach_personality/coach_personality_screen.dart';
 import '../../features/styleguide/styleguide_screen.dart';
 import '../../features/styleguide/theme_gallery_screen.dart';
 import '../../features/upload/upload_screen.dart';
@@ -36,6 +37,9 @@ abstract final class Routes {
   static const home = '/';
   static const history = '/history';
   static const settings = '/settings';
+
+  /// Settings > AI Coach > Customize (docs/COACH_PERSONALITY.md).
+  static const coachPersonality = '/settings/coach';
   static const styleguide = '/styleguide';
   static const coach = '/coach';
 
@@ -165,7 +169,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: Routes.settings, builder: (context, state) => const SettingsScreen()),
+              GoRoute(
+                path: Routes.settings,
+                builder: (context, state) => const SettingsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'coach',
+                    builder: (context, state) => const CoachPersonalityScreen(),
+                  ),
+                ],
+              ),
             ],
           ),
         ],
