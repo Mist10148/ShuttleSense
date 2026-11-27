@@ -1,6 +1,6 @@
 # AI Coach personality
 
-> **Experimental, built.** This lives on the `experimental-themes` branch and needs a review from the lead UI/UX developer (the Settings card, the personality page, the slider theme) before it is merged. Decisions: D50–D53, D55, D56. Progress is tracked in [Phase 14](phases/phase-14-coach-personality.md); [what was built](#what-was-built) lists where the code is and what differs from the design.
+> **Experimental, built.** This lives on the `experimental-themes` branch. The project lead waived the lead UI/UX review for it on Nov 27. Decisions: D50–D53, D55–D58. Progress is tracked in [Phase 14](phases/phase-14-coach-personality.md); [what was built](#what-was-built) lists where the code is and what differs from the design.
 
 ShuttleSense's coach answers questions about a recorded session (job chat), about progress and general badminton (the general coach), and about a saved practice video (practice follow-up). Today every answer comes in the same voice. This page plans a **personality system**: the player picks how the coach talks in **Settings > AI Coach**, from 17 presets, and can fine-tune it with sliders, communication preferences and their own words.
 
@@ -42,7 +42,7 @@ A personality changes **how** the coach says things. It never changes **what** t
 | --- | --- | --- |
 | Job chat (`POST /jobs/{id}/chat`) | yes | `coach/chat.py` `answer()` |
 | General coach (`POST /coach/chat`) | yes | `coach/chat.py` `answer()` |
-| Practice follow-up (`POST /practice/sessions/{id}/chat`) | not yet: its code belongs to another developer; the request already accepts the field and ignores it | `practice/followup.py` |
+| Practice follow-up (`POST /practice/sessions/{id}/chat`) | yes (D58) | `practice/followup.py` |
 | Coach report, practice report (JSON) | no: reports stay neutral | `coach/report.py`, `practice/report.py` |
 | Fixed replies (safety, off-topic, side question, refusal) | no: fixed wording | `coach/chat.py` constants |
 | Router (`coach/router.py`) | no | — |
@@ -124,10 +124,10 @@ The app stores profiles and preferences. The backend owns every word of trusted 
 **App** (`app/lib/features/coach_personality/`): the models, the preset list, `PersonalityNotifier` (saved as `coach.personality`), the text hints, the offline keyword drafter, import and export, the chat's quick switcher, and the page `/settings/coach` with its sections in `widgets/`. The Settings card is `features/settings/widgets/coach_personality_card.dart`. The general coach shows "Coach is now …" when the voice changes mid-conversation.
 
 **What differs from the design:**
-- **Practice follow-up:** not wired yet (see Scope).
+- **Practice follow-up:** wired with a few added lines in code another developer owns, approved by the project lead (D58).
 - **Prompt caching:** the Claude system block was not split. The personality comes after the per-request data, so the cached prefix behaves exactly as before (D55).
 - **Import and export:** through the clipboard and a text dialog, so no file-picker package was added (D55).
-- **Distress:** a message in distress is never declined as off topic, and gets the serious overlay with or without a personality (D56). The fixed support line still waits for approved wording.
+- **Distress:** a message in distress is never declined as off topic, and gets the serious overlay with or without a personality (D56). Self-harm and suicide words also get a fixed support line first, from code: placeholder wording, country-neutral and without numbers, until reviewed, localised resources replace it (D57).
 - **Save** sits in a bar pinned under the page rather than in its header, so it stays in reach.
 
 **Tests:** `backend/tests/test_personality_*.py` (attributes, presets, preferences, sanitize, serious, models, builder, contract, routes, generator) and `app/test/` `personality_models_test`, `personality_presets_test`, `personality_text_test`, `coach_personality_settings_test`, `coach_personality_import_test`, `coach_personality_request_test`, `coach_personality_page_test`, `coach_personality_card_test`, plus the page in `accessibility_test`.
