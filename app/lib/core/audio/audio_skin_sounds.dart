@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 
 import '../../features/skins/fx/backrooms_plan.dart';
 import '../../features/skins/fx/denia_plan.dart';
+import 'denia_synth.dart';
 import 'skin_sounds.dart';
 
 void _nothing() {}
@@ -66,8 +67,16 @@ class AudioSkinSounds implements SkinSounds {
     },
   );
 
+  /// Renders the score to a WAV (a few tens of ms) and plays it from memory.
   @override
-  StopSound deniaScore(DeniaScore score) => _nothing;
+  StopSound deniaScore(DeniaScore score) {
+    try {
+      final wav = deniaScoreWav(score, seed: DateTime.now().microsecond | 1);
+      return _play(BytesSource(wav, mimeType: 'audio/wav'), 1);
+    } catch (_) {
+      return _nothing;
+    }
+  }
 
   @override
   void stopAll() {
