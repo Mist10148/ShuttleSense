@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/tokens.dart';
 import 'personality_notifier.dart';
 import 'presets.dart';
@@ -74,6 +76,19 @@ class _SwitcherSheet extends ConsumerWidget {
               Text(
                 'Changes how the coach talks from the next answer. The conversation stays.',
                 style: text.bodySmall,
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('switcher-customize'),
+                  onPressed: () {
+                    final router = GoRouter.of(context);
+                    Navigator.of(context).pop();
+                    router.push(Routes.coachPersonality);
+                  },
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Customize'),
+                ),
               ),
               if (settings.profiles.isNotEmpty) ...[
                 const SizedBox(height: Spacing.md),
