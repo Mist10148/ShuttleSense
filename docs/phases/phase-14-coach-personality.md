@@ -8,7 +8,7 @@
 | --- | --- |
 | **Dates** | from Nov 27, 2026 (not scheduled) |
 | **Goal** | Players pick how the AI Coach talks (17 presets, sliders, preferences, their own words, saved profiles), in every chat surface, without changing what the coach knows or its safety behaviour |
-| **Owners** | M1 (backend, prompts, integration); app screens need a review by the lead UI/UX developer |
+| **Owners** | M1 (backend, prompts, integration); the lead UI/UX review was waived by the project lead (Nov 27) |
 | **Entry criteria** | D50–D53 accepted; coach chat (T8.8, T8.11, T12.2) working on Gemini and Claude |
 | **Exit gate** | The [acceptance criteria](../coach-personality/testing.md#acceptance-criteria) all pass; the behavioural eval report for both providers is committed |
 
@@ -87,7 +87,7 @@
 
 **Steps**
 - [x] Optional `personality` on `ChatRequest`, `CoachChatRequest` and `PracticeChatRequest`.
-- [x] `answer()` gains `personality=`; practice follow-up appends the block.
+- [x] `answer()` gains `personality=`; the practice follow-up appends the block (D58).
 - [x] ~~Claude: split the cached system block~~ — not needed: the personality comes after the per-request data, so the cached prefix is unchanged (D55).
 
 **Tests.** `test_personality_routes.py`, `test_personality_contract.py`; existing chat tests unchanged.
@@ -102,7 +102,7 @@
 **Owner:** M1 · **Estimate:** 0.5 d · **Priority:** P3 · **Area:** backend · **Refs:** D52 · **Depends on:** T14.4 · **Blocks:** T14.7
 
 **Steps**
-- [x] Distress words (`personality/serious.py`) switch on serious mode and are never declined as off topic (D56). The fixed support line still waits for approved wording (see [roadmap](../coach-personality/roadmap.md#dependencies-and-owners)).
+- [x] Distress words (`personality/serious.py`) switch on serious mode and are never declined as off topic (D56). Self-harm and suicide words get a fixed support line first (`CRISIS_REPLY`, placeholder wording, D57).
 - [x] Optional `personality_label` on job chat `ChatMessage` (schema stays backward compatible).
 - [x] `/health` reports `coach_personality: true`.
 
@@ -152,7 +152,7 @@
 - [x] Sliders with band labels, default ticks, reset, guard hints, keyboard steps.
 - [x] Preferences, names, instructions and vocabulary with limits and inline warnings.
 - [x] Draft, Save, Discard; Restore defaults.
-- [x] `Slider` theme from tactile tokens in `AppTheme._build` (needs the lead UI/UX review).
+- [x] `Slider` theme in `AppTheme._build` (added lines; review waived).
 
 **Tests.** `coach_personality_page_test.dart`; accessibility at 200% text.
 
@@ -221,5 +221,5 @@
 
 - [x] T14.2–T14.12 done
 - [x] All [acceptance criteria](../coach-personality/testing.md#acceptance-criteria) met
-- [x] Lead UI/UX review of the Settings card, page and `Slider` theme
+- [x] ~~Lead UI/UX review of the Settings card, page and `Slider` theme~~: waived by the project lead (Nov 27)
 - [x] Eval report committed for both providers
