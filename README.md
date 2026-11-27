@@ -421,7 +421,7 @@ What is left needs footage, devices, accounts or the team: [the owner's list](do
 | [docs/PRIVACY.md](docs/PRIVACY.md) | What stays on your backend and exactly what the coach chat sends to the Claude API |
 | [docs/AI_COACH.md](docs/AI_COACH.md) | Recorded single-player practice with the AI Coach: setup, workflow, provider and data, API |
 | [docs/THEMES.md](docs/THEMES.md) | *Experimental:* the selectable app themes (Classic, Backrooms, Denia) and how they are built |
-| [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md) · [docs/coach-personality/](docs/coach-personality/) | *Experimental plan:* selectable AI Coach personalities: presets, customization, prompt architecture, schemas, UI, security, tests and roadmap |
+| [docs/COACH_PERSONALITY.md](docs/COACH_PERSONALITY.md) · [docs/coach-personality/](docs/coach-personality/) | *Experimental:* selectable AI Coach personalities: presets, customization, profiles, prompt architecture, schemas, UI, security, tests and roadmap |
 | [docs/FEEDBACK_RULES.md](docs/FEEDBACK_RULES.md) | Form feedback rules per stroke: measured angles, thresholds, tips and sources |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: what was chosen, the alternatives and why |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release checklist: version bump, builds, signing, smoke tests, tagging |
