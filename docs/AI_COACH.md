@@ -1,5 +1,7 @@
 # AI Coach: recorded single-player practice
 
+> Planned: selectable coach personalities for the chat surfaces, including the practice follow-up. See [COACH_PERSONALITY.md](COACH_PERSONALITY.md).
+
 ## Court-free general practice preview
 
 To try general practice, set `SHUTTLESENSE_PRACTICE_GENERAL=1` in the backend's environment and restart the backend and app. This is opt-in until the tracker has been compared with the existing court-based path on annotated practice clips.
