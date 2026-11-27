@@ -1,6 +1,8 @@
 // Coach personality models (docs/coach-personality/schema.md): JSON round trips, unknown
 // values falling back to defaults, bands and identity merging.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shuttlesense_app/data/models/clip_record.dart';
+import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/features/coach_personality/personality_models.dart';
 
 void main() {
@@ -78,5 +80,24 @@ void main() {
     expect(t.activeProfile, p);
     expect(t.activePresetId, 'stoic');
     expect(t.toJson()['schemaVersion'], 1);
+  });
+
+  test('health and saved answers carry the personality fields', () {
+    final base = {
+      'version': '0.1.0',
+      'schema_version': '1.7',
+      'device': 'cpu',
+      'auth_required': false,
+      'stages': <String>[],
+    };
+    expect(Health.fromJson(base).coachPersonality, isFalse);
+    expect(Health.fromJson({...base, 'coach_personality': true}).coachPersonality, isTrue);
+    final m = ChatMessage.fromJson({
+      'role': 'assistant',
+      'text': 'hi',
+      'personality_label': 'Mentor',
+    });
+    expect(m.personalityLabel, 'Mentor');
+    expect(ChatMessage.fromJson({'role': 'user', 'text': 'q'}).personalityLabel, isNull);
   });
 }

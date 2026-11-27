@@ -12,6 +12,7 @@ class Health {
     this.strokeModels,
     this.chatAvailable = false,
     this.chatMaxMessages = 0,
+    this.coachPersonality = false,
     this.watchVideo = false,
     this.watchMatchType = false,
     this.watchRealtime = false,
@@ -36,6 +37,9 @@ class Health {
   /// The backend has a coach provider key (Gemini, or Claude), so the coach chat works.
   final bool chatAvailable;
   final int chatMaxMessages;
+
+  /// D50: chat requests take a personality; an older backend ignores it.
+  final bool coachPersonality;
   final bool watchVideo;
   final bool watchMatchType;
   final bool watchRealtime;
@@ -84,6 +88,7 @@ class Health {
     strokeModels: (j['stroke_models'] as List<dynamic>?)?.cast<String>(),
     chatAvailable: j['chat_available'] as bool? ?? false,
     chatMaxMessages: asInt(j['chat_max_messages']) ?? 0,
+    coachPersonality: j['coach_personality'] == true,
     watchVideo: j['watch_video'] == true,
     watchMatchType: j['watch_match_type'] == true,
     watchRealtime: j['watch_realtime'] == true,

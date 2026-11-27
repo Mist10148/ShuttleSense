@@ -926,13 +926,22 @@ class Coaching {
 }
 
 class ChatMessage {
-  const ChatMessage({required this.role, required this.text, this.at, this.citations = const []});
+  const ChatMessage({
+    required this.role,
+    required this.text,
+    this.at,
+    this.citations = const [],
+    this.personalityLabel,
+  });
 
   /// user or assistant.
   final String role;
   final String text;
   final DateTime? at;
   final List<Moment> citations;
+
+  /// D50: the coach personality an answer was written in; null for the default coach.
+  final String? personalityLabel;
 
   bool get fromUser => role == 'user';
 
@@ -941,6 +950,7 @@ class ChatMessage {
     text: j['text'] as String,
     at: asDate(j['at']),
     citations: asList(j['citations']).map(Moment.fromJson).toList(),
+    personalityLabel: j['personality_label'] as String?,
   );
 }
 
