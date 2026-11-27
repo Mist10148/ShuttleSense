@@ -2,7 +2,7 @@
 
 [← Phase 13](phase-13-courtside-depth.md) · [Phase overview](../PHASES.md) · Design: [COACH_PERSONALITY.md](../COACH_PERSONALITY.md)
 
-> **Experimental.** Branch `experimental-themes`. T14.1–T14.10 and T14.12 are built and tested; T14.11 has its script but no live run yet. Decisions D50–D53, D55, D56.
+> **Experimental.** Branch `experimental-themes`. T14.1–T14.12 are built and tested; the eval ran on Gemini flash-lite. Decisions D50–D53, D55–D58.
 
 | | |
 | --- | --- |
@@ -26,7 +26,7 @@
 | [T14.8](#t148) | Coach personality page | M1 | 3 d | T14.7 | ✅ |
 | [T14.9](#t149) | Profiles, import and export | M1 | 2 d | T14.8 | ✅ |
 | [T14.10](#t1410) | AI personality generator | M1 | 2 d | T14.4, T14.8 | ✅ |
-| [T14.11](#t1411) | Behavioural evals and fragment tuning | M1 | 2 d | T14.4–T14.10 | ⬜ |
+| [T14.11](#t1411) | Behavioural evals and fragment tuning | M1 | 2 d | T14.4–T14.10 | ✅ |
 | [T14.12](#t1412) | Privacy, API and README updates | M1 | 0.5 d | T14.4 | ✅ |
 
 ---
@@ -199,7 +199,8 @@
 
 **Steps**
 - [x] `scripts/eval_personality.py` with the scenarios (scenario 2, session data, is covered by `test_personality_contract.py`), paced for rate-limited keys.
-- [ ] Run on Gemini and Claude; tune fragments; commit the report to `docs/results/`. A first Gemini run hit the key's quota; it did show distress being declined as off topic, which D56 fixed.
+- [x] Run on Gemini and commit the report: all 17 × 11 answers on `gemini-3.5-flash-lite` (the default model's daily quota was used up), [eval report](../results/personality_eval_gemini.md). A first, partial run showed distress being declined as off topic, which D56 fixed.
+- [ ] Rerun on `gemini-3.8-flash` and Claude when quota allows; score the rubric.
 
 **Acceptance criteria.** Accuracy, grounding and safety score 2 everywhere; other criteria average ≥ 1.5; blind distinctness ≥ 12/17.
 

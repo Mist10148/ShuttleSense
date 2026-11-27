@@ -22,6 +22,7 @@ The lead UI/UX review was waived by the project lead (D50–D53, D55–D58, [doc
 ### Not included
 
 - The crisis line names no specific hotline until reviewed, localised resources replace the placeholder.
+- The scenario eval ran on `gemini-3.5-flash-lite` only ([report](docs/results/personality_eval_gemini.md)); a rerun on the default model is pending its quota.
 
 ## Unreleased — experimental themes (branch `experimental-themes`)
 

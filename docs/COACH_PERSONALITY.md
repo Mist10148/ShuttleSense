@@ -139,7 +139,7 @@ The app stores profiles and preferences. The backend owns every word of trusted 
 - **No accounts.** ShuttleSense has no user accounts, so profiles live on the device. They do not sync. Export and import cover moving them.
 - **No long-term memory.** The coach does not remember facts about the player between conversations. "Memory" here means saved preferences only.
 - **Provider differences.** Gemini and Claude render the same personality slightly differently. Tests check rules, not exact wording.
-- **Not yet evaluated on a live model.** The scenario eval was started on Gemini, but the key's quota ran out; it is the open part of T14.11.
+- **Evaluated on the smaller model only.** The scenario eval ran all 17 personalities on 11 scenarios on `gemini-3.5-flash-lite`, because the default model's daily quota was used up ([report](results/personality_eval_gemini.md)). A rerun on `gemini-3.8-flash` and Claude is still worth doing.
 
 ## References
 
