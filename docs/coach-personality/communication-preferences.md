@@ -130,7 +130,7 @@ Example: `preferredTerms: ["clear = lob to the back", "kill"]`, `avoidTerms: ["l
 
 `instructions`: free text, 0–1000 characters. The player describes the coach in their own words: "Talk like an old-school Indonesian coach. Be strict about footwork. Call my backhand 'the problem child'."
 
-It sits at precedence level 3 and is rendered inside the delimited untrusted block with a frame that limits it to style ([prompt-architecture.md](prompt-architecture.md#layer-5-user-style-preferences)). Validation and injection handling are in [security-privacy.md](security-privacy.md).
+It sits at precedence level 3 and is rendered inside the delimited untrusted block with a frame that limits it to style ([prompt-architecture.md](prompt-architecture.md#layer-4-user-style-preferences)). Validation and injection handling are in [security-privacy.md](security-privacy.md).
 
 ## Memory and persistence
 
