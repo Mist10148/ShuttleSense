@@ -21,6 +21,14 @@ Needs a review from the lead UI/UX developer before merge (D49, [docs/THEMES.md]
 - **Backrooms:** yellowed office wallpaper with plaster grain under a fluorescent ceiling light. Switching to it goes black, shows the Backrooms logo, then reveals the theme with a click and a fading hum.
 - **Denia (Light) and (Dark):** a bubble-and-star pattern, a stage light, lace, and Denia stickers at Faint, Normal or Strong. Switching plays an iris of colour, rising bubbles that pop, sparkles and a "Stagecraft" or "Breakdown" card, with synthesized chimes, a whoosh and bubble bloops.
 - **Controls:** the switch animation and its sound can each be turned off. Reduced motion skips the animation, and high contrast drops the decoration.
+- **Light and Dark per theme:** the navigation rail's sun/moon button and Settings > Appearance move Denia between its light and dark sides; Backrooms, which is light only, says so (D54).
+- **Theme gallery:** `/styleguide/themes`, linked from the Theme card, shows the main components in every theme at once.
+- **Denia props:** the drawn stickers get their white die-cut rim and soft shadow.
+- **Sliders:** themed with ink on a sunken track, at 3:1 against cards in every theme.
+
+### Fixed
+
+- **First switch sound on the web:** the first tap unlocks browser audio, so the first theme switch is no longer silent.
 
 ## Unreleased — automatic scoring
 
