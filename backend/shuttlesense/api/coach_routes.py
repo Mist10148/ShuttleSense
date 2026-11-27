@@ -200,3 +200,74 @@ async def refresh_coach_report(
 ) -> CoachReport:
     """Write the report again, ignoring the cache."""
     return await _report(job_id, request, storage, jobs, settings, refresh=True)
+
+
+GENERATE_PER_MINUTE = 5
+GENERATE_TIMEOUT_S = 20.0
+
+
+class GenerateRequest(BaseModel):
+    """POST /coach/personality/generate: the player's description of the coach they want."""
+
+    description: str = Field(min_length=1, max_length=500)
+    basePreset: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("description is blank")
+        return value
+
+
+class GenerateLimits:
+    """One draft at a time and a few per minute, per server process (D53)."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.busy = False
+        self.recent: deque[float] = deque()
+
+    def start(self) -> None:
+        now = time.monotonic()
+        with self.lock:
+            if self.busy:
+                raise HTTPException(
+                    status_code=409, detail="a personality is already being drafted"
+                )
+            while self.recent and now - self.recent[0] > 60:
+                self.recent.popleft()
+            if len(self.recent) >= GENERATE_PER_MINUTE:
+                raise HTTPException(status_code=429, detail="too many drafts; wait a minute")
+            self.recent.append(now)
+            self.busy = True
+
+    def end(self) -> None:
+        with self.lock:
+            self.busy = False
+
+
+@router.post("/coach/personality/generate")
+async def generate_personality(body: GenerateRequest, request: Request) -> dict:
+    """A draft coach personality from the player's description, for review in the app. Not
+    saved here. 503 when the coach is off, 502 or 504 when no usable draft came back: the
+    app then drafts one itself."""
+    from shuttlesense.coach.personality.generator import GeneratorError, generate
+
+    coach = _coach(request)
+    state = request.app.state
+    limits = getattr(state, "personality_limits", None)
+    if limits is None:
+        limits = state.personality_limits = GenerateLimits()
+    limits.start()
+    try:
+        return await asyncio.wait_for(
+            generate(coach.provider, body.description, body.basePreset),
+            timeout=GENERATE_TIMEOUT_S,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="drafting took too long") from exc
+    except GeneratorError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        limits.end()

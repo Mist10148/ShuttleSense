@@ -98,3 +98,29 @@ def test_general_chat_uses_the_personality(tmp_path):
 def test_health_says_personalities_are_supported(tmp_path):
     with _client(tmp_path, FakeProvider()) as client:
         assert client.get("/health").json()["coach_personality"] is True
+
+
+def test_generator_route_returns_a_draft_and_is_rate_limited(tmp_path):
+    from tests.test_personality_generator import DRAFT
+
+    fake = FakeProvider(json_responses={"GeneratedPersonality": DRAFT})
+    with _client(tmp_path, fake) as client:
+        res = client.post(
+            "/coach/personality/generate", json={"description": "calm and strict about footwork"}
+        )
+        assert res.status_code == 200
+        assert res.json()["basePreset"] == "stoic"
+        for _ in range(4):
+            client.post("/coach/personality/generate", json={"description": "calm"})
+        res = client.post("/coach/personality/generate", json={"description": "calm"})
+        assert res.status_code == 429
+        assert (
+            client.post("/coach/personality/generate", json={"description": " "}).status_code == 422
+        )
+
+
+def test_generator_route_reports_a_failed_draft(tmp_path):
+    fake = FakeProvider(json_responses={"GeneratedPersonality": {"name": "x"}})
+    with _client(tmp_path, fake) as client:
+        res = client.post("/coach/personality/generate", json={"description": "calm"})
+        assert res.status_code == 502
