@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../features/skins/fx/backrooms_plan.dart';
 import '../../features/skins/fx/denia_plan.dart';
 import 'denia_synth.dart';
 import 'skin_sounds.dart';
+import 'wav_synth.dart';
 
 void _nothing() {}
 
@@ -76,6 +78,19 @@ class AudioSkinSounds implements SkinSounds {
     } catch (_) {
       return _nothing;
     }
+  }
+
+  bool _unlocked = false;
+
+  /// Browsers allow sound once a page has been used, but only for playback started inside a
+  /// user gesture. Playing 50 ms of silence on the first tap unlocks the page, so the first
+  /// theme switch is heard (docs/THEMES.md). Other platforms never block sound.
+  @override
+  void unlock() {
+    if (_unlocked || !kIsWeb) return;
+    _unlocked = true;
+    final silence = encodeWav(PcmBuffer(PcmBuffer.defaultRate, PcmBuffer.defaultRate ~/ 20));
+    _play(BytesSource(silence, mimeType: 'audio/wav'), 0);
   }
 
   @override

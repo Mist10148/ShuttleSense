@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/skin_sounds.dart';
 import '../../../core/theme/app_skin.dart';
 import '../../../core/theme/theme_mode.dart';
 
@@ -67,7 +68,10 @@ class _SkinFxHostState extends ConsumerState<SkinFxHost> {
     final run = ref.watch(skinSwitchProvider);
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (e) => SkinFxHost.lastTap = (e.position, DateTime.now()),
+      onPointerDown: (e) {
+        SkinFxHost.lastTap = (e.position, DateTime.now());
+        ref.read(skinSoundsProvider).unlock();
+      },
       child: Stack(
         fit: StackFit.expand,
         children: [

@@ -41,6 +41,9 @@ class RecordingSounds implements SkinSounds {
 
   @override
   void stopAll() => calls.add('stopAll');
+
+  @override
+  void unlock() => calls.add('unlock');
 }
 
 late ProviderContainer _c;
@@ -270,6 +273,13 @@ void main() {
       SkinFxHost.lastTap = (const Offset(10, 20), now);
       expect(SkinFxHost.recentTap(now.add(const Duration(seconds: 3))), const Offset(10, 20));
       expect(SkinFxHost.recentTap(now.add(const Duration(seconds: 5))), isNull);
+    });
+
+    testWidgets('a tap asks the player to unlock sound for the first switch', (tester) async {
+      final sounds = await _pumpHost(tester);
+      expect(sounds.calls, isNot(contains('unlock')));
+      await tester.tap(find.text('page'));
+      expect(sounds.calls, contains('unlock'));
     });
   });
 }

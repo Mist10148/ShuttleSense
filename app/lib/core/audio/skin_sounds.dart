@@ -22,6 +22,10 @@ abstract class SkinSounds {
 
   /// Silences everything (a newer theme switch starts).
   void stopAll();
+
+  /// Called on the user's first taps: lets a browser that blocks sound until the page has
+  /// been used play the first switch. Does nothing where sound is never blocked.
+  void unlock() {}
 }
 
 /// Plays nothing: tests, and platforms without audio.
@@ -39,6 +43,9 @@ class SilentSkinSounds implements SkinSounds {
 
   @override
   void stopAll() {}
+
+  @override
+  void unlock() {}
 }
 
 /// The app's player; tests override it with a fake or [SilentSkinSounds].
