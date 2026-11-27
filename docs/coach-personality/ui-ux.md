@@ -33,7 +33,7 @@ A new `CoachPersonalityCard` sits right after `ThemePickerCard` in `SettingsScre
 
 - **Grid.** A `Wrap` of `KeyCap`s, one per preset (icon and label), keyed `ValueKey('coach-preset-${id}')`, with `semanticLabel: '${label} coach personality'` and `tooltip:` set to the one-line description. On phones the width is 104, on wider screens 136, the same as the theme keys. The 17 keys wrap to 4 rows on a phone. A "Show all / Show fewer" toggle shows 8 by default on compact width, so the card stays short.
 - **Description line** under the grid, updated on selection, in `bodySmall`.
-- **Preview.** A sunken well (`DepthWell`) holding two bubbles that reuse `CoachBubble` styling, plus a `DepthSegmented` to switch between scenario A and B. The text is the static sample, so it changes instantly with no network call.
+- **Preview.** A sunken well (`InsetBox`, `app/lib/ui/depth.dart`) holding two bubbles that reuse `CoachBubble` styling, plus a `DepthSegmented` to switch between scenario A and B. The text is the static sample, so it changes instantly with no network call.
 - **Profiles row.** `ChoiceChip`-style `KeyCap`s for saved profiles (up to 3 shown, then "+2 more"), plus "+ New". Tapping one activates it.
 - **Customize** in the card's `trailing` slot opens the page.
 - **Backend support.** If `/health` lacks `coach_personality`, the card shows a `StatusPill` "This server uses the standard coach voice" and disables the grid.
@@ -125,3 +125,79 @@ These are text fields for the coach's name (24 characters), the pronouns (a drop
 ```
 
 A multi-line `TextField` with a counter and chip lists for vocabulary. If the text trips an injection heuristic, an inline warning appears under the field ("Parts of this look like instructions to change the coach's rules. They will be ignored."). Saving is still allowed.
+
+### Describe it, AI drafts it
+
+A text field (500 characters) and **Generate**, which opens the review sheet from [generator.md](generator.md#review-and-save). While it runs, the button shows a spinner and "Drafting…", the field is read-only and **Cancel** stays available. Errors show inline with **Try again** and **Draft without AI** (the local fallback).
+
+### Profiles
+
+```text
+ ● Footwork bootcamp      Bold · edited      [⋯]
+ ○ Weekend fun            Playful · edited   [⋯]   ⋯ = Rename · Duplicate · Export · Delete
+ ○ Quiet Taskmaster  ✦AI  Stoic · edited     [⋯]
+ [+ New profile]  [Import]  [Export all]
+```
+
+| Action | Behaviour |
+| --- | --- |
+| New | dialog: name + "start from" (any preset, or the current profile) |
+| Rename | inline dialog; names unique, 1–32 characters |
+| Duplicate | copies with " (copy)", not activated |
+| Delete | confirmation dialog; deleting the active profile activates its base preset; **Undo** snackbar for 5 s |
+| Activate | radio tap; same "Coach is now …" snackbar |
+| Export / Import | [schema.md](schema.md#import-and-export) |
+| Restore defaults | on a built-in-based profile: clears overrides, preferences and instructions after confirmation |
+
+At most 20 profiles. At the limit, **New** is disabled with a tooltip explaining why.
+
+## Save and apply behaviour
+
+- **Settings card:** taps apply and save immediately, with Undo.
+- **Customization page:** edits are a **draft**. The preview updates live, from static samples plus a "changed" badge. **Save** writes the profile and, if it is the active one, applies it from the next answer. **Back** with unsaved changes asks "Discard changes?". Sliders do not save on every drag, which avoids writing to `shared_preferences` dozens of times a second.
+- **During a chat:** a personality change never interrupts a streaming answer. It applies to the next question. The chat shows a small divider, "Coach is now Mentor", so the change is visible in the history. Earlier messages are untouched.
+- **Chat header:** the coach's name and the preset icon appear in the chat app bar. Tapping them opens a bottom sheet with the preset grid for a quick switch, without leaving the chat.
+
+## States
+
+| State | What the player sees |
+| --- | --- |
+| First run | Default selected; the card's description reads "Pick how your coach talks. You can change it any time." |
+| Server without support | Grid disabled, pill "This server uses the standard coach voice", Customize still opens (profiles are local) |
+| Coach off (`chat_available: false`) | Card still works (settings are local); generator offers only "Draft without AI" |
+| Generating | Spinner on the button, Cancel available, other sections stay editable |
+| Generator error | Inline error card with the server's message, Try again and Draft without AI |
+| Validation error on save | Field-level error text (e.g., "Up to 24 characters"); Save disabled |
+| Corrupt saved data | One-time `SnackBar` "Coach settings were reset because they could not be read" |
+| Newer data version | Banner "These settings were made by a newer version of ShuttleSense. Changes are disabled." |
+| Empty profiles | "No saved profiles yet. Change any setting to create one." |
+
+## Accessibility
+
+- **Touch targets** are 48 dp (`kMinTouchTarget`), as everywhere. `KeyCap` and `DepthSegmented` already comply.
+- **Sliders** follow the [WAI-ARIA slider pattern](https://www.w3.org/WAI/ARIA/apg/patterns/slider/) through Flutter `Slider`:
+  - `semanticFormatterCallback` reads "80, strong"; the attribute name is the label.
+  - Arrow keys step by 5. A wrapper `Shortcuts`/`Actions` adds Page Up/Down (±20) and Home/End.
+  - A hint is read on focus: "Default for Bold is 45".
+- **Reset buttons** have tooltips that name the attribute and value.
+- **Preview bubbles** carry `Semantics(label: 'Sample question' / 'Sample answer from Mentor')`, matching the chat's labels.
+- **Changes** are announced with `SemanticsService.announce` ("Coach is now Mentor"), because the snackbar can be missed.
+- **Keyboard order** goes top to bottom. Collapsible sections are buttons with expanded state, and Escape closes dialogs and sheets.
+- **Text scaling** at 200% must not overflow. The grid wraps, and slider labels move above the track when the width is under 360 logical px.
+- **Contrast:** all text uses existing tokens, which `test/skin_tokens_test.dart` holds to 4.5:1 in every theme. The "changed" accent rim uses `AppPalette` accent, which is held to 3:1.
+- **Reduced motion:** no new animations beyond the kit's own, which already honour `MediaQuery.disableAnimations`.
+- **Screen-reader users and emojis:** the coach's emoji preference defaults to the preset's. Playful's emojis are read aloud, so the description notes "uses emojis", and the emoji setting is one tap away.
+
+## Themes
+
+The UI adds no colours, images or painters. It works in all four themes because it uses only `SectionCard`, `KeyCap`, `InsetBox`, `RaisedTile`, `DepthSegmented`, `TactileSwitchTile`, Material `Slider` and `TextField`, which the theme builder already styles. Two checks follow from [THEMES.md](../THEMES.md):
+
+- The `Slider` theme must be set in `AppTheme._build` from `TactileTokens`, because today only calibration and practice use sliders and their default Material colours may not reach 3:1 on the Backrooms wall. This is the one theme-builder change the plan needs, and it needs a review by the lead UI/UX developer.
+- Decorated themes paint behind pages, and cards stay solid, so the page needs no special handling.
+
+## Copy
+
+- "Personality changes how your coach talks, not what it knows."
+- "When you mention pain or something hard, every coach gets serious."
+- "Style only. The coach's rules, data and safety don't change."
+- "Your coach is an AI. It doesn't replace a qualified coach, doctor or physiotherapist." (shown once, under the grid)
