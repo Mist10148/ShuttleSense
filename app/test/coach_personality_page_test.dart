@@ -107,6 +107,23 @@ void main() {
     expect(find.byKey(const ValueKey('personality-discard')), findsNothing);
   });
 
+  testWidgets('communication options change the draft and the request', (tester) async {
+    await pumpScreen(tester, const CoachPersonalityScreen(), size: tablet);
+    await _tap(tester, find.byTooltip('Show How the coach talks'));
+    await _tap(
+      tester,
+      find.descendant(
+        of: find.byKey(const ValueKey('pref-pushback')),
+        matching: find.text('Challenging'),
+      ),
+    );
+    expect(_page(tester).draft.preferences.criticalThinking, CriticalThinking.challenging);
+    expect(find.text('Pushes back when the data disagrees.'), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('personality-save')));
+    final req = _c(tester).read(activePersonalityRequestProvider)!;
+    expect((req['preferences'] as Map)['criticalThinking'], 'challenging');
+  });
+
   for (final MapEntry(key: name, value: size) in kSizes.entries) {
     testWidgets('the page lays out on a $name', (tester) async {
       await pumpScreen(tester, const CoachPersonalityScreen(), size: size);

@@ -11,6 +11,7 @@ import 'presets.dart';
 import 'widgets/attribute_sliders.dart';
 import 'widgets/collapsible_section.dart';
 import 'widgets/personality_preview.dart';
+import 'widgets/preferences_section.dart';
 
 /// Settings > AI Coach > Customize: everything about how the coach talks
 /// (docs/coach-personality/ui-ux.md). Edits are a draft until Save; leaving with unsaved
@@ -151,6 +152,17 @@ class CoachPersonalityScreenState extends ConsumerState<CoachPersonalityScreen> 
         overrides: draft.overrides,
         enabled: !readOnly,
         onChanged: (o) => update(draft.copyWith(overrides: o)),
+      ),
+    ),
+    CollapsibleSection(
+      key: const ValueKey('section-preferences'),
+      title: 'How the coach talks',
+      icon: Icons.record_voice_over_outlined,
+      badge: draft.preferences.isDefault ? null : 'changed',
+      child: PreferencesSection(
+        prefs: draft.preferences,
+        enabled: !readOnly,
+        onChanged: (p) => update(draft.copyWith(preferences: p)),
       ),
     ),
   ];
