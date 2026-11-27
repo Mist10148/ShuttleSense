@@ -16,6 +16,7 @@ import '../../features/practice/practice_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/styleguide/styleguide_screen.dart';
+import '../../features/styleguide/theme_gallery_screen.dart';
 import '../../features/upload/upload_screen.dart';
 import '../../features/watch/watch_screen.dart';
 import '../../shared/widgets/message_view.dart';
@@ -37,6 +38,9 @@ abstract final class Routes {
   static const settings = '/settings';
   static const styleguide = '/styleguide';
   static const coach = '/coach';
+
+  /// Every theme side by side (docs/THEMES.md).
+  static const themeGallery = '/styleguide/themes';
 
   static String calibrate(String videoId) => '/videos/$videoId/calibrate';
   static String job(String jobId) => '/jobs/$jobId';
@@ -87,6 +91,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.connect, builder: (context, state) => const ConnectScreen()),
       GoRoute(path: Routes.styleguide, builder: (context, state) => const StyleguideScreen()),
+      GoRoute(path: Routes.themeGallery, builder: (context, state) => const ThemeGalleryScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AdaptiveShell(navigationShell: shell),
         branches: [
