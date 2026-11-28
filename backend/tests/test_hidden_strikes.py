@@ -96,3 +96,29 @@ def test_an_in_call_does_not_depend_on_the_striker() -> None:
 
 def _rally() -> Rally:
     return _record(far_wrist=(645.0, 240.0)).rallies[0]
+
+
+def test_an_out_override_credits_the_touch_found_on_the_track() -> None:
+    """The user confirms OUT; far's missed touch sent it out behind far's own baseline, so
+    near wins, as the automated call would say. The old override credited near's hit."""
+    from datetime import UTC, datetime
+
+    from shuttlesense.referee.linecalls import LineCallOverrideIn, apply_overrides
+    from shuttlesense.schema import LineCall
+
+    record = _record(far_wrist=(645.0, 240.0))
+    record.line_calls = [
+        LineCall(
+            id=0,
+            rally_index=0,
+            frame=LANDING_FRAME,
+            time_s=LANDING_FRAME / 30,
+            call="in",
+            landing_xy=(1.1, 15.0),
+            margin_cm=-1.0,
+            confidence=0.1,
+            uncertain=True,
+        )
+    ]
+    apply_overrides(record, [LineCallOverrideIn(rally_index=0, call="out", at=datetime.now(UTC))])
+    assert record.rallies[0].winner == "near"
