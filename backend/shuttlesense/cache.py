@@ -24,6 +24,9 @@ from shuttlesense.schema import SCHEMA_VERSION, ClipRecord
 # Bump when OWNED changes so caches written with fewer fields miss instead of loading them.
 CACHE_FORMAT = 4
 
+# The tracking cache's list of frames the tracker filled in (record._estimated_shuttle_frames).
+ESTIMATED_KEY = "_estimated_shuttle_frames"
+
 # stage -> (top-level record fields, per-frame fields) it writes; see ARCHITECTURE.md.
 OWNED: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "tracking": ((), ("shuttle",)),
@@ -153,6 +156,10 @@ def save(out_dir: Path, stage: str, key: str, record: ClipRecord) -> None:
     data = record.model_dump(mode="json", include=set(top))
     if per_frame:
         data["frames"] = [f.model_dump(mode="json", include=set(per_frame)) for f in record.frames]
+    if stage == "tracking":
+        # Frames the tracker filled in are not observations; the referee needs to know which
+        # ones, and that set is a private attribute the record's JSON does not hold.
+        data[ESTIMATED_KEY] = sorted(record._estimated_shuttle_frames)
     path = cache_path(out_dir, stage)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps({"config_hash": key, "fields": data}))
@@ -164,6 +171,9 @@ def load(out_dir: Path, stage: str, key: str, record: ClipRecord) -> ClipRecord 
     if cached is None or cached.get("config_hash") != key or "fields" not in cached:
         return None
     fields = cached["fields"]
+    if stage == "tracking" and ESTIMATED_KEY not in fields:
+        return None  # written before the estimated frames were kept: run tracking again
+    estimated = fields.pop(ESTIMATED_KEY, None)
     frames = fields.pop("frames", None)
     if frames is not None and len(frames) != len(record.frames):
         return None
@@ -172,4 +182,12 @@ def load(out_dir: Path, stage: str, key: str, record: ClipRecord) -> ClipRecord 
     if frames is not None:
         for target, values in zip(data["frames"], frames, strict=True):
             target.update(values)
-    return ClipRecord.model_validate(data)
+    loaded = ClipRecord.model_validate(data)
+    # model_validate drops private attributes: carry the estimated frames over, so a cached
+    # rerun decides rallies from the same observations as a fresh run.
+    loaded._estimated_shuttle_frames = (
+        {int(i) for i in estimated}
+        if estimated is not None
+        else set(record._estimated_shuttle_frames)
+    )
+    return loaded
