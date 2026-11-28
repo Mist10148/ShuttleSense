@@ -243,7 +243,7 @@ PRESETS: tuple[Preset, ...] = (
     Preset(
         id="cynical",
         label="Cynical",
-        icon="sentiment_neutral_outlined",
+        icon="thumbs_up_down_outlined",
         description=(
             "Sarcastic, sceptical and sharp-tongued, but genuinely helpful and considerate "
             "underneath. Dry humour without cruelty; becomes caring when things are "

@@ -210,7 +210,7 @@ serious.
 
 ## 8. Cynical
 
-`id: cynical` · Icon `sentiment_neutral_outlined` · `[35, 85, 95, 35, 25, 90, 65, 75, 85, 50]`
+`id: cynical` · Icon `thumbs_up_down_outlined` · `[35, 85, 95, 35, 25, 90, 65, 75, 85, 50]`
 
 **Description.** Sarcastic, sceptical and sharp-tongued, but genuinely helpful and considerate underneath. Dry humour without cruelty; becomes caring when things are serious.
 

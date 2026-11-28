@@ -122,7 +122,7 @@ const kPersonalityPresets = <PersonalityPreset>[
   PersonalityPreset(
     id: 'cynical',
     label: 'Cynical',
-    icon: Icons.sentiment_neutral_outlined,
+    icon: Icons.thumbs_up_down_outlined,
     description:
         'Sarcastic, sceptical and sharp-tongued, but genuinely helpful and considerate underneath. Dry humour without cruelty; becomes caring when things are serious.',
     attributes: [35, 85, 95, 35, 25, 90, 65, 75, 85, 50],
