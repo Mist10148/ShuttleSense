@@ -59,6 +59,10 @@ Needs a review from the lead UI/UX developer before merge (D49, [docs/THEMES.md]
 - **High shots above the frame:** a clear or lift that leaves the top of the video and comes back keeps the rally going instead of splitting it; a "hit" on a shuttle lying on the floor no longer makes a rally (D62).
 - **Uncalled rallies say why:** no landing seen, far off court, unknown service court, or unknown striker.
 - **Cached reruns:** the tracker's filled-in frames are kept with the cache, so a rerun scores the same as a fresh run.
+- **Watch no longer fails after an upload:** a stretch with only a stray hit on a resting shuttle no longer stops the analysis with "zip() argument 2 is longer than argument 1" (D64).
+- **The score adds up with the serves:** when two serves in a row are from the wrong service court for the score, the rally nobody could call is scored, or the close call is turned, so the rest of the game is right; the rally says so (D65).
+- **Line-call overrides credit the right player:** confirming OUT uses the last touch found on the track, as the automated call does.
+- **All four doubles players:** a partner lost behind another player is picked up again where they reappear, even after more than 3 s, and partners swapped by the tracker are put back; officials and spectators beside the court are not taken (D66).
 
 ## Unreleased — app redesign
 
