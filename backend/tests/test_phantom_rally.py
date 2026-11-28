@@ -39,3 +39,16 @@ def test_a_one_hit_rally_that_flew_is_kept() -> None:
     record = _record(points, [(6, "near")])
     out = run(record, StageContext(video_path=None, out_dir=None, config=CFG))
     assert len(out.rallies) == 1 and out.hits[0].rally_index == 0
+
+
+def test_a_window_of_phantom_hits_with_a_court_has_no_rallies() -> None:
+    # Live: the window after a committed rally holds only the resting shuttle and a stray hit.
+    from shuttlesense.court import compute_homography
+    from shuttlesense.schema import Court
+
+    corners = [(300.0, 650.0), (980.0, 650.0), (820.0, 250.0), (460.0, 250.0)]
+    record = _record([(435.0, 240.0)] * 40, [(15, "far")])
+    record.court = Court(corners_px=corners, homography=compute_homography(corners).tolist())
+    out = run(record, StageContext(video_path=None, out_dir=None, config=CFG))
+    assert out.rallies == []
+    assert out.hits[0].rally_index is None
