@@ -60,7 +60,7 @@ def _rally_lines(record: ClipRecord) -> list[str]:
             if r.receiver_id is not None:
                 line += f" to {r.receiver_id}"
         if r.review:
-            line += f"; service check: {r.review}"
+            line += f"; referee note: {r.review}"
         call = calls.get(r.index)
         if call is not None:
             line += (
