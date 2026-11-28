@@ -17,6 +17,8 @@ Reported, with the sample size next to every number:
   +-rally-tolerance seconds), how often Rally.server_id and receiver_id match the labels;
 - slot jumps: a label-free proxy for identity switches, counting frames where a slot's court
   position moves more than --max-step-m meters from the previous frame;
+- four-player coverage (label-free, D66): the share of frames with each slot filled and with
+  all four filled at once;
 - with --boxes (label_clip.py --boxes, one file per --pred, all or none): ID switches (a
   labelled player matched to a different tracked slot than at their previous labelled
   frame, IoU >= --min-iou), per labelled rally, and IDF1 under the best fixed assignment of
@@ -124,6 +126,26 @@ def slot_jumps(record: ClipRecord, max_step_m: float) -> dict[str, Any]:
     return {"slot_steps": steps, "slot_jumps": jumps}
 
 
+def slot_coverage(record: ClipRecord) -> dict[str, Any]:
+    """Share of frames with each slot filled, and with all four at once (label-free)."""
+    n = len(record.frames)
+    filled = {slot: 0 for slot in PLAYER_IDS}
+    all_four = 0
+    for f in record.frames:
+        present = [
+            f.players is not None and getattr(f.players, slot_attr(slot), None) is not None
+            for slot in PLAYER_IDS
+        ]
+        for slot, here in zip(PLAYER_IDS, present, strict=True):
+            filled[slot] += here
+        all_four += all(present)
+    return {
+        "frames": n,
+        "all_four_rate": all_four / n if n else None,
+        **{f"{slot}_coverage": filled[slot] / n if n else None for slot in PLAYER_IDS},
+    }
+
+
 Box = tuple[float, float, float, float]
 
 
@@ -222,6 +244,7 @@ def evaluate(
         **hitter_metrics(record, labels["hits"], args.tolerance),
         **service_metrics(record, labels["rallies"], args.rally_tolerance),
         **slot_jumps(record, args.max_step_m),
+        **slot_coverage(record),
         "box_frames": 0, "labelled_boxes": 0, "id_switches": None,
         "id_switches_per_rally": None, "idf1": None,
     }  # fmt: skip
@@ -237,7 +260,8 @@ def _fmt(value: Any) -> str:
 
 def markdown(results: list[dict[str, Any]]) -> str:
     cols = ["clip", "matched_hits", "hitter_accuracy", "hitter_unknown_rate", "matched_rallies",
-            "service_accuracy", "slot_jumps", "slot_steps", "box_frames", "id_switches",
+            "service_accuracy", "slot_jumps", "slot_steps", "all_four_rate", "box_frames",
+            "id_switches",
             "id_switches_per_rally", "idf1"]  # fmt: skip
     lines = [
         "# Doubles evaluation (T9.12)",
