@@ -822,7 +822,9 @@ def decide_winner(
     return decision.winner if by_serve in (None, decision.winner) else None
 
 
-def referee_review(record: ClipRecord, rally: Rally) -> str | None:
+def referee_review(
+    record: ClipRecord, rally: Rally, cfg: dict[str, Any] | None = None
+) -> str | None:
     """Why the user should look at how this rally was decided, from the record alone (D47,
     D59).
 
@@ -839,7 +841,7 @@ def referee_review(record: ClipRecord, rally: Rally) -> str | None:
     if any(c.rally_index == rally.index and c.override is not None for c in record.line_calls):
         return None
     following = next((r for r in record.rallies if r.index == rally.index + 1), None)
-    by_serve = next_serve_side(record, rally, following, None)
+    by_serve = next_serve_side(record, rally, following, cfg)
     decision = landing_decision(record, rally)
     by_landing = decision.winner
     if by_serve is not None:
@@ -974,7 +976,7 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     start = ScorePair(**ctx.config.get("start_score", {}) or {})
     match = match_config(ctx.config)
     record.score = apply_rallies(record.rallies, start, **match)
-    flag_service(record, start)
+    flag_service(record, start, cfg)
     record.rally_events = build_events(record)
     ctx.progress(1.0)
     return record

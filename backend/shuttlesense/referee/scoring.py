@@ -199,7 +199,9 @@ def apply_corrections(
     flag_service(record, start)
 
 
-def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
+def flag_service(
+    record: ClipRecord, start: ScorePair | None = None, cfg: dict[str, Any] | None = None
+) -> None:
     """Doubles: mark rallies whose serve does not match the derived service order (T9.6).
 
     The order itself comes from the rally winners; this only asks the user to check a rally
@@ -215,7 +217,7 @@ def flag_service(record: ClipRecord, start: ScorePair | None = None) -> None:
 
     width = (record.court.court_size_m if record.court else COURT_SIZE_M)[0]
     for rally in record.rallies:
-        rally.review = referee_review(record, rally)
+        rally.review = referee_review(record, rally, cfg)
     if record.score is None:
         return
     # The score before each rally comes from the same match steps that set server_id, so
