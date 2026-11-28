@@ -104,6 +104,18 @@ stages:
     hold_frames: 5              # legacy tracker only; missing players are now reported as absent
     appearance_weight: 2.0      # legacy doubles tracker only
     partners_close_m: 0.6       # legacy doubles tracker only
+    doubles_keeper:             # D66: keeps all four doubles slots (pose/doubles_keeper.py)
+      enabled: true
+      gate_m: 0.8               # a fill within this of the predicted position...
+      gate_per_frame_m: 0.08    # ...widening per missing frame...
+      max_gate_m: 2.5           # ...up to this
+      max_appearance: 0.5       # shirt colour must match when both are known
+      max_coast_frames: 150     # then the slot re-seeds from a person inside the court
+      reseed_frames: 3          # seen this many frames in the same spot
+      min_height_ratio: 0.45    # box height / expected standing height at the feet
+      max_height_ratio: 2.2
+      swap_margin_m: 0.6        # partners swapped when the other pairing is this much better
+      swap_confirm_frames: 2
 
   court:
     enabled: true
