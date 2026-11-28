@@ -399,7 +399,7 @@ class StreamAnalyzer:
         # This rally's serve can decide the one before it (D47), as offline.
         from shuttlesense.referee.rally import apply_serve_evidence
 
-        apply_serve_evidence(self.record, self.config.get("stages", {}).get("referee"))
+        apply_serve_evidence(self.record, self.config.get("stages", {}).get("referee"), self.start)
         self._rescore()
         self.anchor = end + 1
         self.open_rally_start = None
