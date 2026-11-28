@@ -573,14 +573,52 @@ def next_serve_side(
     return serve.player
 
 
-def landing_winner(record: ClipRecord, rally: Rally) -> PlayerSide | None:
-    """The automated winner from the rally's landing alone (D45 guards included)."""
+@dataclass(frozen=True)
+class LandingDecision:
+    """What the rally's landing alone says about its winner."""
+
+    winner: PlayerSide | None
+    certain: bool = False  # a call outside the uncertainty band, with a known striker
+    note: str | None = None  # why the user should look at it (Rally.review)
+
+
+def _other(side: PlayerSide) -> PlayerSide:
+    return "far" if side == "near" else "near"
+
+
+def landing_decision(record: ClipRecord, rally: Rally) -> LandingDecision:
+    """The automated winner from the rally's landing alone (D45, D61).
+
+    IN: the side whose half it landed on loses, whoever struck it. OUT: the last striker
+    loses, so the striker must be known: the last detected hit, or a later strike found on
+    the track (strikes.final_striker). An OUT on the striker's own half (a missed return, or
+    a shot that never crossed) and a striker nobody can name give no winner. Uncertain
+    landings (confidence < 0.5) give no winner either.
+    """
+    from shuttlesense.referee.strikes import final_striker
     from shuttlesense.schema import COURT_SIZE_M
 
+    landing = rally.landing
+    if landing is None:
+        return LandingDecision(None)
     size = record.court.court_size_m if record.court else COURT_SIZE_M
-    hits = rally_hits(record, rally)
-    last = hits[-1].player if hits else None
-    return rally_winner(rally.landing, last, size[1] / 2, check_side=True)
+    net_y = size[1] / 2
+    if landing.confidence < 0.5:
+        return LandingDecision(None)
+    half: PlayerSide = "far" if landing.y_m >= net_y else "near"
+    if landing.in_court:
+        return LandingDecision(_other(half), certain=True)
+    call = next((c for c in record.line_calls if c.rally_index == rally.index), None)
+    landed_at = call.frame if call else rally.end_frame
+    striker = final_striker(record, rally_hits(record, rally), landed_at)
+    if striker is None or striker.side is None or striker.side == half:
+        return LandingDecision(None)
+    return LandingDecision(half, certain=True)
+
+
+def landing_winner(record: ClipRecord, rally: Rally) -> PlayerSide | None:
+    """The automated winner from the rally's landing alone (landing_decision)."""
+    return landing_decision(record, rally).winner
 
 
 def decide_winner(
