@@ -32,7 +32,7 @@ void paintShuttleTrail(
     );
   }
   final paint = Paint()
-    ..strokeWidth = halo ? 2.5 : 1.5
+    ..strokeWidth = halo ? 3.0 : 2.0
     ..strokeCap = StrokeCap.round;
   // On a coloured court a dark edge under the trail keeps every speed colour readable.
   if (halo) {
