@@ -330,6 +330,9 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
 
     court = court_type(ctx.config)
     tracker = CourtPlayerTracker(cfg, court, court_size)
+    from shuttlesense.pose.doubles_keeper import with_doubles_keeper
+
+    tracker = with_doubles_keeper(tracker, cfg)  # D66: all four doubles players
     far_refiner = FarPlayerRefiner(cfg, court, court_size)
     min_score = cfg.get("min_person_score", 0.4)
     total = max(len(ctx.reader), 1)
