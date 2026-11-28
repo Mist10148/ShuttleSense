@@ -543,6 +543,8 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
         return
     points = [position(frame) for frame in frames]
     width = max(1, round(state.scale))
+    # OpenCV's thicker strokes can jump two raster rows at once. Soften the wider edges.
+    wider_width = 2 if width == 1 else width + 2
     radius = max(4, round(6 * state.scale))
     head = points[-1]
     if head is not None:
@@ -565,15 +567,18 @@ def draw_speed_trail(img: np.ndarray, record: ClipRecord, i: int, state: RenderS
         clipped, a, b = cv2.clipLine((0, 0, img.shape[1], img.shape[0]), a, b)
         if not clipped:
             continue
-        pad = width + 2
+        pad = wider_width + 2
         x0, y0 = max(0, min(a[0], b[0]) - pad), max(0, min(a[1], b[1]) - pad)
         x1 = min(img.shape[1], max(a[0], b[0]) + pad + 1)
         y1 = min(img.shape[0], max(a[1], b[1]) + pad + 1)
         region = img[y0:y1, x0:x1]
         overlay = region.copy()
+        wider_overlay = region.copy()
         color = style.speed_color(current.shuttle_speed_kmh) or style.UNCERTAIN
         a_local, b_local = (a[0] - x0, a[1] - y0), (b[0] - x0, b[1] - y0)
         cv2.line(overlay, a_local, b_local, color, width, cv2.LINE_AA)
+        cv2.line(wider_overlay, a_local, b_local, color, wider_width, cv2.LINE_AA)
+        cv2.addWeighted(overlay, 0.65, wider_overlay, 0.35, 0, dst=overlay)
         alpha = 0.85 - 0.65 * (len(frames) - 1 - j) / length
         cv2.addWeighted(overlay, alpha, region, 1 - alpha, 0, dst=region)
 

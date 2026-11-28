@@ -1,4 +1,6 @@
+import cv2
 import numpy as np
+import pytest
 
 from shuttlesense.fake import load_golden
 from shuttlesense.render.overlays import LAYERS, RenderState
@@ -35,6 +37,31 @@ def test_trail_draws_speed_segments_with_a_hollow_current_marker():
     assert red[2] > red[1] and red[2] > red[0]
     assert tuple(img[20, 115]) == (11, 45, 70)
     assert img[14, 115].min() > 180
+
+
+@pytest.mark.parametrize("scale,width,wider_width", [(1.0, 1, 2), (3.0, 3, 5)])
+@pytest.mark.parametrize("background", [25, 230])
+def test_trail_softens_the_wider_stroke_at_frame_edges(scale, width, wider_width, background):
+    record = load_golden()
+    record.rallies = []
+    record.frames = [
+        Frame(frame=0, shuttle=Shuttle(visible=1, x=-5, y=0)),
+        Frame(frame=1, shuttle=Shuttle(visible=1, x=1285, y=0), shuttle_speed_kmh=100),
+        Frame(frame=2, shuttle=Shuttle(visible=0)),
+    ]
+    img = np.full((720, 1280, 3), background, np.uint8)
+    narrow = img.copy()
+    wide = img.copy()
+    color = SPEED_COLORS[-1]
+    cv2.line(narrow, (0, 0), (1279, 0), color, width, cv2.LINE_AA)
+    cv2.line(wide, (0, 0), (1279, 0), color, wider_width, cv2.LINE_AA)
+    blended = cv2.addWeighted(narrow, 0.65, wide, 0.35, 0)
+    alpha = 0.85 - 0.65 / 12
+    expected = cv2.addWeighted(blended, alpha, img, 1 - alpha, 0)
+
+    LAYERS["trail"](img, record, 2, RenderState(scale=scale))
+
+    np.testing.assert_array_equal(img, expected)
 
 
 def test_trail_breaks_at_missing_samples_and_rally_boundaries():
