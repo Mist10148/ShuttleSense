@@ -125,6 +125,21 @@ six points matched. Doubles accuracy in court meters remains unmeasured.
 Reanalyze saved uploads to refresh player coordinates. A video re-render refreshes the
 shuttle trail using the existing tracking data.
 
+### Four doubles players (Nov 28, D66)
+
+Label-free coverage on two saved doubles clips with their saved court taps. Both runs used
+the same detections in each frame, with far-court refinement on. A box jump is a slot whose
+foot point moves more than 80 px between consecutive frames, a proxy for identity switches.
+
+| Clip | Frames | All four players (tracker → keeper) | Per slot near / near_2 / far / far_2 | Box jumps |
+| --- | ---: | ---: | --- | ---: |
+| Green-court upload | 350 | 27.7% → 58.0% | 76/96/49/75% → 78/97/75/91% | 0 → 0 |
+| Watch doubles (1024×576) | 600 | 66.5% → 78.5% | 98/94/85/80% → 99/94/89/92% | 1 → 2 |
+
+The keeper fills the far pair most, where the tracker loses a partner behind the other. This
+measures presence, not identity: one extra jump on the Watch clip may be a wrong fill, and
+ID switches and IDF1 still need labelled boxes (`label_clip.py --boxes`, `eval_doubles.py`).
+
 ## 6. Threats to validity
 
 - ShuttleSet is elite broadcast footage from elevated cameras. Team clips differ in angle, players and lighting.
