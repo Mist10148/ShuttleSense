@@ -813,13 +813,23 @@ def decide_winner(
     decide at all (none seen, lost, held, far off court, striker unknown) is decided by a
     clear next serve.
     """
+    return _decide(record, rally, next_rally, cfg)[0]
+
+
+def _decide(
+    record: ClipRecord, rally: Rally, next_rally: Rally | None, cfg: dict[str, Any] | None
+) -> tuple[PlayerSide | None, str, PlayerSide | None]:
+    """decide_winner's winner, how firm it is ("pinned", "close" or "open": nobody
+    awarded) and the clear next serve's side."""
     decision = landing_decision(record, rally)
     by_serve = next_serve_side(record, rally, next_rally, cfg)
     if decision.winner is None:
-        return by_serve
+        return by_serve, "pinned" if by_serve else "open", by_serve
     if not decision.certain:
-        return by_serve or decision.winner
-    return decision.winner if by_serve in (None, decision.winner) else None
+        return (by_serve, "pinned", by_serve) if by_serve else (decision.winner, "close", None)
+    if by_serve in (None, decision.winner):
+        return decision.winner, "pinned", by_serve
+    return None, "open", by_serve
 
 
 def referee_review(
@@ -844,6 +854,14 @@ def referee_review(
     by_serve = next_serve_side(record, rally, following, cfg)
     decision = landing_decision(record, rally)
     by_landing = decision.winner
+    withheld = decision.certain and by_serve is not None and by_landing not in (None, by_serve)
+    if rally.winner is not None and (rally.winner not in (by_landing, by_serve) or withheld):
+        # Only the serve-court check (D65) gives a winner neither the landing nor the next
+        # serve gave, or settles a rally they disagreed on.
+        return (
+            f"Scored for {rally.winner} from where the servers stood: the score only adds "
+            "up that way. Check it"
+        )
     if by_serve is not None:
         if by_landing is None and rally.winner == by_serve:
             return f"Scored for {by_serve} from the next serve: no landing call decided it"
@@ -861,20 +879,65 @@ def referee_review(
     return decision.note
 
 
-def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None:
+def apply_serve_evidence(
+    record: ClipRecord, cfg: dict[str, Any] | None, start: ScorePair | None = None
+) -> None:
     """Set every rally's automated winner from its landing and the next serve.
 
     The winner is recomputed from the record each time, never read from rally.winner, so
-    this can run again as rallies are added (live). The user's line-call overrides and
-    score corrections are applied after it by their callers and still win.
+    this can run again as rallies are added (live). With the start score known, the
+    winners are then checked against the service court of each clear serve (D65,
+    referee.sequence). The user's line-call overrides and score corrections are applied
+    after it by their callers and still win.
     """
+    from shuttlesense.referee.sequence import decodable, decode, sequence_config
+
     if record.court is None:
         return  # no court, no automated decisions (the stage needs one)
     rallies = sorted(record.rallies, key=lambda r: r.index)
     if not rallies:
         return  # a live window of phantom hits only: nothing to decide yet
-    for rally, following in zip(rallies, [*rallies[1:], None], strict=True):
-        rally.winner = decide_winner(record, rally, following, cfg)
+    decided = [
+        _decide(record, rally, following, cfg)
+        for rally, following in zip(rallies, [*rallies[1:], None], strict=True)
+    ]
+    for rally, (winner, _, _) in zip(rallies, decided, strict=True):
+        rally.winner = winner
+    sc = sequence_config(cfg)
+    if start is None or not sc["enabled"]:
+        return
+    n = decodable(len(rallies), start, cfg)
+    steps = [
+        _step(record, following, d, sc)
+        for following, d in zip([*rallies[1:], None][:n], decided[:n], strict=True)
+    ]
+    for rally, winner in zip(rallies[:n], decode(steps, start, cfg), strict=True):
+        rally.winner = winner
+
+
+def _step(
+    record: ClipRecord,
+    following: Rally | None,
+    decided: tuple[PlayerSide | None, str, PlayerSide | None],
+    sc: dict[str, Any],
+) -> Any:
+    """A rally's options for the sequence decoder, and the serve seen after it."""
+    from shuttlesense.referee.sequence import Step, serve_parity
+
+    winner, kind, by_serve = decided
+    if kind == "pinned":
+        options = {winner: 0.0}
+    elif kind == "close":
+        assert winner is not None
+        options = {winner: 0.0, _other(winner): float(sc["flip_cost"])}
+    else:
+        options = {None: 0.0, "near": float(sc["fill_cost"]), "far": float(sc["fill_cost"])}
+    served = None
+    if by_serve is not None and following is not None:
+        hits = rally_hits(record, following)
+        parity = serve_parity(record, hits[0], float(sc["center_margin_m"])) if hits else None
+        served = (by_serve, parity) if parity is not None else None
+    return Step(options=options, served=served)
 
 
 def build_events(record: ClipRecord) -> list[RallyEvent]:
@@ -969,11 +1032,12 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
         f.rally_state = "in_play" if inside else "between_rallies"
     record.rallies = rallies
     record.line_calls = calls
-    if size:
-        # The landing decides each rally it can; the next serve decides the rest (D47).
-        apply_serve_evidence(record, cfg)
-    count_strokes(record)
     start = ScorePair(**ctx.config.get("start_score", {}) or {})
+    if size:
+        # The landing decides each rally it can; the next serve decides the rest (D47), and
+        # the serve courts check that the winners add up (D65).
+        apply_serve_evidence(record, cfg, start)
+    count_strokes(record)
     match = match_config(ctx.config)
     record.score = apply_rallies(record.rallies, start, **match)
     flag_service(record, start, cfg)
