@@ -58,9 +58,18 @@ def test_a_touch_the_detector_missed_is_found_on_the_track() -> None:
     assert abs(striker.frame - 40) <= 2
 
 
-def test_an_out_after_a_missed_touch_on_that_half_is_not_given_to_that_side() -> None:
-    """The old rule credited near's hit and gave far the point; far touched it last."""
-    assert landing_decision(_record(far_wrist=(645.0, 240.0)), _rally()).winner != "far"
+def test_an_out_on_the_strikers_own_half_is_their_fault() -> None:
+    """The old rule credited near's hit and gave far the point. Far touched it last and it
+    landed out behind far's own baseline: far's shot never crossed, so near wins."""
+    decision = landing_decision(_record(far_wrist=(645.0, 240.0)), _rally())
+    assert decision.winner == "near" and decision.certain
+
+
+def test_a_gap_after_the_strike_could_hide_a_return() -> None:
+    record = _record(far_wrist=(645.0, 240.0))
+    for f in record.frames[48:58]:
+        f.shuttle = Shuttle()  # out of view mid-flight: a near return could be in there
+    assert landing_decision(record, record.rallies[0]).winner is None
 
 
 def test_a_touch_nobody_can_be_credited_with_withholds_the_out_call() -> None:

@@ -591,9 +591,11 @@ def landing_decision(record: ClipRecord, rally: Rally) -> LandingDecision:
 
     IN: the side whose half it landed on loses, whoever struck it. OUT: the last striker
     loses, so the striker must be known: the last detected hit, or a later strike found on
-    the track (strikes.final_striker). An OUT on the striker's own half (a missed return, or
-    a shot that never crossed) and a striker nobody can name give no winner. Uncertain
-    landings (confidence < 0.5) give no winner either.
+    the track (strikes.final_striker). An OUT on the striker's own half is their fault (the
+    shot never crossed) when the striker is clearly named and the shuttle was seen all the
+    way down; otherwise a return may have been missed and nobody is awarded. A striker
+    nobody can name gives no winner. Uncertain landings (confidence < 0.5) give no winner
+    either.
     """
     from shuttlesense.referee.strikes import final_striker
     from shuttlesense.schema import COURT_SIZE_M
@@ -611,9 +613,26 @@ def landing_decision(record: ClipRecord, rally: Rally) -> LandingDecision:
     call = next((c for c in record.line_calls if c.rally_index == rally.index), None)
     landed_at = call.frame if call else rally.end_frame
     striker = final_striker(record, rally_hits(record, rally), landed_at)
-    if striker is None or striker.side is None or striker.side == half:
+    if striker is None or striker.side is None:
         return LandingDecision(None)
-    return LandingDecision(half, certain=True)
+    if striker.side != half:
+        return LandingDecision(half, certain=True)
+    # Out on the striker's own half: their shot never crossed the net (BWF Law 13), unless
+    # a return was missed. Only a striker the wrists clearly name, followed by a shuttle
+    # seen all the way down, rules that out (D61).
+    if striker.clear and _seen_down(record, striker.frame, landed_at):
+        return LandingDecision(_other(half), certain=True)
+    return LandingDecision(None)
+
+
+def _seen_down(record: ClipRecord, frame: int, landed_at: int) -> bool:
+    """Whether the shuttle was tracked from a strike to its landing with no gap that could
+    hide a return (strikes.tracked_after)."""
+    from shuttlesense.referee.strikes import MAX_GAP_FRAMES, track, tracked_after
+
+    xy, visible = track(record)
+    gap = max(1, round(MAX_GAP_FRAMES * (record.fps or 30.0) / 30.0))
+    return tracked_after(visible, xy, frame, landed_at, gap)
 
 
 def landing_winner(record: ClipRecord, rally: Rally) -> PlayerSide | None:
