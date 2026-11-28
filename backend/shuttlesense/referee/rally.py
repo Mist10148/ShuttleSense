@@ -869,6 +869,8 @@ def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None
     if record.court is None:
         return  # no court, no automated decisions (the stage needs one)
     rallies = sorted(record.rallies, key=lambda r: r.index)
+    if not rallies:
+        return  # a live window of phantom hits only: nothing to decide yet
     for rally, following in zip(rallies, [*rallies[1:], None], strict=True):
         rally.winner = decide_winner(record, rally, following, cfg)
 
