@@ -705,8 +705,7 @@ def landing_decision(record: ClipRecord, rally: Rally) -> LandingDecision:
         if striker is not None and striker.side is not None and striker.clear:
             return LandingDecision(
                 _other(striker.side),
-                note=f"Close call: it came down at the net after {striker.side}'s shot. "
-                "Check it",
+                note=f"Close call: it came down at the net after {striker.side}'s shot. Check it",
             )
         if not landing.in_court:
             return LandingDecision(
