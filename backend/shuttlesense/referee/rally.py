@@ -665,42 +665,125 @@ def _other(side: PlayerSide) -> PlayerSide:
 
 
 def landing_decision(record: ClipRecord, rally: Rally) -> LandingDecision:
-    """The automated winner from the rally's landing alone (D45, D61).
+    """The automated winner from the rally's landing alone (D45, D59, D61).
 
     IN: the side whose half it landed on loses, whoever struck it. OUT: the last striker
     loses, so the striker must be known: the last detected hit, or a later strike found on
     the track (strikes.final_striker). An OUT on the striker's own half is their fault (the
     shot never crossed) when the striker is clearly named and the shuttle was seen all the
     way down; otherwise a return may have been missed and nobody is awarded. A striker
-    nobody can name gives no winner. Uncertain landings (confidence < 0.5) give no winner
-    either.
+    nobody can name gives no winner.
+
+    A close call (inside the uncertainty band) goes to the side the measurement leans to and
+    is not `certain`: the review asks the user to check it (D59). One at the net, where the
+    half is unknown, goes against a clearly named striker (a net fault is the likelier
+    story), else by the half it leans to. A landing far outside the court (likely a false
+    detection) and no landing at all give no winner.
     """
     from shuttlesense.referee.strikes import final_striker
-    from shuttlesense.schema import COURT_SIZE_M
 
     landing = rally.landing
     if landing is None:
-        return LandingDecision(None)
-    size = record.court.court_size_m if record.court else COURT_SIZE_M
-    net_y = size[1] / 2
-    if landing.confidence < 0.5:
-        return LandingDecision(None)
-    half: PlayerSide = "far" if landing.y_m >= net_y else "near"
-    if landing.in_court:
-        return LandingDecision(_other(half), certain=True)
+        return LandingDecision(None, note="Not called: no landing was seen. Pick the winner")
     call = next((c for c in record.line_calls if c.rally_index == rally.index), None)
+    where = _where(record, rally, landing, call)
+    if where.far_off:
+        return LandingDecision(
+            None, note="Not called: it landed far outside the court, likely a false detection"
+        )
+    certain = landing.confidence >= 0.5
+    if not certain and where.box_unknown:
+        # Not a close call but an unknown server: which service court applies is the doubt.
+        return LandingDecision(
+            None, note="Not called: it depends on which service court the serve came from"
+        )
+    close = None if certain else _close_note(landing, call, where)
+    half: PlayerSide = "far" if landing.y_m >= where.net_y else "near"
     landed_at = call.frame if call else rally.end_frame
+    if not certain and where.at_net:
+        striker = final_striker(record, rally_hits(record, rally), landed_at)
+        if striker is not None and striker.side is not None and striker.clear:
+            return LandingDecision(
+                _other(striker.side),
+                note=f"Close call: it came down at the net after {striker.side}'s shot. "
+                "Check it",
+            )
+        if not landing.in_court:
+            return LandingDecision(
+                None, note="Not called: OUT at the net, but who touched it last is unclear"
+            )
+        return LandingDecision(_other(half), note="Close call: it came down at the net. Check it")
+    if landing.in_court:
+        return LandingDecision(_other(half), certain=certain, note=close)
     striker = final_striker(record, rally_hits(record, rally), landed_at)
     if striker is None or striker.side is None:
-        return LandingDecision(None)
+        return LandingDecision(
+            None, note="Not called: OUT, but who touched it last is unclear. Pick the winner"
+        )
     if striker.side != half:
-        return LandingDecision(half, certain=True)
+        return LandingDecision(half, certain=certain, note=close)
     # Out on the striker's own half: their shot never crossed the net (BWF Law 13), unless
     # a return was missed. Only a striker the wrists clearly name, followed by a shuttle
     # seen all the way down, rules that out (D61).
     if striker.clear and _seen_down(record, striker.frame, landed_at):
-        return LandingDecision(_other(half), certain=True)
-    return LandingDecision(None)
+        own = f"{striker.side.capitalize()} touched it last and it went out on their own side"
+        return LandingDecision(_other(half), certain=certain, note=close or own)
+    return LandingDecision(
+        None,
+        note=f"Not called: OUT on {half}'s side after {half}'s touch; a return may have been "
+        "missed. Pick the winner",
+    )
+
+
+@dataclass(frozen=True)
+class _Where:
+    net_y: float
+    at_net: bool  # within the band of the net: the half is unknown
+    far_off: bool  # beyond the court surround: more likely a false detection
+    line: str  # the nearest line of the area it was called against
+    box_unknown: bool  # a serve's possible service courts disagree on in or out
+
+
+def _where(record: ClipRecord, rally: Rally, landing: Landing, call: Any) -> _Where:
+    """Where a landing lies against the net, the court surround and the nearest line."""
+    from shuttlesense.court.lines import play_bounds
+    from shuttlesense.referee.linecalls import (
+        DEFAULTS,
+        _axis_bands,
+        candidate_bounds,
+        line_call_config,
+        nearest_line,
+        signed_margin,
+    )
+    from shuttlesense.schema import COURT_SIZE_M
+
+    size = record.court.court_size_m if record.court else COURT_SIZE_M
+    court = call.court if call is not None else "singles"
+    point = (landing.x_m, landing.y_m)
+    h = np.asarray(record.court.homography) if record.court else None
+    cfg = line_call_config(None)
+    band = float(_axis_bands(cfg, h, point)[1]) if np.isfinite(point).all() else np.inf
+    margin = signed_margin(point, play_bounds(court, size))
+    areas = candidate_bounds(record, rally, court, cfg)
+    calls = {signed_margin(point, area) >= 0 for area in areas}
+    return _Where(
+        net_y=size[1] / 2,
+        at_net=abs(landing.y_m - size[1] / 2) < band,
+        far_off=margin < -float(DEFAULTS["max_out_m"]),
+        line=nearest_line(point, areas[0], size),
+        box_unknown=len(calls) > 1,
+    )
+
+
+def _close_note(landing: Landing, call: Any, where: _Where) -> str:
+    """'Close call: looks OUT by 4 cm at the back line. Check it' (D59)."""
+    word = "IN" if landing.in_court else "OUT"
+    cm = abs(call.margin_cm) if call is not None else None
+    if cm is None:
+        return f"Close call: looks {word} near the {where.line}. Check it"
+    if cm < 1:
+        return f"Close call: looks {word}, on the {where.line}. Check it"
+    return f"Close call: looks {word} by {cm:.0f} cm at the {where.line}. Check it"
 
 
 def _seen_down(record: ClipRecord, frame: int, landed_at: int) -> bool:
@@ -721,26 +804,33 @@ def landing_winner(record: ClipRecord, rally: Rally) -> PlayerSide | None:
 def decide_winner(
     record: ClipRecord, rally: Rally, next_rally: Rally | None, cfg: dict[str, Any] | None
 ) -> PlayerSide | None:
-    """The automated winner from the landing and the next serve together (D47).
+    """The automated winner from the landing and the next serve together (D47, D59).
 
-    The landing decides when it can. A rally it cannot decide (no landing seen, lost, held,
-    uncertain, implausible) is decided by a clear next serve. When both are there and
-    disagree, one of them is wrong (a misplaced landing, a missed hit, a serve credited to
-    the wrong side), so nobody is awarded and the user decides: a wrong point is worse
-    than an unscored one (D45).
+    A certain landing decides; when a clear next serve disagrees with it, one of them is
+    wrong (a misplaced landing, a missed hit, a serve credited to the wrong side), so nobody
+    is awarded and the user decides: a wrong point is worse than an unscored one (D45). A
+    close call gives way to a clear next serve, which is the better evidence, and otherwise
+    stands as the likely winner, flagged for the user to check. A rally the landing cannot
+    decide at all (none seen, lost, held, far off court, striker unknown) is decided by a
+    clear next serve.
     """
-    by_landing = landing_winner(record, rally)
+    decision = landing_decision(record, rally)
     by_serve = next_serve_side(record, rally, next_rally, cfg)
-    if by_landing is None or by_serve is None:
-        return by_landing or by_serve
-    return by_landing if by_landing == by_serve else None
+    if decision.winner is None:
+        return by_serve
+    if not decision.certain:
+        return by_serve or decision.winner
+    return decision.winner if by_serve in (None, decision.winner) else None
 
 
 def referee_review(record: ClipRecord, rally: Rally) -> str | None:
-    """Why the user should look at how this rally was decided, from the record alone (D47).
+    """Why the user should look at how this rally was decided, from the record alone (D47,
+    D59).
 
     A rally scored from the next serve, or withheld because its landing and the next serve
-    disagree, says so. A rally the user decided (override or winner correction) does not.
+    disagree, says so; so do a close call given to the likely side and a rally the referee
+    could not call. A rally the user decided (override or winner correction) does not, nor
+    does a certain call.
     """
     if record.court is None:
         return None
@@ -751,14 +841,23 @@ def referee_review(record: ClipRecord, rally: Rally) -> str | None:
         return None
     following = next((r for r in record.rallies if r.index == rally.index + 1), None)
     by_serve = next_serve_side(record, rally, following, None)
-    if by_serve is None:
-        return None
-    by_landing = landing_winner(record, rally)
-    if by_landing is None and rally.winner == by_serve:
-        return f"Scored for {by_serve} from the next serve: no landing call decided it"
-    if by_landing is not None and by_landing != by_serve and rally.winner is None:
-        return f"The landing gives the rally to {by_landing}, but {by_serve} served next"
-    return None
+    decision = landing_decision(record, rally)
+    by_landing = decision.winner
+    if by_serve is not None:
+        if by_landing is None and rally.winner == by_serve:
+            return f"Scored for {by_serve} from the next serve: no landing call decided it"
+        if decision.certain and by_landing != by_serve and rally.winner is None:
+            return f"The landing gives the rally to {by_landing}, but {by_serve} served next"
+        if not decision.certain and by_landing is not None:
+            if by_landing == by_serve:
+                return None  # the close call and the next serve agree
+            return (
+                f"Close call given to {by_serve}, who served next; the landing leaned to "
+                f"{by_landing}. Check it"
+            )
+    if rally.winner is not None and rally.winner != by_landing:
+        return None  # decided some other way: nothing to add
+    return decision.note
 
 
 def apply_serve_evidence(record: ClipRecord, cfg: dict[str, Any] | None) -> None:
