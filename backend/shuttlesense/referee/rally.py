@@ -205,6 +205,20 @@ def _relocated_rest(
     return None
 
 
+def _flew(visible: np.ndarray, xy: np.ndarray, hit: int, end: int, cfg: dict[str, Any]) -> bool:
+    """Whether the shuttle moved min_approach_px or more between a hit and the rally's end.
+
+    A one-hit "rally" in which it never did is a hit detected on a shuttle lying on the floor
+    or being carried back to serve, not play (D62).
+    """
+    far = float(cfg.get("min_approach_px", MIN_APPROACH_PX))
+    seen = [i for i in range(max(0, hit), min(len(visible), end + 1)) if visible[i]]
+    if not seen:
+        return True  # nothing to judge by: keep the rally, as before
+    pts = xy[seen]
+    return bool((np.linalg.norm(pts - pts[0], axis=1) >= far).any())
+
+
 def _back_from_above(
     visible: np.ndarray,
     xy: np.ndarray,
@@ -681,8 +695,12 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
     # Singles or doubles lines follow the match (the job's court), whatever line_call says.
     line_cfg = {**line_call_config(cfg), "court": court_type(ctx.config)}
     rallies, calls = [], []
-    for index, seg in enumerate(segments):
+    for seg in segments:
         hits_in = [h for h in record.hits if seg.start <= h.frame <= seg.end]
+        if len(hits_in) == 1 and not _flew(visible, xy, hits_in[0].frame, seg.end, cfg):
+            hits_in[0].rally_index = None
+            continue  # a "hit" on a shuttle lying still or carried: not a rally (D62)
+        index = len(rallies)
         for h in hits_in:
             h.rally_index = index
         rally = Rally(index=index, start_frame=seg.start, end_frame=seg.end)
