@@ -8,6 +8,8 @@ import 'package:shuttlesense_app/core/audio/skin_sounds.dart';
 import 'package:shuttlesense_app/core/theme/app_skin.dart';
 import 'package:shuttlesense_app/data/models/health.dart';
 import 'package:shuttlesense_app/features/coach_personality/personality_notifier.dart';
+import 'package:shuttlesense_app/features/coach_personality/preset_groups.dart';
+import 'package:shuttlesense_app/features/coach_personality/presets.dart';
 import 'package:shuttlesense_app/features/settings/widgets/coach_personality_card.dart';
 
 import 'fakes/fake_api_client.dart';
@@ -79,11 +81,59 @@ void main() {
     expect(visited, ['/settings/coach']);
   });
 
-  testWidgets('a phone shows eight presets until asked for all', (tester) async {
+  testWidgets('a phone shows one group at a time, starting with the active one', (tester) async {
     await pumpScreen(tester, _card, api: FakeApiClient(health: _health()));
+    expect(find.byKey(const ValueKey('coach-preset-default')), findsOneWidget);
     expect(find.byKey(const ValueKey('coach-preset-cute_shy')), findsNothing);
-    await _tap(tester, find.byKey(const ValueKey('coach-show-all')));
+    await _tap(tester, find.text('Supportive'));
     expect(find.byKey(const ValueKey('coach-preset-cute_shy')), findsOneWidget);
+    expect(find.text('Warm and encouraging'), findsOneWidget);
+    expect(find.byKey(const ValueKey('coach-preset-default')), findsNothing);
+    // Picking a preset there keeps its group open.
+    await _tap(tester, find.byKey(const ValueKey('coach-preset-mentor')));
+    expect(_c(tester).read(personalityProvider).activeId, 'preset:mentor');
+    expect(find.byKey(const ValueKey('coach-preset-mentor')), findsOneWidget);
+  });
+
+  testWidgets('a wide card shows every group with taglines and the coach in use', (tester) async {
+    await pumpScreen(
+      tester,
+      _card,
+      api: FakeApiClient(health: _health()),
+      size: laptop,
+    );
+    for (final group in kPresetGroups) {
+      expect(find.byKey(ValueKey('coach-group-${group.id}')), findsOneWidget);
+      for (final id in group.presetIds) {
+        expect(find.byKey(ValueKey('coach-preset-$id')), findsOneWidget);
+      }
+    }
+    expect(find.text('Step-by-step teacher'), findsOneWidget);
+    expect(find.text('Your coach'), findsOneWidget);
+    expect(find.text('Build your own'), findsOneWidget);
+  });
+
+  testWidgets('Build your own opens the personality page', (tester) async {
+    final visited = await pumpScreen(
+      tester,
+      _card,
+      api: FakeApiClient(health: _health()),
+      size: laptop,
+    );
+    await _tap(tester, find.byKey(const ValueKey('coach-preset-custom')));
+    expect(visited, ['/settings/coach']);
+  });
+
+  test('every preset but Custom is in exactly one group, with a tagline', () {
+    final grouped = [for (final g in kPresetGroups) ...g.presetIds];
+    final ids = [for (final p in kPersonalityPresets) p.id]..remove('custom');
+    expect(grouped.toSet(), ids.toSet());
+    expect(grouped.length, ids.length);
+    for (final p in kPersonalityPresets) {
+      expect(kPresetTaglines[p.id], isNotNull, reason: p.id);
+    }
+    expect(groupOf('cute_shy').id, 'supportive');
+    expect(groupOf('custom').id, kPresetGroups.first.id);
   });
 
   testWidgets('an older server is named and the presets are off', (tester) async {
