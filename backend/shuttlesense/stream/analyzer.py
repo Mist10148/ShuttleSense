@@ -330,6 +330,9 @@ class StreamAnalyzer:
             start = self._rally_start(window, r, anchor)
             settle = self.rally_settle if r.landing is not None else self.lost_rally_settle
             closed = r.end_frame < last and (final or last - r.end_frame >= settle)
+            # The session's last frame can be the landing itself: a shuttle still settling
+            # when the session stopped (D60).
+            closed = closed or (final and r.landing is not None)
             if closed:
                 events += self._commit_rally(window, r, anchor, start)
             elif final:
