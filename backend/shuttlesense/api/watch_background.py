@@ -201,6 +201,7 @@ class BackgroundWatch:
                     session.request.name = "Watch & Analyze"
                 self.state.live.finish(self.entry)
         except Exception as exc:
+            log.exception("Watch background analysis failed for job %s", self.entry.job_id)
             self.error = str(exc) or "Background analysis failed"
             self.state.jobs.finish_outside(self.entry.job_id, error=self.error)
             with self.state.live.lock:
