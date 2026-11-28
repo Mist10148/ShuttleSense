@@ -195,7 +195,11 @@ def test_eval_rallies_boundaries_and_score(tmp_path: Path) -> None:
     out = tmp_path / "rallies.md"
     md = eval_rallies.to_markdown(results, 1.0, eval_rallies.pooled(results))
     eval_rallies.write_report({"clips": results}, md, out)
-    assert "| rally01 | 2 | 1 | 1 | 50.0% | 100.0% | 1-1 / 1-0 |" in out.read_text(encoding="utf-8")
+    assert result["score_mae"] == 0.0 and result["exact_score_rate"] == 1.0
+    assert result["coverage"] == 1.0
+    assert "| rally01 | 2 | 1 | 1 | 50.0% | 100.0% | 0.00 | 100.0% | 100.0% | 1-1 / 1-0 |" in (
+        out.read_text(encoding="utf-8")
+    )
 
 
 def test_eval_phone_scores_hits_strokes_counts_and_rallies(tmp_path: Path) -> None:
@@ -508,3 +512,22 @@ def test_eval_rallies_reports_what_decided_each_point(tmp_path: Path) -> None:
     results = {"rally01": result}
     md = eval_rallies.to_markdown(results, 1.0, eval_rallies.pooled(results))
     assert "| serve | 1 | 1 | 0 | 0.0% |" in md
+
+
+def test_eval_rallies_score_error_and_sequence_source() -> None:
+    eval_rallies = load_script("eval_rallies")
+    rows = [
+        {"pred": [0, 1], "winner_true": "near", "winner_pred": "near",
+         "score_true": [1, 0], "score_pred": [1, 0]},
+        {"pred": [2, 3], "winner_true": "far", "winner_pred": None,
+         "score_true": [1, 1], "score_pred": [1, 0]},
+        {"pred": None, "winner_true": "far", "winner_pred": None,
+         "score_true": [1, 2], "score_pred": None},
+    ]  # fmt: skip
+    errors = eval_rallies.score_errors(rows)
+    assert errors == {"score_mae": 0.5, "exact_score_rate": 0.5, "coverage": 0.5}
+    from shuttlesense.schema import Rally
+
+    rally = Rally(index=0, start_frame=0, end_frame=1, winner="near",
+                  review="Scored for near from where the servers stood: ...")  # fmt: skip
+    assert eval_rallies.decided_by(rally) == "sequence"
