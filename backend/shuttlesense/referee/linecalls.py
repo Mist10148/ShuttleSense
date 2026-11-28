@@ -150,6 +150,18 @@ def _boundary_call(point_m, bounds, bands) -> tuple[Call, float, float, bool]:
     return call, margin, min(confidence, 0.499) if uncertain else confidence, uncertain
 
 
+def nearest_line(point_m: Sequence[float], bounds: Bounds, size: Sequence[float]) -> str:
+    """Plain name of the area's edge nearest the point: side line, back line or service
+    line (the short or doubles long service line of a service box)."""
+    x, y = float(point_m[0]), float(point_m[1])
+    x0, x1, y0, y1 = bounds
+    across = min(abs(x - x0), abs(x - x1))
+    end = y0 if abs(y - y0) <= abs(y - y1) else y1
+    if across < abs(y - end):
+        return "side line"
+    return "back line" if min(abs(end), abs(end - float(size[1]))) < 1e-6 else "service line"
+
+
 def implausible(
     point_m: Sequence[float],
     margin: float,
