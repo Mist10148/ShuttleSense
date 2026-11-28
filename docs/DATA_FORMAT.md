@@ -85,7 +85,7 @@ v1.2 (Nov 12, [D22](DECISIONS.md), [Phase 9](phases/phase-9-doubles.md)) adds op
 | `frames[].court_positions` | `near_2`, `far_2` | Their court positions |
 | `hits[]` | `hitter`, `hitter_confidence` | The slot who hit (`player` stays the side). Absent when the two partners were about as close to the shuttle |
 | `rallies[]` | `server_id`, `receiver_id` | Who served and received the rally (the first game, and later games the user named in `score.game_service`, v1.3) |
-| `rallies[]` | `review` | Why the user should check the rally: pose disagrees with the derived service order. Never changes the score |
+| `rallies[]` | `review` | Why the user should check the rally: a close call given to the likely side, a point from the next serve, a landing and next serve that disagree, why the referee could not call it (D59, D61), or pose disagreeing with the derived service order. Never changes the score |
 | `score` | `first_server_id`, `first_receiver_id`, `server_id`, `receiver_id` | The user's first server and receiver, and who serves and receives next |
 | `summary.per_player` | `near_1` … `far_2` keys | Per partner, next to the `near` / `far` side totals |
 | `coaching.session_notes[]` | `player` | A slot for form and out notes in doubles, or the side when the partners were too close to tell who hit; `rule: "formation"` notes (severity 0) say how often each pair played front and back or side by side |
