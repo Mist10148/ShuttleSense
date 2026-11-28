@@ -89,6 +89,42 @@ def test_referee_cache_keeps_line_calls_and_events(tmp_path: Path) -> None:
     assert restored.rally_events == record.rally_events
 
 
+def test_cache_keeps_the_tracker_estimated_frames(tmp_path: Path) -> None:
+    """A cached rerun must treat filled-in shuttle frames as unobserved, like a fresh run."""
+    from shuttlesense import cache
+    from shuttlesense.schema import ClipRecord
+
+    golden = Path(__file__).parent / "fixtures" / "golden_record.json"
+    record = ClipRecord.model_validate_json(golden.read_text(encoding="utf-8"))
+    record._estimated_shuttle_frames = {3, 4, 9}
+    cache.save(tmp_path, "tracking", "k", record)
+    fresh = ClipRecord.model_validate_json(golden.read_text(encoding="utf-8"))
+    restored = cache.load(tmp_path, "tracking", "k", fresh)
+    assert restored is not None
+    assert restored._estimated_shuttle_frames == {3, 4, 9}
+    # A later stage's cache rebuilds the record again: the set must survive that too.
+    cache.save(tmp_path, "hits", "h", restored)
+    later = cache.load(tmp_path, "hits", "h", restored)
+    assert later is not None
+    assert later._estimated_shuttle_frames == {3, 4, 9}
+
+
+def test_tracking_cache_without_estimated_frames_misses(tmp_path: Path) -> None:
+    import json as _json
+
+    from shuttlesense import cache
+    from shuttlesense.schema import ClipRecord
+
+    golden = Path(__file__).parent / "fixtures" / "golden_record.json"
+    record = ClipRecord.model_validate_json(golden.read_text(encoding="utf-8"))
+    cache.save(tmp_path, "tracking", "k", record)
+    path = cache.cache_path(tmp_path, "tracking")
+    data = _json.loads(path.read_text(encoding="utf-8"))
+    del data["fields"][cache.ESTIMATED_KEY]  # a cache written by an older version
+    path.write_text(_json.dumps(data), encoding="utf-8")
+    assert cache.load(tmp_path, "tracking", "k", record) is None
+
+
 def test_file_changed_in_place_invalidates_cache(
     counting_stages, tiny_video: Path, tmp_path: Path
 ) -> None:
