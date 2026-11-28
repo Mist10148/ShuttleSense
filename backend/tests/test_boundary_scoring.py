@@ -49,12 +49,13 @@ def score_landing(x, y, side="near", court="singles", stroke="clear"):
         (5.40, 10, "doubles", "clear", "hitter"),
         (1, 13.02, "doubles", "serve", "receiver"),
         (1, 13.02, "doubles", "clear", "hitter"),
-        (1, 12.8, "doubles", "serve", None),
+        # Close calls (inside the band) go to the likely side and are flagged (D59).
+        (1, 12.8, "doubles", "serve", "receiver?"),
         (1, 11, "singles", "serve", "hitter"),
         (4, 11, "singles", "serve", "receiver"),
-        (5.18, 10, "singles", "clear", None),
-        (1, 7.0, "singles", "clear", None),
-        (1, 13.1, "singles", "clear", None),
+        (5.18, 10, "singles", "clear", "hitter?"),
+        (1, 7.0, "singles", "clear", "hitter?"),
+        (1, 13.1, "singles", "clear", "hitter?"),
         (0.12, 10, "singles", "clear", "hitter"),
     ],
 )
@@ -62,11 +63,13 @@ def test_landing_decides_at_most_one_point(side, x, depth, court, stroke, award)
     y = depth if side == "near" else 13.4 - depth
     record = score_landing(x, y, side, court, stroke)
     receiver = "far" if side == "near" else "near"
-    winner = {"hitter": side, "receiver": receiver, None: None}[award]
+    close = award.endswith("?")
+    winner = {"hitter": side, "receiver": receiver}[award.rstrip("?")]
     (rally,) = record.rallies
     (call,) = record.line_calls
-    assert call.uncertain == (winner is None)
+    assert call.uncertain == close
     assert rally.winner == winner
+    assert (rally.review or "").startswith("Close call") == close
     assert (record.score.near, record.score.far) == (winner == "near", winner == "far")
     # Crossing the net in flight produced no intermediate rally or score.
     assert call.frame >= 29

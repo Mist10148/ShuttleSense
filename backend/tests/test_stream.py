@@ -82,7 +82,9 @@ def test_override_and_correction_rescore() -> None:
     record, _ = synthetic_record()
     a, live, _ = _live(record)
     uncertain = next(c for c in live.line_calls if c.uncertain)
-    assert live.rallies[uncertain.rally_index].winner is None
+    # A close call goes to the likely side and asks to be checked (D59).
+    assert live.rallies[uncertain.rally_index].winner == "near"
+    assert live.rallies[uncertain.rally_index].review.startswith("Close call")
     events = a.override(uncertain.id, "out")
     assert events[0]["line_call"]["override"]["call"] == "out"
     # The near player (who served it, having won the rally before) hit the last shot out.
