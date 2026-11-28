@@ -279,7 +279,8 @@ def apply_overrides(record: ClipRecord, overrides: Sequence[LineCallOverrideIn])
     corrections (scoring.apply_corrections) run after this; a winner correction older than
     the rally's override is skipped there, so the newest decision wins (D32).
     """
-    from shuttlesense.referee.rally import rally_winner
+    from shuttlesense.referee.rally import rally_hits, rally_winner
+    from shuttlesense.referee.strikes import final_striker
 
     latest = {o.rally_index: o for o in sorted(overrides, key=lambda o: o.at)}
     rallies = {r.index: r for r in record.rallies}
@@ -294,8 +295,13 @@ def apply_overrides(record: ClipRecord, overrides: Sequence[LineCallOverrideIn])
             continue
         rally.landing.in_court = o.call == "in"
         rally.landing.confidence = 1.0
-        hits = [h for h in record.hits if h.rally_index == rally.index]
-        rally.winner = rally_winner(rally.landing, hits[-1].player if hits else None, size[1] / 2)
+        hits = rally_hits(record, rally)
+        # The user settled IN or OUT; who touched it last still comes from the track, so a
+        # return the hit detector missed is credited like an automated call (D61).
+        striker = final_striker(record, hits, call.frame) if hits else None
+        last = striker.side if striker is not None and striker.side is not None else None
+        last = last or (hits[-1].player if hits else None)
+        rally.winner = rally_winner(rally.landing, last, size[1] / 2)
 
 
 def clear_override(record: ClipRecord, rally_index: int) -> None:
