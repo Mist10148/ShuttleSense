@@ -185,6 +185,8 @@ stages:
     relocate_still_frames: 6    # ...still for this many frames
     relocate_extra_frames: 15   # ...settled within lost_frames_end + this after the loss
     end_rest_frames: 8          # the last rally: a rest this long before the clip ends lands
+    end_min_flight_frames: 15   # ...or, this long after its last hit, a shuttle coming down
+    end_slow_px: 6.0            # ...no faster than this (720p, a frame) as the clip ends (D60)
     top_exit_frames: 75         # a shuttle lost this long that comes back down into the
     top_exit_px: 40.0           # ...top of the frame (within this, 720p) was above it: same rally
     line_call:                 # F20, docs/PRD.md: automated calls, never official

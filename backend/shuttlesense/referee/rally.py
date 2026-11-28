@@ -37,6 +37,15 @@ FALLING_FRAMES = 8  # frames before the loss that must show the shuttle coming d
 # A shuttle that settles before the clip ends (D48): nothing can follow the last frame, so a
 # shorter rest than stationary_frames_end is enough to call it.
 END_REST_FRAMES = 8
+# A shuttle still coming down as the clip ends (D60): seen in the last END_WINDOW_FRAMES,
+# at least end_min_flight_frames after the last hit, moving no more than end_slow_px a frame
+# (and under END_SLOW_SHARE of its fastest flight), after frames END_FASTER_BEFORE times
+# faster.
+END_WINDOW_FRAMES = 6
+END_MIN_FLIGHT_FRAMES = 15
+END_SLOW_PX = 6.0
+END_SLOW_SHARE = 1 / 3
+END_FASTER_BEFORE = 1.5
 # A high shuttle above the frame (D62): lost for up to this long, it is back in play when it
 # comes down into the frame within this distance of the top edge.
 TOP_EXIT_FRAMES = 75
@@ -50,8 +59,9 @@ FRAME_KEYS = (
     "relocate_extra_frames",
     "end_rest_frames",
     "top_exit_frames",
+    "end_min_flight_frames",
 )
-PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px", "top_exit_px")
+PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px", "top_exit_px", "end_slow_px")
 
 
 def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
@@ -63,6 +73,7 @@ def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
         "min_approach_px": MIN_APPROACH_PX,
         "relocate_px": RELOCATE_PX,
         "top_exit_px": TOP_EXIT_PX,
+        "end_slow_px": END_SLOW_PX,
     }
     for key in PIXEL_KEYS:
         out[key] = float(out.get(key, defaults[key])) * scale
@@ -259,6 +270,9 @@ class Segment:
     # Where it lies in the image: the median of its resting detections, steadier than the
     # first resting frame, which may be taken mid-bounce (D48).
     landing_px: tuple[float, float] | None = None
+    # A shuttle still settling as the clip ended (D60): where it was a few frames before, so
+    # the line call's band can cover how far it may still have moved.
+    moving_from_px: tuple[float, float] | None = None
 
 
 def _rest_after(
@@ -402,6 +416,65 @@ def _settled_at_end(
     return None
 
 
+def _settling_at_end(
+    visible: np.ndarray,
+    xy: np.ndarray,
+    frame: int,
+    n: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
+) -> tuple[int, np.ndarray, np.ndarray] | None:
+    """(landing frame, image point, point a few frames before) when the clip ends just as the
+    last rally's shuttle comes down, before it has rested end_rest_frames (D60).
+
+    A clip cut, or a live session stopped, a moment after the shuttle touched the floor
+    leaves it still sliding or tumbling a few pixels a frame. It counts as landed where it
+    was last seen when: it is seen in the last frames, end_min_flight_frames or more after
+    the last hit; it moves no more than end_slow_px a frame (median) and under a third of its
+    fastest flight since the hit; it was coming down (image y rising) both in those frames
+    and in the ones before, where it was clearly faster. A shuttle at the top of a flight is
+    also slow, but it was rising just before. The call's band then grows by how far it moved
+    in its last frames (rally.run), so a shuttle near a line stays a close call.
+    """
+    k = END_WINDOW_FRAMES
+    min_flight = int(cfg.get("end_min_flight_frames", END_MIN_FLIGHT_FRAMES))
+    slow = float(cfg.get("end_slow_px", END_SLOW_PX))
+    if n - frame <= min_flight or any(i in unobserved for i in range(frame, n)):
+        return None
+    tail = [j for j in range(n - k, n) if visible[j]]
+    prior = [j for j in range(n - 2 * k, n - k) if visible[j]]
+    if len(tail) < k - 1 or tail[-1] < n - 2 or len(prior) < 3 or tail[0] - frame < min_flight:
+        return None
+
+    def speeds(frames: list[int]) -> np.ndarray:
+        steps = [
+            np.linalg.norm(xy[b] - xy[a]) / (b - a)
+            for a, b in zip(frames[:-1], frames[1:], strict=True)
+            if b - a <= 2
+        ]
+        return np.asarray(steps, dtype=float)
+
+    now = speeds(tail)
+    flight = speeds([j for j in range(frame, n) if visible[j]])
+    if not len(now) or not len(flight):
+        return None
+    median = float(np.median(now))
+    falling = xy[tail[-1]][1] > xy[tail[0]][1] and xy[prior[-1]][1] > xy[prior[0]][1]
+    before = speeds(prior)
+    if not (
+        falling
+        and median <= slow
+        and median <= END_SLOW_SHARE * float(flight.max())
+        and len(before)
+        and float(before.mean()) >= END_FASTER_BEFORE * median
+    ):
+        return None
+    if not _approached(visible, xy, tail[0], frame, cfg):
+        return None
+    back = tail[-4] if len(tail) >= 4 else tail[0]
+    return tail[-1], xy[tail[-1]], xy[back]
+
+
 def segment_rallies(
     visible: np.ndarray,
     xy: np.ndarray,
@@ -419,6 +492,7 @@ def segment_rallies(
     of the clip is left open.
     """
     n = len(visible)
+    unob = unobserved or set()
     hits = sorted(h for h in hits if 0 <= h < n)
     if not hits:
         return []
@@ -447,6 +521,10 @@ def segment_rallies(
                 if settled is not None:
                     at, px = settled
                     segments.append(Segment(start, at, True, at, (float(px[0]), float(px[1]))))
+                elif (settling := _settling_at_end(visible, xy, hits[k], n, cfg, unob)) is not None:
+                    at, px, before = settling
+                    spot, was = (float(px[0]), float(px[1])), (float(before[0]), float(before[1]))
+                    segments.append(Segment(start, at, True, at, spot, was))
                 else:
                     segments.append(Segment(start, n - 1, False, None))
                 k += 1
@@ -770,7 +848,12 @@ def run(record: ClipRecord, ctx: StageContext) -> ClipRecord:
             point = image_to_court(np.asarray(record.court.homography), spot[None, :])[0]
         # A point near the homography's horizon maps to inf/NaN, which JSON cannot hold.
         if landing is not None and point is not None and np.isfinite(point).all():
-            call = make_line_call(record, rally, landing, point, line_cfg)
+            extra = 0.0
+            if seg.moving_from_px is not None:  # still settling at the clip's end (D60)
+                h = np.asarray(record.court.homography)
+                was = image_to_court(h, np.asarray([seg.moving_from_px]))[0]
+                extra = float(np.linalg.norm(was - point)) if np.isfinite(was).all() else np.inf
+            call = make_line_call(record, rally, landing, point, line_cfg, extra_band_m=extra)
             call.id = len(calls)
             calls.append(call)
             x_m, y_m = call.landing_xy

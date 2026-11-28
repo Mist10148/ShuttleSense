@@ -199,12 +199,20 @@ def candidate_bounds(
 
 
 def make_line_call(
-    record: ClipRecord, rally: Rally, frame: int, point_m: Sequence[float], cfg: dict[str, Any]
+    record: ClipRecord,
+    rally: Rally,
+    frame: int,
+    point_m: Sequence[float],
+    cfg: dict[str, Any],
+    *,
+    extra_band_m: float = 0.0,
 ) -> LineCall:
+    """The call for one landing. `extra_band_m` widens the band on both axes: how far a
+    shuttle still settling when the clip ended may yet have moved (D60)."""
     court: CourtType = cfg["court"]
     areas = candidate_bounds(record, rally, court, cfg)
     h = np.asarray(record.court.homography) if record.court else None
-    bands = _axis_bands(cfg, h, point_m)
+    bands = np.hypot(_axis_bands(cfg, h, point_m), extra_band_m)
     candidates = [_boundary_call(point_m, bounds, bands) for bounds in areas]
     # Use the most inclusive box for the provisional call and its displayed margin.
     call, margin, confidence, uncertain = max(candidates, key=lambda result: result[1])
