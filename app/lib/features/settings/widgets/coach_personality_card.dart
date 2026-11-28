@@ -77,6 +77,8 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
       child: LayoutBuilder(
         builder: (context, box) {
           final wide = box.maxWidth >= _wide;
+          // Large text on a narrow card: one key per row, so names never break mid-word.
+          final perRow = !wide && MediaQuery.textScalerOf(context).scale(10) >= 15 ? 1 : 2;
           final shown = _group == null
               ? groupOf(preset.id)
               : kPresetGroups.firstWhere((g) => g.id == _group);
@@ -102,6 +104,7 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
                 title: active == null ? preset.label : active.name,
                 detail: active == null ? preset.description : 'based on ${preset.label}',
                 wide: wide,
+                stacked: perRow == 1,
               ),
               const SizedBox(height: Spacing.lg),
               Text('Pick how your coach talks. You can change it any time.', style: muted),
@@ -114,24 +117,29 @@ class _CoachPersonalityCardState extends ConsumerState<CoachPersonalityCard> {
                   const SizedBox(height: Spacing.md),
                 ]
               else ...[
-                // One group at a time keeps a phone card short (it was 17 keys tall).
-                DepthSegmented<String>(
+                // One group at a time keeps a phone card short (it was 17 keys tall). Chips
+                // wrap, so the group names stay whole at any width and text size.
+                Wrap(
                   key: const ValueKey('coach-groups'),
-                  compact: true,
-                  wrapLabels: true,
-                  segments: [
-                    for (final g in kPresetGroups) ButtonSegment(value: g.id, label: Text(g.label)),
+                  spacing: Spacing.sm,
+                  runSpacing: Spacing.sm,
+                  children: [
+                    for (final g in kPresetGroups)
+                      ChoiceChip(
+                        key: ValueKey('coach-group-chip-${g.id}'),
+                        label: Text(g.label),
+                        selected: g.id == shown.id,
+                        onSelected: (_) => setState(() => _group = g.id),
+                      ),
                   ],
-                  selected: {shown.id},
-                  onSelectionChanged: (s) => setState(() => _group = s.first),
                 ),
                 const SizedBox(height: Spacing.sm),
                 Text(shown.blurb, key: const ValueKey('coach-group-blurb'), style: muted),
                 const SizedBox(height: Spacing.sm),
-                for (var i = 0; i < shown.presetIds.length; i += 2) ...[
+                for (var i = 0; i < shown.presetIds.length; i += perRow) ...[
                   _KeyRow(
                     children: [
-                      for (final id in shown.presetIds.skip(i).take(2)) key(presetById(id)),
+                      for (final id in shown.presetIds.skip(i).take(perRow)) key(presetById(id)),
                     ],
                   ),
                   const SizedBox(height: Spacing.sm),
@@ -192,12 +200,16 @@ class _CurrentCoach extends StatelessWidget {
     required this.title,
     required this.detail,
     required this.wide,
+    this.stacked = false,
   });
 
   final IconData icon;
   final String title;
   final String detail;
   final bool wide;
+
+  /// Icon above the text: large text on a narrow card needs the full width.
+  final bool stacked;
 
   @override
   Widget build(BuildContext context) {
@@ -208,45 +220,52 @@ class _CurrentCoach extends StatelessWidget {
       icon: const Icon(Icons.tune),
       label: const Text('Customize'),
     );
-    final summary = Row(
+    final well = InsetBox(
+      radius: Radii.md,
+      padding: const EdgeInsets.all(Spacing.md),
+      child: Icon(icon, size: 28, color: theme.colorScheme.primary),
+    );
+    final about = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InsetBox(
-          radius: Radii.md,
-          padding: const EdgeInsets.all(Spacing.md),
-          child: Icon(icon, size: 28, color: theme.colorScheme.primary),
+        Text(
+          'Your coach',
+          style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
-        const SizedBox(width: Spacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Your coach',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+        Semantics(
+          liveRegion: true,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: title,
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
-              ),
-              Semantics(
-                liveRegion: true,
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: title,
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(text: ' · $detail'),
-                    ],
-                  ),
-                  key: const ValueKey('coach-description'),
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-            ],
+                TextSpan(text: ' · $detail'),
+              ],
+            ),
+            key: const ValueKey('coach-description'),
+            style: theme.textTheme.bodyMedium,
           ),
         ),
       ],
     );
+    final summary = stacked
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              well,
+              const SizedBox(height: Spacing.sm),
+              about,
+            ],
+          )
+        : Row(
+            children: [
+              well,
+              const SizedBox(width: Spacing.md),
+              Expanded(child: about),
+            ],
+          );
     if (!wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
