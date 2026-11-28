@@ -116,8 +116,13 @@ class StreamAnalyzer:
         self.hit_lag += 1
         # Offline ignores a rest followed by a hit within lost_frames_end (detector noise), so
         # a rally is final only once that long has passed and any such hit would be detected.
-        lost = frames_at(stages.get("referee", {}).get("lost_frames_end", 30), fps)
+        referee_cfg = stages.get("referee", {})
+        lost = frames_at(referee_cfg.get("lost_frames_end", 30), fps)
         self.rally_settle = lost + self.hit_lag
+        # A shuttle lost from view can come back down from above the frame for
+        # top_exit_frames (D62): only then is a rally that ended without a landing final.
+        above = frames_at(referee_cfg.get("top_exit_frames", 75), fps)
+        self.lost_rally_settle = max(lost, above) + self.hit_lag
         self.speed_smoothing = int(analytics_cfg.get("speed_smoothing", 3))
         self.min_keypoint_score = float(stages.get("pose", {}).get("min_keypoint_score", 0.3))
         self._recent_shuttle: deque[tuple[float, float]] = deque(maxlen=self.speed_smoothing + 2)
@@ -323,7 +328,8 @@ class StreamAnalyzer:
         open_start = None
         for r in window.rallies:
             start = self._rally_start(window, r, anchor)
-            closed = r.end_frame < last and (final or last - r.end_frame >= self.rally_settle)
+            settle = self.rally_settle if r.landing is not None else self.lost_rally_settle
+            closed = r.end_frame < last and (final or last - r.end_frame >= settle)
             if closed:
                 events += self._commit_rally(window, r, anchor, start)
             elif final:
