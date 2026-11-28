@@ -346,9 +346,23 @@ class RallyHistory extends StatelessWidget {
         lets.remove(c.rallyIndex);
       }
     }
+    // Close calls given to the likely side, and rallies the referee could not call, carry a
+    // note saying why (D59): count them so a long history shows what is left to check.
+    final toCheck = record.rallies
+        .where((r) => r.review != null && !(r.winner == null && lets.contains(r.index)))
+        .length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (toCheck > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Spacing.xs),
+            child: Text(
+              '$toCheck ${toCheck == 1 ? 'call' : 'calls'} to check',
+              key: const Key('calls-to-check'),
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
         for (final rally in record.rallies)
           _RallyRow(
             rally: rally,
@@ -487,15 +501,32 @@ class _RallyRow extends StatelessWidget {
         ? 'no landing call'
         : '${landing.inCourt ? 'in' : 'out'}${landing.uncertain ? ' ?' : ''}';
     final needsConfirm = rally.winner == null && !isLet;
+    // The referee's note: a close call given to the likely side, or why it could not call
+    // the rally (D59). A let needs nothing more.
+    final note = isLet ? null : rally.review;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              '${showGame ? 'G${rally.game} · ' : ''}Rally ${rally.index + 1} · '
-              '${rally.strokeCount} strokes · $call',
-              style: TextStyle(fontWeight: current ? FontWeight.w600 : null),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${showGame ? 'G${rally.game} · ' : ''}Rally ${rally.index + 1} · '
+                  '${rally.strokeCount} strokes · $call',
+                  style: TextStyle(fontWeight: current ? FontWeight.w600 : null),
+                ),
+                if (note != null)
+                  Text(
+                    note,
+                    key: ValueKey('rally-review-${rally.index}'),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+              ],
             ),
           ),
           if (isLet)
@@ -506,7 +537,17 @@ class _RallyRow extends StatelessWidget {
           if (needsConfirm)
             Tooltip(
               message: 'Undecided: pick the winner',
-              child: Icon(Icons.help_outline, size: 18, color: Theme.of(context).colorScheme.error),
+              child: Icon(Icons.help_outline, size: 18, color: scheme.error),
+            )
+          else if (note != null)
+            Tooltip(
+              message: 'Check this call: tap the other side if it is wrong',
+              child: Icon(
+                Icons.flag_outlined,
+                size: 18,
+                color: scheme.tertiary,
+                semanticLabel: 'Check this call',
+              ),
             ),
           for (final side in ['near', 'far'])
             Padding(
