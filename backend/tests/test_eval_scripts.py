@@ -393,6 +393,12 @@ def test_eval_doubles_scores_hitters_service_and_slot_jumps(tmp_path: Path) -> N
     assert result["hitter_accuracy"] == 2 / 3 and result["hitter_unknown_rate"] == 0
     assert result["matched_rallies"] == 1 and result["service_accuracy"] == 1.0
     assert result["slot_steps"] > 0 and result["slot_jumps"] == 0
+    present = [
+        all(getattr(f.players, a, None) is not None for a in ("near", "near_2", "far", "far_2"))
+        for f in record.frames
+    ]
+    assert result["all_four_rate"] == sum(present) / len(record.frames)
+    assert 0 <= result["near_1_coverage"] <= 1
     assert "| golden_doubles | 3 | 66.7% |" in eval_doubles.markdown([result])
 
 
