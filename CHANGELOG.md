@@ -13,6 +13,8 @@ The lead UI/UX review was waived by the project lead (D50–D53, D55–D58, [doc
 - **In the coach:** the chosen personality goes with every question in session chat, the general coach and the practice follow-up (D58); the app bar shows it and switches it, and a change keeps the conversation with a "Coach is now …" line.
 - **Backend:** a personality block built from the validated settings, after the coach's rules and data; the player's own words in a delimited, style-only block; serious mode for pain, injury and distress; `POST /coach/personality/generate`; `coach_personality` on `/health`; `personality_label` on answers.
 
+- **AI Coach card layout:** the coach in use comes first, then the presets in four named groups with a tagline each; phones show one group at a time, and Custom is a separate Build your own key (D63).
+
 - **Crisis support line:** self-harm or suicide words get a fixed support message first, pointing to local emergency services, a crisis line and people the player trusts. The wording is a placeholder (D57).
 
 ### Fixed
@@ -51,6 +53,12 @@ Needs a review from the lead UI/UX developer before merge (D49, [docs/THEMES.md]
 - **No false points:** a static false detection, a shuttle held in a hand, a rest far off court, a landing on the net line, or an OUT call that disagrees with the last detected hitter no longer award a point; the rally waits for the user (D45).
 - **Doubles lines:** line calls always use the match's singles or doubles court.
 - **Shuttle lost as it lands:** when the tracker misses the shuttle as it falls and finds it again lying where it fell, that is the landing, so the rally scores in uploads, Live and Watch (D46).
+- **Close calls are scored and flagged:** a landing near a line goes to the side it most likely belongs to, and the rally says so ("Close call: looks IN by 6 cm at the back line. Check it"); the score history counts the calls to check (D59).
+- **Clip ends as the shuttle lands:** a shuttle still sliding to a stop on the clip's last frames now lands there, so the last rally scores instead of staying open (D60).
+- **Who hit last:** a touch the hit detector missed is found on the shuttle's track, so an OUT is no longer given to the wrong side, and a shot that lands out on the striker's own side is their fault (D61).
+- **High shots above the frame:** a clear or lift that leaves the top of the video and comes back keeps the rally going instead of splitting it; a "hit" on a shuttle lying on the floor no longer makes a rally (D62).
+- **Uncalled rallies say why:** no landing seen, far off court, unknown service court, or unknown striker.
+- **Cached reruns:** the tracker's filled-in frames are kept with the cache, so a rerun scores the same as a fresh run.
 
 ## Unreleased — app redesign
 
