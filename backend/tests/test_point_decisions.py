@@ -22,8 +22,10 @@ CASES = [
     ("singles", "serve", 3.5, (1, 11), "observed", "near"),
     ("singles", "serve", None, (1, 11), "observed", None),
     ("singles", "serve", None, (1, 7.5), "observed", "far"),
-    ("singles", "clear", None, (5.18, 10), "observed", None),
-    ("singles", "clear", None, (-0.5, 6.72), "observed", None),
+    # Close calls go to the likely side, flagged (D59): on the side line it is IN on far's
+    # half; wide at the net after near's shot, near's OUT gives far the point.
+    ("singles", "clear", None, (5.18, 10), "observed", "near"),
+    ("singles", "clear", None, (-0.5, 6.72), "observed", "far"),
     ("singles", "clear", None, (1, 10), "sparse", None),
     ("singles", "clear", None, (1, 10), "inpaint", None),
     # A shot that never crosses the net lands in on the hitter's own half: the hitter loses.
