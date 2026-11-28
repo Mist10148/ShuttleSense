@@ -37,6 +37,10 @@ FALLING_FRAMES = 8  # frames before the loss that must show the shuttle coming d
 # A shuttle that settles before the clip ends (D48): nothing can follow the last frame, so a
 # shorter rest than stationary_frames_end is enough to call it.
 END_REST_FRAMES = 8
+# A high shuttle above the frame (D62): lost for up to this long, it is back in play when it
+# comes down into the frame within this distance of the top edge.
+TOP_EXIT_FRAMES = 75
+TOP_EXIT_PX = 40.0
 # stages.referee keys that count frames.
 FRAME_KEYS = (
     "stationary_frames_end",
@@ -45,8 +49,9 @@ FRAME_KEYS = (
     "relocate_still_frames",
     "relocate_extra_frames",
     "end_rest_frames",
+    "top_exit_frames",
 )
-PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px")
+PIXEL_KEYS = ("rest_radius_px", "min_approach_px", "relocate_px", "top_exit_px")
 
 
 def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
@@ -57,6 +62,7 @@ def scaled_pixels(cfg: dict[str, Any], height: int | None) -> dict[str, Any]:
         "rest_radius_px": REST_RADIUS_PX,
         "min_approach_px": MIN_APPROACH_PX,
         "relocate_px": RELOCATE_PX,
+        "top_exit_px": TOP_EXIT_PX,
     }
     for key in PIXEL_KEYS:
         out[key] = float(out.get(key, defaults[key])) * scale
@@ -199,6 +205,37 @@ def _relocated_rest(
     return None
 
 
+def _back_from_above(
+    visible: np.ndarray,
+    xy: np.ndarray,
+    last_visible: int,
+    now: int,
+    stop: int,
+    cfg: dict[str, Any],
+    unobserved: set[int],
+) -> int | None:
+    """The frame a shuttle lost from view comes back down into the top of the frame, if it
+    does within top_exit_frames of the loss (D62).
+
+    A high clear or lift can stay above the frame for longer than lost_frames_end. When it
+    reappears at the top edge (within top_exit_px) and comes down, it never left play: the
+    rally goes on. An unobserved frame before it proves nothing, so it gives None.
+    """
+    window = int(cfg.get("top_exit_frames", TOP_EXIT_FRAMES))
+    top = float(cfg.get("top_exit_px", TOP_EXIT_PX))
+    end = min(stop, len(visible), last_visible + window + 1)
+    for j in range(now + 1, end):
+        if j in unobserved:
+            return None
+        if not visible[j]:
+            continue
+        if xy[j][1] > top:
+            return None  # found somewhere else: not the same flight coming back
+        later = [k for k in range(j + 1, min(end, j + 5)) if visible[k]]
+        return j if later and xy[later[-1]][1] > xy[j][1] else None
+    return None
+
+
 @dataclass(frozen=True)
 class Segment:
     start: int
@@ -234,6 +271,7 @@ def _rest_after(
     still = int(cfg.get("stationary_frames_end", 20))
     radius = float(cfg.get("rest_radius_px", STATIONARY_PX))
     last_visible, missing = frame, 0
+    resume: int | None = None  # the shuttle comes back down into the frame here (D62)
     rest = _RestRun(radius)
     for i in range(frame, stop):
         if i in unobserved:
@@ -245,11 +283,13 @@ def _rest_after(
             missing += 1
             if missing > MAX_MISSED_AT_REST:
                 rest.reset()
-            if missing >= lost:
-                found = _relocated_rest(visible, xy, last_visible, cfg, unobserved)
-                return (last_visible, *found) if found else (last_visible, None, None)
+            if missing >= lost and resume is None:
+                resume = _back_from_above(visible, xy, last_visible, i, stop, cfg, unobserved)
+                if resume is None:
+                    found = _relocated_rest(visible, xy, last_visible, cfg, unobserved)
+                    return (last_visible, *found) if found else (last_visible, None, None)
             continue
-        missing = 0
+        missing, resume = 0, None
         last_visible = i
         rest.add(i, xy[i])
         if rest.count >= still:
