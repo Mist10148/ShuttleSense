@@ -28,8 +28,17 @@ def test_a_shuttle_settled_just_before_the_clip_ends_is_a_landing() -> None:
     assert np.allclose(seg.landing_px, (500.0, 260.0), atol=3.0)
 
 
-def test_too_short_a_rest_at_the_end_leaves_the_rally_open() -> None:
+def test_a_short_rest_at_the_end_lands_where_the_shuttle_lies() -> None:
+    """Five still frames after a fall are short of end_rest_frames, but the shuttle came down
+    and stopped as the clip ended: it landed there (D60)."""
     visible, xy = _falls_then_lies(5)
+    seg = segment_rallies(visible, xy, [2], CFG)[0]
+    assert seg.closed and np.allclose(seg.landing_px, (500.0, 260.0))
+
+
+def test_a_shuttle_still_flying_at_the_end_leaves_the_rally_open() -> None:
+    visible, xy = _falls_then_lies(5)
+    xy[40:] = [[500.0 + 5 * k, 260.0 + 4 * k] for k in range(5)]  # never slows down
     seg = segment_rallies(visible, xy, [2], CFG)[0]
     assert not seg.closed and seg.landing_frame is None
 
