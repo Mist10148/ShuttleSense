@@ -10,32 +10,39 @@ The personality system uses **progressive disclosure**. Picking a preset takes o
 
 ## Settings card
 
-A new `CoachPersonalityCard` sits right after `ThemePickerCard` in `SettingsScreen` (one added line, like the Theme card). It mirrors that card's layout so the two read as a pair.
+A new `CoachPersonalityCard` sits right after `ThemePickerCard` in `SettingsScreen` (one added line, like the Theme card).
+
+The card leads with the coach in use, then the presets in four named groups of four (D63). Seventeen look-alike keys in one wrap left a lone key on the last row, hid what each voice is like behind a tooltip, and put the current choice below the grid; grouping by what the voices share and a short tagline per key make the choice two quick steps (progressive disclosure, as in the rest of this design).
 
 ```text
-┌─ ◎ AI Coach ─────────────────────────────────────────── [Customize ›] ┐
-│                                                                        │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐      │
-│  │    ✦     │ │    ▣     │ │    ☺     │ │    ϟ     │ │    ◉     │      │
-│  │ Default  │ │Professnl │ │ Friendly │ │Efficient │ │Intellect.│ ...  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘      │
-│   (selected KeyCap is pressed in)                                      │
-│                                                                        │
-│  Mentor · Patient and educational. Builds your game step by step.      │
-│  ┌ Preview ─────────────────────────────────────────────────────────┐  │
-│  │ You  Why do my smashes keep going into the net?                  │  │
-│  │ ◎    Your swing has good speed, which is a great base. The net…  │  │
-│  └──────────────────────────────────────────────── [Technique|Setback]┘ │
-│                                                                        │
-│  My profiles:  (● Footwork bootcamp)  (○ Weekend fun)  [+ New]         │
-└────────────────────────────────────────────────────────────────────────┘
+┌─ ◎ AI Coach ───────────────────────────────────────────────────────────┐
+│ ┌──┐ Your coach                                                         │
+│ │✦ │ Default · Balanced, intelligent, adaptable…          [⚙ Customize] │
+│ └──┘                                                                    │
+│ Pick how your coach talks. You can change it any time.                  │
+│ Everyday  Clear, balanced coaching                                      │
+│ [ Default    ] [ Professional ] [ Efficient   ] [ Reserved     ]        │
+│ Supportive  Warm and encouraging                                        │
+│ [ Friendly   ] [ Mentor       ] [ Compassionate] [ Cute & Shy  ]        │
+│ Challenging  Pushes you and asks why                                    │
+│ [ Bold       ] [ Stoic        ] [ Intellectual ] [ Cynical     ]        │
+│ Fun  Playful, inventive, a bit odd                                      │
+│ [ Witty      ] [ Playful      ] [ Creative     ] [ Robotic     ]        │
+│ [ ⚙ Build your own · Sliders and your own words                  › ]    │
+│ My profiles:  (● Footwork bootcamp)  (○ Weekend fun)  [+2 more]         │
+│ ┌ Preview ───────────────────────────────────── [Technique|Setback] ┐   │
+│ └────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Grid.** A `Wrap` of `KeyCap`s, one per preset (icon and label), keyed `ValueKey('coach-preset-${id}')`, with `semanticLabel: '${label} coach personality'` and `tooltip:` set to the one-line description. On phones the width is 104, on wider screens 136, the same as the theme keys. The 17 keys wrap to 4 rows on a phone. A "Show all / Show fewer" toggle shows 8 by default on compact width, so the card stays short.
-- **Description line** under the grid, updated on selection, in `bodySmall`.
+- **Current coach.** The active preset's icon in a sunken well, "Your coach", the name in bold and its description (or "based on …" for a profile), keyed `coach-description` and a live region. Customize sits beside it on a wide card and under it on a narrow one.
+- **Groups** (`preset_groups.dart`, app-only, so the presets' parity with the server is untouched): Everyday (Default, Professional, Efficient, Reserved), Supportive (Friendly, Mentor, Compassionate, Cute & Shy), Challenging (Bold, Stoic, Intellectual, Cynical), Fun (Witty, Playful, Creative, Robotic). Each key shows the icon, the label and a two- or three-word tagline; the full description stays in the tooltip. Keys keep `ValueKey('coach-preset-${id}')` and read "Mentor coach personality: Step-by-step teacher, selected".
+- **Wide card** (560 dp and up): every group as a heading and an even row of four equal-width keys.
+- **Narrow card:** one group at a time behind wrapping `ChoiceChip`s (`coach-group-chip-${id}`), opening on the active preset's group, a 2 × 2 grid of keys under the group's one-line blurb. With text at 150 % or more each key gets its own row and the icon sits above the description, so names never break mid-word.
+- **Build your own** (`coach-preset-custom`) is a full-width key under the groups: Custom opens the editor rather than picking a voice, so it is not one of the presets.
 - **Preview.** A sunken well (`InsetBox`, `app/lib/ui/depth.dart`) holding two bubbles that reuse `CoachBubble` styling, plus a `DepthSegmented` to switch between scenario A and B. The text is the static sample, so it changes instantly with no network call.
 - **Profiles row.** `ChoiceChip`-style `KeyCap`s for saved profiles (up to 3 shown, then "+2 more"), plus "+ New". Tapping one activates it.
-- **Customize** in the card's `trailing` slot opens the page.
+- **Customize** next to the current coach opens the page.
 - **Backend support.** If `/health` lacks `coach_personality`, the card shows a `StatusPill` "This server uses the standard coach voice" and disables the grid.
 
 Selecting a preset **applies immediately**: it is saved, the next chat answer uses it, and a `SnackBar` reads "Coach is now Mentor" with an **Undo** action. This follows the Theme card, where a tap also applies at once.
