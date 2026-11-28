@@ -122,6 +122,36 @@ void main() {
       expect(find.textContaining('in ?'), findsOneWidget);
     });
 
+    testWidgets('a close call given to the likely side says why and asks for a check', (
+      tester,
+    ) async {
+      final record = goldenRecord().copyWith(
+        rallies: const [
+          Rally(
+            index: 0,
+            startFrame: 0,
+            endFrame: 55,
+            winner: 'far',
+            review: 'Close call: looks IN by 6 cm at the back line. Check it',
+            landing: Landing(x: 1.2, y: 0.06, inCourt: true, confidence: 0.14),
+          ),
+          Rally(
+            index: 1,
+            startFrame: 60,
+            endFrame: 90,
+            review: 'Not called: no landing was seen. Pick the winner',
+          ),
+        ],
+      );
+      await pump(tester, Scoreboard(record: record, frameIndex: 95));
+      expect(find.byKey(const Key('calls-to-check')), findsOneWidget);
+      expect(find.text('2 calls to check'), findsOneWidget);
+      expect(find.text('Close call: looks IN by 6 cm at the back line. Check it'), findsOneWidget);
+      expect(find.byKey(const ValueKey('rally-review-1')), findsOneWidget);
+      expect(find.byIcon(Icons.flag_outlined), findsOneWidget); // the close call
+      expect(find.byIcon(Icons.help_outline), findsOneWidget); // the uncalled rally
+    });
+
     testWidgets('no referee shows a hint', (tester) async {
       final json = goldenRecordJson()..['score'] = null;
       await pump(tester, Scoreboard(record: ClipRecord.fromJson(json), frameIndex: 0));
