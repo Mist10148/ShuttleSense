@@ -21,8 +21,13 @@ rallies the predicted winner is compared with the label, and the predicted score
 from --start-score with referee.apply_rallies.
 
 Each predicted rally from a record.json also says what decided it (D47): its landing, the
-next serve, withheld (the landing and the next serve disagree) or undecided. The report
-gives the count and winner accuracy per source, so a source that gives false points shows.
+next serve, the serve courts (D65), withheld (the landing and the next serve disagree) or
+undecided. The report gives the count and winner accuracy per source, so a source that
+gives false points shows.
+
+Score error: on matched rallies where both scores are known, the mean absolute error of
+the score after the rally (|near| + |far| points per rally) and the share with the exact
+score; coverage is the share of matched, labelled rallies given any winner.
 """
 
 from __future__ import annotations
@@ -40,12 +45,14 @@ from shuttlesense.schema import Rally, ScorePair, load_record
 
 RESULTS_DIR = BACKEND_DIR.parent / "docs" / "results"
 SIDES = ("near", "far")
-SOURCES = ("landing", "serve", "withheld", "undecided")
+SOURCES = ("landing", "serve", "sequence", "withheld", "undecided")
 
 
 def decided_by(rally: Rally) -> str:
     """What decided a predicted rally, from its review note and winner (D47)."""
     review = rally.review or ""
+    if review.startswith("Scored for ") and "from where the servers stood" in review:
+        return "sequence"
     if review.startswith("Scored for ") and "from the next serve" in review:
         return "serve"
     if review.startswith("The landing gives the rally to "):
@@ -159,6 +166,7 @@ def evaluate_clip(
     winners_ok = sum(1 for r in judged if r["winner_pred"] == r["winner_true"])
     pred_scores = [p["score"] for p in predicted if p["score"] is not None]
     true_final = next((s for s in reversed(scores) if s is not None), None)
+    errors = score_errors(rows)
     return {
         "truth_rallies": len(truth),
         "pred_rallies": len(predicted),
@@ -170,7 +178,25 @@ def evaluate_clip(
         "final_score_true": true_final,
         "final_score_pred": pred_scores[-1] if pred_scores else None,
         "by_source": by_source(rows),
+        **errors,
         "rallies": rows,
+    }
+
+
+def score_errors(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Score MAE (points per rally), exact-score rate and winner coverage on matched rallies."""
+    scored = [r for r in rows if r["score_pred"] is not None and r["score_true"] is not None]
+    diffs = [abs(r["score_pred"][0] - r["score_true"][0])
+             + abs(r["score_pred"][1] - r["score_true"][1]) for r in scored]  # fmt: skip
+    labelled = [r for r in rows if r["pred"] is not None and r["winner_true"]]
+    return {
+        "score_mae": sum(diffs) / len(diffs) if diffs else None,
+        "exact_score_rate": sum(d == 0 for d in diffs) / len(diffs) if diffs else None,
+        "coverage": (
+            sum(r["winner_pred"] is not None for r in labelled) / len(labelled)
+            if labelled
+            else None
+        ),
     }
 
 
@@ -202,6 +228,10 @@ def _pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1%}"
 
 
+def _num(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}"
+
+
 def to_markdown(results: dict[str, dict[str, Any]], tolerance_s: float, overall: dict) -> str:
     lines = [
         "# Rally boundaries and score",
@@ -209,19 +239,22 @@ def to_markdown(results: dict[str, dict[str, Any]], tolerance_s: float, overall:
         f"A rally is correct when start and end are both within +-{tolerance_s:g} s.",
         "",
         "| Clip | Labelled | Predicted | Correct | Boundary acc. | Winner acc. | "
-        "Final score (true / pred) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        "Score MAE | Exact score | Coverage | Final score (true / pred) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for name, r in results.items():
         lines.append(
             f"| {name} | {r['truth_rallies']} | {r['pred_rallies']} | {r['matched']} | "
             f"{_pct(r['boundary_accuracy'])} | {_pct(r['winner_accuracy'])} | "
+            f"{_num(r.get('score_mae'))} | {_pct(r.get('exact_score_rate'))} | "
+            f"{_pct(r.get('coverage'))} | "
             f"{_score(r['final_score_true'])} / {_score(r['final_score_pred'])} |"
         )
     lines += [
         f"| **all** | {overall['truth_rallies']} | {overall['pred_rallies']} | "
         f"{overall['matched']} | **{_pct(overall['boundary_accuracy'])}** | "
-        f"{_pct(overall['winner_accuracy'])} | |",
+        f"{_pct(overall['winner_accuracy'])} | **{_num(overall.get('score_mae'))}** | "
+        f"{_pct(overall.get('exact_score_rate'))} | {_pct(overall.get('coverage'))} | |",
         "",
     ]
     sources = overall.get("by_source")
@@ -260,6 +293,7 @@ def pooled(results: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "boundary_accuracy": matched / truth if truth else 0.0,
         "winner_accuracy": ok / len(judged) if judged else None,
         "by_source": by_source([row for r in results.values() for row in r["rallies"]]),
+        **score_errors([row for r in results.values() for row in r["rallies"]]),
     }
 
 
