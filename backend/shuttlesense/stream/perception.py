@@ -223,6 +223,9 @@ class ModelPerception:
         self.court = court_type(self.config)
         self.court_size = tuple(court_cfg.get("court_size_m", COURT_SIZE_M))
         self.tracker = CourtPlayerTracker(cfg, self.court, self.court_size)
+        from shuttlesense.pose.doubles_keeper import with_doubles_keeper
+
+        self.tracker = with_doubles_keeper(self.tracker, cfg)  # D66: all four doubles players
         self.far_refiner = FarPlayerRefiner(cfg, self.court, self.court_size)
         self.homography = None
         if corners:
